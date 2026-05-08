@@ -4,6 +4,12 @@
   "version": "0.1.1",
   "description": "Control Chromium browsers with OpenCode.",
   "action": {
+    "default_icon": {
+      "16": "images/icon16.png",
+      "32": "images/icon32.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    },
     "default_popup": "popup.html",
     "default_title": "OpenCode Browser"
   },
@@ -11,15 +17,38 @@
     "service_worker": "src/background.js",
     "type": "module"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self'; font-src 'self'"
+  },
   "permissions": [
     "alarms",
+    "bookmarks",
     "debugger",
+    "downloads",
+    "downloads.ui",
+    "favicon",
     "history",
     "nativeMessaging",
+    "notifications",
+    "readingList",
     "scripting",
+    "sessions",
     "storage",
     "tabGroups",
-    "tabs"
+    "tabs",
+    "topSites"
   ],
-  "host_permissions": ["<all_urls>"]
+  "host_permissions": ["<all_urls>"],
+  "icons": {
+    "16": "images/icon16.png",
+    "32": "images/icon32.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "matches": ["<all_urls>"],
+      "resources": ["images/cursor-chat.png"]
+    }
+  ]
 }

@@ -54,6 +54,17 @@ Or install manually with an explicit extension ID:
 node scripts/install-native-host.js --extension-id <extension-id> --browsers chrome
 ```
 
-4. Start OpenCode in this repo. The local plugin at `.opencode/plugins/chromium-browser.js` exposes the browser tools.
+4. Install root development dependencies with `npm install` if they are not already present.
+5. Start OpenCode in this repo. The local plugin at `.opencode/plugins/chromium-browser.js` exposes the browser tools. OpenCode manages the small `.opencode/package.json` dependency set for local plugin loading.
 
-If OpenCode was already running, restart it after installing `.opencode` dependencies or changing plugin files.
+If OpenCode was already running, restart it after installing dependencies or changing plugin files.
+
+## Diagnostics
+
+```bash
+node scripts/installed-browsers.js --json
+node scripts/chrome-is-running.js --browser chrome --check --json
+node scripts/check-extension-installed.js --browser chrome --extension-id <extension-id> --json
+node scripts/check-native-host.js chrome --extension-id <extension-id> --json
+node scripts/open-browser-window.js --browser chrome --dry-run --json
+```

@@ -6,18 +6,49 @@
 
 The OpenCode plugin will expose browser automation as custom tools using `@opencode-ai/plugin`.
 
-Initial tool set:
+Tool set:
 
 - `browser_status`
+- `browser_capabilities`
 - `browser_list_tabs`
+- `browser_selected_tab`
+- `browser_get_tab`
 - `browser_new_tab`
 - `browser_claim_tab`
+- `browser_name_session`
 - `browser_navigate`
+- `browser_reload`
+- `browser_back`
+- `browser_forward`
+- `browser_close_tab`
+- `browser_history`
 - `browser_screenshot`
+- `browser_move`
 - `browser_click`
+- `browser_double_click`
+- `browser_scroll`
+- `browser_drag`
 - `browser_type`
 - `browser_keypress`
 - `browser_snapshot`
+- `browser_dom_snapshot`
+- `browser_dom_click`
+- `browser_dom_type`
+- `browser_locator_count`
+- `browser_locator_click`
+- `browser_locator_fill`
+- `browser_locator_text`
+- `browser_set_file_input`
+- `browser_clipboard_read_text`
+- `browser_clipboard_write_text`
+- `browser_enable_inspection`
+- `browser_console_logs`
+- `browser_network_events`
+- `browser_clear_events`
+- `browser_download_events`
+- `browser_clear_download_events`
+- `browser_cdp`
+- `browser_turn_end`
 - `browser_finalize`
 
 ### Native Host
@@ -31,7 +62,11 @@ Messages use JSON-RPC 2.0. Browser-native messaging frames are 4-byte length-pre
 
 ### Chromium Extension
 
-The extension owns browser access. It handles tab management, `chrome.debugger` attach/detach, CDP execution, screenshots, and browser metadata.
+The extension owns browser access. It handles tab management, `chrome.debugger` attach/detach, CDP execution, screenshots, download observation, cursor overlay state, and browser metadata.
+
+Tabs are tracked by session and origin. Agent-created tabs can be closed during finalization. User-claimed tabs are released from the automation session during finalization unless explicitly kept, but they are not closed by default.
+
+Automation targets controlled tabs through CDP without foregrounding the Chrome window by default. Mouse gestures are serialized per tab so a click or drag sequence cannot be interleaved by another agent, and inline PDF responses are reported as browser download events with `status: "opened_inline"` when Chrome renders them instead of creating a download item.
 
 ## Protocol Shape
 

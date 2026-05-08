@@ -7,11 +7,18 @@
     "host": "node native-host/src/host.js",
     "install:native-host": "node scripts/install-native-host.js",
     "check:native-host": "node scripts/check-native-host.js",
+    "check:extension": "node scripts/check-extension-installed.js --json",
+    "check:browser-running": "node scripts/chrome-is-running.js --check --json",
+    "list:browsers": "node scripts/installed-browsers.js --json",
+    "open:browser": "node scripts/open-browser-window.js",
     "find:extension": "node scripts/find-extension-id.js",
+    "check:opencode-plugin": "node scripts/check-opencode-plugin.js",
     "test": "node --test"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "latest"
+    "@opencode-ai/plugin": "1.3.3"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "zod": "4.1.8"
+  }
 }

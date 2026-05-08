@@ -5,17 +5,40 @@ import os from "node:os";
 import path from "node:path";
 
 const BROWSER_ROOTS = {
-  brave: path.join(os.homedir(), "AppData", "Local", "BraveSoftware", "Brave-Browser", "User Data"),
-  chrome: path.join(os.homedir(), "AppData", "Local", "Google", "Chrome", "User Data"),
-  edge: path.join(os.homedir(), "AppData", "Local", "Microsoft", "Edge", "User Data"),
+  brave: {
+    win32: path.join(os.homedir(), "AppData", "Local", "BraveSoftware", "Brave-Browser", "User Data"),
+    darwin: path.join(os.homedir(), "Library", "Application Support", "BraveSoftware", "Brave-Browser"),
+    linux: path.join(os.homedir(), ".config", "BraveSoftware", "Brave-Browser"),
+  },
+  chrome: {
+    win32: path.join(os.homedir(), "AppData", "Local", "Google", "Chrome", "User Data"),
+    darwin: path.join(os.homedir(), "Library", "Application Support", "Google", "Chrome"),
+    linux: path.join(os.homedir(), ".config", "google-chrome"),
+  },
+  edge: {
+    win32: path.join(os.homedir(), "AppData", "Local", "Microsoft", "Edge", "User Data"),
+    darwin: path.join(os.homedir(), "Library", "Application Support", "Microsoft Edge"),
+    linux: path.join(os.homedir(), ".config", "microsoft-edge"),
+  },
+  chromium: {
+    win32: path.join(os.homedir(), "AppData", "Local", "Chromium", "User Data"),
+    darwin: path.join(os.homedir(), "Library", "Application Support", "Chromium"),
+    linux: path.join(os.homedir(), ".config", "chromium"),
+  },
 };
 
 const browser = process.argv[2] ?? "brave";
-const root = process.argv[3] ?? BROWSER_ROOTS[browser];
+const platform = process.platform === "win32" ? "win32" : process.platform === "darwin" ? "darwin" : "linux";
+const root = process.argv[3] ?? BROWSER_ROOTS[browser]?.[platform];
 
 if (!root) {
   console.error(`Unknown browser: ${browser}`);
   process.exit(1);
+}
+
+if (!fs.existsSync(root)) {
+  console.log(JSON.stringify([], null, 2));
+  process.exit(0);
 }
 
 function readJsonIfPresent(filePath) {

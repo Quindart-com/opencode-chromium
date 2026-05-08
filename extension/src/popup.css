@@ -1,5 +1,5 @@
 body {
-  min-width: 260px;
+  min-width: 300px;
   margin: 0;
   color: #171717;
   background: #fafafa;
@@ -11,10 +11,30 @@ main {
 }
 
 h1 {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   font-size: 16px;
 }
 
-p {
+dl {
   margin: 0;
+}
+
+div {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #e7e7e7;
+}
+
+dt {
+  color: #616161;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }

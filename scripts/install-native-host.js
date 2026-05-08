@@ -27,6 +27,44 @@ const SUPPORTED_BROWSERS = {
   },
 };
 
+const NON_WINDOWS_NATIVE_HOST_DIRS = {
+  chrome: {
+    darwin: ["Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts"],
+    linux: [".config", "google-chrome", "NativeMessagingHosts"],
+  },
+  edge: {
+    darwin: ["Library", "Application Support", "Microsoft Edge", "NativeMessagingHosts"],
+    linux: [".config", "microsoft-edge", "NativeMessagingHosts"],
+  },
+  brave: {
+    darwin: ["Library", "Application Support", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts"],
+    linux: [".config", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts"],
+  },
+  chromium: {
+    darwin: ["Library", "Application Support", "Chromium", "NativeMessagingHosts"],
+    linux: [".config", "chromium", "NativeMessagingHosts"],
+  },
+};
+
+const USER_DATA_DIRS = {
+  chrome: {
+    darwin: ["Library", "Application Support", "Google", "Chrome"],
+    linux: [".config", "google-chrome"],
+  },
+  edge: {
+    darwin: ["Library", "Application Support", "Microsoft Edge"],
+    linux: [".config", "microsoft-edge"],
+  },
+  brave: {
+    darwin: ["Library", "Application Support", "BraveSoftware", "Brave-Browser"],
+    linux: [".config", "BraveSoftware", "Brave-Browser"],
+  },
+  chromium: {
+    darwin: ["Library", "Application Support", "Chromium"],
+    linux: [".config", "chromium"],
+  },
+};
+
 function usage() {
   console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id>] [--browsers chrome,edge,brave,chromium|all]");
   console.error("");
@@ -77,9 +115,13 @@ function installDir() {
 }
 
 function browserUserDataRoot(browser) {
-  if (process.platform !== "win32") return null;
-  const parts = SUPPORTED_BROWSERS[browser].windowsUserDataDir;
-  return path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), ...parts);
+  if (process.platform === "win32") {
+    const parts = SUPPORTED_BROWSERS[browser].windowsUserDataDir;
+    return path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), ...parts);
+  }
+  const platform = process.platform === "darwin" ? "darwin" : "linux";
+  const parts = USER_DATA_DIRS[browser]?.[platform];
+  return parts ? path.join(os.homedir(), ...parts) : null;
 }
 
 function readJsonIfPresent(filePath) {
@@ -134,7 +176,13 @@ function writeUnixWrapper(root, targetDir) {
 }
 
 function manifestPathForBrowser(browser, targetDir) {
-  return path.join(targetDir, `${HOST_NAME}.${browser}.json`);
+  if (process.platform === "win32") return path.join(targetDir, `${HOST_NAME}.${browser}.json`);
+  const platform = process.platform === "darwin" ? "darwin" : "linux";
+  const parts = NON_WINDOWS_NATIVE_HOST_DIRS[browser]?.[platform];
+  if (!parts) return path.join(targetDir, `${HOST_NAME}.${browser}.json`);
+  const manifestDir = path.join(os.homedir(), ...parts);
+  fs.mkdirSync(manifestDir, { recursive: true });
+  return path.join(manifestDir, `${HOST_NAME}.json`);
 }
 
 function writeManifest({ browser, extensionIds, hostPath, targetDir }) {
@@ -148,6 +196,19 @@ function writeManifest({ browser, extensionIds, hostPath, targetDir }) {
   };
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
   return manifestPath;
+}
+
+function writeExtensionIdConfig(root, extensionIds) {
+  if (extensionIds.length === 0) return null;
+  const configPath = path.join(root, "scripts", "extension-id.json");
+  const uniqueIds = [...new Set(extensionIds)];
+  const config = {
+    extensionHostName: HOST_NAME,
+    extensionIds: uniqueIds,
+  };
+  if (uniqueIds.length === 1) config.extensionId = uniqueIds[0];
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  return configPath;
 }
 
 function installWindowsRegistry(browser, manifestPath) {
@@ -164,6 +225,7 @@ function installManifest(args) {
   const hostPath = process.platform === "win32" ? writeWindowsWrapper(root, targetDir) : writeUnixWrapper(root, targetDir);
 
   const installed = [];
+  const allExtensionIds = [];
   for (const browser of args.browsers) {
     const extensionIds = args.auto ? detectExtensionIds(browser) : [args.extensionId];
     if (extensionIds.length === 0) {
@@ -180,9 +242,11 @@ function installManifest(args) {
 
     if (process.platform === "win32") installWindowsRegistry(browser, manifestPath);
     installed.push({ browser, manifestPath, extensionIds });
+    allExtensionIds.push(...extensionIds);
   }
 
-  return { hostName: HOST_NAME, hostPath, installed };
+  const extensionIdConfigPath = writeExtensionIdConfig(root, allExtensionIds);
+  return { hostName: HOST_NAME, hostPath, extensionIdConfigPath, installed };
 }
 
 try {
