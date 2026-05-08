@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "host": "node native-host/src/host.js",
     "test": "node --test"
   },
   "devDependencies": {}
