@@ -11,20 +11,24 @@ const HOST_NAME = "com.opencode.browser";
 const SUPPORTED_BROWSERS = {
   chrome: {
     windowsRegistryKey: `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${HOST_NAME}`,
+    windowsUserDataDir: ["Google", "Chrome", "User Data"],
   },
   edge: {
     windowsRegistryKey: `HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\${HOST_NAME}`,
+    windowsUserDataDir: ["Microsoft", "Edge", "User Data"],
   },
   brave: {
     windowsRegistryKey: `HKCU\\Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts\\${HOST_NAME}`,
+    windowsUserDataDir: ["BraveSoftware", "Brave-Browser", "User Data"],
   },
   chromium: {
     windowsRegistryKey: `HKCU\\Software\\Chromium\\NativeMessagingHosts\\${HOST_NAME}`,
+    windowsUserDataDir: ["Chromium", "User Data"],
   },
 };
 
 function usage() {
-  console.error("Usage: node scripts/install-native-host.js --extension-id <id> [--browsers chrome,edge,brave,chromium]");
+  console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id>] [--browsers chrome,edge,brave,chromium|all]");
   console.error("");
   console.error("The extension ID is visible on chrome://extensions after loading extension/ as unpacked.");
 }
@@ -41,14 +45,20 @@ function parseArgs(argv) {
       args.extensionId = argv[++i];
       continue;
     }
+    if (arg === "--auto") {
+      args.auto = true;
+      args.browsers = Object.keys(SUPPORTED_BROWSERS);
+      continue;
+    }
     if (arg === "--browsers") {
-      args.browsers = argv[++i].split(",").map((item) => item.trim()).filter(Boolean);
+      const browsers = argv[++i].split(",").map((item) => item.trim()).filter(Boolean);
+      args.browsers = browsers.includes("all") ? Object.keys(SUPPORTED_BROWSERS) : browsers;
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
   if (!args.extensionId) args.extensionId = process.env.OPENCODE_BROWSER_EXTENSION_ID;
-  if (!args.extensionId) throw new Error("Missing --extension-id or OPENCODE_BROWSER_EXTENSION_ID");
+  if (!args.extensionId && !args.auto) throw new Error("Missing --extension-id, OPENCODE_BROWSER_EXTENSION_ID, or --auto");
   for (const browser of args.browsers) {
     if (!SUPPORTED_BROWSERS[browser]) throw new Error(`Unsupported browser: ${browser}`);
   }
@@ -66,10 +76,50 @@ function installDir() {
   return path.join(os.homedir(), ".config", "opencode", "browser");
 }
 
+function browserUserDataRoot(browser) {
+  if (process.platform !== "win32") return null;
+  const parts = SUPPORTED_BROWSERS[browser].windowsUserDataDir;
+  return path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), ...parts);
+}
+
+function readJsonIfPresent(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function detectExtensionIds(browser) {
+  const root = browserUserDataRoot(browser);
+  if (!root || !fs.existsSync(root)) return [];
+
+  const ids = new Set();
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    for (const preferencesFile of ["Secure Preferences", "Preferences"]) {
+      const preferences = readJsonIfPresent(path.join(root, entry.name, preferencesFile));
+      const settings = preferences?.extensions?.settings;
+      if (!settings || typeof settings !== "object") continue;
+
+      for (const [id, extension] of Object.entries(settings)) {
+        const name = extension?.manifest?.name ?? "";
+        const extensionPath = extension?.path ?? "";
+        if (/OpenCode Browser/i.test(name) || /Opencode-Plugins/i.test(extensionPath) || /opencode/i.test(extensionPath)) {
+          ids.add(id);
+        }
+      }
+    }
+  }
+
+  return [...ids];
+}
+
 function writeWindowsWrapper(root, targetDir) {
   const wrapperPath = path.join(targetDir, "opencode-browser-host.cmd");
   const hostPath = path.join(root, "native-host", "src", "host.js");
-  const contents = `@echo off\r\nnode "${hostPath}"\r\n`;
+  const contents = `@echo off\r\n"${process.execPath}" "${hostPath}"\r\n`;
   fs.writeFileSync(wrapperPath, contents, "utf8");
   return wrapperPath;
 }
@@ -77,7 +127,7 @@ function writeWindowsWrapper(root, targetDir) {
 function writeUnixWrapper(root, targetDir) {
   const wrapperPath = path.join(targetDir, "opencode-browser-host");
   const hostPath = path.join(root, "native-host", "src", "host.js");
-  const contents = `#!/usr/bin/env sh\nexec node "${hostPath}"\n`;
+  const contents = `#!/usr/bin/env sh\nexec "${process.execPath}" "${hostPath}"\n`;
   fs.writeFileSync(wrapperPath, contents, { encoding: "utf8", mode: 0o755 });
   fs.chmodSync(wrapperPath, 0o755);
   return wrapperPath;
@@ -87,14 +137,14 @@ function manifestPathForBrowser(browser, targetDir) {
   return path.join(targetDir, `${HOST_NAME}.${browser}.json`);
 }
 
-function writeManifest({ browser, extensionId, hostPath, targetDir }) {
+function writeManifest({ browser, extensionIds, hostPath, targetDir }) {
   const manifestPath = manifestPathForBrowser(browser, targetDir);
   const manifest = {
     name: HOST_NAME,
     description: "OpenCode Chromium browser native messaging host",
     path: hostPath,
     type: "stdio",
-    allowed_origins: [`chrome-extension://${extensionId}/`],
+    allowed_origins: extensionIds.map((extensionId) => `chrome-extension://${extensionId}/`),
   };
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
   return manifestPath;
@@ -115,15 +165,21 @@ function installManifest(args) {
 
   const installed = [];
   for (const browser of args.browsers) {
+    const extensionIds = args.auto ? detectExtensionIds(browser) : [args.extensionId];
+    if (extensionIds.length === 0) {
+      installed.push({ browser, skipped: true, reason: "OpenCode Browser extension was not detected" });
+      continue;
+    }
+
     const manifestPath = writeManifest({
       browser,
-      extensionId: args.extensionId,
+      extensionIds,
       hostPath,
       targetDir,
     });
 
     if (process.platform === "win32") installWindowsRegistry(browser, manifestPath);
-    installed.push({ browser, manifestPath });
+    installed.push({ browser, manifestPath, extensionIds });
   }
 
   return { hostName: HOST_NAME, hostPath, installed };

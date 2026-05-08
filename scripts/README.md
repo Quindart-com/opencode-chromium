@@ -4,7 +4,13 @@ Setup, check, and development helper scripts for the OpenCode Chromium browser p
 
 ## Install Native Host
 
-After loading `extension/` as an unpacked extension, copy its extension ID from `chrome://extensions`, then run:
+After loading `extension/` as an unpacked extension, install native messaging manifests for every detected Chromium browser:
+
+```bash
+node scripts/install-native-host.js --auto --browsers all
+```
+
+Or copy an extension ID from `chrome://extensions`, then run:
 
 ```bash
 node scripts/install-native-host.js --extension-id <extension-id> --browsers chrome

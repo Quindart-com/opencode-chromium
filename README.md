@@ -42,7 +42,13 @@ Firefox is out of scope for the first version because it does not expose the sam
 
 1. Load `extension/` as an unpacked extension in Chrome.
 2. Copy the unpacked extension ID from `chrome://extensions`.
-3. Install the native messaging manifest:
+3. Install the native messaging manifest. If the extension is already loaded, use auto-detection:
+
+```bash
+node scripts/install-native-host.js --auto --browsers all
+```
+
+Or install manually with an explicit extension ID:
 
 ```bash
 node scripts/install-native-host.js --extension-id <extension-id> --browsers chrome

@@ -1,9 +1,16 @@
 const HOST_NAME = "com.opencode.browser";
 const DEBUGGER_VERSION = "1.3";
 const DEFAULT_SESSION_ID = "default";
+const KEEPALIVE_ALARM = "opencode-browser-keepalive";
+const SESSION_GROUP_COLOR = "green";
+const DELIVERABLE_GROUP_TITLE = "✅ OpenCode";
+const DELIVERABLE_GROUP_COLOR = "blue";
+const MAX_CDP_EVENTS_PER_TAB = 500;
 
 const sessions = new Map();
 const attachedTabs = new Set();
+const cdpEventsByTabId = new Map();
+let deliverableGroupId = null;
 
 const hostStatus = {
   state: "disconnected",
@@ -55,7 +62,11 @@ class NativeRpc {
   }
 
   async notify(method, params) {
-    this.#post({ jsonrpc: "2.0", method, params });
+    try {
+      this.#post({ jsonrpc: "2.0", method, params });
+    } catch {
+      this.connect();
+    }
   }
 
   async request(method, params) {
@@ -78,7 +89,7 @@ class NativeRpc {
     this.#reconnectTimer = setTimeout(() => {
       this.#reconnectTimer = null;
       this.connect();
-    }, 2000);
+    }, 1000);
   }
 
   #rejectPending(message) {
@@ -144,14 +155,15 @@ function sessionId(params) {
 function sessionState(id) {
   let session = sessions.get(id);
   if (!session) {
-    session = { tabIds: new Set(), name: null };
+    session = { tabIds: new Set(), name: null, groupId: null };
     sessions.set(id, session);
   }
   return session;
 }
 
-function trackTab(id, tabId) {
+async function trackTab(id, tabId) {
   sessionState(id).tabIds.add(tabId);
+  await ensureSessionGroup(id, tabId).catch(() => {});
 }
 
 function tabIdFromParams(params) {
@@ -171,6 +183,32 @@ function normalizeTab(tab) {
   };
 }
 
+function normalizeKeepItem(item) {
+  if (Number.isInteger(item)) return { tabId: item, status: "handoff" };
+  return {
+    tabId: item?.tabId ?? item?.tab_id,
+    status: item?.status ?? "handoff",
+  };
+}
+
+function cdpEventTabId(source) {
+  return Number.isInteger(source?.tabId) ? source.tabId : null;
+}
+
+function recordCdpEvent(source, method, params) {
+  const tabId = cdpEventTabId(source);
+  if (!Number.isInteger(tabId)) return;
+  const events = cdpEventsByTabId.get(tabId) ?? [];
+  events.push({
+    time: new Date().toISOString(),
+    tabId,
+    method,
+    params: params ?? {},
+  });
+  if (events.length > MAX_CDP_EVENTS_PER_TAB) events.splice(0, events.length - MAX_CDP_EVENTS_PER_TAB);
+  cdpEventsByTabId.set(tabId, events);
+}
+
 function chromeCall(fn) {
   return new Promise((resolve, reject) => {
     fn((result) => {
@@ -183,6 +221,93 @@ function chromeCall(fn) {
 
 async function getTab(tabId) {
   return chromeCall((done) => chrome.tabs.get(tabId, done));
+}
+
+async function activateTab(tabId) {
+  const tab = await getTab(tabId);
+  if (Number.isInteger(tab.windowId)) {
+    await chromeCall((done) => chrome.windows.update(tab.windowId, { focused: true }, done)).catch(() => {});
+  }
+  await chromeCall((done) => chrome.tabs.update(tabId, { active: true }, done)).catch(() => {});
+  return getTab(tabId);
+}
+
+async function ensureSessionGroup(id, tabId) {
+  const session = sessionState(id);
+  if (!chrome.tabs.group || !chrome.tabGroups) return null;
+
+  if (Number.isInteger(session.groupId)) {
+    try {
+      await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId], groupId: session.groupId }, done));
+      return session.groupId;
+    } catch {
+      session.groupId = null;
+    }
+  }
+
+  const groupId = await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId] }, done));
+  session.groupId = groupId;
+  await chromeCall((done) => {
+    chrome.tabGroups.update(
+      groupId,
+      { title: session.name ?? "OpenCode", color: SESSION_GROUP_COLOR },
+      done,
+    );
+  }).catch(() => {});
+  return groupId;
+}
+
+async function ensureDeliverableGroup(tabId) {
+  if (!chrome.tabs.group || !chrome.tabGroups) return null;
+
+  if (Number.isInteger(deliverableGroupId)) {
+    try {
+      await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId], groupId: deliverableGroupId }, done));
+      return deliverableGroupId;
+    } catch {
+      deliverableGroupId = null;
+    }
+  }
+
+  const groupId = await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId] }, done));
+  deliverableGroupId = groupId;
+  await chromeCall((done) => {
+    chrome.tabGroups.update(
+      groupId,
+      { title: DELIVERABLE_GROUP_TITLE, color: DELIVERABLE_GROUP_COLOR },
+      done,
+    );
+  }).catch(() => {});
+  return groupId;
+}
+
+async function injectCursor(tabId) {
+  if (!chrome.scripting?.executeScript) return;
+  await chromeCall((done) => {
+    chrome.scripting.executeScript(
+      { target: { tabId }, files: ["content-scripts/cursor.js"] },
+      done,
+    );
+  }).catch(() => {});
+}
+
+async function moveMouse(params) {
+  const tabId = tabIdFromParams(params);
+  await activateTab(tabId);
+  await injectCursor(tabId);
+  await chromeCall((done) => {
+    chrome.tabs.sendMessage(
+      tabId,
+      {
+        type: "OPENCODE_CURSOR_STATE",
+        x: params.x,
+        y: params.y,
+        visible: params.visible !== false,
+      },
+      done,
+    );
+  }).catch(() => {});
+  return {};
 }
 
 async function attachTab(tabId) {
@@ -242,10 +367,30 @@ rpc.register("detach", async (params) => {
 
 rpc.register("executeCdp", executeCdp);
 
+rpc.register("activateTab", async (params) => normalizeTab(await activateTab(tabIdFromParams(params))));
+
+rpc.register("moveMouse", moveMouse);
+
+rpc.register("getCdpEvents", async (params) => {
+  const tabId = tabIdFromParams(params);
+  const methods = Array.isArray(params.methods) ? new Set(params.methods) : null;
+  const prefix = typeof params.methodPrefix === "string" ? params.methodPrefix : null;
+  const limit = Number.isInteger(params.limit) ? params.limit : 100;
+  let events = cdpEventsByTabId.get(tabId) ?? [];
+  if (methods) events = events.filter((event) => methods.has(event.method));
+  if (prefix) events = events.filter((event) => event.method.startsWith(prefix));
+  return { events: events.slice(-limit) };
+});
+
+rpc.register("clearCdpEvents", async (params) => {
+  cdpEventsByTabId.delete(tabIdFromParams(params));
+  return {};
+});
+
 rpc.register("createTab", async (params) => {
   const id = sessionId(params);
   const tab = await chromeCall((done) => chrome.tabs.create({ active: true, url: "about:blank" }, done));
-  trackTab(id, tab.id);
+  await trackTab(id, tab.id);
   return normalizeTab(tab);
 });
 
@@ -253,7 +398,7 @@ rpc.register("claimUserTab", async (params) => {
   const id = sessionId(params);
   const tabId = tabIdFromParams(params);
   const tab = await getTab(tabId);
-  trackTab(id, tabId);
+  await trackTab(id, tabId);
   return normalizeTab(tab);
 });
 
@@ -291,10 +436,16 @@ rpc.register("getUserHistory", async (params) => {
 });
 
 rpc.register("finalizeTabs", async (params) => {
-  const keep = new Set((params.keep ?? []).map((item) => item.tabId ?? item.tab_id));
+  const keep = new Map((params.keep ?? []).map((item) => {
+    const normalized = normalizeKeepItem(item);
+    return [normalized.tabId, normalized.status];
+  }));
   const session = sessionState(sessionId(params));
   for (const tabId of [...session.tabIds]) {
-    if (keep.has(tabId)) continue;
+    if (keep.has(tabId)) {
+      if (keep.get(tabId) === "deliverable") await ensureDeliverableGroup(tabId).catch(() => {});
+      continue;
+    }
     await chromeCall((done) => chrome.tabs.remove(tabId, done)).catch(() => {});
     session.tabIds.delete(tabId);
     attachedTabs.delete(tabId);
@@ -305,10 +456,20 @@ rpc.register("finalizeTabs", async (params) => {
 rpc.register("nameSession", async (params) => {
   const session = sessionState(sessionId(params));
   session.name = typeof params.name === "string" ? params.name : null;
+  if (Number.isInteger(session.groupId) && chrome.tabGroups) {
+    await chromeCall((done) => {
+      chrome.tabGroups.update(
+        session.groupId,
+        { title: session.name ?? "OpenCode", color: SESSION_GROUP_COLOR },
+        done,
+      );
+    }).catch(() => {});
+  }
   return {};
 });
 
 chrome.debugger.onEvent.addListener((source, method, params) => {
+  recordCdpEvent(source, method, params);
   void rpc.notify("onCDPEvent", { source, method, params }).catch(() => {});
 });
 
@@ -322,4 +483,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 });
+  rpc.connect();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 });
+  rpc.connect();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === KEEPALIVE_ALARM) rpc.connect();
+});
+
+chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 });
 rpc.connect();

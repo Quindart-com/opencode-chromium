@@ -19,10 +19,16 @@ Use OpenCode browser tools directly:
 - `browser_claim_tab`
 - `browser_navigate`
 - `browser_screenshot`
+- `browser_move`
 - `browser_click`
 - `browser_type`
 - `browser_keypress`
 - `browser_snapshot`
+- `browser_enable_inspection`
+- `browser_console_logs`
+- `browser_network_events`
+- `browser_clear_events`
+- `browser_cdp`
 - `browser_finalize`
 
 ## First Step
@@ -36,7 +42,22 @@ If the native host is not reachable, tell the user to load the extension and ins
 - Use `browser_list_tabs` with `scope: "user"` to find existing tabs.
 - Use `browser_claim_tab` when the user wants to control an already-open tab.
 - Use `browser_new_tab` or `browser_navigate` without `tabId` for a new controlled tab.
+- Session tabs are grouped in the browser by the extension.
 - Use `browser_finalize` before ending browser work. Keep tabs only when the user needs the live page after the turn.
+- Use `status: "deliverable"` for tabs that are final user-facing outputs.
+
+## Reliable Input
+
+- `browser_click`, `browser_type`, and `browser_keypress` activate and focus the tab before dispatching input.
+- Use `browser_move` when you need to show the cursor position before acting.
+- If a click misses, take a fresh screenshot or snapshot before choosing new coordinates.
+
+## Inspection
+
+- Use `browser_enable_inspection` before collecting console or network events.
+- Use `browser_console_logs` for `Runtime.consoleAPICalled` and `Log.entryAdded` events.
+- Use `browser_network_events` for captured `Network.*` events.
+- Use `browser_cdp` for targeted CDP commands such as `Runtime.evaluate`, `DOM.getDocument`, or `Performance.getMetrics`.
 
 ## Interaction Safety
 
