@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "OpenCode Browser",
+  "version": "0.1.0",
+  "description": "Control Chromium browsers with OpenCode.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "OpenCode Browser"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "debugger",
+    "history",
+    "nativeMessaging",
+    "storage",
+    "tabGroups",
+    "tabs"
+  ],
+  "host_permissions": ["<all_urls>"]
+}
