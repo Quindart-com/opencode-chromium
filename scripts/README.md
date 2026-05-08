@@ -10,6 +10,12 @@ After loading `extension/` as an unpacked extension, copy its extension ID from 
 node scripts/install-native-host.js --extension-id <extension-id> --browsers chrome
 ```
 
+For Brave, you can try detecting the unpacked extension ID with:
+
+```bash
+node scripts/find-extension-id.js brave
+```
+
 For multiple Chromium browsers:
 
 ```bash

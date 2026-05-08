@@ -49,3 +49,5 @@ node scripts/install-native-host.js --extension-id <extension-id> --browsers chr
 ```
 
 4. Start OpenCode in this repo. The local plugin at `.opencode/plugins/chromium-browser.js` exposes the browser tools.
+
+If OpenCode was already running, restart it after installing `.opencode` dependencies or changing plugin files.
