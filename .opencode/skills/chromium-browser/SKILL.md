@@ -78,10 +78,19 @@ Only run `scripts/open-browser-window.js` without `--dry-run` after the user agr
 - Use `browser_claim_tab` when the user wants to control an already-open tab.
 - Claim only tabs returned by `browser_list_tabs` with `scope: "user"`; do not guess tab IDs.
 - Use `browser_new_tab` or `browser_navigate` without `tabId` for a new controlled tab.
+- Controlled tabs are session-owned. A tab created or claimed by one browser session cannot be controlled by another browser session.
+- For sub-agents or parallel browser work, have each agent create or claim its own tab in its own session. Do not create tabs in the parent session and hand those tab IDs to sub-agents.
+- If multiple agents need the same site, each agent should open the site independently in its own controlled tab.
 - Session tabs are grouped in the browser by the extension.
 - The extension tracks whether a tab was agent-created or user-claimed. `browser_finalize` closes unkept agent-created tabs and releases unkept user-claimed tabs without closing them.
 - Use `browser_finalize` before ending browser work. Keep tabs only when the user needs the live page after the turn.
 - Use `status: "deliverable"` for tabs that are final user-facing outputs.
+
+## Web Search
+
+- Prefer interactive search over direct Google search-result URLs. Open `https://www.google.com/`, type the query into the page, and submit it like a user.
+- Avoid constructing direct `/search?q=...` Google URLs unless there is a strong reason. Direct search-result navigation is more likely to trigger automated-traffic or CAPTCHA pages.
+- Do not attempt to bypass CAPTCHAs or automated-traffic interstitials. If one appears, report it and use another source or a more targeted site URL.
 
 ## Reliable Input
 

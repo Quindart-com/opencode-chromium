@@ -61,7 +61,11 @@ async function moveCursor(context, tabId, x, y, options = {}) {
 }
 
 async function inputGesture(context, tabId, steps, timeoutMs) {
-  return extensionRequest(context, "inputGesture", { tabId, steps, timeoutMs });
+  return browserRequest(
+    "inputGesture",
+    sessionParams(context, { tabId, steps, timeoutMs }),
+    { timeoutMs: Math.max(timeoutMs ?? 0, 30000) },
+  );
 }
 
 async function enableInspection(context, tabId) {
@@ -664,7 +668,8 @@ export const ChromiumBrowserPlugin = async () => {
           }
           const end = points.at(-1);
           steps.push(mouseStep({ type: "mouseReleased", x: end.x, y: end.y, button: args.button, buttons: 0, clickCount: 1, pointerType: "mouse" }, end, 16));
-          await inputGesture(context, args.tabId, steps);
+          const timeoutMs = Math.min(120000, Math.max(30000, steps.reduce((total, step) => total + (step.delayMs ?? 0), 0) + 15000));
+          await inputGesture(context, args.tabId, steps, timeoutMs);
           return stringify({ dragged: true, tabId: args.tabId, points: args.path.length, dispatchedPoints: points.length });
         },
       }),
