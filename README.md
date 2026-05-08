@@ -37,3 +37,15 @@ The implementation is intentionally independent of Codex's `browser-client.mjs` 
 - Chromium-compatible browsers that support `chrome.debugger` and native messaging
 
 Firefox is out of scope for the first version because it does not expose the same CDP/debugger surface.
+
+## Development Quick Start
+
+1. Load `extension/` as an unpacked extension in Chrome.
+2. Copy the unpacked extension ID from `chrome://extensions`.
+3. Install the native messaging manifest:
+
+```bash
+node scripts/install-native-host.js --extension-id <extension-id> --browsers chrome
+```
+
+4. Start OpenCode in this repo. The local plugin at `.opencode/plugins/chromium-browser.js` exposes the browser tools.

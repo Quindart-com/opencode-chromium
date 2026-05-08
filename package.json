@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "host": "node native-host/src/host.js",
+    "install:native-host": "node scripts/install-native-host.js",
+    "check:native-host": "node scripts/check-native-host.js",
     "test": "node --test"
   },
   "dependencies": {
