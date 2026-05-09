@@ -1,6 +1,6 @@
-# Scripts
+# Setup Scripts
 
-Setup, check, and development helper scripts for the OpenCode Chromium browser plugin.
+Setup and diagnostic helpers for the OpenCode Chromium browser plugin.
 
 ## Install Native Host
 
@@ -16,7 +16,7 @@ Or copy an extension ID from `chrome://extensions`, then run:
 node scripts/install-native-host.js --extension-id <extension-id> --browsers chrome
 ```
 
-For Brave, you can try detecting the unpacked extension ID with:
+You can try detecting the unpacked extension ID with:
 
 ```bash
 node scripts/find-extension-id.js brave

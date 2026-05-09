@@ -1,10 +1,35 @@
 {
   "name": "opencode-chromium-browser-plugin",
   "version": "0.1.1",
-  "private": true,
+  "description": "OpenCode browser automation for Chromium-based browsers using a readable extension and native messaging host.",
+  "license": "MIT",
   "type": "module",
+  "keywords": [
+    "opencode",
+    "chromium",
+    "browser-automation",
+    "native-messaging",
+    "chrome-extension"
+  ],
+  "files": [
+    ".opencode/.gitignore",
+    ".opencode/package.json",
+    ".opencode/plugins",
+    ".opencode/skills",
+    "docs/architecture.md",
+    "extension",
+    "native-host",
+    "opencode-plugin",
+    "scripts",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "host": "node native-host/src/host.js",
+    "check": "npm run check:opencode-plugin && npm test",
     "install:native-host": "node scripts/install-native-host.js",
     "check:native-host": "node scripts/check-native-host.js",
     "check:extension": "node scripts/check-extension-installed.js --json",

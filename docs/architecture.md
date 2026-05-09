@@ -87,6 +87,6 @@ OpenCode tools call the host with JSON-RPC requests such as:
 
 The host relays compatible requests to the extension and returns the response to the OpenCode tool.
 
-## Reference Material
+## Public Source Boundary
 
-The `reference/` directory contains extracted Codex artifacts. These files are kept for protocol comparison and should not be edited as the source of the new implementation.
+The public repository contains the readable OpenCode plugin, Chromium extension, native host, setup helpers, and documentation. Internal comparison material is not part of the published source tree.

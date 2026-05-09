@@ -18,6 +18,7 @@ const tabLocks = new Map();
 const cdpEventsByTabId = new Map();
 const cursorStateByTabId = new Map();
 const cursorArrivalWaiters = new Map();
+const cursorInjectedTabs = new Set();
 const downloadEvents = [];
 const inlineResponseEventKeys = new Set();
 let deliverableGroupId = null;
@@ -244,7 +245,7 @@ function tabIdFromParams(params) {
 }
 
 function cursorIdFromParams(params) {
-  const id = params.cursorId ?? params.cursor_id ?? params.turn_id ?? params.turnId ?? params.session_id ?? params.sessionId;
+  const id = params.cursorId ?? params.cursor_id ?? params.session_id ?? params.sessionId;
   return typeof id === "string" && id.length > 0 ? id : "default";
 }
 
@@ -480,17 +481,26 @@ async function untrackTab(sessionId, tabId) {
   if (!session.tabIds.size) sessions.delete(sessionId);
   cdpEventsByTabId.delete(tabId);
   cursorStateByTabId.delete(tabId);
+  cursorInjectedTabs.delete(tabId);
   await persistSessions().catch(() => {});
 }
 
-async function injectCursor(tabId) {
-  if (!chrome.scripting?.executeScript) return;
-  await chromeCall((done) => {
-    chrome.scripting.executeScript(
-      { target: { tabId }, files: ["content-scripts/cursor.js"], injectImmediately: true },
-      done,
-    );
-  }).catch(() => {});
+async function injectCursor(tabId, options = {}) {
+  if (!chrome.scripting?.executeScript) return false;
+  if (!options.force && cursorInjectedTabs.has(tabId)) return true;
+  try {
+    await chromeCall((done) => {
+      chrome.scripting.executeScript(
+        { target: { tabId }, files: ["content-scripts/cursor.js"], injectImmediately: true },
+        done,
+      );
+    });
+    cursorInjectedTabs.add(tabId);
+    return true;
+  } catch {
+    cursorInjectedTabs.delete(tabId);
+    return false;
+  }
 }
 
 function cursorWaiterKey(tabId, cursorId, moveSequence) {
@@ -516,9 +526,20 @@ async function publishCursorState(tabId, state) {
   const cursorId = state.cursorId ?? "default";
   cursorStatesForTab(tabId).set(cursorId, { ...state, cursorId });
   await injectCursor(tabId);
-  await chromeCall((done) => {
-    chrome.tabs.sendMessage(tabId, { type: "OPENCODE_CURSOR_STATE", ...state, cursorId }, done);
-  }).catch(() => {});
+  try {
+    await chromeCall((done) => {
+      chrome.tabs.sendMessage(tabId, { type: "OPENCODE_CURSOR_STATE", ...state, cursorId }, done);
+    });
+    return;
+  } catch {
+    cursorInjectedTabs.delete(tabId);
+  }
+
+  if (await injectCursor(tabId, { force: true })) {
+    await chromeCall((done) => {
+      chrome.tabs.sendMessage(tabId, { type: "OPENCODE_CURSOR_STATE", ...state, cursorId }, done);
+    }).catch(() => {});
+  }
 }
 
 async function moveMouse(params) {
@@ -661,17 +682,34 @@ async function executeInputGesture(params) {
 
   return withTabLock(tabId, async () => {
     const results = [];
+    const hasCursorSteps = steps.some((s) => s.cursor && Number.isFinite(s.cursor.x) && Number.isFinite(s.cursor.y));
+    const cursorPublishInterval = hasCursorSteps && steps.length > 20 ? Math.max(1, Math.floor(steps.length / 20)) : 1;
+    let stepIndex = 0;
+
     for (const step of steps) {
+      stepIndex += 1;
+      const isLast = stepIndex === steps.length;
       if (step.cursor && Number.isFinite(step.cursor.x) && Number.isFinite(step.cursor.y)) {
         moveSequence += 1;
-        await publishCursorState(tabId, {
-          x: Number(step.cursor.x),
-          y: Number(step.cursor.y),
-          visible: step.cursor.visible !== false,
-          moveSequence,
-          cursorId,
-          imageUrl: chrome.runtime.getURL("images/cursor-chat.png"),
-        });
+        if (isLast || stepIndex % cursorPublishInterval === 1) {
+          await publishCursorState(tabId, {
+            x: Number(step.cursor.x),
+            y: Number(step.cursor.y),
+            visible: step.cursor.visible !== false,
+            moveSequence,
+            cursorId,
+            imageUrl: chrome.runtime.getURL("images/cursor-chat.png"),
+          });
+        } else {
+          cursorStatesForTab(tabId).set(cursorId, {
+            x: Number(step.cursor.x),
+            y: Number(step.cursor.y),
+            visible: step.cursor.visible !== false,
+            moveSequence,
+            cursorId,
+            imageUrl: chrome.runtime.getURL("images/cursor-chat.png"),
+          });
+        }
       }
 
       if (typeof step.method === "string" && step.method.length > 0) {
@@ -1075,8 +1113,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   attachedTabs.delete(tabId);
   cdpEventsByTabId.delete(tabId);
   cursorStateByTabId.delete(tabId);
+  cursorInjectedTabs.delete(tabId);
   const owner = findTabOwner(tabId);
   if (owner) void untrackTab(owner.sessionId, tabId);
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading" || typeof changeInfo.url === "string") cursorInjectedTabs.delete(tabId);
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
