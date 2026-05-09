@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">OpenCode Chromium Browser Plugin</title>
+  <desc id="desc">A Chromium-style browser ring wrapped around code brackets.</desc>
+  <defs>
+    <linearGradient id="ring" x1="70" y1="70" x2="442" y2="442" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#27d3ff"/>
+      <stop offset="0.35" stop-color="#4f7cff"/>
+      <stop offset="0.7" stop-color="#9d5cff"/>
+      <stop offset="1" stop-color="#22d3a6"/>
+    </linearGradient>
+    <linearGradient id="core" x1="160" y1="150" x2="356" y2="366" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#101828"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#020617" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#f8fbff"/>
+  <g filter="url(#shadow)">
+    <circle cx="256" cy="256" r="178" fill="none" stroke="url(#ring)" stroke-width="58" stroke-linecap="round"/>
+    <path d="M96 256c0-62 35-116 86-143l48 84a64 64 0 0 0-38 59H96Z" fill="#22c55e" opacity="0.96"/>
+    <path d="M182 113a160 160 0 0 1 153 4l-49 84a64 64 0 0 0-56-4l-48-84Z" fill="#38bdf8" opacity="0.96"/>
+    <path d="M335 117a160 160 0 0 1 81 139h-96a64 64 0 0 0-34-55l49-84Z" fill="#6366f1" opacity="0.96"/>
+    <path d="M416 256a160 160 0 0 1-80 139l-49-83a64 64 0 0 0 33-56h96Z" fill="#a855f7" opacity="0.96"/>
+    <path d="M336 395a160 160 0 0 1-160-1l49-83a64 64 0 0 0 62 1l49 83Z" fill="#14b8a6" opacity="0.96"/>
+    <path d="M176 394a160 160 0 0 1-80-138h96a64 64 0 0 0 33 55l-49 83Z" fill="#06b6d4" opacity="0.96"/>
+    <circle cx="256" cy="256" r="115" fill="url(#core)"/>
+    <circle cx="256" cy="256" r="89" fill="#0f172a" stroke="#38bdf8" stroke-width="3" opacity="0.98"/>
+    <path d="M220 211 170 256l50 45" fill="none" stroke="#e0f2fe" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M292 211 342 256l-50 45" fill="none" stroke="#e0f2fe" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M272 205 239 307" fill="none" stroke="#22d3ee" stroke-width="16" stroke-linecap="round"/>
+  </g>
+</svg>
