@@ -83,11 +83,13 @@ process.stdin.on("data", (chunk) => {
 
 process.stdin.on("end", () => {
   log("extension disconnected");
+  relay.shutdown("Browser extension disconnected");
   server.close(() => cleanupSocketPath());
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
+    relay.shutdown(`Native host received ${signal}`);
     server.close(() => {
       cleanupSocketPath();
       process.exit(0);

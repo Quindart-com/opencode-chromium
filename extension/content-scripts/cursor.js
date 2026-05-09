@@ -212,6 +212,9 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
   }
 
   function applyState(state) {
+    const x = Number(state.x);
+    const y = Number(state.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const entry = entryFor(state.cursorId);
     const wasVisible = entry.visible;
     if (state.imageUrl && entry.image.src !== state.imageUrl) {
@@ -219,7 +222,7 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
       entry.image.src = state.imageUrl;
     }
 
-    entry.target = clampPoint({ x: Number(state.x), y: Number(state.y) });
+    entry.target = clampPoint({ x, y });
     entry.moveSequence = Number.isInteger(state.moveSequence) ? state.moveSequence : entry.moveSequence + 1;
     entry.pendingArrival = entry.moveSequence;
     const visible = state.visible !== false;
