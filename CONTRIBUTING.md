@@ -5,14 +5,14 @@ Contributions are welcome.
 ## Development Setup
 
 ```bash
-npm install
-npm run check
+bun install
+bun run check
 ```
 
 Load `extension/` as an unpacked extension in a Chromium-based browser, then install the native messaging host with the generated extension ID:
 
 ```bash
-npm run install:native-host -- --extension-id <extension-id> --browsers chrome
+bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 ```
 
 ## Pull Requests
