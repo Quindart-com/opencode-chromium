@@ -1,4 +1,23 @@
+# Dependencies
 node_modules/
+**/node_modules/
+
+# Build output
 dist/
+
+# Local OpenCode install artifacts
+.opencode/node_modules/
+.opencode/package-lock.json
+.opencode/bun.lock
+
+# Local extension/native-host state
+scripts/extension-id.json
+
+# Internal reference material, kept locally only
+reference/
+docs/implementation-plan.md
+
+# Logs and OS files
 *.log
 .DS_Store
+Thumbs.db

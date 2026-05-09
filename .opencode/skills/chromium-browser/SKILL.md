@@ -106,7 +106,7 @@ Only run `scripts/open-browser-window.js` without `--dry-run` after the user agr
 - Use `browser_enable_inspection` before collecting console or network events.
 - Use `browser_console_logs` for `Runtime.consoleAPICalled` and `Log.entryAdded` events.
 - Use `browser_network_events` for captured `Network.*` events.
-- Use `browser_cdp` for targeted CDP commands such as `Runtime.evaluate`, `DOM.getDocument`, or `Performance.getMetrics`; the plugin enables the Performance domain automatically for metrics.
+- Use `browser_cdp` for targeted CDP commands such as `Runtime.evaluate`, `DOM.getDocument`, or `Performance.getMetrics`; pass command parameters with `params`, or with `paramsJson` if the client does not expose arbitrary object params. The plugin enables the Performance domain automatically for metrics.
 - Use `browser_download_events` after actions that may start downloads. Inline PDFs are reported with `status: "opened_inline"` when Chrome opens them in the browser instead of downloading them.
 - Use `browser_set_file_input` for file inputs after confirming uploads with the user when required.
 - Confirm before reading or writing clipboard content unless the user explicitly requested clipboard use.

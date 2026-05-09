@@ -26,6 +26,10 @@ function extensionRequest(context, method, params = {}) {
   return browserRequest(method, sessionParams(context, params));
 }
 
+function cdpRequestOptions(timeoutMs) {
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs: Math.ceil(timeoutMs + 5000) } : {};
+}
+
 async function cdp(context, tabId, method, commandParams = {}, timeoutMs) {
   if (method !== "Target.getTargets") {
     await extensionRequest(context, "attach", { tabId });
@@ -38,6 +42,7 @@ async function cdp(context, tabId, method, commandParams = {}, timeoutMs) {
           commandParams: {},
           timeoutMs,
         }),
+        cdpRequestOptions(timeoutMs),
       ).catch(() => {});
     }
   }
@@ -49,6 +54,7 @@ async function cdp(context, tabId, method, commandParams = {}, timeoutMs) {
       commandParams,
       timeoutMs,
     }),
+    cdpRequestOptions(timeoutMs),
   );
 }
 
@@ -106,6 +112,25 @@ function keyEventParams(key) {
 
 function stringify(value) {
   return JSON.stringify(value, null, 2);
+}
+
+function parseJsonObject(value, label) {
+  if (value === undefined || value === null || value === "") return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new Error(`${label} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${label} must be a JSON object`);
+  return parsed;
+}
+
+function cdpParamsFromArgs(args) {
+  return {
+    ...(args.params && typeof args.params === "object" ? args.params : {}),
+    ...parseJsonObject(args.paramsJson, "paramsJson"),
+  };
 }
 
 function escapeHtml(value) {
@@ -203,7 +228,7 @@ function mouseStep(commandParams, cursor, delayMs = 0) {
   };
 }
 
-function interpolatePath(points, maxStep = 6) {
+function interpolatePath(points, maxStep = 16) {
   const output = [];
   for (const point of points) {
     if (!output.length) {
@@ -553,21 +578,22 @@ export const ChromiumBrowserPlugin = async () => {
             height: tool.schema.number(),
             scale: tool.schema.number().optional(),
           }).optional(),
+          timeoutMs: tool.schema.number().int().positive().default(30000),
         },
         async execute(args, context) {
           await activate(context, args.tabId);
           await cdp(context, args.tabId, "Page.enable", {}).catch(() => {});
-          const params = { format: "png" };
+          const params = { format: "png", optimizeForSpeed: true };
           if (args.clip) params.clip = { ...args.clip, scale: args.clip.scale ?? 1 };
           if (args.fullPage) {
-            const metrics = await cdp(context, args.tabId, "Page.getLayoutMetrics", {});
+            const metrics = await cdp(context, args.tabId, "Page.getLayoutMetrics", {}, args.timeoutMs);
             const size = metrics.contentSize ?? metrics.cssContentSize;
             if (size) {
               params.captureBeyondViewport = true;
               params.clip = { x: 0, y: 0, width: Math.ceil(size.width), height: Math.ceil(size.height), scale: 1 };
             }
           }
-          const result = await cdp(context, args.tabId, "Page.captureScreenshot", params);
+          const result = await cdp(context, args.tabId, "Page.captureScreenshot", params, args.timeoutMs);
           return stringify({ mimeType: "image/png", base64: result.data });
         },
       }),
@@ -668,7 +694,7 @@ export const ChromiumBrowserPlugin = async () => {
           }
           const end = points.at(-1);
           steps.push(mouseStep({ type: "mouseReleased", x: end.x, y: end.y, button: args.button, buttons: 0, clickCount: 1, pointerType: "mouse" }, end, 16));
-          const timeoutMs = Math.min(120000, Math.max(30000, steps.reduce((total, step) => total + (step.delayMs ?? 0), 0) + 15000));
+          const timeoutMs = Math.min(180000, Math.max(30000, steps.length * 500 + 15000));
           await inputGesture(context, args.tabId, steps, timeoutMs);
           return stringify({ dragged: true, tabId: args.tabId, points: args.path.length, dispatchedPoints: points.length });
         },
@@ -927,11 +953,12 @@ export const ChromiumBrowserPlugin = async () => {
         args: {
           tabId: tool.schema.number().int().positive(),
           method: tool.schema.string().describe("CDP method, for example Runtime.evaluate"),
-          params: tool.schema.record(tool.schema.string(), tool.schema.any()).default({}),
+          params: tool.schema.record(tool.schema.string(), tool.schema.any()).optional().describe("CDP command parameters as an object."),
+          paramsJson: tool.schema.string().optional().describe("CDP command parameters as a JSON object string. Use this if arbitrary object params are not exposed by the client."),
           timeoutMs: tool.schema.number().int().positive().optional(),
         },
         async execute(args, context) {
-          return stringify(await cdp(context, args.tabId, args.method, args.params, args.timeoutMs));
+          return stringify(await cdp(context, args.tabId, args.method, cdpParamsFromArgs(args), args.timeoutMs));
         },
       }),
 

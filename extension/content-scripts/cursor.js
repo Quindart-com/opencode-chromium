@@ -1,6 +1,6 @@
-const OPENCODE_CURSOR_VERSION = 2;
+const OPENCODE_CURSOR_VERSION = 3;
 
-if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
+if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorInstalledVersion < OPENCODE_CURSOR_VERSION) {
   globalThis.__opencodeCursorInstalledVersion = OPENCODE_CURSOR_VERSION;
 
   const ROOT_ID = "opencode-agent-cursor-root";
@@ -11,6 +11,7 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
 
   let host;
   let shadow;
+  let messageListenerActive = false;
   const cursors = new Map();
 
   function clamp(value, min, max) {
@@ -49,9 +50,12 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
       "position: fixed",
       "left: 0",
       "top: 0",
+      "width: 100vw",
+      "height: 100vh",
       "z-index: 2147483647",
       "pointer-events: none",
-      "contain: layout style paint",
+      "overflow: visible",
+      "contain: style",
     ].join(";");
     document.documentElement.appendChild(host);
 
@@ -131,6 +135,7 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
       moveSequence: 0,
       pendingArrival: null,
       raf: null,
+      visible: false,
     };
   }
 
@@ -165,6 +170,22 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
     sendRuntimeMessage({ type: "OPENCODE_CURSOR_ARRIVED", cursorId: entry.cursorId, moveSequence: sequence });
   }
 
+  function stopAnimation(entry) {
+    if (entry.raf != null) cancelAnimationFrame(entry.raf);
+    entry.raf = null;
+  }
+
+  function finishAtTarget(entry) {
+    stopAnimation(entry);
+    entry.current = entry.target;
+    entry.cursor.style.transform = transformFor(entry, entry.current);
+    if (entry.pendingArrival === entry.moveSequence) {
+      const sequence = entry.pendingArrival;
+      entry.pendingArrival = null;
+      notifyArrived(entry, sequence);
+    }
+  }
+
   function animate(entry) {
     const dx = entry.target.x - entry.current.x;
     const dy = entry.target.y - entry.current.y;
@@ -192,6 +213,7 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
 
   function applyState(state) {
     const entry = entryFor(state.cursorId);
+    const wasVisible = entry.visible;
     if (state.imageUrl && entry.image.src !== state.imageUrl) {
       entry.cursor.classList.remove("image-error");
       entry.image.src = state.imageUrl;
@@ -201,11 +223,18 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
     entry.moveSequence = Number.isInteger(state.moveSequence) ? state.moveSequence : entry.moveSequence + 1;
     entry.pendingArrival = entry.moveSequence;
     const visible = state.visible !== false;
+    entry.visible = visible;
     entry.cursor.classList.toggle("visible", visible);
 
     if (!visible) {
+      stopAnimation(entry);
       entry.pendingArrival = null;
       notifyArrived(entry, entry.moveSequence);
+      return;
+    }
+
+    if (!wasVisible || document.hidden) {
+      finishAtTarget(entry);
       return;
     }
 
@@ -215,13 +244,6 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
   function applyStates(states) {
     for (const state of states) applyState(state);
   }
-
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type !== "OPENCODE_CURSOR_STATE") return false;
-    applyState(message);
-    sendResponse({ ok: true });
-    return true;
-  });
 
   function refreshCurrentState() {
     sendRuntimeMessage({ type: "OPENCODE_GET_CURSOR_STATE" }, (response) => {
@@ -239,8 +261,18 @@ if (globalThis.__opencodeCursorInstalledVersion !== OPENCODE_CURSOR_VERSION) {
     }
   }
 
-  window.addEventListener("resize", refreshBounds);
-  window.visualViewport?.addEventListener("resize", refreshCurrentState);
-  window.visualViewport?.addEventListener("scroll", refreshCurrentState);
-  refreshCurrentState();
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "OPENCODE_CURSOR_STATE") return false;
+    applyState(message);
+    sendResponse({ ok: true });
+    return true;
+  });
+
+  if (!messageListenerActive) {
+    messageListenerActive = true;
+    window.addEventListener("resize", refreshBounds);
+    window.visualViewport?.addEventListener("resize", refreshCurrentState);
+    window.visualViewport?.addEventListener("scroll", refreshCurrentState);
+    refreshCurrentState();
+  }
 }
