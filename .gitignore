@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 **/node_modules/
+bun.lock
 
 # Build output
 dist/
@@ -16,6 +17,9 @@ scripts/extension-id.json
 # Internal reference material, kept locally only
 reference/
 docs/implementation-plan.md
+
+# Local scratch files
+house-concurrency-demo.html
 
 # Logs and OS files
 *.log
