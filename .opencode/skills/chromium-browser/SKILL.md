@@ -97,9 +97,13 @@ Only run `scripts/open-browser-window.js` without `--dry-run` after the user agr
 - Browser tools target the controlled tab through the extension and CDP without bringing that tab or window to the foreground by default.
 - Use `browser_move` when you need to show the OpenCode cursor overlay before acting on the current tab.
 - `browser_click`, `browser_double_click`, and `browser_drag` serialize mouse gestures per tab so concurrent agents do not interleave press/move/release events.
-- If a click misses, take a fresh screenshot or snapshot before choosing new coordinates.
-- Prefer `browser_dom_snapshot` plus `browser_dom_click` for visible interactable elements when it avoids brittle coordinates.
-- Use `browser_locator_*` for straightforward CSS-selector interactions; take a fresh DOM snapshot before retrying failed selectors.
+- `browser_locator_click` and `browser_dom_click` now verify that the target exists, is visible, is enabled, accepts pointer events, and is not covered at its click point. If those checks fail, treat the tool failure as real feedback and inspect again before retrying.
+- `browser_type`, `browser_dom_type`, and `browser_locator_fill` require an editable focused/target element and verify the resulting value or text changed as expected.
+- `browser_keypress` supports common chords such as `Control+A`, `Ctrl+A`, `Meta+A`, and `Shift+Tab`. Edit chords such as select-all require a focused editable element and fail if verification fails.
+- `browser_navigate` waits for `domcontentloaded` by default. Pass `waitUntil: "none"` only when you intentionally want to race page loading, or `waitUntil: "load"` when full load completion matters.
+- If a coordinate click misses, take a fresh screenshot or snapshot before choosing new coordinates.
+- Prefer `browser_dom_snapshot` plus `browser_dom_click` for visible interactable elements when it avoids brittle coordinates. Node IDs are snapshot-scoped; take a fresh snapshot after navigation or major DOM changes.
+- Use `browser_locator_*` for straightforward CSS-selector interactions; failed selectors, hidden elements, disabled controls, and covered targets should be handled by inspecting the page again rather than assuming success.
 
 ## Inspection
 

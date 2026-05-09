@@ -9,6 +9,7 @@ const MAX_CDP_EVENTS_PER_TAB = 500;
 const MAX_DOWNLOAD_EVENTS = 200;
 const MAX_INLINE_RESPONSE_KEYS = 500;
 const DEFAULT_CDP_TIMEOUT_MS = 10000;
+const DEFAULT_NATIVE_REQUEST_TIMEOUT_MS = 15000;
 const HOST_STATUS_STORAGE_KEY = "OPENCODE_NATIVE_HOST_STATUS";
 const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
 
@@ -75,14 +76,23 @@ class NativeRpc {
     }
   }
 
-  async request(method, params) {
+  async request(method, params, options = {}) {
     const id = this.#nextId++;
     const promise = new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+        ? options.timeoutMs
+        : DEFAULT_NATIVE_REQUEST_TIMEOUT_MS;
+      const timeout = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(new Error(`Native host request timed out after ${timeoutMs}ms: ${method}`));
+      }, timeoutMs);
+      this.#pending.set(id, { resolve, reject, timeout });
     });
     try {
       this.#post({ jsonrpc: "2.0", method, params, id });
     } catch (error) {
+      const pending = this.#pending.get(id);
+      if (pending) clearTimeout(pending.timeout);
       this.#pending.delete(id);
       throw error;
     }
@@ -126,7 +136,10 @@ class NativeRpc {
   }
 
   #rejectPending(message) {
-    for (const pending of this.#pending.values()) pending.reject(new Error(message));
+    for (const pending of this.#pending.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error(message));
+    }
     this.#pending.clear();
   }
 
@@ -143,6 +156,7 @@ class NativeRpc {
     const pending = this.#pending.get(message.id);
     if (!pending) return;
     this.#pending.delete(message.id);
+    clearTimeout(pending.timeout);
 
     if (message.error) pending.reject(new Error(message.error.message ?? "RPC error"));
     else pending.resolve(message.result);
@@ -187,6 +201,12 @@ function nowIso() {
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function finiteNumber(value, label) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`${label} must be a finite number`);
+  return number;
 }
 
 function requiredSessionId(params) {
@@ -525,21 +545,24 @@ async function waitForCursorArrival(tabId, cursorId, moveSequence, timeoutMs) {
 async function publishCursorState(tabId, state) {
   const cursorId = state.cursorId ?? "default";
   cursorStatesForTab(tabId).set(cursorId, { ...state, cursorId });
-  await injectCursor(tabId);
+  if (!(await injectCursor(tabId))) throw new Error(`Could not inject cursor overlay into tab ${tabId}`);
   try {
-    await chromeCall((done) => {
+    const response = await chromeCall((done) => {
       chrome.tabs.sendMessage(tabId, { type: "OPENCODE_CURSOR_STATE", ...state, cursorId }, done);
     });
-    return;
-  } catch {
+    return { delivered: true, retried: false, response };
+  } catch (error) {
     cursorInjectedTabs.delete(tabId);
   }
 
   if (await injectCursor(tabId, { force: true })) {
-    await chromeCall((done) => {
+    const response = await chromeCall((done) => {
       chrome.tabs.sendMessage(tabId, { type: "OPENCODE_CURSOR_STATE", ...state, cursorId }, done);
-    }).catch(() => {});
+    });
+    return { delivered: true, retried: true, response };
   }
+
+  throw new Error(`Could not deliver cursor state to tab ${tabId}`);
 }
 
 async function moveMouse(params) {
@@ -551,9 +574,11 @@ async function moveMouse(params) {
   const moveSequence = Number.isInteger(params.moveSequence)
     ? params.moveSequence
     : (previous?.moveSequence ?? 0) + 1;
+  const x = finiteNumber(params.x, "x");
+  const y = finiteNumber(params.y, "y");
   const state = {
-    x: Number(params.x),
-    y: Number(params.y),
+    x,
+    y,
     visible: params.visible !== false,
     moveSequence,
     cursorId,
@@ -563,9 +588,13 @@ async function moveMouse(params) {
   const arrival = params.waitForArrival
     ? waitForCursorArrival(tabId, cursorId, moveSequence, params.timeoutMs ?? 2000)
     : null;
-  await publishCursorState(tabId, state);
-  if (arrival) return arrival;
-  return { moveSequence, cursorId };
+  const delivery = await publishCursorState(tabId, state);
+  if (arrival) {
+    const result = await arrival;
+    if (result.timedOut) throw new Error(`Cursor did not report arrival within ${params.timeoutMs ?? 2000}ms`);
+    return { ...result, ...delivery };
+  }
+  return { moveSequence, cursorId, ...delivery };
 }
 
 async function hideCursor(tabId, cursorId) {
@@ -601,7 +630,10 @@ async function attachTab(tabId, sessionId) {
     try {
       await chromeCall((done) => chrome.debugger.attach({ tabId }, DEBUGGER_VERSION, done));
     } catch (error) {
-      if (!/another debugger/i.test(errorMessage(error))) throw error;
+      if (/another debugger/i.test(errorMessage(error))) {
+        throw new Error(`Cannot attach debugger to tab ${tabId}: another debugger is already attached`);
+      }
+      throw error;
     }
     attachedTabs.set(tabId, sessionId);
     return {};
@@ -649,7 +681,6 @@ async function sendCdpCommand(tabId, method, commandParams, timeoutMs) {
 }
 
 async function executeCdp(params) {
-  const tabId = tabIdFromParams(params);
   const method = params.method;
   if (typeof method !== "string" || method.length === 0) throw new Error("Expected CDP method");
 
@@ -658,6 +689,7 @@ async function executeCdp(params) {
     return { targetInfos: targets };
   }
 
+  const tabId = tabIdFromParams(params);
   ensureControlledTab(params, tabId);
   if (!attachedTabs.has(tabId)) throw new Error("Debugger unattached");
 
@@ -676,6 +708,19 @@ async function executeInputGesture(params) {
   const cursorId = cursorIdFromParams(params);
   const steps = Array.isArray(params.steps) ? params.steps : [];
   if (!steps.length) throw new Error("inputGesture requires at least one step");
+  if (steps.length > 5000) throw new Error(`inputGesture step limit exceeded: ${steps.length}`);
+
+  for (const [index, step] of steps.entries()) {
+    if (step.cursor) {
+      finiteNumber(step.cursor.x, `steps[${index}].cursor.x`);
+      finiteNumber(step.cursor.y, `steps[${index}].cursor.y`);
+    }
+    const params = step.commandParams ?? step.command_params;
+    if (params && (step.method === "Input.dispatchMouseEvent" || step.method === "Input.dispatchTouchEvent")) {
+      if (params.x !== undefined) finiteNumber(params.x, `steps[${index}].commandParams.x`);
+      if (params.y !== undefined) finiteNumber(params.y, `steps[${index}].commandParams.y`);
+    }
+  }
 
   await attachTab(tabId, sessionId);
   let moveSequence = cursorStateByTabId.get(tabId)?.get(cursorId)?.moveSequence ?? 0;
@@ -1010,7 +1055,7 @@ rpc.register("closeTab", async (params) => {
   const tabId = tabIdFromParams(params);
   const { sessionId } = ensureControlledTab(params, tabId);
   await detachTab(tabId);
-  await chromeCall((done) => chrome.tabs.remove(tabId, done)).catch(() => {});
+  await chromeCall((done) => chrome.tabs.remove(tabId, done));
   await untrackTab(sessionId, tabId);
   return {};
 });
@@ -1041,8 +1086,8 @@ rpc.register("finalizeTabs", async (params) => {
     if (status) {
       if (status === "deliverable") {
         await ensureDeliverableGroup(tabId).catch(() => {});
-        await untrackTab(id, tabId);
       }
+      await untrackTab(id, tabId);
       continue;
     }
 
@@ -1052,7 +1097,7 @@ rpc.register("finalizeTabs", async (params) => {
       continue;
     }
 
-    await chromeCall((done) => chrome.tabs.remove(tabId, done)).catch(() => {});
+    await chromeCall((done) => chrome.tabs.remove(tabId, done));
     await untrackTab(id, tabId);
   }
   await persistSessions().catch(() => {});
@@ -1102,7 +1147,6 @@ rpc.register("executeUnhandledCommand", async (params) => ({ handled: false, com
 
 chrome.debugger.onEvent.addListener((source, method, params) => {
   recordCdpEvent(source, method, params);
-  void rpc.notify("onCDPEvent", { source, method, params }).catch(() => {});
 });
 
 chrome.debugger.onDetach.addListener((source) => {
