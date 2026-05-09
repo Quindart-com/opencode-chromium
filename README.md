@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="OpenCode Chromium Browser Plugin Logo" width="200"/>
+  <img src="assets/logo.svg" alt="OpenCode Chromium Browser Plugin Logo" width="200"/>
 </p>
 
 <h1 align="center">OpenCode Chromium Browser Plugin</h1>
@@ -186,7 +186,7 @@ opencode-plugin/   OpenCode plugin source (client + tool definitions)
 .opencode/         OpenCode plugin entrypoint + browser skill
 scripts/           Setup and diagnostic helpers (install, check, find)
 docs/              Architecture notes
-logo.png           Repository logo
+assets/logo.svg    Repository logo
 ```
 
 ---

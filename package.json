@@ -4,7 +4,6 @@
   "description": "OpenCode browser automation for Chromium-based browsers using a readable extension and native messaging host.",
   "license": "MIT",
   "type": "module",
-  "packageManager": "bun@1.3.6",
   "keywords": [
     "opencode",
     "chromium",
@@ -17,6 +16,7 @@
     ".opencode/package.json",
     ".opencode/plugins",
     ".opencode/skills",
+    "assets",
     "docs/architecture.md",
     "extension",
     "native-host",
@@ -30,7 +30,7 @@
   },
   "scripts": {
     "host": "node native-host/src/host.js",
-    "check": "bun run check:opencode-plugin && bun run test",
+    "check": "npm run check:opencode-plugin && npm test",
     "install:native-host": "node scripts/install-native-host.js",
     "check:native-host": "node scripts/check-native-host.js",
     "check:extension": "node scripts/check-extension-installed.js --json",
