@@ -64,7 +64,7 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 ## Requirements
 
 - [Node.js](https://nodejs.org/) 20 or newer
-- npm
+- [bun](https://bun.sh/)
 - [OpenCode](https://opencode.ai)
 - A Chromium-based browser (Chrome, Edge, Brave, etc.)
 
@@ -75,7 +75,7 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 1. **Install dependencies**
 
    ```powershell
-   npm install
+   bun install
    ```
 
 2. **Load the extension**
@@ -89,13 +89,13 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 3. **Install the native messaging host**
 
    ```powershell
-   npm run install:native-host -- --extension-id <extension-id> --browsers chrome
+   bun run install:native-host -- --extension-id <extension-id> --browsers chrome
    ```
 
    Or auto-detect for all installed browsers:
 
    ```powershell
-   npm run install:native-host -- --auto --browsers all
+   bun run install:native-host -- --auto --browsers all
    ```
 
 4. **Restart OpenCode** from this repository directory so it picks up `.opencode/plugins/chromium-browser.js` and `.opencode/skills/chromium-browser/SKILL.md`.
@@ -107,7 +107,7 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 1. **Install dependencies**
 
    ```bash
-   npm install
+   bun install
    ```
 
 2. **Load the extension**
@@ -121,13 +121,13 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 3. **Install the native messaging host**
 
    ```bash
-   npm run install:native-host -- --extension-id <extension-id> --browsers chrome
+   bun run install:native-host -- --extension-id <extension-id> --browsers chrome
    ```
 
    Or auto-detect for all installed browsers:
 
    ```bash
-   npm run install:native-host -- --auto --browsers all
+   bun run install:native-host -- --auto --browsers all
    ```
 
 4. **Restart OpenCode** from this repository directory.
@@ -138,16 +138,16 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 
 ```bash
 # Full check (plugin validation + tests)
-npm run check
+bun run check
 
 # List detected browsers
-npm run list:browsers
+bun run list:browsers
 
 # Check native host registration
-npm run check:native-host -- --json
+bun run check:native-host -- --json
 
 # Check whether the extension is installed in a browser profile
-npm run check:extension -- --browser chrome --extension-id <extension-id>
+bun run check:extension -- --browser chrome --extension-id <extension-id>
 ```
 
 Once set up, run `browser_status` in OpenCode to verify connectivity.
@@ -211,13 +211,13 @@ installing it, and only load the extension from a checkout you trust.
 
 ```bash
 # Run tests (native-host framing tests)
-npm test
+bun test
 
 # Validate the OpenCode plugin shape
-npm run check:opencode-plugin
+bun run check:opencode-plugin
 
 # Start the native host directly for local debugging
-npm run host
+bun run host
 ```
 
 ---

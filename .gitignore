@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 **/node_modules/
+package-lock.json
 bun.lock
 
 # Build output
@@ -9,17 +10,9 @@ dist/
 # Local OpenCode install artifacts
 .opencode/node_modules/
 .opencode/package-lock.json
-.opencode/bun.lock
 
 # Local extension/native-host state
 scripts/extension-id.json
-
-# Internal reference material, kept locally only
-reference/
-docs/implementation-plan.md
-
-# Local scratch files
-house-concurrency-demo.html
 
 # Logs and OS files
 *.log
