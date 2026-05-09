@@ -30,7 +30,7 @@
   },
   "scripts": {
     "host": "node native-host/src/host.js",
-    "check": "npm run check:opencode-plugin && npm test",
+    "check": "bun run check:opencode-plugin && bun test",
     "install:native-host": "node scripts/install-native-host.js",
     "check:native-host": "node scripts/check-native-host.js",
     "check:extension": "node scripts/check-extension-installed.js --json",

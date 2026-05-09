@@ -64,11 +64,11 @@ If the native host is not reachable, tell the user to load the extension and ins
 
 For setup diagnostics, use the repository scripts:
 
-- `node scripts/installed-browsers.js --json`
-- `node scripts/chrome-is-running.js --browser chrome --check --json`
-- `node scripts/check-extension-installed.js --browser chrome --json`
-- `node scripts/check-native-host.js chrome --json`
-- `node scripts/open-browser-window.js --browser chrome --dry-run --json`
+- `bun run list:browsers`
+- `bun run check:browser-running -- --browser chrome`
+- `bun run check:extension -- --browser chrome --extension-id <extension-id>`
+- `bun run check:native-host -- chrome --extension-id <extension-id> --json`
+- `bun run open:browser -- --browser chrome --dry-run`
 
 Only run `scripts/open-browser-window.js` without `--dry-run` after the user agrees to open a browser window.
 

@@ -4,7 +4,7 @@
 
 ### OpenCode Plugin
 
-The OpenCode plugin will expose browser automation as custom tools using `@opencode-ai/plugin`.
+The OpenCode plugin exposes browser automation as custom tools using `@opencode-ai/plugin`.
 
 Tool set:
 
