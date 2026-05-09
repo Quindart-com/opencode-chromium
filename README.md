@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <a href="https://x.com/ABadissy/status/2052852726736789586"><strong>Watch the demo on X</strong></a>
+</p>
+
+<p align="center">
   <a href="#why">Why</a> •
   <a href="#features">Features</a> •
   <a href="#supported-browsers">Browsers</a> •
