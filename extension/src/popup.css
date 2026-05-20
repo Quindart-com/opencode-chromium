@@ -1,5 +1,5 @@
 body {
-  min-width: 300px;
+  min-width: 340px;
   margin: 0;
   color: #171717;
   background: #fafafa;
@@ -37,4 +37,47 @@ dt {
 dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+form {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #d8d8d8;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  color: #616161;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #cfcfcf;
+  border-radius: 6px;
+  font: inherit;
+}
+
+button {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: white;
+  background: #166534;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+p {
+  margin: 8px 0 0;
+  color: #616161;
+  font-size: 12px;
 }

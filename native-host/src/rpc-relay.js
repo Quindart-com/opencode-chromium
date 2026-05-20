@@ -15,10 +15,12 @@ export class RpcRelay {
   #pendingBySocket = new Map();
   #nextRequestId = 1;
   #state;
+  #onProfile;
 
-  constructor({ extensionWriter, state }) {
+  constructor({ extensionWriter, state, onProfile }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
+    this.#onProfile = onProfile;
   }
 
   addClient(socket) {
@@ -103,6 +105,10 @@ export class RpcRelay {
     this.#state.lastExtensionMessageAt = new Date().toISOString();
 
     if (message?.method) {
+      if (message.method === "profile.hello") {
+        await this.#handleProfileHello(message);
+        return;
+      }
       await this.#handleExtensionRequestOrNotification(message);
       return;
     }
@@ -118,7 +124,27 @@ export class RpcRelay {
       ipcClients: this.#clients.size,
       lastExtensionMessageAt: this.#state.lastExtensionMessageAt ?? null,
       startedAt: this.#state.startedAt,
+      profile: this.#state.profile ?? null,
     };
+  }
+
+  async #handleProfileHello(message) {
+    const profile = message.params && typeof message.params === "object" ? message.params : {};
+    if (typeof profile.profileId !== "string" || profile.profileId.length === 0) {
+      if (message.id !== undefined) {
+        await this.#extensionWriter({
+          jsonrpc: JSON_RPC_VERSION,
+          id: message.id,
+          error: { code: -32602, message: "profile.hello requires profileId" },
+        });
+      }
+      return;
+    }
+
+    this.#onProfile?.(profile);
+    if (message.id !== undefined) {
+      await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, result: { registered: true } });
+    }
   }
 
   async #handleExtensionResponse(message) {

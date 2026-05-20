@@ -22,7 +22,17 @@
           <dt>Last Check</dt>
           <dd id="last-checked">-</dd>
         </div>
+        <div>
+          <dt>Profile ID</dt>
+          <dd id="profile-id">Checking...</dd>
+        </div>
       </dl>
+      <form id="profile-form">
+        <label for="profile-label">Profile label</label>
+        <input id="profile-label" name="profile-label" type="text" maxlength="80" placeholder="work, personal, staging">
+        <button type="submit">Save</button>
+        <p id="profile-help">Labels stay local and are used only to pick the right open browser profile.</p>
+      </form>
     </main>
     <script type="module" src="src/popup.js"></script>
   </body>

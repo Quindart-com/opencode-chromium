@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { tool } from "@opencode-ai/plugin";
-import { browserRequest } from "./client.js";
+import { browserRequest, listBrowserProfiles, resolveBrowserProfile } from "./client.js";
+
+const selectedProfilesBySession = new Map();
+const usedProfilesBySession = new Map();
 
 function contextValue(context, keys) {
   for (const key of keys) {
@@ -11,8 +14,12 @@ function contextValue(context, keys) {
   return null;
 }
 
+function sessionKey(context) {
+  return contextValue(context, ["sessionID", "sessionId", "session_id"]) ?? "opencode";
+}
+
 function sessionParams(context, params = {}) {
-  const sessionId = contextValue(context, ["sessionID", "sessionId", "session_id"]) ?? "opencode";
+  const sessionId = sessionKey(context);
   const turnId = contextValue(context, ["messageID", "messageId", "turnID", "turnId", "requestID", "requestId"])
     ?? sessionId;
   return {
@@ -22,25 +29,98 @@ function sessionParams(context, params = {}) {
   };
 }
 
-function extensionRequest(context, method, params = {}) {
-  return browserRequest(method, sessionParams(context, params));
+function explicitProfileId(params = {}) {
+  const id = params.profileId ?? params.profile_id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+function markProfileUsed(context, profileId) {
+  const key = sessionKey(context);
+  let used = usedProfilesBySession.get(key);
+  if (!used) {
+    used = new Set();
+    usedProfilesBySession.set(key, used);
+  }
+  used.add(profileId);
+}
+
+async function resolveSessionProfileId(context, requestedProfileId = null) {
+  const key = sessionKey(context);
+  const selected = selectedProfilesBySession.get(key) ?? null;
+  const used = usedProfilesBySession.get(key);
+  const stickyProfileId = !requestedProfileId && !selected && used?.size === 1 ? [...used][0] : null;
+  const profile = await resolveBrowserProfile(requestedProfileId ?? selected ?? stickyProfileId);
+  return profile.profileId;
+}
+
+async function profileSessionParams(context, params = {}) {
+  const requestedProfileId = explicitProfileId(params);
+  const profileId = await resolveSessionProfileId(context, requestedProfileId);
+  const cleanParams = { ...params };
+  delete cleanParams.profileId;
+  delete cleanParams.profile_id;
+  return { profileId, params: sessionParams(context, { ...cleanParams, profile_id: profileId }) };
+}
+
+async function targetProfileIdsForSession(context) {
+  const key = sessionKey(context);
+  const used = [...(usedProfilesBySession.get(key) ?? [])];
+  if (used.length > 0) return used;
+
+  const selected = selectedProfilesBySession.get(key);
+  if (selected) return [selected];
+
+  return [await resolveSessionProfileId(context)];
+}
+
+async function extensionProfileRequest(context, method, params = {}) {
+  const request = await profileSessionParams(context, params);
+  markProfileUsed(context, request.profileId);
+  return {
+    profileId: request.profileId,
+    result: await browserRequest(method, request.params, { profileId: request.profileId }),
+  };
+}
+
+async function extensionRequest(context, method, params = {}) {
+  return (await extensionProfileRequest(context, method, params)).result;
+}
+
+function addProfileToTabResult(result, profileId) {
+  if (!result || typeof result !== "object") return result;
+  if (Array.isArray(result.tabs)) {
+    return { ...result, profileId, tabs: result.tabs.map((tab) => ({ ...tab, profileId })) };
+  }
+  return { ...result, profileId };
 }
 
 const attachedTabKeys = new Set();
 const enabledDomainsByTabKey = new Map();
 
-function tabCacheKey(context, tabId) {
-  return `${contextValue(context, ["sessionID", "sessionId", "session_id"]) ?? "opencode"}:${tabId}`;
+function tabCacheKey(context, profileId, tabId) {
+  return `${sessionKey(context)}:${profileId}:${tabId}`;
 }
 
-function clearTabCache(context, tabId) {
-  const key = tabCacheKey(context, tabId);
-  attachedTabKeys.delete(key);
-  enabledDomainsByTabKey.delete(key);
+function clearTabCache(context, tabId, profileId = null) {
+  if (profileId) {
+    const key = tabCacheKey(context, profileId, tabId);
+    attachedTabKeys.delete(key);
+    enabledDomainsByTabKey.delete(key);
+    return;
+  }
+
+  const prefix = `${sessionKey(context)}:`;
+  const suffix = `:${tabId}`;
+  for (const key of [...attachedTabKeys]) {
+    if (key.startsWith(prefix) && key.endsWith(suffix)) attachedTabKeys.delete(key);
+  }
+  for (const key of [...enabledDomainsByTabKey.keys()]) {
+    if (key.startsWith(prefix) && key.endsWith(suffix)) enabledDomainsByTabKey.delete(key);
+  }
 }
 
-function clearSessionCache(context) {
-  const prefix = `${contextValue(context, ["sessionID", "sessionId", "session_id"]) ?? "opencode"}:`;
+function clearSessionCache(context, profileId = null) {
+  const prefix = `${sessionKey(context)}:${profileId ? `${profileId}:` : ""}`;
   for (const key of [...attachedTabKeys]) {
     if (key.startsWith(prefix)) attachedTabKeys.delete(key);
   }
@@ -53,10 +133,10 @@ function cdpRequestOptions(timeoutMs) {
   return Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs: Math.ceil(timeoutMs + 5000) } : {};
 }
 
-async function ensureAttached(context, tabId) {
-  const key = tabCacheKey(context, tabId);
+async function ensureAttached(context, tabId, profileId) {
+  const key = tabCacheKey(context, profileId, tabId);
   if (attachedTabKeys.has(key)) return;
-  await extensionRequest(context, "attach", { tabId });
+  await extensionRequest(context, "attach", { tabId, profile_id: profileId });
   attachedTabKeys.add(key);
 }
 
@@ -65,43 +145,48 @@ function isDebuggerDetachedError(error) {
   return /debugger unattached|not attached/i.test(message);
 }
 
-function executeCdpRequest(context, tabId, method, commandParams = {}, timeoutMs) {
+async function executeCdpRequest(context, tabId, method, commandParams = {}, timeoutMs, profileId = null) {
+  const resolvedProfileId = profileId ?? await resolveSessionProfileId(context);
+  markProfileUsed(context, resolvedProfileId);
   return browserRequest(
     "executeCdp",
     sessionParams(context, {
+      profile_id: resolvedProfileId,
       target: { tabId },
       method,
       commandParams,
       timeoutMs,
     }),
-    cdpRequestOptions(timeoutMs),
+    { ...cdpRequestOptions(timeoutMs), profileId: resolvedProfileId },
   );
 }
 
-async function cdp(context, tabId, method, commandParams = {}, timeoutMs) {
-  if (method === "Target.getTargets") return executeCdpRequest(context, tabId, method, commandParams, timeoutMs);
+async function cdp(context, tabId, method, commandParams = {}, timeoutMs, options = {}) {
+  const profileId = options.profileId ?? await resolveSessionProfileId(context);
+  if (method === "Target.getTargets") return executeCdpRequest(context, tabId, method, commandParams, timeoutMs, profileId);
 
-  await ensureAttached(context, tabId);
-  if (method === "Performance.getMetrics") await enableCdpDomains(context, tabId, ["Performance"]);
+  await ensureAttached(context, tabId, profileId);
+  if (method === "Performance.getMetrics") await enableCdpDomains(context, tabId, ["Performance"], { profileId });
 
   try {
-    return await executeCdpRequest(context, tabId, method, commandParams, timeoutMs);
+    return await executeCdpRequest(context, tabId, method, commandParams, timeoutMs, profileId);
   } catch (error) {
     if (!isDebuggerDetachedError(error)) throw error;
-    clearTabCache(context, tabId);
-    await ensureAttached(context, tabId);
-    return executeCdpRequest(context, tabId, method, commandParams, timeoutMs);
+    clearTabCache(context, tabId, profileId);
+    await ensureAttached(context, tabId, profileId);
+    return executeCdpRequest(context, tabId, method, commandParams, timeoutMs, profileId);
   }
 }
 
 async function enableCdpDomains(context, tabId, domains, options = {}) {
-  const key = tabCacheKey(context, tabId);
+  const profileId = options.profileId ?? await resolveSessionProfileId(context);
+  const key = tabCacheKey(context, profileId, tabId);
   const enabled = enabledDomainsByTabKey.get(key) ?? new Set();
 
   for (const domain of domains) {
     if (enabled.has(domain)) continue;
     try {
-      await cdp(context, tabId, `${domain}.enable`, {});
+      await cdp(context, tabId, `${domain}.enable`, {}, undefined, { profileId });
       enabled.add(domain);
     } catch (error) {
       if (!options.optional) throw error;
@@ -120,10 +205,12 @@ async function moveCursor(context, tabId, x, y, options = {}) {
 }
 
 async function inputGesture(context, tabId, steps, timeoutMs) {
+  const { profileId, params } = await profileSessionParams(context, { tabId, steps, timeoutMs });
+  markProfileUsed(context, profileId);
   return browserRequest(
     "inputGesture",
-    sessionParams(context, { tabId, steps, timeoutMs }),
-    { timeoutMs: Math.max(timeoutMs ?? 0, 30000) },
+    params,
+    { profileId, timeoutMs: Math.max(timeoutMs ?? 0, 30000) },
   );
 }
 
@@ -879,6 +966,119 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function scrollPoint(context, tabId, x, y) {
+  if (x !== undefined) finiteNumber(x, "x");
+  if (y !== undefined) finiteNumber(y, "y");
+
+  if (x !== undefined && y !== undefined) return { x, y };
+
+  const viewport = await runtimeEvaluate(
+    context,
+    tabId,
+    "({ width: window.innerWidth || 800, height: window.innerHeight || 600 })",
+    { timeoutMs: 3000, runtimeTimeoutMs: 1000 },
+  ).catch(() => ({ width: 800, height: 600 }));
+  return {
+    x: x ?? Math.max(1, Math.floor((viewport.width ?? 800) / 2)),
+    y: y ?? Math.max(1, Math.floor((viewport.height ?? 600) / 2)),
+  };
+}
+
+function scrollSnapshotExpression(x, y) {
+  return `(() => {
+    const point = { x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)} };
+    const root = document.scrollingElement || document.documentElement;
+    const metrics = (element) => ({
+      tag: element === root ? "window" : element.tagName,
+      id: element === root ? null : (element.id || null),
+      className: element === root ? null : (typeof element.className === "string" ? element.className.slice(0, 120) : null),
+      scrollLeft: element === root ? window.scrollX : element.scrollLeft,
+      scrollTop: element === root ? window.scrollY : element.scrollTop,
+      scrollWidth: element.scrollWidth,
+      scrollHeight: element.scrollHeight,
+      clientWidth: element === root ? window.innerWidth : element.clientWidth,
+      clientHeight: element === root ? window.innerHeight : element.clientHeight,
+    });
+    const isScrollable = (element) => {
+      if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+      const style = getComputedStyle(element);
+      const overflowY = style.overflowY;
+      const overflowX = style.overflowX;
+      const canY = /(auto|scroll|overlay)/.test(overflowY) && element.scrollHeight > element.clientHeight + 1;
+      const canX = /(auto|scroll|overlay)/.test(overflowX) && element.scrollWidth > element.clientWidth + 1;
+      return canY || canX;
+    };
+    let target = document.elementFromPoint(point.x, point.y);
+    for (let element = target; element; element = element.parentElement) {
+      if (isScrollable(element)) {
+        target = element;
+        break;
+      }
+    }
+    if (!target || !isScrollable(target)) target = root;
+    return { point, window: metrics(root), target: metrics(target) };
+  })()`;
+}
+
+function scrollFallbackExpression(x, y, scrollX, scrollY) {
+  return `(() => {
+    const snapshot = ${scrollSnapshotExpression(x, y)};
+    const root = document.scrollingElement || document.documentElement;
+    const target = document.elementFromPoint(${JSON.stringify(x)}, ${JSON.stringify(y)});
+    const isScrollable = (element) => {
+      if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+      const style = getComputedStyle(element);
+      const overflowY = style.overflowY;
+      const overflowX = style.overflowX;
+      const canY = /(auto|scroll|overlay)/.test(overflowY) && element.scrollHeight > element.clientHeight + 1;
+      const canX = /(auto|scroll|overlay)/.test(overflowX) && element.scrollWidth > element.clientWidth + 1;
+      return canY || canX;
+    };
+    let scrollTarget = target;
+    for (let element = target; element; element = element.parentElement) {
+      if (isScrollable(element)) {
+        scrollTarget = element;
+        break;
+      }
+    }
+    if (!scrollTarget || !isScrollable(scrollTarget)) scrollTarget = root;
+    if (scrollTarget === root) window.scrollBy({ left: ${JSON.stringify(scrollX)}, top: ${JSON.stringify(scrollY)}, behavior: "auto" });
+    else scrollTarget.scrollBy({ left: ${JSON.stringify(scrollX)}, top: ${JSON.stringify(scrollY)}, behavior: "auto" });
+    return { before: snapshot, after: ${scrollSnapshotExpression(x, y)} };
+  })()`;
+}
+
+function didScroll(before, after) {
+  return before?.window?.scrollLeft !== after?.window?.scrollLeft
+    || before?.window?.scrollTop !== after?.window?.scrollTop
+    || before?.target?.scrollLeft !== after?.target?.scrollLeft
+    || before?.target?.scrollTop !== after?.target?.scrollTop;
+}
+
+async function scrollTab(context, tabId, args) {
+  finiteNumber(args.scrollX, "scrollX");
+  finiteNumber(args.scrollY, "scrollY");
+  await activate(context, tabId);
+  const point = await scrollPoint(context, tabId, args.x, args.y);
+  const before = await runtimeEvaluate(context, tabId, scrollSnapshotExpression(point.x, point.y), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
+  await dispatchMouse(context, tabId, {
+    type: "mouseWheel",
+    x: point.x,
+    y: point.y,
+    deltaX: args.scrollX,
+    deltaY: args.scrollY,
+    pointerType: "mouse",
+  });
+  await sleep(100);
+  const afterWheel = await runtimeEvaluate(context, tabId, scrollSnapshotExpression(point.x, point.y), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
+  if (didScroll(before, afterWheel) || (args.scrollX === 0 && args.scrollY === 0)) {
+    return { scrolled: didScroll(before, afterWheel), fallbackUsed: false, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: afterWheel };
+  }
+
+  const fallback = await runtimeEvaluate(context, tabId, scrollFallbackExpression(point.x, point.y, args.scrollX, args.scrollY), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
+  return { scrolled: didScroll(fallback.before, fallback.after), fallbackUsed: true, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: fallback.after };
+}
+
 async function waitForPageReady(context, tabId, waitUntil = "domcontentloaded", timeoutMs = 15000) {
   if (waitUntil === "none") return { waitUntil, readyState: null };
   const expected = waitUntil === "load" ? ["complete"] : ["interactive", "complete"];
@@ -906,26 +1106,74 @@ export const ChromiumBrowserPlugin = async () => {
       browser_status: tool({
         description: "Check the OpenCode browser native host connection status.",
         args: {},
-        async execute() {
+        async execute(_args, context) {
           const host = await browserRequest("host.status");
           let extension = null;
           try {
+            const profileId = await resolveSessionProfileId(context);
             extension = {
-              ping: await browserRequest("ping"),
-              info: await browserRequest("getInfo"),
+              selectedProfileId: profileId,
+              ping: await browserRequest("ping", { profile_id: profileId }, { profileId }),
+              info: await browserRequest("getInfo", { profile_id: profileId }, { profileId }),
             };
           } catch (error) {
             extension = { error: error instanceof Error ? error.message : String(error) };
           }
-          return stringify({ host, extension });
+          return stringify({ host, selectedProfileId: selectedProfilesBySession.get(sessionKey(context)) ?? null, extension });
+        },
+      }),
+
+      browser_list_profiles: tool({
+        description: "List currently connected browser profiles available to OpenCode. Closed profiles are not launched or returned.",
+        args: {},
+        async execute() {
+          return stringify({ profiles: await listBrowserProfiles() });
+        },
+      }),
+
+      browser_selected_profile: tool({
+        description: "Return the browser profile selected for this OpenCode session, if any.",
+        args: {},
+        async execute(_args, context) {
+          const selectedProfileId = selectedProfilesBySession.get(sessionKey(context)) ?? null;
+          const profiles = await listBrowserProfiles();
+          const selectedProfile = selectedProfileId ? profiles.find((profile) => profile.profileId === selectedProfileId) ?? null : null;
+          return stringify({ selectedProfileId, selectedProfile, profiles });
+        },
+      }),
+
+      browser_select_profile: tool({
+        description: "Select which connected browser profile subsequent browser tools should use.",
+        args: {
+          profileId: tool.schema.string().describe("Profile ID from browser_list_profiles"),
+        },
+        async execute(args, context) {
+          const profile = await resolveBrowserProfile(args.profileId);
+          selectedProfilesBySession.set(sessionKey(context), profile.profileId);
+          markProfileUsed(context, profile.profileId);
+          clearSessionCache(context);
+          return stringify({ selected: true, profileId: profile.profileId, profileLabel: profile.profileLabel ?? null, browserName: profile.browserName ?? null });
+        },
+      }),
+
+      browser_name_profile: tool({
+        description: "Set a local label for a connected browser profile, such as work or personal.",
+        args: {
+          profileId: tool.schema.string().optional().describe("Profile ID from browser_list_profiles. Defaults to the selected profile."),
+          label: tool.schema.string().describe("Short local label for this browser profile."),
+        },
+        async execute(args, context) {
+          const profileId = await resolveSessionProfileId(context, args.profileId ?? null);
+          const result = await browserRequest("setProfileLabel", { profile_id: profileId, label: args.label }, { profileId });
+          return stringify(result);
         },
       }),
 
       browser_capabilities: tool({
         description: "List capabilities advertised by the OpenCode Browser extension.",
         args: {},
-        async execute() {
-          return stringify(await browserRequest("getInfo"));
+        async execute(_args, context) {
+          return stringify(await extensionRequest(context, "getInfo"));
         },
       }),
 
@@ -936,7 +1184,8 @@ export const ChromiumBrowserPlugin = async () => {
         },
         async execute(args, context) {
           const method = args.scope === "session" ? "getTabs" : "getUserTabs";
-          return stringify(await browserRequest(method, sessionParams(context)));
+          const { profileId, result } = await extensionProfileRequest(context, method);
+          return stringify(addProfileToTabResult(result, profileId));
         },
       }),
 
@@ -944,7 +1193,8 @@ export const ChromiumBrowserPlugin = async () => {
         description: "Return the current logical tab selected for this browser session.",
         args: {},
         async execute(_args, context) {
-          return stringify(await extensionRequest(context, "getSelectedTab"));
+          const { profileId, result } = await extensionProfileRequest(context, "getSelectedTab");
+          return stringify(result ? addProfileToTabResult(result, profileId) : null);
         },
       }),
 
@@ -954,7 +1204,8 @@ export const ChromiumBrowserPlugin = async () => {
           tabId: tool.schema.number().int().positive(),
         },
         async execute(args, context) {
-          return stringify(await extensionRequest(context, "getTab", { tabId: args.tabId }));
+          const { profileId, result } = await extensionProfileRequest(context, "getTab", { tabId: args.tabId });
+          return stringify(addProfileToTabResult(result, profileId));
         },
       }),
 
@@ -962,7 +1213,8 @@ export const ChromiumBrowserPlugin = async () => {
         description: "Create a new Chromium tab controlled by OpenCode.",
         args: {},
         async execute(_args, context) {
-          return stringify(await browserRequest("createTab", sessionParams(context)));
+          const { profileId, result } = await extensionProfileRequest(context, "createTab");
+          return stringify(addProfileToTabResult(result, profileId));
         },
       }),
 
@@ -972,7 +1224,8 @@ export const ChromiumBrowserPlugin = async () => {
           tabId: tool.schema.number().int().positive().describe("Chrome tab ID to claim"),
         },
         async execute(args, context) {
-          return stringify(await browserRequest("claimUserTab", sessionParams(context, { tabId: args.tabId })));
+          const { profileId, result } = await extensionProfileRequest(context, "claimUserTab", { tabId: args.tabId });
+          return stringify(addProfileToTabResult(result, profileId));
         },
       }),
 
@@ -995,19 +1248,21 @@ export const ChromiumBrowserPlugin = async () => {
           timeoutMs: tool.schema.number().int().positive().default(15000),
         },
         async execute(args, context) {
+          let profileId = null;
           const tab = args.tabId
             ? { id: args.tabId }
-            : await browserRequest("createTab", sessionParams(context));
+            : (await extensionProfileRequest(context, "createTab")).result;
+          profileId = await resolveSessionProfileId(context);
           await activate(context, tab.id);
           if (args.url.toLowerCase().startsWith("data:")) {
             const result = await navigateDataUrl(context, tab.id, args.url);
             const readiness = await waitForPageReady(context, tab.id, args.waitUntil, args.timeoutMs);
-            return stringify({ ...result, readiness });
+            return stringify({ ...result, profileId, readiness });
           }
           await enableCdpDomains(context, tab.id, ["Page"], { optional: true });
           await cdp(context, tab.id, "Page.navigate", { url: args.url }, args.timeoutMs);
           const readiness = await waitForPageReady(context, tab.id, args.waitUntil, args.timeoutMs);
-          return stringify({ tabId: tab.id, url: args.url, readiness });
+          return stringify({ profileId, tabId: tab.id, url: args.url, readiness });
         },
       }),
 
@@ -1157,26 +1412,13 @@ export const ChromiumBrowserPlugin = async () => {
         description: "Scroll a Chromium tab from a viewport coordinate.",
         args: {
           tabId: tool.schema.number().int().positive(),
-          x: tool.schema.number().default(0),
-          y: tool.schema.number().default(0),
+          x: tool.schema.number().optional().describe("Viewport x coordinate. Defaults to the viewport center."),
+          y: tool.schema.number().optional().describe("Viewport y coordinate. Defaults to the viewport center."),
           scrollX: tool.schema.number().default(0),
           scrollY: tool.schema.number().default(0),
         },
         async execute(args, context) {
-          finiteNumber(args.x, "x");
-          finiteNumber(args.y, "y");
-          finiteNumber(args.scrollX, "scrollX");
-          finiteNumber(args.scrollY, "scrollY");
-          await activate(context, args.tabId);
-          await dispatchMouse(context, args.tabId, {
-            type: "mouseWheel",
-            x: args.x,
-            y: args.y,
-            deltaX: args.scrollX,
-            deltaY: args.scrollY,
-            pointerType: "mouse",
-          });
-          return stringify({ scrolled: true, tabId: args.tabId, scrollX: args.scrollX, scrollY: args.scrollY });
+          return stringify(await scrollTab(context, args.tabId, args));
         },
       }),
 
@@ -1483,9 +1725,12 @@ export const ChromiumBrowserPlugin = async () => {
         description: "End the current browser turn by detaching debuggers and hiding cursors without closing tabs.",
         args: {},
         async execute(_args, context) {
-          const result = await extensionRequest(context, "turnEnded");
-          clearSessionCache(context);
-          return stringify(result);
+          const results = {};
+          for (const profileId of await targetProfileIdsForSession(context)) {
+            results[profileId] = await browserRequest("turnEnded", sessionParams(context, { profile_id: profileId }), { profileId });
+            clearSessionCache(context, profileId);
+          }
+          return stringify({ profiles: results });
         },
       }),
 
@@ -1498,15 +1743,28 @@ export const ChromiumBrowserPlugin = async () => {
               tool.schema.object({
                 tabId: tool.schema.number().int().positive(),
                 status: tool.schema.enum(["handoff", "deliverable"]).default("handoff"),
+                profileId: tool.schema.string().optional(),
               }),
             ]),
           ).default([]),
         },
         async execute(args, context) {
+          const profileIds = await targetProfileIdsForSession(context);
           const keep = args.keep.map((item) => (typeof item === "number" ? { tabId: item, status: "handoff" } : item));
-          const result = await browserRequest("finalizeTabs", sessionParams(context, { keep }));
-          clearSessionCache(context);
-          return stringify(result);
+          if (profileIds.length > 1 && keep.some((item) => !item.profileId)) {
+            throw new Error("browser_finalize keep items must include profileId when multiple browser profiles were used");
+          }
+
+          const results = {};
+          for (const profileId of profileIds) {
+            const profileKeep = keep
+              .filter((item) => !item.profileId || item.profileId === profileId)
+              .map(({ tabId, status }) => ({ tabId, status }));
+            results[profileId] = await browserRequest("finalizeTabs", sessionParams(context, { profile_id: profileId, keep: profileKeep }), { profileId });
+            clearSessionCache(context, profileId);
+          }
+          usedProfilesBySession.delete(sessionKey(context));
+          return stringify({ profiles: results });
         },
       }),
     },

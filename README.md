@@ -45,6 +45,7 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 - **Readable Node.js native messaging host** — Bridges the browser extension to OpenCode via local IPC.
 - **OpenCode plugin & skill** — 42+ browser automation tools exposed to your AI agents.
 - **Multi-browser** — Works with Chrome, Edge, Brave, Chromium, and other Chromium-based browsers.
+- **Multi-profile routing** — Select among currently open browser profiles, label them locally, and avoid launching or falling back to closed profiles.
 
 ---
 
@@ -152,12 +153,15 @@ bun run check:extension -- --browser chrome --extension-id <extension-id>
 
 Once set up, run `browser_status` in OpenCode to verify connectivity.
 
+For multiple open profiles, run `browser_list_profiles`, optionally label each profile from the extension popup or `browser_name_profile`, then use `browser_select_profile` before tab automation.
+
 ---
 
 ## Troubleshooting
 
 - **`browser_status` cannot reach host** — Reload the unpacked extension and reinstall the native host manifest with the current extension ID.
 - **Extension not detected** — Make sure you're checking the right browser profile. Pass `--browser edge` or `--browser brave` as needed.
+- **Multiple profiles connected** — Use `browser_list_profiles` and `browser_select_profile`. OpenCode will not pick randomly or launch a closed profile.
 - **File upload blocked** — Open the extension details page and enable **Allow access to file URLs**.
 - **Changes not taking effect** — If the browser was already running while you changed native messaging manifests, restart it.
 
@@ -167,7 +171,8 @@ Once set up, run `browser_status` in OpenCode to verify connectivity.
 
 ```text
 OpenCode tools
-  -> local IPC (named pipe / unix socket)
+  -> live profile registry
+  -> per-profile local IPC (named pipe / unix socket)
   -> native-host/ (Node.js host bridge)
   -> Chromium native messaging
   -> extension/ (MV3 service worker)
@@ -175,9 +180,7 @@ OpenCode tools
   -> browser tab
 ```
 
-The native host is intentionally small and readable (~300 lines). The extension owns all browser access:
-tab tracking, CDP execution, screenshots, downloads, cursor overlay, console logs, network events,
-and session management.
+Each open browser profile runs its own extension/native-host connection and registers a live local endpoint. The plugin routes only to connected profiles, so closing a profile makes that target unavailable instead of silently using another profile. The extension owns all browser access: tab tracking, CDP execution, screenshots, downloads, cursor overlay, console logs, network events, and session management.
 
 ---
 
