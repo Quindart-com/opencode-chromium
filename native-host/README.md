@@ -12,12 +12,12 @@ node native-host/src/host.js
 
 ## Local IPC
 
-The host listens on:
+Each connected browser profile listens on its own generated local IPC endpoint:
 
-- Windows: `\\.\pipe\opencode-browser`
-- macOS/Linux: `<tmp>/opencode-browser.sock`
+- Windows: `\\.\pipe\opencode-browser-<instance>`
+- macOS/Linux: `<tmp>/opencode-browser-<instance>.sock`
 
-Override with `OPENCODE_BROWSER_IPC_PATH`.
+The endpoint is advertised through the local live-profile registry so OpenCode can route to the selected open profile. Override a specific instance endpoint with `OPENCODE_BROWSER_INSTANCE_IPC_PATH`.
 
 Both Chromium native messaging and local IPC use 4-byte length-prefixed JSON frames.
 

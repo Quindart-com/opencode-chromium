@@ -15,6 +15,10 @@ Use OpenCode browser tools directly:
 
 - `browser_status`
 - `browser_capabilities`
+- `browser_list_profiles`
+- `browser_selected_profile`
+- `browser_select_profile`
+- `browser_name_profile`
 - `browser_list_tabs`
 - `browser_selected_tab`
 - `browser_get_tab`
@@ -62,6 +66,8 @@ Before browser work, call `browser_status`.
 
 If the native host is not reachable, tell the user to load the extension and install the native messaging manifest before retrying.
 
+If more than one browser profile is connected, call `browser_list_profiles` and then `browser_select_profile` before opening, claiming, or inspecting tabs. Do not choose randomly. If the required profile is not listed, report that it is not open; do not launch another profile unless the user explicitly asks.
+
 For setup diagnostics, use the repository scripts:
 
 - `bun run list:browsers`
@@ -74,6 +80,9 @@ Only run `scripts/open-browser-window.js` without `--dry-run` after the user agr
 
 ## Tab Use
 
+- Browser profiles are separate targets. Use `browser_list_profiles` to see only currently open profiles, and `browser_select_profile` to switch between them.
+- Use `browser_name_profile` only when the user asks to label a profile, or when a short non-sensitive local label is useful for future selection.
+- When a selected profile disappears, treat tool failure as a real disconnect. Do not fall back to another profile.
 - Use `browser_list_tabs` with `scope: "user"` to find existing tabs.
 - Use `browser_claim_tab` when the user wants to control an already-open tab.
 - Claim only tabs returned by `browser_list_tabs` with `scope: "user"`; do not guess tab IDs.

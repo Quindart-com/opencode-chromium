@@ -4,15 +4,35 @@ import fs from "node:fs";
 import net from "node:net";
 import process from "node:process";
 import { FrameDecoder, writeFrame } from "./framing.js";
-import { defaultIpcPath, isUnixSocketPath } from "./ipc-path.js";
+import { instanceIpcPath, isUnixSocketPath } from "./ipc-path.js";
+import { removeProfileRegistration, writeProfileRegistration } from "./profile-registry.js";
 import { RpcRelay } from "./rpc-relay.js";
 
-const ipcPath = defaultIpcPath();
-const state = { startedAt: new Date().toISOString() };
+const ipcPath = instanceIpcPath();
+const state = { startedAt: new Date().toISOString(), ipcPath, profile: null };
+let registeredProfileId = null;
+
+function registerProfile(profile) {
+  if (registeredProfileId && registeredProfileId !== profile.profileId) {
+    removeProfileRegistration(registeredProfileId);
+  }
+
+  const registration = {
+    ...profile,
+    ipcPath,
+    hostPid: process.pid,
+    startedAt: state.startedAt,
+    lastSeenAt: new Date().toISOString(),
+  };
+  writeProfileRegistration(registration);
+  state.profile = registration;
+  registeredProfileId = profile.profileId;
+}
 
 const relay = new RpcRelay({
   state,
   extensionWriter: (message) => writeFrame(process.stdout, message),
+  onProfile: registerProfile,
 });
 
 function log(message) {
@@ -27,6 +47,11 @@ function prepareSocketPath() {
 function cleanupSocketPath() {
   if (!isUnixSocketPath(ipcPath)) return;
   if (fs.existsSync(ipcPath)) fs.unlinkSync(ipcPath);
+}
+
+function cleanupProfileRegistration() {
+  if (registeredProfileId) removeProfileRegistration(registeredProfileId);
+  registeredProfileId = null;
 }
 
 function createIpcServer() {
@@ -83,12 +108,14 @@ process.stdin.on("data", (chunk) => {
 
 process.stdin.on("end", () => {
   log("extension disconnected");
+  cleanupProfileRegistration();
   relay.shutdown("Browser extension disconnected");
   server.close(() => cleanupSocketPath());
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
+    cleanupProfileRegistration();
     relay.shutdown(`Native host received ${signal}`);
     server.close(() => {
       cleanupSocketPath();

@@ -10,6 +10,10 @@ Tool set:
 
 - `browser_status`
 - `browser_capabilities`
+- `browser_list_profiles`
+- `browser_selected_profile`
+- `browser_select_profile`
+- `browser_name_profile`
 - `browser_list_tabs`
 - `browser_selected_tab`
 - `browser_get_tab`
@@ -53,10 +57,11 @@ Tool set:
 
 ### Native Host
 
-The native host has two jobs:
+The native host has three jobs:
 
 - Speak Chromium native messaging over stdin/stdout with the extension.
-- Expose a local IPC endpoint that OpenCode tools can call.
+- Expose a per-profile local IPC endpoint that OpenCode tools can call.
+- Register the currently connected browser profile in a local live-profile registry.
 
 Messages use JSON-RPC 2.0. Browser-native messaging frames are 4-byte length-prefixed JSON payloads.
 
@@ -64,7 +69,7 @@ Messages use JSON-RPC 2.0. Browser-native messaging frames are 4-byte length-pre
 
 The extension owns browser access. It handles tab management, `chrome.debugger` attach/detach, CDP execution, screenshots, download observation, cursor overlay state, and browser metadata.
 
-Tabs are tracked by session and origin. Agent-created tabs can be closed during finalization. User-claimed tabs are released from the automation session during finalization unless explicitly kept, but they are not closed by default.
+Tabs are tracked by profile, session, and origin. Agent-created tabs can be closed during finalization. User-claimed tabs are released from the automation session during finalization unless explicitly kept, but they are not closed by default.
 
 Automation targets controlled tabs through CDP without foregrounding the Chrome window by default. Mouse gestures are serialized per tab so a click or drag sequence cannot be interleaved by another agent, and inline PDF responses are reported as browser download events with `status: "opened_inline"` when Chrome renders them instead of creating a download item.
 
@@ -85,7 +90,13 @@ OpenCode tools call the host with JSON-RPC requests such as:
 }
 ```
 
-The host relays compatible requests to the extension and returns the response to the OpenCode tool.
+The plugin first resolves the requested live profile, then sends the request to that profile's IPC endpoint. The host relays compatible requests to its extension and returns the response to the OpenCode tool.
+
+## Browser Profiles
+
+Each extension profile stores a generated profile ID in extension-local storage. Users can add a local label such as `work` or `personal` from the extension popup or the `browser_name_profile` tool. Labels are not baked into source code or setup files.
+
+When exactly one profile is connected, browser tools can use it automatically. When multiple profiles are connected, OpenCode must call `browser_select_profile` before profile-scoped actions. If a selected profile closes, requests for that profile fail instead of falling back to another open profile or launching a browser.
 
 ## Public Source Boundary
 

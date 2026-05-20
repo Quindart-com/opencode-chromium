@@ -12,6 +12,7 @@ const DEFAULT_CDP_TIMEOUT_MS = 10000;
 const DEFAULT_NATIVE_REQUEST_TIMEOUT_MS = 15000;
 const HOST_STATUS_STORAGE_KEY = "OPENCODE_NATIVE_HOST_STATUS";
 const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
+const PROFILE_STORAGE_KEY = "OPENCODE_BROWSER_PROFILE";
 
 const sessions = new Map();
 const attachedTabs = new Map();
@@ -23,6 +24,7 @@ const cursorInjectedTabs = new Set();
 const downloadEvents = [];
 const inlineResponseEventKeys = new Set();
 let deliverableGroupId = null;
+let profileStatePromise = null;
 
 const hostStatus = {
   state: "disconnected",
@@ -62,6 +64,8 @@ class NativeRpc {
         this.#setStatus({ state: "disconnected", error: error?.message ?? null });
         this.#scheduleReconnect();
       });
+
+      void announceProfile().catch(() => {});
     } catch (error) {
       this.#setStatus({ state: "disconnected", error: errorMessage(error) });
       this.#scheduleReconnect();
@@ -201,6 +205,69 @@ function nowIso() {
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function randomProfileId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("") || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeProfileLabel(label) {
+  if (label === null || label === undefined) return null;
+  const normalized = String(label).replace(/[\r\n\t]+/g, " ").trim().slice(0, 80);
+  return normalized.length > 0 ? normalized : null;
+}
+
+function browserNameFromUserAgent() {
+  const userAgent = navigator.userAgent ?? "";
+  if (/Edg\//.test(userAgent)) return "Microsoft Edge";
+  if (/OPR\//.test(userAgent)) return "Opera";
+  if (/Chrome\//.test(userAgent)) return "Chromium";
+  return "Chromium-based browser";
+}
+
+async function getProfileState() {
+  if (profileStatePromise) return profileStatePromise;
+
+  profileStatePromise = (async () => {
+    const stored = (await storageGet(PROFILE_STORAGE_KEY).catch(() => ({})))?.[PROFILE_STORAGE_KEY];
+    const profile = stored && typeof stored === "object" ? stored : {};
+    const state = {
+      profileId: typeof profile.profileId === "string" && profile.profileId.length > 0 ? profile.profileId : randomProfileId(),
+      profileLabel: normalizeProfileLabel(profile.profileLabel),
+    };
+    await storageSet({ [PROFILE_STORAGE_KEY]: state }).catch(() => {});
+    return state;
+  })();
+
+  return profileStatePromise;
+}
+
+async function setProfileLabel(label) {
+  const current = await getProfileState();
+  const next = { ...current, profileLabel: normalizeProfileLabel(label) };
+  profileStatePromise = Promise.resolve(next);
+  await storageSet({ [PROFILE_STORAGE_KEY]: next });
+  await announceProfile().catch(() => {});
+  return profileMetadata();
+}
+
+async function profileMetadata() {
+  const profile = await getProfileState();
+  const manifest = chrome.runtime.getManifest();
+  return {
+    profileId: profile.profileId,
+    profileLabel: profile.profileLabel,
+    browserName: browserNameFromUserAgent(),
+    extensionId: chrome.runtime.id,
+    extensionVersion: manifest.version,
+  };
+}
+
+async function announceProfile() {
+  await rpc.notify("profile.hello", await profileMetadata());
 }
 
 function finiteNumber(value, label) {
@@ -871,29 +938,40 @@ function registerDownloadListeners() {
 
 rpc.register("ping", async () => "pong");
 
-rpc.register("getInfo", async () => ({
-  id: chrome.runtime.id,
-  name: "OpenCode Browser",
-  version: chrome.runtime.getManifest().version,
-  type: "extension",
-  capabilities: {
-    browser: [
-      { id: "tabs", description: "Create, claim, list, finalize, and navigate Chromium tabs." },
-      { id: "history", description: "Read browser history through the extension history permission." },
-      { id: "downloads", description: "Observe browser download lifecycle events." },
-    ],
-    tab: [
-      { id: "cdp", description: "Run Chrome DevTools Protocol commands against controlled tabs." },
-      { id: "cua", description: "Coordinate-based mouse, keyboard, scroll, drag, and screenshot automation." },
-      { id: "dom", description: "DOM snapshot and selector-based interaction helpers." },
-      { id: "clipboard", description: "Read and write plain text through the page clipboard API." },
-    ],
-  },
-  metadata: {
-    extensionId: chrome.runtime.id,
-    hostName: HOST_NAME,
-  },
-}));
+rpc.register("getInfo", async () => {
+  const profile = await profileMetadata();
+  return {
+    id: chrome.runtime.id,
+    name: "OpenCode Browser",
+    version: chrome.runtime.getManifest().version,
+    type: "extension",
+    profile,
+    capabilities: {
+      browser: [
+        { id: "profiles", description: "Select among currently open browser profiles without launching closed profiles." },
+        { id: "tabs", description: "Create, claim, list, finalize, and navigate Chromium tabs." },
+        { id: "history", description: "Read browser history through the extension history permission." },
+        { id: "downloads", description: "Observe browser download lifecycle events." },
+      ],
+      tab: [
+        { id: "cdp", description: "Run Chrome DevTools Protocol commands against controlled tabs." },
+        { id: "cua", description: "Coordinate-based mouse, keyboard, scroll, drag, and screenshot automation." },
+        { id: "dom", description: "DOM snapshot and selector-based interaction helpers." },
+        { id: "clipboard", description: "Read and write plain text through the page clipboard API." },
+      ],
+    },
+    metadata: {
+      extensionId: chrome.runtime.id,
+      hostName: HOST_NAME,
+      profileId: profile.profileId,
+      profileLabel: profile.profileLabel,
+    },
+  };
+});
+
+rpc.register("getProfile", async () => profileMetadata());
+
+rpc.register("setProfileLabel", async (params) => setProfileLabel(params.label));
 
 rpc.register("attach", async (params) => {
   const tabId = tabIdFromParams(params);
@@ -1169,6 +1247,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "GET_HOST_STATUS" || message?.type === "GET_NATIVE_HOST_STATUS") {
     sendResponse({ status: hostStatus });
+    return true;
+  }
+
+  if (message?.type === "GET_PROFILE") {
+    profileMetadata()
+      .then((profile) => sendResponse({ profile }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
+
+  if (message?.type === "SET_PROFILE_LABEL") {
+    setProfileLabel(message.label)
+      .then((profile) => sendResponse({ profile }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }
 
