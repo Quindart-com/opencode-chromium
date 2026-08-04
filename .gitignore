@@ -6,6 +6,7 @@ bun.lock
 
 # Build output
 dist/
+*.tgz
 
 # Local OpenCode install artifacts
 .opencode/node_modules/
