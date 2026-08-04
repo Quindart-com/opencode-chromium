@@ -1,10 +1,14 @@
 import net from "node:net";
 import { FrameDecoder, writeFrame } from "../../native-host/src/framing.js";
 import { defaultIpcPath } from "../../native-host/src/ipc-path.js";
-import { readProfileRegistrations, removeProfileRegistrationFile } from "../../native-host/src/profile-registry.js";
+import { profileRegistryDir, readProfileRegistrations, removeProfileRegistrationFile } from "../../native-host/src/profile-registry.js";
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const PROFILE_STATUS_TIMEOUT_MS = 1000;
+const PROFILE_CACHE_TTL_MS = 750;
+
+const browserClients = new Map();
+const profileCache = new Map();
 
 export class BrowserHostRpcError extends Error {
   constructor(message, { code, data, method } = {}) {
@@ -36,70 +40,136 @@ export function validateJsonRpcResponse(message, expectedId, method = "unknown")
 }
 
 export class BrowserHostClient {
+  #socket = null;
+  #connectPromise = null;
+  #decoder = null;
+  #pending = new Map();
+  #nextRequestId = 1;
+  #closed = false;
+
   constructor({ ipcPath = defaultIpcPath(), timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     this.ipcPath = ipcPath;
     this.timeoutMs = timeoutMs;
   }
 
-  request(method, params = {}) {
-    return new Promise((resolve, reject) => {
+  async #connect() {
+    if (this.#closed) throw new Error(`Browser host client is closed: ${this.ipcPath}`);
+    if (this.#socket && !this.#socket.destroyed) return this.#socket;
+    if (this.#connectPromise) return this.#connectPromise;
+
+    this.#connectPromise = new Promise((resolve, reject) => {
       const socket = net.createConnection(this.ipcPath);
-      const id = 1;
-      let settled = false;
-      const timeout = setTimeout(() => {
-        finish(() => reject(new Error(`Timed out waiting for browser host response to ${method}`)), true);
-      }, this.timeoutMs);
-
-      const cleanup = () => clearTimeout(timeout);
-      const finish = (settle, destroy = false) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        if (destroy) socket.destroy();
-        else socket.end();
-        settle();
-      };
-      const decoder = new FrameDecoder({
-        onMessage: (message) => {
-          let result;
-          try {
-            result = validateJsonRpcResponse(message, id, method);
-          } catch (error) {
-            finish(() => reject(error), true);
-            return;
-          }
-          if (result === null) return;
-          finish(() => resolve(result));
-        },
+      let connected = false;
+      this.#socket = socket;
+      this.#decoder = new FrameDecoder({
+        onMessage: (message) => this.#handleMessage(message),
       });
 
-      socket.on("connect", () => {
-        writeFrame(socket, { jsonrpc: "2.0", method, params, id }).catch((error) => {
-          finish(() => reject(error), true);
-        });
+      socket.once("connect", () => {
+        connected = true;
+        resolve(socket);
       });
-
       socket.on("data", (chunk) => {
         try {
-          decoder.push(chunk);
+          this.#decoder?.push(chunk);
         } catch (error) {
-          finish(() => reject(error), true);
+          this.#disconnect(error);
         }
       });
-
       socket.on("error", (error) => {
-        finish(() => reject(new Error(`Could not connect to OpenCode browser host at ${this.ipcPath}: ${error.message}`)), true);
+        const wrapped = new Error(`Could not connect to OpenCode browser host at ${this.ipcPath}: ${error.message}`);
+        if (!connected) reject(wrapped);
+        this.#disconnect(wrapped);
       });
-
       socket.on("close", () => {
-        finish(() => reject(new Error(`Browser host connection closed before response to ${method}`)));
+        this.#disconnect(new Error(`Browser host connection closed: ${this.ipcPath}`));
       });
-
       socket.on("end", () => {
-        finish(() => reject(new Error(`Browser host connection ended before response to ${method}`)));
+        this.#disconnect(new Error(`Browser host connection ended: ${this.ipcPath}`));
+      });
+    });
+
+    try {
+      return await this.#connectPromise;
+    } finally {
+      if (!this.#socket || this.#socket.destroyed) this.#connectPromise = null;
+    }
+  }
+
+  #handleMessage(message) {
+    if (!message || typeof message !== "object" || message.id === undefined) return;
+    const pending = this.#pending.get(message.id);
+    if (!pending) return;
+
+    let result;
+    try {
+      result = validateJsonRpcResponse(message, message.id, pending.method);
+    } catch (error) {
+      this.#settle(message.id, () => pending.reject(error));
+      return;
+    }
+    this.#settle(message.id, () => pending.resolve(result));
+  }
+
+  #settle(id, settle) {
+    const pending = this.#pending.get(id);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.#pending.delete(id);
+    settle();
+  }
+
+  #disconnect(error) {
+    const socket = this.#socket;
+    this.#socket = null;
+    this.#decoder = null;
+    this.#connectPromise = null;
+    if (socket && !socket.destroyed) socket.destroy();
+    for (const [id, pending] of this.#pending) {
+      this.#settle(id, () => pending.reject(error));
+    }
+  }
+
+  async request(method, params = {}, options = {}) {
+    const socket = await this.#connect();
+    const id = this.#nextRequestId++;
+    const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : this.timeoutMs;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.#settle(id, () => reject(new Error(`Timed out waiting for browser host response to ${method}`)));
+      }, timeoutMs);
+      this.#pending.set(id, { method, resolve, reject, timeout });
+      writeFrame(socket, { jsonrpc: "2.0", method, params, id }).catch((error) => {
+        this.#settle(id, () => reject(error));
+        this.#disconnect(error);
       });
     });
   }
+
+  close() {
+    this.#closed = true;
+    this.#disconnect(new Error(`Browser host client closed: ${this.ipcPath}`));
+  }
+}
+
+function pooledBrowserClient(ipcPath, options = {}) {
+  let client = browserClients.get(ipcPath);
+  if (!client) {
+    client = new BrowserHostClient({ ipcPath, timeoutMs: DEFAULT_TIMEOUT_MS });
+    browserClients.set(ipcPath, client);
+  }
+  return client;
+}
+
+export function closeBrowserClients() {
+  for (const client of browserClients.values()) client.close();
+  browserClients.clear();
+  profileCache.clear();
+}
+
+export function invalidateBrowserProfileCache() {
+  profileCache.delete(profileRegistryDir());
 }
 
 function profileIdFromParams(params = {}) {
@@ -133,8 +203,8 @@ export function chooseBrowserProfile(profiles, profileId = null) {
 }
 
 async function statusForRegistration(registration, timeoutMs) {
-  const client = new BrowserHostClient({ ipcPath: registration.ipcPath, timeoutMs });
-  const status = await client.request("host.status");
+  const client = pooledBrowserClient(registration.ipcPath, { timeoutMs });
+  const status = await client.request("host.status", {}, { timeoutMs });
   const profile = status?.profile && typeof status.profile === "object" ? status.profile : registration;
   return {
     ...registration,
@@ -151,17 +221,24 @@ async function statusForRegistration(registration, timeoutMs) {
 export async function listBrowserProfiles(options = {}) {
   const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : PROFILE_STATUS_TIMEOUT_MS;
   const includeInternal = options.includeInternal === true;
-  const profiles = [];
+  const cacheKey = profileRegistryDir();
+  const cached = profileCache.get(cacheKey);
+  let profiles;
 
-  for (const registration of readProfileRegistrations()) {
-    try {
-      profiles.push(await statusForRegistration(registration, timeoutMs));
-    } catch {
-      removeProfileRegistrationFile(registration.registrationPath);
+  if (options.fresh !== true && cached && Date.now() - cached.at < PROFILE_CACHE_TTL_MS) {
+    profiles = cached.profiles;
+  } else {
+    const registrations = readProfileRegistrations();
+    const settled = await Promise.allSettled(registrations.map((registration) => statusForRegistration(registration, timeoutMs)));
+    profiles = [];
+    for (let index = 0; index < settled.length; index += 1) {
+      const result = settled[index];
+      if (result.status === "fulfilled") profiles.push(result.value);
+      else removeProfileRegistrationFile(registrations[index].registrationPath);
     }
+    profiles.sort((first, second) => String(first.profileLabel ?? first.profileId).localeCompare(String(second.profileLabel ?? second.profileId)));
+    profileCache.set(cacheKey, { at: Date.now(), profiles });
   }
-
-  profiles.sort((first, second) => String(first.profileLabel ?? first.profileId).localeCompare(String(second.profileLabel ?? second.profileId)));
   return includeInternal ? profiles : profiles.map(publicProfile);
 }
 
@@ -187,5 +264,10 @@ export async function browserRequest(method, params = {}, options = {}) {
 
   const profile = options.ipcPath ? null : await resolveBrowserProfile(requestedProfileId, options);
   const ipcPath = options.ipcPath ?? profile.ipcPath;
-  return new BrowserHostClient({ ...options, ipcPath }).request(method, params);
+  try {
+    return await pooledBrowserClient(ipcPath, options).request(method, params, options);
+  } catch (error) {
+    invalidateBrowserProfileCache();
+    throw error;
+  }
 }

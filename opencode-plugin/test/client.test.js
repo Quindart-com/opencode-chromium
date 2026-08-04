@@ -4,7 +4,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { BrowserHostRpcError, browserRequest, chooseBrowserProfile, listBrowserProfiles, validateJsonRpcResponse } from "../src/client.js";
+import { BrowserHostRpcError, browserRequest, chooseBrowserProfile, closeBrowserClients, listBrowserProfiles, validateJsonRpcResponse } from "../src/client.js";
 import { FrameDecoder, writeFrame } from "../../native-host/src/framing.js";
 import { writeProfileRegistration } from "../../native-host/src/profile-registry.js";
 
@@ -59,9 +59,11 @@ function testIpcPath(name) {
 
 function createFakeProfileHost({ profileId, profileLabel }) {
   const ipcPath = testIpcPath(profileId);
+  let connections = 0;
   if (process.platform !== "win32") fs.rmSync(ipcPath, { force: true });
 
   const server = net.createServer((socket) => {
+    connections += 1;
     const decoder = new FrameDecoder({
       onMessage: (message) => {
         if (message.method === "host.status") {
@@ -97,6 +99,7 @@ function createFakeProfileHost({ profileId, profileLabel }) {
       });
       resolve({
         ipcPath,
+        get connections() { return connections; },
         close: () => new Promise((done) => server.close(() => {
           if (process.platform !== "win32") fs.rmSync(ipcPath, { force: true });
           done();
@@ -121,7 +124,9 @@ test("discovers and routes to live browser profile hosts", async () => {
 
     const result = await browserRequest("ping", { profile_id: "profile-a" });
     assert.deepEqual(result, { method: "ping", profileId: "profile-a" });
+    assert.equal(host.connections, 1, "profile status and action should reuse one IPC connection");
   } finally {
+    closeBrowserClients();
     await host.close();
     fs.rmSync(registryDir, { recursive: true, force: true });
     if (previousRegistry === undefined) delete process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;

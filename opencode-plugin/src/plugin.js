@@ -1,8 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
-import { tool } from "@opencode-ai/plugin";
+import { z } from "zod";
 import { browserRequest, listBrowserProfiles, resolveBrowserProfile } from "./client.js";
+
+// OpenCode accepts this plain tool shape. Keeping the schema/runtime definition
+// independent from @opencode-ai/plugin lets MCP and direct SDK adapters share it.
+const tool = Object.assign((definition) => definition, { schema: z });
 
 const selectedProfilesBySession = new Map();
 const usedProfilesBySession = new Map();
@@ -197,7 +201,8 @@ async function enableCdpDomains(context, tabId, domains, options = {}) {
 }
 
 async function activate(context, tabId) {
-  return extensionRequest(context, "activateTab", { tabId }).catch(() => null);
+  await extensionRequest(context, "activateTab", { tabId, foreground: true }).catch(() => null);
+  await cdp(context, tabId, "Page.bringToFront", {}).catch(() => null);
 }
 
 async function moveCursor(context, tabId, x, y, options = {}) {
@@ -283,8 +288,18 @@ const PRINTABLE_CODE_BY_KEY = {
   "`": "Backquote",
 };
 
+const KEY_NAME_CANONICAL = new Map([
+  ...Object.entries(KEY_NAME_ALIASES),
+  ...Object.keys(MODIFIER_DEFINITIONS).map((key) => [key, key]),
+  ...Object.keys(SPECIAL_KEY_DEFINITIONS).map((key) => [key, key]),
+].map(([key, value]) => [key.toLocaleLowerCase(), value]));
+
 function normalizeKeyName(key) {
-  return KEY_NAME_ALIASES[key] ?? key;
+  const raw = String(key);
+  const canonical = KEY_NAME_CANONICAL.get(raw.toLocaleLowerCase());
+  if (canonical !== undefined) return canonical;
+  if (/^f([1-9]|1[0-2])$/i.test(raw)) return raw.toUpperCase();
+  return raw;
 }
 
 function keyDefinition(key, modifiers = new Set(), rawPrimary = key) {
@@ -380,6 +395,130 @@ export function keyDispatchEvents(parsed) {
 
 function stringify(value) {
   return JSON.stringify(value, null, 2);
+}
+
+function compactConsoleValue(value) {
+  if (value === undefined || value === null) return "";
+  return String(value).replace(/\s+/g, " ").trim().slice(0, 1000);
+}
+
+function consoleEventText(event) {
+  const params = event.params ?? {};
+  if (event.method === "Runtime.consoleAPICalled") {
+    return (params.args ?? [])
+      .map((arg) => compactConsoleValue(arg.value ?? arg.description ?? arg.preview?.description ?? arg.type))
+      .filter(Boolean)
+      .join(" ");
+  }
+  return compactConsoleValue(params.entry?.text ?? params.text ?? "");
+}
+
+function consoleEventLevel(event) {
+  const params = event.params ?? {};
+  return params.entry?.level ?? params.type ?? "log";
+}
+
+function consoleEventUrl(event) {
+  const params = event.params ?? {};
+  const frame = params.stackTrace?.callFrames?.[0] ?? params.entry?.stackTrace?.callFrames?.[0];
+  return params.entry?.url ?? frame?.url ?? null;
+}
+
+function compactConsoleEvents(response, options = {}) {
+  if (options.raw) return response;
+  const events = Array.isArray(response?.events) ? response.events : [];
+  const grouped = new Map();
+  for (const event of events) {
+    const text = consoleEventText(event);
+    const level = consoleEventLevel(event);
+    const url = consoleEventUrl(event);
+    const key = [event.method, level, text, url].join("\u0000");
+    const existing = grouped.get(key);
+    const params = event.params ?? {};
+    const frame = params.stackTrace?.callFrames?.[0] ?? params.entry?.stackTrace?.callFrames?.[0] ?? null;
+    if (existing) {
+      existing.count += 1;
+      existing.lastTime = event.time;
+      continue;
+    }
+    grouped.set(key, {
+      time: event.time,
+      lastTime: event.time,
+      tabId: event.tabId,
+      method: event.method,
+      level,
+      source: params.entry?.source ?? null,
+      text,
+      url,
+      blockedByClient: /ERR_BLOCKED_BY_CLIENT/i.test(text),
+      count: 1,
+      ...(frame ? { topFrame: { functionName: frame.functionName || null, url: frame.url || null, lineNumber: Number.isInteger(frame.lineNumber) ? frame.lineNumber + 1 : null, columnNumber: Number.isInteger(frame.columnNumber) ? frame.columnNumber + 1 : null } } : {}),
+      ...(options.includeStack ? { stackTrace: params.stackTrace ?? params.entry?.stackTrace ?? null } : {}),
+    });
+  }
+  const compacted = [...grouped.values()].sort((first, second) => String(first.time).localeCompare(String(second.time)));
+  return {
+    totalEvents: events.length,
+    returned: compacted.length,
+    grouped: true,
+    events: compacted,
+  };
+}
+
+function pageSearchLabel(result) {
+  return compactConsoleValue(result.name || result.text || result.selector || result.kind).slice(0, 220) || null;
+}
+
+function leanPageSearchResult(result) {
+  return {
+    node_id: result.node_id,
+    kind: result.kind,
+    label: pageSearchLabel(result),
+    interactive: result.interactive === true,
+  };
+}
+
+function compactPageSearchResult(result) {
+  return {
+    ...leanPageSearchResult(result),
+    text: compactConsoleValue(result.text).slice(0, 220) || null,
+  };
+}
+
+function compactModelUse(ranking) {
+  const model = ranking?.model;
+  if (!model || typeof model !== "object") return null;
+  return {
+    enabled: ranking.enabled === true,
+    used: model.used === true,
+    error: model.error ?? model.embedding?.error ?? model.reranker?.error ?? null,
+  };
+}
+
+export function shapePageSearchRanking(ranking, detail = "lean") {
+  if (detail === "full" || detail === "debug" || !Array.isArray(ranking?.results)) return ranking;
+  const base = {
+    url: ranking.url,
+    title: ranking.title,
+    query: ranking.query,
+    scope: ranking.scope ?? null,
+    totalCandidates: ranking.totalCandidates,
+    truncated: ranking.truncated,
+    mode: ranking.mode,
+    totalUnits: ranking.totalUnits,
+    returned: ranking.returned,
+  };
+  if (detail === "compact") {
+    return {
+      ...base,
+      model: compactModelUse(ranking),
+      results: ranking.results.map(compactPageSearchResult),
+    };
+  }
+  return {
+    ...base,
+    results: ranking.results.map(leanPageSearchResult),
+  };
 }
 
 function parseJsonObject(value, label) {
@@ -607,6 +746,15 @@ function interactionHelpersSource() {
       return String(element.innerText || element.textContent || '');
     };
 
+    const textHash = (value) => {
+      let hash = 2166136261;
+      for (let index = 0; index < value.length; index += 1) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16).padStart(8, '0');
+    };
+
     const editableSnapshot = (element, kind) => {
       const value = editableValue(element, kind);
       const selection = window.getSelection();
@@ -615,6 +763,7 @@ function interactionHelpersSource() {
         tagName: element.localName,
         type: element.getAttribute('type'),
         value,
+        valueHash: textHash(value),
         selectionStart: Number.isFinite(element.selectionStart) ? element.selectionStart : null,
         selectionEnd: Number.isFinite(element.selectionEnd) ? element.selectionEnd : null,
         selectedText: selection && selection.rangeCount ? String(selection.toString()) : '',
@@ -626,7 +775,8 @@ function interactionHelpersSource() {
       const style = getComputedStyle(element);
       if (style.display === 'none') throw new Error('Element is not visible: display is none: ' + describeElement(element));
       if (style.visibility === 'hidden' || style.visibility === 'collapse') throw new Error('Element is not visible: visibility is ' + style.visibility + ': ' + describeElement(element));
-      if (Number(style.opacity) === 0) throw new Error('Element is not visible: opacity is 0: ' + describeElement(element));
+      const virtualEditorInput = element.matches?.('textarea.inputarea, textarea[aria-label*="editor" i]') || Boolean(element.closest?.('.monaco-editor, [data-editor]'));
+      if (Number(style.opacity) === 0 && !virtualEditorInput) throw new Error('Element is not visible: opacity is 0: ' + describeElement(element));
 
       let best = null;
       for (const rect of element.getClientRects()) {
@@ -655,13 +805,18 @@ function interactionHelpersSource() {
       assertPointerInteractable(element);
       element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
       const rect = visibleRect(element);
-      const x = Math.floor(rect.left + rect.width / 2);
-      const y = Math.floor(rect.top + rect.height / 2);
-      const hit = document.elementFromPoint(x, y);
-      if (!hit || !composedContains(element, hit)) {
-        throw new Error('Element is not clickable: center point is covered by ' + describeElement(hit) + ': ' + describeElement(element));
+      const fractions = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75], [0.5, 0.2], [0.5, 0.8]];
+      let coveredBy = null;
+      for (const [fx, fy] of fractions) {
+        const x = Math.floor(rect.left + Math.max(1, rect.width - 1) * fx);
+        const y = Math.floor(rect.top + Math.max(1, rect.height - 1) * fy);
+        const hit = document.elementFromPoint(x, y);
+        if (hit && composedContains(element, hit)) {
+          return { x, y, tagName: element.localName, text: (element.innerText || element.value || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160) };
+        }
+        coveredBy = hit;
       }
-      return { x, y, tagName: element.localName, text: (element.innerText || element.value || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160) };
+      throw new Error('Element is not clickable: safe click points are covered by ' + describeElement(coveredBy) + ': ' + describeElement(element));
     };
 
     const focusedEditableElement = (includeSelect = false) => {
@@ -762,10 +917,90 @@ async function grantClipboardPermission(context, tabId) {
   }).catch(() => {});
 }
 
+function validClip(clip) {
+  if (!clip || typeof clip !== "object") return null;
+  const x = Number(clip.x);
+  const y = Number(clip.y);
+  const width = Number(clip.width);
+  const height = Number(clip.height);
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), scale: Number.isFinite(clip.scale) ? clip.scale : 1 };
+}
+
+function visualMapCaptureClip(args, map) {
+  const explicit = validClip(args.clip);
+  if (explicit) return explicit;
+  const scopeBox = validClip(map?.scope?.boundingBox);
+  if (scopeBox && map?.scope?.mode && map.scope.mode !== "page" && map.scope.mode !== "viewport") {
+    return {
+      x: Math.max(0, scopeBox.x - 8),
+      y: Math.max(0, scopeBox.y - 8),
+      width: scopeBox.width + 16,
+      height: scopeBox.height + 16,
+      scale: 1,
+    };
+  }
+  return null;
+}
+
+function shouldRunVisualModel(args, map) {
+  if (args.vision === "off") return false;
+  if (args.vision === "force") return true;
+  return (map?.elements?.length ?? 0) === 0;
+}
+
+async function captureVisualMapScreenshot(context, tabId, args, map) {
+  await enableCdpDomains(context, tabId, ["Page"], { optional: true });
+  const clip = visualMapCaptureClip(args, map);
+  const params = { format: "png", optimizeForSpeed: true };
+  if (clip) params.clip = clip;
+  const result = await cdp(context, tabId, "Page.captureScreenshot", params, args.timeoutMs ?? 30000);
+  return { base64: result.data, origin: { x: clip?.x ?? 0, y: clip?.y ?? 0 } };
+}
+
+function visualElementForDetail(element, origin, detail) {
+  const box = element?.box && typeof element.box === "object"
+    ? {
+        x: Math.round(Number(element.box.x ?? 0) + origin.x),
+        y: Math.round(Number(element.box.y ?? 0) + origin.y),
+        width: Math.max(1, Math.round(Number(element.box.width ?? 1))),
+        height: Math.max(1, Math.round(Number(element.box.height ?? 1))),
+      }
+    : null;
+  const lean = {
+    node_id: null,
+    kind: compactConsoleValue(element?.kind || element?.label || "visual").slice(0, 80) || "visual",
+    label: compactConsoleValue(element?.label || element?.kind || "visual").slice(0, 160) || "visual",
+    box,
+    source: "visual",
+  };
+  if (detail !== "debug") return lean;
+  return { ...lean, score: Number.isFinite(element?.score) ? element.score : null };
+}
+
+function mergeVisualMapModelResult(map, visual, origin, detail) {
+  const elements = Array.isArray(visual?.elements) ? visual.elements : [];
+  if (!elements.length) return map;
+  return {
+    ...map,
+    elements: [
+      ...(Array.isArray(map.elements) ? map.elements : []),
+      ...elements.map((element) => visualElementForDetail(element, origin, detail)).filter((element) => element.box),
+    ],
+    returned: (map.returned ?? 0) + elements.length,
+    sources: [...new Set([...(map.sources ?? ["dom"]), "visual"])],
+    ...(detail === "debug" ? { visualModel: { used: visual.used === true, model: visual.model ?? null } } : {}),
+  };
+}
+
 function domSnapshotExpression() {
   return `(() => {
-    window.__opencodeDomNodeMap = new Map();
-    window.__opencodeDomNextNodeId = 1;
+    if (!(window.__opencodeDomNodeMap instanceof Map) || window.__opencodeDomNodeMap.size > 2000) window.__opencodeDomNodeMap = new Map();
+    for (const [id, element] of window.__opencodeDomNodeMap) {
+      if (!element?.isConnected) window.__opencodeDomNodeMap.delete(id);
+    }
+    if (!Number.isFinite(window.__opencodeDomNextNodeId)) window.__opencodeDomNextNodeId = 1;
+    const previousNodeMap = window.__opencodeDomNodeMap;
     const selectorFor = (element) => {
       if (element.id) return '#' + CSS.escape(element.id);
       const parts = [];
@@ -813,28 +1048,611 @@ function domSnapshotExpression() {
   })()`;
 }
 
-function domNodeClickTargetExpression(nodeId) {
+export function pageSearchUnitsExpression(options = {}) {
+  const maxUnits = Number.isInteger(options.maxUnits) && options.maxUnits > 0 ? Math.min(options.maxUnits, 1500) : 700;
+  const scope = ["auto", "page", "viewport", "focused"].includes(options.scope) ? options.scope : "auto";
+  const rootSelector = typeof options.selector === "string" && options.selector.length > 0 ? options.selector : null;
+  const containerNodeId = typeof options.containerNodeId === "string" && options.containerNodeId.length > 0 ? options.containerNodeId : null;
+  const clip = options.clip && Number.isFinite(options.clip.x) && Number.isFinite(options.clip.y) && Number.isFinite(options.clip.width) && Number.isFinite(options.clip.height)
+    ? {
+        x: Math.round(options.clip.x),
+        y: Math.round(options.clip.y),
+        width: Math.max(1, Math.round(options.clip.width)),
+        height: Math.max(1, Math.round(options.clip.height)),
+      }
+    : null;
+  return `(() => {
+    if (!(window.__opencodeDomNodeMap instanceof Map) || window.__opencodeDomNodeMap.size > 2000) window.__opencodeDomNodeMap = new Map();
+    for (const [id, element] of window.__opencodeDomNodeMap) {
+      if (!element?.isConnected) window.__opencodeDomNodeMap.delete(id);
+    }
+    if (!Number.isFinite(window.__opencodeDomNextNodeId)) window.__opencodeDomNextNodeId = 1;
+    const previousNodeMap = window.__opencodeDomNodeMap;
+    const maxUnits = ${JSON.stringify(maxUnits)};
+    const requestedScope = ${JSON.stringify(scope)};
+    const requestedSelector = ${JSON.stringify(rootSelector)};
+    const requestedContainerNodeId = ${JSON.stringify(containerNodeId)};
+    const requestedClip = ${JSON.stringify(clip)};
+    const compact = (value, max = 500) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, max);
+    const textOf = (element, max = 500) => compact(element.innerText || element.value || element.textContent || '', max);
+    const textById = (id) => id ? compact((document.getElementById(id)?.innerText || document.getElementById(id)?.textContent || ''), 180) : '';
+    const visible = (element) => {
+      if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return false;
+      for (const rect of element.getClientRects()) {
+        if (rect.width > 0 && rect.height > 0) return true;
+      }
+      return false;
+    };
+    const boxFor = (element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+    };
+    const inViewport = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom >= 0 && rect.right >= 0 && rect.top <= innerHeight && rect.left <= innerWidth;
+    };
+    const intersectsClip = (element) => {
+      if (!requestedClip) return true;
+      const rect = element.getBoundingClientRect();
+      const left = Math.max(rect.left, requestedClip.x);
+      const top = Math.max(rect.top, requestedClip.y);
+      const right = Math.min(rect.right, requestedClip.x + requestedClip.width);
+      const bottom = Math.min(rect.bottom, requestedClip.y + requestedClip.height);
+      return right > left && bottom > top;
+    };
+    const selectorFor = (element) => {
+      if (element.id) return '#' + CSS.escape(element.id);
+      const parts = [];
+      for (let node = element; node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement; node = node.parentElement) {
+        let part = node.localName;
+        if (!part) break;
+        const role = node.getAttribute('role');
+        if (role && parts.length === 0) part += '[role="' + CSS.escape(role) + '"]';
+        if (node.classList.length) part += '.' + [...node.classList].slice(0, 2).map((name) => CSS.escape(name)).join('.');
+        const parent = node.parentElement;
+        if (parent) {
+          const siblings = [...parent.children].filter((sibling) => sibling.localName === node.localName);
+          if (siblings.length > 1) part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')';
+        }
+        parts.unshift(part);
+        if (parts.length >= 4) break;
+      }
+      return parts.join(' > ');
+    };
+    const nameFor = (element) => {
+      const labelledBy = compact(String(element.getAttribute('aria-labelledby') || '').split(/\\s+/).map(textById).filter(Boolean).join(' '), 180);
+      return compact(element.getAttribute('aria-label') || labelledBy || element.getAttribute('placeholder') || element.getAttribute('alt') || element.getAttribute('title') || element.labels?.[0]?.innerText || '', 180);
+    };
+    const kindFor = (element) => {
+      const tag = element.localName;
+      const role = element.getAttribute('role');
+      if (/^h[1-6]$/.test(tag)) return 'heading';
+      if (tag === 'a') return 'link';
+      if (tag === 'button' || role === 'button') return 'button';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable) return 'field';
+      if (tag === 'option') return 'option';
+      if (tag === 'form') return 'form';
+      if (tag === 'main' || tag === 'section' || tag === 'article' || tag === 'nav' || tag === 'aside' || role === 'region') return 'region';
+      if (element.hasAttribute('aria-live') || role === 'status' || role === 'alert') return 'status';
+      return role || 'element';
+    };
+    const interactive = (element) => element.matches('a,button,input,textarea,select,[role="button"],[role="link"],[role="menuitem"],[role="checkbox"],[role="radio"],[role="switch"],[role="textbox"],[role="combobox"],[tabindex],summary,label,[contenteditable],option');
+    const headings = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+      .filter(visible)
+      .map((element) => ({ element, level: Number(element.localName.slice(1)), text: textOf(element, 120) }))
+      .filter((heading) => heading.text);
+    const headingPathFor = (element) => {
+      const stack = [];
+      for (const heading of headings) {
+        if (!(heading.element.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+        stack[heading.level - 1] = heading.text;
+        stack.length = heading.level;
+      }
+      return stack.filter(Boolean).slice(-4);
+    };
+    const landmarkFor = (element) => {
+      const landmark = element.closest('main,nav,aside,header,footer,form,dialog,[role="main"],[role="navigation"],[role="complementary"],[role="banner"],[role="contentinfo"],[role="form"],[role="dialog"]');
+      if (!landmark) return null;
+      return compact(nameFor(landmark) || landmark.getAttribute('role') || landmark.localName, 120) || null;
+    };
+    const idFor = (element) => {
+      for (const [id, mapped] of window.__opencodeDomNodeMap) {
+        if (mapped === element) return id;
+      }
+      const id = 'node-' + window.__opencodeDomNextNodeId++;
+      window.__opencodeDomNodeMap.set(id, element);
+      return id;
+    };
+    const focusedRoot = () => {
+      const modalSelector = 'dialog[open],[role="dialog"],[aria-modal="true"],[popover]:popover-open,.modal,.popover,.dialog';
+      const candidates = [...document.querySelectorAll(modalSelector)]
+        .filter(visible)
+        .filter(inViewport)
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const zIndex = Number.parseInt(style.zIndex, 10);
+          return { element, area: Math.max(0, rect.width * rect.height), zIndex: Number.isFinite(zIndex) ? zIndex : 0 };
+        })
+        .filter((item) => item.area > 0)
+        .sort((first, second) => second.zIndex - first.zIndex || second.area - first.area);
+      return candidates[0]?.element ?? null;
+    };
+    const rootForScope = () => {
+      if (requestedContainerNodeId && previousNodeMap?.has(requestedContainerNodeId)) {
+        const node = previousNodeMap.get(requestedContainerNodeId);
+        if (node?.isConnected) return { root: node, mode: 'node' };
+      }
+      if (requestedSelector) {
+        const node = document.querySelector(requestedSelector);
+        if (node) return { root: node, mode: 'selector' };
+      }
+      if (requestedScope === 'focused' || requestedScope === 'auto') {
+        const root = focusedRoot();
+        if (root) return { root, mode: 'focused' };
+      }
+      return { root: document, mode: requestedScope === 'viewport' ? 'viewport' : 'page' };
+    };
+    const candidateSelector = 'a,button,input,textarea,select,[role],[tabindex],summary,label,[contenteditable],details,option,h1,h2,h3,h4,h5,h6,main,section,article,nav,aside,form,dialog,[aria-live]';
+    const priority = (element) => {
+      const kind = kindFor(element);
+      if (kind === 'form' || kind === 'region') return 4;
+      if (kind === 'heading' || kind === 'status') return 3;
+      if (interactive(element)) return 2;
+      return 1;
+    };
+    const scopeInfo = rootForScope();
+    const queryRoot = scopeInfo.root === document ? document : scopeInfo.root;
+    const rawCandidates = queryRoot === document
+      ? [...document.querySelectorAll(candidateSelector)]
+      : [queryRoot, ...queryRoot.querySelectorAll(candidateSelector)];
+    const candidates = [...new Set(rawCandidates)]
+      .filter(visible)
+      .filter((element) => scopeInfo.mode !== 'viewport' || inViewport(element))
+      .filter(intersectsClip)
+      .filter((element) => interactive(element) || textOf(element, 240).length > 0)
+      .sort((first, second) => {
+        const byPriority = priority(second) - priority(first);
+        if (byPriority) return byPriority;
+        return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+    const units = candidates.slice(0, maxUnits).map((element) => {
+      const rect = element.getBoundingClientRect();
+      const type = element.getAttribute('type');
+      return {
+        node_id: idFor(element),
+        kind: kindFor(element),
+        tagName: element.localName,
+        role: element.getAttribute('role'),
+        name: nameFor(element) || null,
+        text: type === 'password' ? '' : textOf(element, interactive(element) ? 240 : 500),
+        type,
+        placeholder: element.getAttribute('placeholder'),
+        selector: selectorFor(element),
+        headingPath: headingPathFor(element),
+        landmark: landmarkFor(element),
+        boundingBox: boxFor(element),
+        inViewport: inViewport(element),
+        disabled: Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true',
+        interactive: interactive(element),
+      };
+    });
+    const scopeBox = scopeInfo.root && scopeInfo.root !== document ? boxFor(scopeInfo.root) : { x: 0, y: 0, width: innerWidth, height: innerHeight };
+    return {
+      url: location.href,
+      title: document.title,
+      scope: {
+        requested: requestedScope,
+        mode: scopeInfo.mode,
+        selector: requestedSelector,
+        node_id: scopeInfo.root && scopeInfo.root !== document ? idFor(scopeInfo.root) : null,
+        boundingBox: scopeBox,
+        clip: requestedClip,
+      },
+      totalCandidates: candidates.length,
+      truncated: candidates.length > units.length,
+      units,
+    };
+  })()`;
+}
+
+export function visualMapExpression(options = {}) {
+  const maxResults = Number.isInteger(options.maxResults) && options.maxResults > 0 ? Math.min(options.maxResults, 250) : 80;
+  const scope = ["auto", "page", "viewport", "focused"].includes(options.scope) ? options.scope : "auto";
+  const rootSelector = typeof options.selector === "string" && options.selector.length > 0 ? options.selector : null;
+  const containerNodeId = typeof options.nodeId === "string" && options.nodeId.length > 0 ? options.nodeId : null;
+  const query = typeof options.query === "string" && options.query.length > 0 ? options.query : "";
+  const detail = options.detail === "debug" ? "debug" : "lean";
+  const clip = options.clip && Number.isFinite(options.clip.x) && Number.isFinite(options.clip.y) && Number.isFinite(options.clip.width) && Number.isFinite(options.clip.height)
+    ? {
+        x: Math.round(options.clip.x),
+        y: Math.round(options.clip.y),
+        width: Math.max(1, Math.round(options.clip.width)),
+        height: Math.max(1, Math.round(options.clip.height)),
+      }
+    : null;
+  return `(() => {
+    const previousNodeMap = window.__opencodeDomNodeMap instanceof Map ? window.__opencodeDomNodeMap : null;
+    window.__opencodeDomNodeMap = new Map();
+    window.__opencodeDomNextNodeId = 1;
+    const maxResults = ${JSON.stringify(maxResults)};
+    const requestedScope = ${JSON.stringify(scope)};
+    const requestedSelector = ${JSON.stringify(rootSelector)};
+    const requestedNodeId = ${JSON.stringify(containerNodeId)};
+    const requestedQuery = ${JSON.stringify(query)};
+    const requestedDetail = ${JSON.stringify(detail)};
+    const requestedClip = ${JSON.stringify(clip)};
+    const compact = (value, max = 240) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, max);
+    const textOf = (element, max = 240) => compact(element.innerText || element.value || element.textContent || '', max);
+    const textById = (id) => id ? compact((document.getElementById(id)?.innerText || document.getElementById(id)?.textContent || ''), 180) : '';
+    const visible = (element) => {
+      if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return false;
+      for (const rect of element.getClientRects()) {
+        if (rect.width > 1 && rect.height > 1) return true;
+      }
+      return false;
+    };
+    const boxFor = (element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+    };
+    const inViewport = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom >= 0 && rect.right >= 0 && rect.top <= innerHeight && rect.left <= innerWidth;
+    };
+    const intersectsClip = (element) => {
+      if (!requestedClip) return true;
+      const rect = element.getBoundingClientRect();
+      const left = Math.max(rect.left, requestedClip.x);
+      const top = Math.max(rect.top, requestedClip.y);
+      const right = Math.min(rect.right, requestedClip.x + requestedClip.width);
+      const bottom = Math.min(rect.bottom, requestedClip.y + requestedClip.height);
+      return right > left && bottom > top;
+    };
+    const selectorFor = (element) => {
+      if (element.id) return '#' + CSS.escape(element.id);
+      const parts = [];
+      for (let node = element; node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement; node = node.parentElement) {
+        let part = node.localName;
+        if (!part) break;
+        const role = node.getAttribute('role');
+        if (role && parts.length === 0) part += '[role="' + CSS.escape(role) + '"]';
+        if (node.classList.length) part += '.' + [...node.classList].slice(0, 2).map((name) => CSS.escape(name)).join('.');
+        const parent = node.parentElement;
+        if (parent) {
+          const siblings = [...parent.children].filter((sibling) => sibling.localName === node.localName);
+          if (siblings.length > 1) part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')';
+        }
+        parts.unshift(part);
+        if (parts.length >= 4) break;
+      }
+      return parts.join(' > ');
+    };
+    const nameFor = (element) => {
+      const labelledBy = compact(String(element.getAttribute('aria-labelledby') || '').split(/\\s+/).map(textById).filter(Boolean).join(' '), 180);
+      return compact(element.getAttribute('aria-label') || labelledBy || element.getAttribute('placeholder') || element.getAttribute('alt') || element.getAttribute('title') || element.labels?.[0]?.innerText || '', 180);
+    };
+    const kindFor = (element) => {
+      const tag = element.localName;
+      const role = element.getAttribute('role');
+      const type = String(element.getAttribute('type') || '').toLowerCase();
+      if (tag === 'button' || role === 'button') return 'button';
+      if (tag === 'a' || role === 'link') return 'link';
+      if (tag === 'input' && (type === 'checkbox' || role === 'checkbox')) return 'checkbox';
+      if (tag === 'input' && (type === 'radio' || role === 'radio')) return 'radio';
+      if (role === 'switch') return 'switch';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || role === 'textbox' || element.isContentEditable) return 'field';
+      if (role === 'menuitem') return 'menuitem';
+      if (role === 'tab') return 'tab';
+      if (tag === 'dialog' || role === 'dialog') return 'dialog';
+      if (tag === 'form' || role === 'form') return 'form';
+      if (tag === 'label') return 'label';
+      if (tag === 'summary') return 'summary';
+      if (tag === 'svg') return 'icon';
+      if (/^h[1-6]$/.test(tag)) return 'heading';
+      return role || tag || 'element';
+    };
+    const interactive = (element) => element.matches('a,button,input,textarea,select,[role="button"],[role="link"],[role="menuitem"],[role="checkbox"],[role="radio"],[role="switch"],[role="textbox"],[role="combobox"],[role="tab"],[tabindex],summary,label,[contenteditable],option');
+    const idFor = (element) => {
+      for (const [id, mapped] of window.__opencodeDomNodeMap) {
+        if (mapped === element) return id;
+      }
+      const id = 'node-' + window.__opencodeDomNextNodeId++;
+      window.__opencodeDomNodeMap.set(id, element);
+      return id;
+    };
+    const focusedRoot = () => {
+      const modalSelector = 'dialog[open],[role="dialog"],[aria-modal="true"],[popover]:popover-open,.modal,.popover,.dialog';
+      const candidates = [...document.querySelectorAll(modalSelector)]
+        .filter(visible)
+        .filter(inViewport)
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const zIndex = Number.parseInt(style.zIndex, 10);
+          return { element, area: Math.max(0, rect.width * rect.height), zIndex: Number.isFinite(zIndex) ? zIndex : 0 };
+        })
+        .filter((item) => item.area > 0)
+        .sort((first, second) => second.zIndex - first.zIndex || second.area - first.area);
+      return candidates[0]?.element ?? null;
+    };
+    const rootForScope = () => {
+      if (requestedNodeId && previousNodeMap?.has(requestedNodeId)) {
+        const node = previousNodeMap.get(requestedNodeId);
+        if (node?.isConnected) return { root: node, mode: 'node' };
+      }
+      if (requestedSelector) {
+        const node = document.querySelector(requestedSelector);
+        if (node) return { root: node, mode: 'selector' };
+      }
+      if (requestedScope === 'focused' || requestedScope === 'auto') {
+        const root = focusedRoot();
+        if (root) return { root, mode: 'focused' };
+      }
+      return { root: document, mode: requestedScope === 'viewport' ? 'viewport' : 'page' };
+    };
+    const lexicalScore = (value) => {
+      const query = compact(requestedQuery, 240).toLowerCase();
+      if (!query) return 0;
+      const text = compact(value, 500).toLowerCase();
+      const tokens = [...new Set(query.match(/[a-z0-9]{2,}/g) || [])];
+      if (!tokens.length) return text.includes(query) ? 1 : 0;
+      const matches = tokens.filter((token) => text.includes(token)).length;
+      return (text.includes(query) ? 0.45 : 0) + matches / tokens.length * 0.55;
+    };
+    const coveredAtCenter = (element) => {
+      const rect = element.getBoundingClientRect();
+      const x = Math.max(0, Math.min(innerWidth - 1, Math.floor(rect.left + rect.width / 2)));
+      const y = Math.max(0, Math.min(innerHeight - 1, Math.floor(rect.top + rect.height / 2)));
+      const hit = document.elementFromPoint(x, y);
+      return Boolean(hit && hit !== element && !element.contains(hit));
+    };
+    const candidateSelector = 'a,button,input,textarea,select,[role],[tabindex],summary,label,[contenteditable],details,option,svg,[aria-label],[title],dialog,form,h1,h2,h3,h4,h5,h6';
+    const scopeInfo = rootForScope();
+    const queryRoot = scopeInfo.root === document ? document : scopeInfo.root;
+    const rawCandidates = queryRoot === document
+      ? [...document.querySelectorAll(candidateSelector)]
+      : [queryRoot, ...queryRoot.querySelectorAll(candidateSelector)];
+    const candidates = [...new Set(rawCandidates)]
+      .filter(visible)
+      .filter((element) => scopeInfo.mode !== 'viewport' || inViewport(element))
+      .filter(intersectsClip)
+      .filter((element) => interactive(element) || nameFor(element) || textOf(element, 80))
+      .map((element) => {
+        const label = nameFor(element) || textOf(element, 160) || kindFor(element);
+        const searchText = [kindFor(element), element.getAttribute('role'), label, textOf(element, 220), selectorFor(element)].filter(Boolean).join(' ');
+        const score = lexicalScore(searchText);
+        return { element, label, score, interactive: interactive(element) };
+      })
+      .sort((first, second) => {
+        if (requestedQuery && second.score !== first.score) return second.score - first.score;
+        if (second.interactive !== first.interactive) return Number(second.interactive) - Number(first.interactive);
+        return first.element.compareDocumentPosition(second.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+    const elements = candidates.slice(0, maxResults).map((item) => {
+      const element = item.element;
+      const base = {
+        node_id: idFor(element),
+        kind: kindFor(element),
+        label: item.label || null,
+        box: boxFor(element),
+        source: 'dom',
+      };
+      if (requestedDetail !== 'debug') return base;
+      return {
+        ...base,
+        tagName: element.localName,
+        role: element.getAttribute('role'),
+        selector: selectorFor(element),
+        text: textOf(element, 240) || null,
+        interactive: item.interactive,
+        disabled: Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true',
+        covered: coveredAtCenter(element),
+        score: Number(item.score.toFixed(4)),
+      };
+    });
+    const scopeBox = scopeInfo.root && scopeInfo.root !== document ? boxFor(scopeInfo.root) : { x: 0, y: 0, width: innerWidth, height: innerHeight };
+    return {
+      url: location.href,
+      title: document.title,
+      query: requestedQuery || null,
+      scope: {
+        requested: requestedScope,
+        mode: scopeInfo.mode,
+        selector: requestedSelector,
+        node_id: scopeInfo.root && scopeInfo.root !== document ? idFor(scopeInfo.root) : null,
+        boundingBox: scopeBox,
+        clip: requestedClip,
+      },
+      totalCandidates: candidates.length,
+      returned: elements.length,
+      truncated: candidates.length > elements.length,
+      elements,
+    };
+  })()`;
+}
+
+export function pageInspectExpression(options = {}) {
+  const nodeId = typeof options.nodeId === "string" && options.nodeId.length > 0 ? options.nodeId : null;
+  const selector = typeof options.selector === "string" && options.selector.length > 0 ? options.selector : null;
+  const depth = Number.isInteger(options.depth) && options.depth >= 0 ? Math.min(options.depth, 4) : 2;
+  const maxChildren = Number.isInteger(options.maxChildren) && options.maxChildren > 0 ? Math.min(options.maxChildren, 80) : 30;
+  const maxText = Number.isInteger(options.maxText) && options.maxText > 0 ? Math.min(options.maxText, 2000) : 700;
+  return `(() => {
+    if (!window.__opencodeDomNodeMap) window.__opencodeDomNodeMap = new Map();
+    if (!window.__opencodeDomNextNodeId) window.__opencodeDomNextNodeId = 1;
+    const requestedNodeId = ${JSON.stringify(nodeId)};
+    const requestedSelector = ${JSON.stringify(selector)};
+    const maxDepth = ${JSON.stringify(depth)};
+    const maxChildren = ${JSON.stringify(maxChildren)};
+    const maxText = ${JSON.stringify(maxText)};
+    const compact = (value, max = 500) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, max);
+    const textOf = (element, max = maxText) => compact(element.innerText || element.value || element.textContent || '', max);
+    const textById = (id) => id ? compact((document.getElementById(id)?.innerText || document.getElementById(id)?.textContent || ''), 180) : '';
+    const visible = (element) => {
+      if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return false;
+      for (const rect of element.getClientRects()) {
+        if (rect.width > 0 && rect.height > 0) return true;
+      }
+      return false;
+    };
+    const selectorFor = (element) => {
+      if (element.id) return '#' + CSS.escape(element.id);
+      const parts = [];
+      for (let node = element; node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement; node = node.parentElement) {
+        let part = node.localName;
+        if (!part) break;
+        const role = node.getAttribute('role');
+        if (role && parts.length === 0) part += '[role="' + CSS.escape(role) + '"]';
+        if (node.classList.length) part += '.' + [...node.classList].slice(0, 2).map((name) => CSS.escape(name)).join('.');
+        const parent = node.parentElement;
+        if (parent) {
+          const siblings = [...parent.children].filter((sibling) => sibling.localName === node.localName);
+          if (siblings.length > 1) part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')';
+        }
+        parts.unshift(part);
+        if (parts.length >= 5) break;
+      }
+      return parts.join(' > ');
+    };
+    const nameFor = (element) => {
+      const labelledBy = compact(String(element.getAttribute('aria-labelledby') || '').split(/\\s+/).map(textById).filter(Boolean).join(' '), 180);
+      return compact(element.getAttribute('aria-label') || labelledBy || element.getAttribute('placeholder') || element.getAttribute('alt') || element.getAttribute('title') || element.labels?.[0]?.innerText || '', 180);
+    };
+    const kindFor = (element) => {
+      const tag = element.localName;
+      const role = element.getAttribute('role');
+      if (/^h[1-6]$/.test(tag)) return 'heading';
+      if (tag === 'a') return 'link';
+      if (tag === 'button' || role === 'button') return 'button';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable) return 'field';
+      if (tag === 'option') return 'option';
+      if (tag === 'form') return 'form';
+      if (tag === 'main' || tag === 'section' || tag === 'article' || tag === 'nav' || tag === 'aside' || role === 'region') return 'region';
+      if (element.hasAttribute('aria-live') || role === 'status' || role === 'alert') return 'status';
+      return role || 'element';
+    };
+    const interactive = (element) => element.matches('a,button,input,textarea,select,[role="button"],[role="link"],[role="menuitem"],[role="checkbox"],[role="radio"],[role="switch"],[role="textbox"],[role="combobox"],[tabindex],summary,label,[contenteditable],option');
+    const idFor = (element) => {
+      for (const [id, mapped] of window.__opencodeDomNodeMap) {
+        if (mapped === element) return id;
+      }
+      const id = 'node-' + window.__opencodeDomNextNodeId++;
+      window.__opencodeDomNodeMap.set(id, element);
+      return id;
+    };
+    const boxFor = (element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+    };
+    const styleFor = (element) => {
+      const style = getComputedStyle(element);
+      return {
+        display: style.display,
+        position: style.position,
+        color: style.color,
+        backgroundColor: style.backgroundColor,
+        font: compact([style.fontStyle, style.fontWeight, style.fontSize, style.fontFamily].filter(Boolean).join(' '), 160),
+        border: compact(style.border, 160),
+        borderRadius: style.borderRadius,
+        padding: style.padding,
+        margin: style.margin,
+        cursor: style.cursor,
+        opacity: style.opacity,
+        zIndex: style.zIndex,
+      };
+    };
+    const summaryFor = (element, textMax = 220) => {
+      const type = element.getAttribute('type');
+      return {
+        node_id: idFor(element),
+        kind: kindFor(element),
+        tagName: element.localName,
+        role: element.getAttribute('role'),
+        name: nameFor(element) || null,
+        text: type === 'password' ? '' : textOf(element, textMax),
+        type,
+        placeholder: element.getAttribute('placeholder'),
+        selector: selectorFor(element),
+        boundingBox: boxFor(element),
+        inViewport: (() => { const rect = element.getBoundingClientRect(); return rect.bottom >= 0 && rect.right >= 0 && rect.top <= innerHeight && rect.left <= innerWidth; })(),
+        disabled: Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true',
+        interactive: interactive(element),
+        visible: visible(element),
+      };
+    };
+    const childTree = (element, level = 0) => {
+      if (level >= maxDepth) return [];
+      return [...element.children]
+        .filter(visible)
+        .slice(0, maxChildren)
+        .map((child) => ({
+          ...summaryFor(child, 180),
+          children: childTree(child, level + 1),
+        }));
+    };
+    const target = requestedNodeId
+      ? window.__opencodeDomNodeMap.get(requestedNodeId)
+      : requestedSelector
+        ? document.querySelector(requestedSelector)
+        : null;
+    if (!target) throw new Error(requestedNodeId ? 'DOM node ID not found in current page map: ' + requestedNodeId : 'Selector not found: ' + requestedSelector);
+    const contextRoot = target.closest('main,section,article,form,dialog,nav,aside,[role="main"],[role="region"],[role="dialog"],[role="form"]') || target.parentElement || target;
+    const ancestors = [];
+    for (let node = target.parentElement; node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement; node = node.parentElement) {
+      ancestors.unshift(summaryFor(node, 120));
+      if (ancestors.length >= 5) break;
+    }
+    const siblings = target.parentElement
+      ? [...target.parentElement.children].filter((child) => child !== target && visible(child)).slice(0, 12).map((child) => summaryFor(child, 180))
+      : [];
+    const nearbyInteractives = [...contextRoot.querySelectorAll('a,button,input,textarea,select,[role="button"],[role="link"],[tabindex],summary,label,[contenteditable]')]
+      .filter((element) => element !== target && visible(element))
+      .slice(0, 20)
+      .map((element) => summaryFor(element, 180));
+    return {
+      url: location.href,
+      title: document.title,
+      requested: { nodeId: requestedNodeId, selector: requestedSelector },
+      target: { ...summaryFor(target, maxText), styles: styleFor(target), html: compact(target.outerHTML, 1600) },
+      contextRoot: summaryFor(contextRoot, maxText),
+      ancestors,
+      siblings,
+      nearbyInteractives,
+      children: childTree(target),
+      screenshotClip: boxFor(target),
+    };
+  })()`;
+}
+
+export function domNodeClickTargetExpression(nodeId) {
   return `(() => {
     ${interactionHelpersSource()}
     return clickTarget(nodeByIdStrict(${JSON.stringify(nodeId)}));
   })()`;
 }
 
-function domNodeEditableExpression(nodeId, options = {}) {
+export function domNodeEditableExpression(nodeId, options = {}) {
   return `(() => {
     ${interactionHelpersSource()}
     return prepareEditable(nodeByIdStrict(${JSON.stringify(nodeId)}), ${JSON.stringify(options)});
   })()`;
 }
 
-function selectorClickTargetExpression(selector) {
+export function selectorClickTargetExpression(selector) {
   return `(() => {
     ${interactionHelpersSource()}
     return clickTarget(querySelectorStrict(${JSON.stringify(selector)}));
   })()`;
 }
 
-function selectorEditableExpression(selector, options = {}) {
+export function selectorEditableExpression(selector, options = {}) {
   return `(() => {
     ${interactionHelpersSource()}
     return prepareEditable(querySelectorStrict(${JSON.stringify(selector)}), ${JSON.stringify(options)});
@@ -919,7 +1737,10 @@ async function clickPoint(context, tabId, x, y, button = "left") {
 }
 
 async function insertTextAndVerify(context, tabId, before, text, options = {}) {
-  if (text.length > 0) await cdp(context, tabId, "Input.insertText", { text });
+  const chunkSize = 16384;
+  for (let offset = 0; offset < text.length; offset += chunkSize) {
+    await cdp(context, tabId, "Input.insertText", { text: text.slice(offset, offset + chunkSize) });
+  }
   return runtimeEvaluate(context, tabId, verifyFocusedEditableExpression(before, {
     insertedText: text,
     expectedValue: options.expectedValue,
@@ -930,18 +1751,18 @@ async function insertTextAndVerify(context, tabId, before, text, options = {}) {
 async function fillFocusedEditable(context, tabId, before, value) {
   if (before.kind === "select") {
     const after = await runtimeEvaluate(context, tabId, setFocusedSelectValueExpression(value));
-    return { filled: true, tabId, kind: after.kind, value: after.value };
+    return { filled: true, tabId, kind: after.kind, value: after.value, valueLength: after.value.length, valueHash: after.valueHash };
   }
 
   if (value.length === 0 && before.value.length > 0) {
     const parsed = parseKeyPress("Backspace");
     for (const event of keyDispatchEvents(parsed)) await cdp(context, tabId, "Input.dispatchKeyEvent", event);
     const after = await runtimeEvaluate(context, tabId, verifyFocusedEditableExpression(before, { expectedValue: "" }));
-    return { filled: true, tabId, kind: after.kind, value: after.value };
+    return { filled: true, tabId, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash };
   }
 
   const after = await insertTextAndVerify(context, tabId, before, value, { expectedValue: value });
-  return { filled: true, tabId, kind: after.kind, value: after.value };
+  return { filled: true, tabId, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash };
 }
 
 async function pressKey(context, tabId, key) {
@@ -1500,6 +2321,145 @@ export const ChromiumBrowserPlugin = async () => {
         },
       }),
 
+      browser_page_search: tool({
+        description: "Search the current page with local semantic retrieval and return only relevant actionable page units.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          query: tool.schema.string().describe("What to find on the page, such as 'checkout button' or 'repository danger zone'."),
+          maxResults: tool.schema.number().int().positive().default(20),
+          maxUnits: tool.schema.number().int().positive().default(700).describe("Maximum page units to extract before ranking."),
+          embeddingCandidates: tool.schema.number().int().positive().default(120).describe("Maximum extracted units to embed before reranking."),
+          rerankCandidates: tool.schema.number().int().positive().default(8).describe("Top embedding candidates to rerank with the local reranker."),
+          detail: tool.schema.enum(["lean", "compact", "full", "debug"]).default("lean"),
+          scope: tool.schema.enum(["auto", "page", "viewport", "focused"]).default("auto").describe("Search the whole page, viewport, or focused surface such as a dialog. Auto prefers focused surfaces."),
+          selector: tool.schema.string().optional().describe("Restrict search to a CSS selector root."),
+          containerNodeId: tool.schema.string().optional().describe("Restrict search to a node ID from browser_page_search, browser_visual_map, or browser_dom_snapshot."),
+          clip: tool.schema.object({
+            x: tool.schema.number(),
+            y: tool.schema.number(),
+            width: tool.schema.number(),
+            height: tool.schema.number(),
+          }).optional().describe("Restrict candidates to a viewport clip rectangle."),
+          mode: tool.schema.enum(["auto", "deep", "lexical", "hybrid", "semantic"]).default("auto"),
+          timeoutMs: tool.schema.number().int().positive().default(120000),
+        },
+        async execute(args, context) {
+          const profileId = await resolveSessionProfileId(context);
+          markProfileUsed(context, profileId);
+          const strategy = args.mode === "hybrid" || args.mode === "semantic" ? "deep" : args.mode;
+          const timeoutMs = Math.max(250, Math.min(args.timeoutMs, strategy === "deep" ? 60000 : 10000));
+          const maxResults = Math.max(1, Math.min(args.maxResults, 100));
+          const maxUnits = Math.max(1, Math.min(args.maxUnits, 1000));
+          const embeddingCandidates = Math.max(1, Math.min(args.embeddingCandidates, strategy === "deep" ? 120 : 48));
+          const page = await runtimeEvaluate(context, args.tabId, pageSearchUnitsExpression({
+            maxUnits,
+            scope: args.scope,
+            selector: args.selector,
+            containerNodeId: args.containerNodeId,
+            clip: args.clip,
+          }), {
+            timeoutMs: Math.min(timeoutMs, 30000),
+            runtimeTimeoutMs: 5000,
+          });
+          const ranking = await browserRequest("semantic.rankPageUnits", sessionParams(context, {
+            profile_id: profileId,
+            query: args.query,
+            units: page.units,
+            maxResults,
+            mode: strategy,
+            embeddingCandidates,
+            rerankCandidates: args.rerankCandidates,
+            pageFingerprint: `${page.url}|${page.title}|${page.units.length}`,
+          }), { profileId, timeoutMs });
+          return stringify(shapePageSearchRanking({
+            url: page.url,
+            title: page.title,
+            query: args.query,
+            scope: page.scope,
+            totalCandidates: page.totalCandidates,
+            truncated: page.truncated,
+            ...ranking,
+          }, args.detail));
+        },
+      }),
+
+      browser_visual_map: tool({
+        description: "Return lean visual UI boxes for visible controls and containers without screenshot payloads.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          query: tool.schema.string().optional().describe("Optional target such as 'save button' or 'settings dialog'. Matching only affects ordering."),
+          scope: tool.schema.enum(["auto", "page", "viewport", "focused"]).default("auto").describe("Map the whole page, viewport, or focused surface such as a dialog. Auto prefers focused surfaces."),
+          selector: tool.schema.string().optional().describe("Restrict mapping to a CSS selector root."),
+          nodeId: tool.schema.string().optional().describe("Restrict mapping to a node ID from a previous browser_page_search, browser_visual_map, or browser_dom_snapshot call."),
+          clip: tool.schema.object({
+            x: tool.schema.number(),
+            y: tool.schema.number(),
+            width: tool.schema.number(),
+            height: tool.schema.number(),
+          }).optional().describe("Restrict mapping to a viewport clip rectangle."),
+          maxResults: tool.schema.number().int().positive().default(80),
+          detail: tool.schema.enum(["lean", "debug"]).default("lean"),
+          vision: tool.schema.enum(["auto", "off", "force"]).default("auto").describe("Optional local screenshot detector. Auto only runs when DOM mapping finds no elements."),
+          labels: tool.schema.array(tool.schema.string()).optional().describe("Candidate labels for the optional screenshot detector."),
+          timeoutMs: tool.schema.number().int().positive().default(120000),
+        },
+        async execute(args, context) {
+          const profileId = await resolveSessionProfileId(context);
+          markProfileUsed(context, profileId);
+          let map = await runtimeEvaluate(context, args.tabId, visualMapExpression(args), {
+            timeoutMs: 30000,
+            runtimeTimeoutMs: 5000,
+          });
+          if (shouldRunVisualModel(args, map)) {
+            try {
+              const screenshot = await captureVisualMapScreenshot(context, args.tabId, args, map);
+              const visual = await browserRequest("visual.mapScreenshot", sessionParams(context, {
+                profile_id: profileId,
+                imageBase64: screenshot.base64,
+                mimeType: "image/png",
+                query: args.query ?? null,
+                labels: args.labels,
+                maxResults: args.maxResults,
+                force: args.vision === "force",
+              }), { profileId, timeoutMs: args.timeoutMs });
+              map = mergeVisualMapModelResult(map, visual, screenshot.origin, args.detail);
+            } catch (error) {
+              if (args.detail === "debug") {
+                map = {
+                  ...map,
+                  visualModel: {
+                    used: false,
+                    error: error instanceof Error ? error.message : String(error),
+                  },
+                };
+              }
+            }
+          }
+          return stringify(map);
+        },
+      }),
+
+      browser_page_inspect: tool({
+        description: "Return focused zoom-in DOM context for a page-search node ID or CSS selector.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          nodeId: tool.schema.string().optional().describe("Node ID from browser_page_search or browser_dom_snapshot."),
+          selector: tool.schema.string().optional().describe("CSS selector to inspect when nodeId is not available."),
+          depth: tool.schema.number().int().min(0).default(2),
+          maxChildren: tool.schema.number().int().positive().default(30),
+          maxText: tool.schema.number().int().positive().default(700),
+        },
+        async execute(args, context) {
+          const profileId = await resolveSessionProfileId(context);
+          markProfileUsed(context, profileId);
+          const inspectArgs = { ...args, selector: args.selector ?? (!args.nodeId ? 'dialog[open], [role="dialog"], body' : undefined) };
+          return stringify(await runtimeEvaluate(context, args.tabId, pageInspectExpression(inspectArgs), {
+            timeoutMs: 30000,
+            runtimeTimeoutMs: 5000,
+          }));
+        },
+      }),
+
       browser_dom_click: tool({
         description: "Click a DOM node ID returned by browser_dom_snapshot.",
         args: {
@@ -1514,17 +2474,24 @@ export const ChromiumBrowserPlugin = async () => {
       }),
 
       browser_dom_type: tool({
-        description: "Type text into a DOM node ID returned by browser_dom_snapshot.",
+        description: "Focus, append to, or replace text in a DOM node returned by browser_dom_snapshot.",
         args: {
           tabId: tool.schema.number().int().positive(),
           nodeId: tool.schema.string(),
           text: tool.schema.string(),
+          mode: tool.schema.enum(["append", "replace", "focus"]).default("append"),
         },
         async execute(args, context) {
           await activate(context, args.tabId);
-          const before = await runtimeEvaluate(context, args.tabId, domNodeEditableExpression(args.nodeId, { cursorAtEnd: true }));
+          const before = await runtimeEvaluate(context, args.tabId, domNodeEditableExpression(args.nodeId, {
+            selectAll: args.mode === "replace",
+            cursorAtEnd: args.mode === "append",
+            includeSelect: args.mode === "replace",
+          }));
+          if (args.mode === "focus") return stringify({ focused: true, tabId: args.tabId, nodeId: args.nodeId, kind: before.kind, valueLength: before.value.length, valueHash: before.valueHash });
+          if (args.mode === "replace") return stringify(await fillFocusedEditable(context, args.tabId, before, args.text));
           const after = await insertTextAndVerify(context, args.tabId, before, args.text);
-          return stringify({ typed: true, tabId: args.tabId, nodeId: args.nodeId, length: args.text.length, kind: after.kind, valueLength: after.value.length });
+          return stringify({ typed: true, tabId: args.tabId, nodeId: args.nodeId, length: args.text.length, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash });
         },
       }),
 
@@ -1554,16 +2521,24 @@ export const ChromiumBrowserPlugin = async () => {
       }),
 
       browser_locator_fill: tool({
-        description: "Fill the first element matching a CSS selector in a controlled tab.",
+        description: "Focus, append to, or replace the first editable element matching a CSS selector.",
         args: {
           tabId: tool.schema.number().int().positive(),
           selector: tool.schema.string(),
           value: tool.schema.string(),
+          mode: tool.schema.enum(["append", "replace", "focus"]).default("replace"),
         },
         async execute(args, context) {
           await activate(context, args.tabId);
-          const before = await runtimeEvaluate(context, args.tabId, selectorEditableExpression(args.selector, { selectAll: true, includeSelect: true }));
-          return stringify(await fillFocusedEditable(context, args.tabId, before, args.value));
+          const before = await runtimeEvaluate(context, args.tabId, selectorEditableExpression(args.selector, {
+            selectAll: args.mode === "replace",
+            cursorAtEnd: args.mode === "append",
+            includeSelect: args.mode === "replace",
+          }));
+          if (args.mode === "focus") return stringify({ focused: true, tabId: args.tabId, selector: args.selector, kind: before.kind, valueLength: before.value.length, valueHash: before.valueHash });
+          if (args.mode === "replace") return stringify(await fillFocusedEditable(context, args.tabId, before, args.value));
+          const after = await insertTextAndVerify(context, args.tabId, before, args.value);
+          return stringify({ typed: true, tabId: args.tabId, selector: args.selector, length: args.value.length, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash });
         },
       }),
 
@@ -1648,18 +2623,21 @@ export const ChromiumBrowserPlugin = async () => {
       }),
 
       browser_console_logs: tool({
-        description: "Read captured console and log events from a Chromium tab.",
+        description: "Read compact captured console and log events from a Chromium tab.",
         args: {
           tabId: tool.schema.number().int().positive(),
-          limit: tool.schema.number().int().positive().default(100),
+          limit: tool.schema.number().int().positive().default(50),
+          raw: tool.schema.boolean().default(false).describe("Return raw CDP payloads instead of compact grouped diagnostics."),
+          includeStack: tool.schema.boolean().default(false).describe("Include full stack traces in compact output."),
         },
         async execute(args, context) {
           await enableCdpDomains(context, args.tabId, ["Runtime", "Log"], { optional: true });
-          return stringify(await extensionRequest(context, "getCdpEvents", {
+          const response = await extensionRequest(context, "getCdpEvents", {
             tabId: args.tabId,
             limit: args.limit,
             methods: ["Runtime.consoleAPICalled", "Log.entryAdded"],
-          }));
+          });
+          return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack }));
         },
       }),
 

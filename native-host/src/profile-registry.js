@@ -2,11 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const REGISTRY_DIR_ENV = "OPENCODE_BROWSER_PROFILE_REGISTRY_DIR";
 const REGISTRY_VERSION = 1;
 
 export function profileRegistryDir() {
-  if (process.env[REGISTRY_DIR_ENV]) return path.resolve(process.env[REGISTRY_DIR_ENV]);
+  const configured = process.env.AGENT_BROWSER_PROFILE_REGISTRY_DIR ?? process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
+  if (configured) return path.resolve(configured);
   return path.join(os.tmpdir(), "opencode-browser-profiles");
 }
 

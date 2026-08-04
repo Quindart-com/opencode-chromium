@@ -16,11 +16,13 @@ export class RpcRelay {
   #nextRequestId = 1;
   #state;
   #onProfile;
+  #localHandler;
 
-  constructor({ extensionWriter, state, onProfile }) {
+  constructor({ extensionWriter, state, onProfile, localHandler }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
     this.#onProfile = onProfile;
+    this.#localHandler = localHandler;
   }
 
   addClient(socket) {
@@ -79,6 +81,20 @@ export class RpcRelay {
     }
 
     if (message?.method && message.id !== undefined) {
+      const local = await this.#handleLocalMethod(message.method, message.params ?? {});
+      if (local.handled) {
+        await writeFrame(socket, local.error ? {
+          jsonrpc: JSON_RPC_VERSION,
+          id: message.id,
+          error: { code: -32000, message: local.error },
+        } : {
+          jsonrpc: JSON_RPC_VERSION,
+          id: message.id,
+          result: local.result,
+        });
+        return;
+      }
+
       const extensionId = this.#nextRequestId++;
       const timeout = setTimeout(() => {
         const pending = this.#deletePending(extensionId);
@@ -99,6 +115,19 @@ export class RpcRelay {
     }
 
     await this.#extensionWriter(message);
+  }
+
+  async #handleLocalMethod(method, params) {
+    if (!this.#localHandler) return { handled: false };
+    try {
+      const result = await this.#localHandler(method, params);
+      return result === undefined ? { handled: false } : { handled: true, result };
+    } catch (error) {
+      return {
+        handled: true,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   async handleExtensionMessage(message) {
@@ -173,6 +202,20 @@ export class RpcRelay {
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,
         result: "pong",
+      });
+      return;
+    }
+
+    const local = await this.#handleLocalMethod(message.method, message.params ?? {});
+    if (local.handled) {
+      await this.#extensionWriter(local.error ? {
+        jsonrpc: JSON_RPC_VERSION,
+        id: message.id,
+        error: { code: -32000, message: local.error },
+      } : {
+        jsonrpc: JSON_RPC_VERSION,
+        id: message.id,
+        result: local.result,
       });
       return;
     }

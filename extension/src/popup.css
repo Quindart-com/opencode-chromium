@@ -19,7 +19,7 @@ dl {
   margin: 0;
 }
 
-div {
+dl > div {
   display: grid;
   grid-template-columns: 88px 1fr;
   gap: 8px;
@@ -55,7 +55,8 @@ label {
   letter-spacing: 0.03em;
 }
 
-input {
+input,
+select {
   box-sizing: border-box;
   width: 100%;
   padding: 8px;
@@ -74,6 +75,49 @@ button {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+button.secondary {
+  margin-left: 6px;
+  color: #164e63;
+  background: #cffafe;
+}
+
+button.danger {
+  margin-left: 6px;
+  color: #7f1d1d;
+  background: #fee2e2;
+}
+
+.form-title {
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #171717;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.model-info {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid #e7e7e7;
+  border-radius: 6px;
+  color: #444;
+  background: white;
+  font-size: 12px;
 }
 
 p {

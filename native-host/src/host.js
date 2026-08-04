@@ -7,6 +7,8 @@ import { FrameDecoder, writeFrame } from "./framing.js";
 import { instanceIpcPath, isUnixSocketPath } from "./ipc-path.js";
 import { removeProfileRegistration, writeProfileRegistration } from "./profile-registry.js";
 import { RpcRelay } from "./rpc-relay.js";
+import { handleSemanticHostMethod } from "./semantic-search.js";
+import { handleVisualHostMethod } from "./visual-map.js";
 
 const ipcPath = instanceIpcPath();
 const state = { startedAt: new Date().toISOString(), ipcPath, profile: null };
@@ -33,6 +35,11 @@ const relay = new RpcRelay({
   state,
   extensionWriter: (message) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
+  localHandler: async (method, params) => {
+    const semantic = await handleSemanticHostMethod(method, params);
+    if (semantic !== undefined) return semantic;
+    return handleVisualHostMethod(method, params);
+  },
 });
 
 function log(message) {
@@ -88,6 +95,25 @@ function createIpcServer() {
 }
 
 const server = createIpcServer();
+let shutdownStarted = false;
+
+function shutdownHost(reason, exitCode = 0) {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  log(reason);
+  cleanupProfileRegistration();
+  relay.shutdown(reason);
+  server.close(() => {
+    cleanupSocketPath();
+    process.exit(exitCode);
+  });
+  const forceExit = setTimeout(() => {
+    cleanupSocketPath();
+    process.exit(exitCode);
+  }, 2000);
+  forceExit.unref?.();
+}
+
 const nativeDecoder = new FrameDecoder({
   onMessage: (message) => {
     relay.handleExtensionMessage(message).catch((error) => {
@@ -106,20 +132,10 @@ process.stdin.on("data", (chunk) => {
   }
 });
 
-process.stdin.on("end", () => {
-  log("extension disconnected");
-  cleanupProfileRegistration();
-  relay.shutdown("Browser extension disconnected");
-  server.close(() => cleanupSocketPath());
-});
+process.stdin.on("end", () => shutdownHost("Browser extension disconnected"));
+process.stdin.on("close", () => shutdownHost("Browser extension input closed"));
+process.stdin.on("error", (error) => shutdownHost(`Browser extension input failed: ${error.message}`, 1));
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    cleanupProfileRegistration();
-    relay.shutdown(`Native host received ${signal}`);
-    server.close(() => {
-      cleanupSocketPath();
-      process.exit(0);
-    });
-  });
+  process.on(signal, () => shutdownHost(`Native host received ${signal}`));
 }

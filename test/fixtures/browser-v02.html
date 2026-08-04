@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Browser v0.2 fixture</title>
+<button id="open">Open settings</button>
+<dialog id="settings">
+  <h1>Workspace settings</h1>
+  <label>Name <input id="name" value="Old value"></label>
+  <div class="monaco-editor" data-editor><textarea class="inputarea" aria-label="Code editor" style="opacity:0">const oldValue = true;</textarea></div>
+  <div class="overlay" style="position:absolute;left:0;top:0;width:20px;height:20px"></div>
+  <a id="download" download="fixture.txt" href="data:text/plain,fixture">Download</a>
+  <button id="save">Save</button>
+</dialog>
+<script>
+  open.addEventListener("click", () => settings.showModal());
+  save.addEventListener("click", () => { save.textContent = "Saved"; });
+</script>

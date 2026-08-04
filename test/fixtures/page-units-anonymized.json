@@ -1,0 +1,16 @@
+{
+  "fingerprint": "fixture-settings-dialog-v1",
+  "queries": ["save workspace settings", "invite a team member", "download monthly report", "close dialog"],
+  "units": [
+    { "node_id": "n1", "kind": "heading", "text": "Workspace settings", "headingPath": ["Settings"] },
+    { "node_id": "n2", "kind": "textbox", "label": "Workspace name", "interactive": true, "inViewport": true },
+    { "node_id": "n3", "kind": "button", "text": "Save changes", "headingPath": ["Workspace settings"], "interactive": true, "inViewport": true },
+    { "node_id": "n4", "kind": "button", "text": "Invite member", "headingPath": ["Members"], "interactive": true },
+    { "node_id": "n5", "kind": "link", "text": "Download report", "headingPath": ["Usage"], "interactive": true },
+    { "node_id": "n6", "kind": "button", "ariaName": "Close dialog", "interactive": true, "inViewport": true },
+    { "node_id": "n7", "kind": "region", "text": "Authentication and access controls" },
+    { "node_id": "n8", "kind": "checkbox", "label": "Email notifications", "interactive": true },
+    { "node_id": "n9", "kind": "button", "text": "Cancel", "interactive": true },
+    { "node_id": "n10", "kind": "paragraph", "text": "Changes are applied to all workspace members." }
+  ]
+}
