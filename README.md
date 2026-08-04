@@ -2,10 +2,10 @@
   <img src="assets/logo.svg" alt="OpenCode Chromium Browser Plugin Logo" width="200"/>
 </p>
 
-<h1 align="center">OpenCode Chromium Browser Plugin</h1>
+<h1 align="center">Chromium Agent Browser</h1>
 
 <p align="center">
-  <strong>Browser automation for Chromium-based browsers, built from readable source instead of a closed browser bundle.</strong>
+  <strong>AI-first browser automation for Codex, OpenCode, MCP clients, and direct model SDKs—built from readable source.</strong>
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@ Codex ships a Chrome browser integration that is **closed source** and tied to C
 
 > Also, if my browser starts quietly pulling down a full AI model in the background, that browser is not working for me anymore. I want a browser stack that stays lean, transparent, and under user control.
 
-This repository rebuilds the integration around Chromium APIs, native messaging, and **OpenCode-native tools**. No proprietary blobs, no vendor lock-in.
+This repository rebuilds the integration around Chromium APIs, native messaging, a provider-neutral runtime, and **four compact AI tools**. No proprietary blobs and no client lock-in.
 
 ---
 
@@ -43,9 +43,25 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 
 - **Manifest V3 Chromium extension** — Tab management, CDP execution, screenshots, downloads, cursor overlays, console/network logs.
 - **Readable Node.js native messaging host** — Bridges the browser extension to OpenCode via local IPC.
-- **OpenCode plugin & skill** — 42+ browser automation tools exposed to your AI agents.
+- **Lexical-first adaptive search** — Exact matches return immediately; uncertain English matches can use a 22.6M-parameter Snowflake model, while the retained Qwen bundle is reserved for explicit deep retrieval.
+- **Visual UI map** — DOM-first visible control and container boxes for agents that need coordinates without paying for full screenshots. An optional local screenshot detector can be enabled in the native host for fallback cases.
+- **AI-first action chains** — Up to 20 typed actions in one request, with step references and automatic turn cleanup.
+- **Minimal model context** — Four default tools, lean observations, response budgets, and resource-backed screenshots/large results.
+- **Universal clients** — Official MCP stdio and Streamable HTTP transports plus OpenAI, Anthropic, Gemini, and MCP schema exports for direct SDK use.
+- **Safe chain approval** — Consequential chains pause before side effects; a token-only follow-up executes the immutable server-stored request.
+- **Compatible migration** — The original 49 granular tools remain available through explicit legacy mode.
 - **Multi-browser** — Works with Chrome, Edge, Brave, Chromium, and other Chromium-based browsers.
 - **Multi-profile routing** — Select among currently open browser profiles, label them locally, and avoid launching or falling back to closed profiles.
+
+---
+
+## What's New In v0.2.0
+
+- **Four-tool agent surface** — `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize` replace the default 49-tool context with typed chains, conditional settling, compact observations, approvals, and artifact resources.
+- **Universal clients** — Codex/MCP stdio and Streamable HTTP, OpenCode, and direct OpenAI, Anthropic, Gemini, and MCP schema adapters now share one runtime.
+- **Adaptive retrieval** — Lexical search stays the fast default; uncertain English matches can use the small local Snowflake model, while explicit deep search retains the Qwen retrieval path.
+- **Visual mapping** — DOM-first visible controls and containers provide coordinates without returning screenshot payloads; an optional local detector is available as a fallback.
+- **Compatibility and migration** — The original tools remain available through explicit legacy mode. See [the v0.2 migration guide](docs/migration-v0.2.md) for the API mapping.
 
 ---
 
@@ -65,9 +81,15 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 ## Requirements
 
 - [Node.js](https://nodejs.org/) 20 or newer
-- [bun](https://bun.sh/)
-- [OpenCode](https://opencode.ai)
+- npm (bundled with Node.js); Bun remains optional
+- An MCP client, OpenCode, or a JavaScript agent application
 - A Chromium-based browser (Chrome, Edge, Brave, etc.)
+
+## Connect an AI client
+
+For Codex or another MCP client, run `node codex-adapter/mcp-server.js` as an MCP stdio server (registered as `opencode-browser-adapter`). For OpenCode, the repository-local plugin loads automatically inside this project; run `npm run install:opencode` once to register the same four-tool surface globally. For custom JavaScript agents, import `createBrowserAgent` and request `openai`, `anthropic`, `gemini`, or `mcp` tool definitions.
+
+See [universal client integration](docs/universal-clients.md), [Codex/MCP setup](codex-adapter/README.md), and the [legacy migration table](docs/migration-v0.2.md).
 
 ---
 
@@ -76,7 +98,7 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 1. **Install dependencies**
 
    ```powershell
-   bun install
+   npm install
    ```
 
 2. **Load the extension**
@@ -90,16 +112,22 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 3. **Install the native messaging host**
 
    ```powershell
-   bun run install:native-host -- --extension-id <extension-id> --browsers chrome
+   npm run install:native-host -- --extension-id <extension-id> --browsers chrome
    ```
 
    Or auto-detect for all installed browsers:
 
    ```powershell
-   bun run install:native-host -- --auto --browsers all
+   npm run install:native-host -- --auto --browsers all
    ```
 
-4. **Restart OpenCode** from this repository directory so it picks up `.opencode/plugins/chromium-browser.js` and `.opencode/skills/chromium-browser/SKILL.md`.
+4. **Register the OpenCode plugin globally** (optional but recommended, makes the tools available in every project):
+
+   ```powershell
+   npm run install:opencode
+   ```
+
+5. **Restart OpenCode**. Inside this repository it picks up `.opencode/plugins/opencode-browser-adapter.js` and `.opencode/skills/opencode-browser-adapter/SKILL.md` automatically; elsewhere it uses the global registration from the previous step.
 
 ---
 
@@ -108,7 +136,7 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 1. **Install dependencies**
 
    ```bash
-   bun install
+   npm install
    ```
 
 2. **Load the extension**
@@ -122,16 +150,22 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 3. **Install the native messaging host**
 
    ```bash
-   bun run install:native-host -- --extension-id <extension-id> --browsers chrome
+   npm run install:native-host -- --extension-id <extension-id> --browsers chrome
    ```
 
    Or auto-detect for all installed browsers:
 
    ```bash
-   bun run install:native-host -- --auto --browsers all
+   npm run install:native-host -- --auto --browsers all
    ```
 
-4. **Restart OpenCode** from this repository directory.
+4. **Register the OpenCode plugin globally** (optional but recommended, makes the tools available in every project):
+
+   ```bash
+   npm run install:opencode
+   ```
+
+5. **Restart OpenCode**.
 
 ---
 
@@ -139,29 +173,27 @@ This repository rebuilds the integration around Chromium APIs, native messaging,
 
 ```bash
 # Full check (plugin validation + tests)
-bun run check
+npm run check
 
 # List detected browsers
-bun run list:browsers
+npm run list:browsers
 
 # Check native host registration
-bun run check:native-host -- --json
+npm run check:native-host -- --json
 
 # Check whether the extension is installed in a browser profile
-bun run check:extension -- --browser chrome --extension-id <extension-id>
+npm run check:extension -- --browser chrome --extension-id <extension-id>
 ```
 
-Once set up, run `browser_status` in OpenCode to verify connectivity.
-
-For multiple open profiles, run `browser_list_profiles`, optionally label each profile from the extension popup or `browser_name_profile`, then use `browser_select_profile` before tab automation.
+Once set up, start with the useful browser operation. The sole connected profile is automatic; with multiple profiles, `browser_session` or the first useful call returns the compact choices without requiring an empty status round trip.
 
 ---
 
 ## Troubleshooting
 
-- **`browser_status` cannot reach host** — Reload the unpacked extension and reinstall the native host manifest with the current extension ID.
+- **A browser call reports no connected profile** — Reload the unpacked extension and reinstall the native host manifest with the current extension ID.
 - **Extension not detected** — Make sure you're checking the right browser profile. Pass `--browser edge` or `--browser brave` as needed.
-- **Multiple profiles connected** — Use `browser_list_profiles` and `browser_select_profile`. OpenCode will not pick randomly or launch a closed profile.
+- **Multiple profiles connected** — Pass the profile ID or exact label to a core tool, or use `browser_session`. The runtime will not pick randomly or launch a closed profile.
 - **File upload blocked** — Open the extension details page and enable **Allow access to file URLs**.
 - **Changes not taking effect** — If the browser was already running while you changed native messaging manifests, restart it.
 
@@ -170,7 +202,8 @@ For multiple open profiles, run `browser_list_profiles`, optionally label each p
 ## How It Works
 
 ```text
-OpenCode tools
+AI client (MCP / OpenCode / direct SDK)
+  -> four-tool provider-neutral browser core
   -> live profile registry
   -> per-profile local IPC (named pipe / unix socket)
   -> native-host/ (Node.js host bridge)
@@ -190,6 +223,8 @@ Each open browser profile runs its own extension/native-host connection and regi
 extension/         Chromium extension source (MV3, background, popup, content scripts)
 native-host/       Native messaging host and IPC bridge (Node.js)
 opencode-plugin/   OpenCode plugin source (client + tool definitions)
+browser-core/      Chaining runtime, safety, artifacts, schemas, and direct SDK
+codex-adapter/     Official MCP stdio and Streamable HTTP server
 .opencode/         OpenCode plugin entrypoint + browser skill
 scripts/           Setup and diagnostic helpers (install, check, find)
 docs/              Architecture notes
@@ -206,7 +241,7 @@ installing it, and only load the extension from a checkout you trust.
 - The native host communicates **locally** via Chromium native messaging and a local IPC socket/pipe.
 - The extension requests broad permissions (tabs, debugger, downloads, scripting, history, etc.)
   because browser automation requires them.
-- No telemetry, no analytics, no remote connections.
+- No telemetry, no analytics, and no remote AI APIs. Optional Qwen3 retrieval and visual detector models are downloaded from Hugging Face the first time you enable or force them, then reused from the local native-host cache.
 
 ---
 
@@ -214,13 +249,13 @@ installing it, and only load the extension from a checkout you trust.
 
 ```bash
 # Run tests (native-host framing tests)
-bun test
+npm test
 
 # Validate the OpenCode plugin shape
-bun run check:opencode-plugin
+npm run check:opencode-plugin
 
 # Start the native host directly for local debugging
-bun run host
+npm run host
 ```
 
 ---
