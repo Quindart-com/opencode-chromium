@@ -11,9 +11,7 @@ function repoRoot() {
 }
 
 function configDir(root) {
-  const preferred = path.join(root, ".opencode");
-  if (fs.existsSync(preferred)) return preferred;
-  return path.join(root, ".oopencode");
+  return path.join(root, ".opencode");
 }
 
 async function loadPluginModule(root) {
