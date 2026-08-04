@@ -28,6 +28,20 @@ For multiple Chromium browsers:
 bun run install:native-host -- --extension-id <extension-id> --browsers chrome,edge,brave,chromium
 ```
 
+## Install OpenCode Plugin
+
+Register the `opencode-browser-adapter` plugin and skill globally for OpenCode. The global plugin file re-exports this repository's entrypoint, so repository changes apply immediately without reinstalling. The script also removes outdated `chromium-browser` plugin/skill registrations:
+
+```bash
+bun run install:opencode
+```
+
+Remove the global registration again:
+
+```bash
+bun run uninstall:opencode
+```
+
 ## Check Native Host
 
 ```bash
