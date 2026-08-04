@@ -15,7 +15,7 @@ function configDir(root) {
 }
 
 async function loadPluginModule(root) {
-  const pluginPath = path.join(configDir(root), "plugins", "chromium-browser.js");
+  const pluginPath = path.join(configDir(root), "plugins", "opencode-browser-adapter.js");
   if (!fs.existsSync(pluginPath)) throw new Error(`Plugin entrypoint not found: ${pluginPath}`);
   return import(pathToFileURL(pluginPath).href);
 }
