@@ -27,6 +27,15 @@ test("parses Shift+Tab with modifier key events", () => {
   assert.equal(events[1].modifiers, 8);
 });
 
+test("normalizes key names and modifiers case-insensitively", () => {
+  const selectAll = parseKeyPress("CTRL+A");
+  assert.equal(selectAll.selectAll, true);
+  assert.deepEqual(selectAll.modifiers, ["Control"]);
+  assert.equal(parseKeyPress("ESC").primary.key, "Escape");
+  assert.equal(parseKeyPress("ESCAPE").primary.key, "Escape");
+  assert.equal(parseKeyPress("Control+a").primary.code, "KeyA");
+});
+
 test("rejects unsupported multi-character keys", () => {
   assert.throws(() => parseKeyPress("Control+DefinitelyNotAKey"), /Unsupported key/);
 });

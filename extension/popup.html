@@ -33,6 +33,20 @@
         <button type="submit">Save</button>
         <p id="profile-help">Labels stay local and are used only to pick the right open browser profile.</p>
       </form>
+      <form id="semantic-form">
+        <div class="form-title">Semantic page search</div>
+        <label class="checkbox-row">
+          <input id="semantic-enabled" type="checkbox">
+          <span>Enable adaptive semantic retrieval</span>
+        </label>
+        <label for="semantic-model">Local model cache</label>
+        <select id="semantic-model" name="semantic-model"></select>
+        <div id="semantic-model-info" class="model-info">Loading model options...</div>
+        <button type="submit">Save semantic settings</button>
+        <button id="semantic-prepare" type="button" class="secondary">Prepare selected model</button>
+        <button id="semantic-delete" type="button" class="danger">Delete selected model files</button>
+        <p id="semantic-help">Search is lexical-first. The small adaptive model loads in the background; deep search uses the retained Qwen bundle only when requested.</p>
+      </form>
     </main>
     <script type="module" src="src/popup.js"></script>
   </body>

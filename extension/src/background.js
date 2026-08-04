@@ -321,7 +321,17 @@ function ensureControlledTab(params, tabId) {
   const sessionId = requiredSessionId(params);
   const session = sessionState(sessionId);
   updateTurn(session, params);
-  if (!session.tabIds.has(tabId)) throw new Error(`Tab ${tabId} is not controlled by this session`);
+  if (!session.tabIds.has(tabId)) {
+    const owner = findTabOwner(tabId);
+    if (!owner) throw new Error(`Tab ${tabId} is not controlled by this session`);
+    owner.session.tabIds.delete(tabId);
+    owner.session.tabOrigins.delete(tabId);
+    if (owner.session.activeTabId === tabId) owner.session.activeTabId = [...owner.session.tabIds].at(-1) ?? null;
+    session.tabIds.add(tabId);
+    session.tabOrigins.set(tabId, owner.origin ?? "user");
+  }
+  session.activeTabId = tabId;
+  void persistSessions().catch(() => {});
   return { sessionId, session, origin: session.tabOrigins.get(tabId) ?? "agent" };
 }
 
@@ -548,7 +558,9 @@ async function ungroupTab(tabId) {
 async function trackTab(sessionId, tabId, origin) {
   const existing = findTabOwner(tabId);
   if (existing && existing.sessionId !== sessionId) {
-    throw new Error(`Tab ${tabId} already belongs to another browser session`);
+    existing.session.tabIds.delete(tabId);
+    existing.session.tabOrigins.delete(tabId);
+    if (existing.session.activeTabId === tabId) existing.session.activeTabId = [...existing.session.tabIds].at(-1) ?? null;
   }
 
   const session = sessionState(sessionId);
@@ -793,6 +805,7 @@ async function executeInputGesture(params) {
   let moveSequence = cursorStateByTabId.get(tabId)?.get(cursorId)?.moveSequence ?? 0;
 
   return withTabLock(tabId, async () => {
+    await sendCdpCommand(tabId, "Page.bringToFront", {}, methodTimeoutMs).catch(() => {});
     const results = [];
     const hasCursorSteps = steps.some((s) => s.cursor && Number.isFinite(s.cursor.x) && Number.isFinite(s.cursor.y));
     const cursorPublishInterval = hasCursorSteps && steps.length > 20 ? Math.max(1, Math.floor(steps.length / 20)) : 1;
@@ -952,6 +965,8 @@ rpc.register("getInfo", async () => {
         { id: "tabs", description: "Create, claim, list, finalize, and navigate Chromium tabs." },
         { id: "history", description: "Read browser history through the extension history permission." },
         { id: "downloads", description: "Observe browser download lifecycle events." },
+        { id: "semantic", description: "Configure local semantic page retrieval models in the native host." },
+        { id: "visual-map", description: "Return lean visible UI boxes and optionally use local screenshot detection in the native host." },
       ],
       tab: [
         { id: "cdp", description: "Run Chrome DevTools Protocol commands against controlled tabs." },
@@ -1138,6 +1153,18 @@ rpc.register("closeTab", async (params) => {
   return {};
 });
 
+rpc.register("releaseTab", async (params) => {
+  const tabId = tabIdFromParams(params);
+  const { sessionId, session } = ensureControlledTab(params, tabId);
+  const origin = session.tabOrigins.get(tabId) ?? "agent";
+  await detachTab(tabId);
+  await hideCursor(tabId).catch(() => {});
+  await ungroupTab(tabId).catch(() => {});
+  await untrackTab(sessionId, tabId);
+  await persistSessions().catch(() => {});
+  return { released: true, tabId, origin };
+});
+
 rpc.register("reloadTab", async (params) => {
   const tabId = tabIdFromParams(params);
   ensureControlledTab(params, tabId);
@@ -1260,6 +1287,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "SET_PROFILE_LABEL") {
     setProfileLabel(message.label)
       .then((profile) => sendResponse({ profile }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
+
+  if (message?.type === "GET_SEMANTIC_SETTINGS") {
+    rpc.request("semantic.status", {})
+      .then((semantic) => sendResponse({ semantic }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
+
+  if (message?.type === "SET_SEMANTIC_SETTINGS") {
+    rpc.request("semantic.setSettings", {
+      enabled: message.enabled === true,
+      modelId: typeof message.modelId === "string" ? message.modelId : undefined,
+      preload: message.preload === true,
+    })
+      .then((semantic) => sendResponse({ semantic }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
+
+  if (message?.type === "PREPARE_SEMANTIC_MODEL") {
+    rpc.request("semantic.prepareModel", { modelId: typeof message.modelId === "string" ? message.modelId : undefined })
+      .then((semantic) => sendResponse({ semantic }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
+
+  if (message?.type === "DELETE_SEMANTIC_MODEL") {
+    rpc.request("semantic.deleteModel", { modelId: typeof message.modelId === "string" ? message.modelId : undefined })
+      .then((semantic) => sendResponse({ semantic }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }
