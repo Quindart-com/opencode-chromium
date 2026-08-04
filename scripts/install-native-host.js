@@ -95,7 +95,7 @@ function parseArgs(argv) {
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
-  if (!args.extensionId) args.extensionId = process.env.OPENCODE_BROWSER_EXTENSION_ID;
+  if (!args.extensionId) args.extensionId = process.env.AGENT_BROWSER_EXTENSION_ID ?? process.env.OPENCODE_BROWSER_EXTENSION_ID;
   if (!args.extensionId && !args.auto) throw new Error("Missing --extension-id, OPENCODE_BROWSER_EXTENSION_ID, or --auto");
   for (const browser of args.browsers) {
     if (!SUPPORTED_BROWSERS[browser]) throw new Error(`Unsupported browser: ${browser}`);
