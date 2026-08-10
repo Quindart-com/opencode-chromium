@@ -137,7 +137,7 @@ try {
   if (schemaErrors > 0) throw new Error("One or more tools produced an invalid MCP input schema");
 
   const schemaBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
-  if (schemaBytes > 8000) throw new Error(`Core tool definitions exceed the 8000-byte context budget: ${schemaBytes}`);
+  if (schemaBytes > 10000) throw new Error(`Core tool definitions exceed the 10000-byte context budget: ${schemaBytes}`);
 
   const legacyTools = await runServer("legacy");
   const legacyNames = new Set(legacyTools.map((tool) => tool.name));

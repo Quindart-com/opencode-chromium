@@ -7,7 +7,9 @@
 ## What it provides
 
 - Four compact default tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`.
-- The complete 49-operation browser engine behind explicit compatibility and capability modes.
+- The complete multi-operation browser engine behind explicit compatibility and capability modes.
+- Native hover, JavaScript dialog handling with approval gating, and png/jpeg/webp screenshots with quality control.
+- Server-level origin policy (allowed/blocked origin globs) and file-root restrictions for uploads.
 - Snowflake-default page search with explicit lexical/auto alternatives and Qwen deep retrieval without loading models in the extension.
 - Profile-aware sessions, tab ownership, stale-target recovery, bounded read retries, conditional settling, approvals, and artifact resources.
 - MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
@@ -29,7 +31,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.0.0` under the canonical name `opencode-browser-plugin`.
+The package is released as `1.2.0` under the canonical name `opencode-browser-plugin`.
 
 ## MCP
 
@@ -51,7 +53,7 @@ Loopback Streamable HTTP is available with:
 bun run mcp:http
 ```
 
-Non-loopback HTTP requires a bearer token in `AGENT_BROWSER_AUTH_TOKEN` (or the variable selected with `--auth-token-env`). The default server name is `opencode-browser-plugin`.
+Non-loopback HTTP requires a bearer token in `AGENT_BROWSER_AUTH_TOKEN` (or the variable selected with `--auth-token-env`). The default server name is `opencode-browser-plugin`. Origin and file-root safety configuration is server-level: pass `--allowed-origin` / `--blocked-origin` globs, or set `AGENT_BROWSER_ALLOWED_ORIGINS`, `AGENT_BROWSER_BLOCKED_ORIGINS`, and `AGENT_BROWSER_ALLOWED_FILE_ROOTS` (see [docs/mcp.md](docs/mcp.md)).
 
 ## OpenCode V2
 
@@ -148,7 +150,7 @@ Large results and screenshots are artifact-first. MCP clients retrieve them thro
 
 ```text
 src/core/                 shared runtime, schemas, safety, artifacts, versions
-src/browser/              profile-aware IPC client and 49-operation engine
+src/browser/              profile-aware IPC client, policies, and operation engine
 src/adapters/mcp/         universal MCP server and transports
 src/adapters/opencode/    native OpenCode V2 adapter
 src/adapters/sdk/         provider schema adapters and direct agent API
