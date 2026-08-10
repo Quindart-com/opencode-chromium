@@ -63,9 +63,9 @@ for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
       const name = extension?.manifest?.name ?? "";
       const extensionPath = extension?.path ?? "";
       const matches =
-        /OpenCode Browser/i.test(name) ||
+        /opencode-browser-plugin/i.test(name) ||
         /Opencode-Plugins/i.test(extensionPath) ||
-        /opencode/i.test(extensionPath);
+        /opencode-browser-plugin/i.test(extensionPath) || /Opencode-Plugins/i.test(extensionPath);
       if (!matches) continue;
 
       results.push({

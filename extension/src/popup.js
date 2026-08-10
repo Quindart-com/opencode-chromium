@@ -27,7 +27,7 @@ chrome.runtime.sendMessage({ type: "GET_NATIVE_HOST_STATUS" }, (response) => {
   const state = nativeStatus.state ?? "unknown";
   const lastError = nativeStatus.error;
   status.textContent = lastError ? `${state}: ${lastError}` : state;
-  host.textContent = nativeStatus.hostName ?? "com.opencode.browser";
+  host.textContent = nativeStatus.hostName ?? "com.opencode.browser.plugin";
   lastChecked.textContent = nativeStatus.lastChecked ? new Date(nativeStatus.lastChecked).toLocaleString() : "-";
 });
 
@@ -55,7 +55,7 @@ profileForm.addEventListener("submit", (event) => {
       return;
     }
     showProfile(response?.profile);
-    profileHelp.textContent = "Saved. Use browser_list_profiles in OpenCode to select this profile.";
+  profileHelp.textContent = "Saved. Pass this profile label to the first useful browser call.";
   });
 });
 
@@ -106,7 +106,7 @@ function renderSemanticStatus(semantic) {
     stopSemanticPoll();
     return;
   }
-  semanticHelp.textContent = `Lexical search is always available. Uncertain auto searches use the lightweight model when ready; download and load failures degrade safely.${cacheDir}`;
+  semanticHelp.textContent = `Snowflake retrieval is the default. Lexical and auto search remain available; download and load failures degrade safely.${cacheDir}`;
 }
 
 function loadSemanticStatus() {

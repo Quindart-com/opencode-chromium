@@ -1,0 +1,18 @@
+interface:
+  display_name: "OpenCode Browser Plugin"
+  short_description: "Provider-neutral Chromium browser automation"
+  brand_color: "#000000"
+  default_prompt: "Use $opencode-browser-plugin to control a Chromium browser through its four browser tools."
+
+policy:
+  allow_implicit_invocation: true
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "opencode-browser-plugin"
+      description: "MCP server exposing browser_run, browser_observe, browser_session, and browser_finalize"
+      transport: "stdio"
+      command:
+        - "bun"
+        - "dist/adapters/mcp/server.js"

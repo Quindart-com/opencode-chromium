@@ -1,0 +1,332 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { z } from "zod";
+import { AgentBrowserRuntime } from "../../src/core/runtime.js";
+import { ArtifactStore } from "../../src/core/artifacts.js";
+
+function fakeRuntime() {
+  const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-runtime-test-")) });
+  const runtime = new AgentBrowserRuntime({ artifactStore: store });
+  runtime.executed = [];
+  runtime.selectProfile = async (session) => {
+    session.profileId = "profile-1";
+    return { profileId: "profile-1" };
+  };
+  runtime.ensureTab = async (session) => {
+    session.activeTabId = 42;
+    return 42;
+  };
+  runtime.executeStep = async (step) => {
+    runtime.executed.push(step.action);
+    if (step.action === "find") return { results: [{ nodeId: "node-1" }] };
+    return { done: step.action };
+  };
+  runtime.settleStep = async () => null;
+  runtime.invoke = async (name) => ({ ended: name === "browser_turn_end" });
+  return runtime;
+}
+
+test("risky action chain pauses once before any browser action", async () => {
+  const runtime = fakeRuntime();
+  try {
+    const request = {
+      sessionId: "safety-test",
+      steps: [{ id: "submit", action: "click", target: { query: "Submit order" } }],
+      returnMode: "all",
+    };
+    const first = await runtime.run(request);
+    assert.equal(first.status, "approval_required");
+    assert.deepEqual(runtime.executed, []);
+
+    const second = await runtime.run({ approvalToken: first.approvalToken });
+    assert.equal(second.status, "completed");
+    assert.deepEqual(runtime.executed, ["click"]);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("approval follow-up rejects retransmitted or changed action chains", async () => {
+  const runtime = fakeRuntime();
+  try {
+    const first = await runtime.run({ sessionId: "bound", steps: [{ action: "press", key: "Enter" }] });
+    const changed = await runtime.run({ sessionId: "bound", steps: [{ action: "press", key: "Escape" }], approvalToken: first.approvalToken });
+    assert.equal(changed.status, "invalid_request");
+    assert.deepEqual(runtime.executed, []);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("network body inspection is approval-gated without changing the default tool surface", async () => {
+  const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-network-approval-test-")) });
+  const runtime = new AgentBrowserRuntime({
+    artifactStore: store,
+    operationFactory: async () => ({
+      tool: {
+        browser_network_inspect: {
+          capabilityOnly: true,
+          args: {
+            tabId: z.number().int().positive(),
+            includeBody: z.enum(["none", "request", "response", "both"]).default("none"),
+          },
+          async execute() { return JSON.stringify({ events: [] }); },
+        },
+      },
+    }),
+  });
+  try {
+    const result = await runtime.run({
+      sessionId: "network-approval",
+      steps: [{ action: "capability", capability: "network.inspect", input: { tabId: 42, includeBody: "response" } }],
+    });
+    assert.equal(result.status, "approval_required");
+    assert.match(result.reasons.join(" "), /network body inspection/);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("chain validation happens before profile or tab side effects", async () => {
+  const runtime = fakeRuntime();
+  let selected = false;
+  runtime.selectProfile = async () => { selected = true; };
+  try {
+    const result = await runtime.run({ sessionId: "preflight", steps: [{ action: "navigate" }] });
+    assert.equal(result.status, "invalid_request");
+    assert.equal(selected, false);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("settle without a resolvable target fails fast instead of timing out", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.settleStep;
+  let invoked = false;
+  runtime.invoke = async () => { invoked = true; throw new Error("should not reach the browser"); };
+  try {
+    await assert.rejects(
+      runtime.settleStep({ action: "navigate", settle: { condition: "contains", value: "Example Domain" } }, 42, new Map(), runtime.getSession("settle-target")),
+      /settle condition "contains" requires a target selector/,
+    );
+    await assert.rejects(
+      runtime.settleStep({ action: "navigate", settle: { condition: "exists" } }, 42, new Map(), runtime.getSession("settle-target")),
+      /settle condition "exists" requires a target selector or nodeId/,
+    );
+    assert.equal(invoked, false);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("settle contains with a selector passes when the text matches", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.settleStep;
+  runtime.invoke = async (name) => {
+    assert.equal(name, "browser_locator_text");
+    return { text: "Example Domain heading text" };
+  };
+  try {
+    const result = await runtime.settleStep(
+      { action: "navigate", settle: { condition: "contains", target: { selector: "h1" }, value: "Example Domain" } },
+      42,
+      new Map(),
+      runtime.getSession("settle-match"),
+    );
+    assert.deepEqual(result, { condition: "contains", settled: true });
+  } finally {
+    runtime.close();
+  }
+});
+
+test("large accessibility observations include a useful inline preview", async () => {
+  const runtime = fakeRuntime();
+  const nodes = Array.from({ length: 1200 }, (_, index) => ({
+    nodeId: `ax-${index}`,
+    backendDOMNodeId: index + 1,
+    ignored: false,
+    role: { value: index % 2 ? "button" : "heading" },
+    name: { value: `Useful page node ${index} ${"x".repeat(700)}` },
+  }));
+  runtime.getSession("large-ax").activeTabId = 42;
+  runtime.invoke = async (name) => {
+    if (name === "browser_snapshot") return { nodes };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "large-ax", mode: "raw-snapshot" });
+    assert.equal(result.ok, true);
+    assert.equal(result.truncated, true);
+    assert.equal(result.result.totalNodes, 1200);
+    assert.ok(result.result.nodes.length > 0);
+    assert.match(result.result.nodes[0].name, /Useful page node/);
+    assert.ok(result.artifact?.uri);
+    assert.ok(JSON.stringify(result).length <= 4096, "inline response should honor the default budget");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("inspect observations constrain legacy tree expansion before budgeting", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("inspect-limit").activeTabId = 42;
+  let inspectArgs;
+  runtime.invoke = async (name, args) => {
+    if (name !== "browser_page_inspect") throw new Error(`Unexpected operation: ${name}`);
+    inspectArgs = args;
+    return { target: { name: "Settings" }, children: Array.from({ length: 100 }, (_, index) => ({ text: `child ${index} ${"y".repeat(500)}` })) };
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "inspect-limit", mode: "inspect", selector: "#settings" });
+    assert.equal(inspectArgs.depth, 1);
+    assert.equal(inspectArgs.maxChildren, 12);
+    assert.equal(inspectArgs.maxText, 280);
+    assert.equal(result.ok, true);
+    assert.ok(result.result.target);
+    assert.ok(JSON.stringify(result).length <= 4096);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("untargeted inspect uses a bounded active-surface root", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("inspect-root").activeTabId = 42;
+  let selector;
+  runtime.invoke = async (name, args) => {
+    assert.equal(name, "browser_page_inspect");
+    selector = args.selector;
+    return { target: { name: "Page" } };
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "inspect-root", mode: "inspect", limit: 9999, maxChars: 999999 });
+    assert.equal(result.ok, true);
+    assert.match(selector, /dialog/);
+    assert.ok(JSON.stringify(result).length <= 20000);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("postObserve is returned from the same run", async () => {
+  const runtime = fakeRuntime();
+  runtime.observeValue = async () => ({ results: [{ node_id: "saved", label: "Saved" }] });
+  try {
+    const result = await runtime.run({
+      sessionId: "post-observe",
+      steps: [{ action: "press", key: "Escape" }],
+      postObserve: { mode: "search", query: "saved" },
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.observation.results[0].node_id, "saved");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("clipboardWrite maps the common value field to the legacy text input", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.executeStep;
+  runtime.resolveTarget = async () => ({});
+  let call;
+  runtime.invoke = async (name, args) => { call = { name, args }; return { written: true }; };
+  try {
+    await runtime.executeStep({ action: "clipboardWrite", value: "copied safely" }, 42, new Map(), runtime.getSession("clipboard"));
+    assert.equal(call.name, "browser_clipboard_write_text");
+    assert.equal(call.args.text, "copied safely");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("read-only legacy operations retry once after a transient CDP failure", async () => {
+  const runtime = fakeRuntime();
+  let attempts = 0;
+  runtime.legacyToolsPromise = Promise.resolve({
+    browser_page_search: {
+      args: { value: z.string() },
+      async execute() {
+        attempts += 1;
+        if (attempts === 1) throw new Error("CDP timeout");
+        return JSON.stringify({ results: [] });
+      },
+    },
+  });
+  delete runtime.invoke;
+  try {
+    const result = await runtime.invoke("browser_page_search", { value: "query" }, "read-retry");
+    assert.deepEqual(result, { results: [] });
+    assert.equal(attempts, 2);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("uncertain mutation failures attach compact recovery state without retrying", async () => {
+  const runtime = fakeRuntime();
+  let attempts = 0;
+  runtime.executeStep = async () => {
+    attempts += 1;
+    throw new Error("CDP timeout after dispatch");
+  };
+  runtime.observeValue = async () => ({ target: { label: "Save" } });
+  try {
+    const result = await runtime.run({ sessionId: "uncertain", steps: [{ action: "click", target: { selector: "#commit-control" } }] });
+    assert.equal(result.status, "partial");
+    assert.equal(attempts, 1);
+    assert.equal(result.results[0].error.uncertain, true);
+    assert.equal(result.results[0].observation.target.label, "Save");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("stale target with a selector is re-resolved once", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.executeStep;
+  let resolutions = 0;
+  let clicks = 0;
+  runtime.resolveTarget = async () => {
+    resolutions += 1;
+    return resolutions === 1 ? { nodeId: "stale", selector: "#save" } : { selector: "#save" };
+  };
+  runtime.clickTarget = async () => {
+    clicks += 1;
+    if (clicks === 1) throw new Error("Element is detached");
+    return { clicked: true };
+  };
+  try {
+    const result = await runtime.executeStep({ action: "click", target: { nodeId: "stale", selector: "#save" } }, 42, new Map(), runtime.getSession("stale"));
+    assert.equal(result.clicked, true);
+    assert.equal(resolutions, 2);
+    assert.equal(clicks, 2);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("opening a named profile returns its tabs immediately", async () => {
+  const runtime = fakeRuntime();
+  runtime.connectedProfiles = async () => [{ profileId: "work-id", profileLabel: "Work" }];
+  runtime.selectProfile = async (session, requested) => {
+    assert.equal(requested, "Work");
+    session.profileId = "work-id";
+    return { profileId: "work-id" };
+  };
+  runtime.invoke = async (name, args) => {
+    assert.equal(name, "browser_list_tabs");
+    assert.equal(args.scope, "user");
+    return { tabs: [{ id: 9, title: "Dashboard" }] };
+  };
+  try {
+    const result = await runtime.session({ sessionId: "named-open", action: "open", profile: "Work", scope: "user" });
+    assert.equal(result.ok, true);
+    assert.equal(result.result.tabs[0].id, 9);
+  } finally {
+    runtime.close();
+  }
+});

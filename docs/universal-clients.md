@@ -1,55 +1,46 @@
-# Universal AI client integration
+# Universal clients
 
-The browser implementation has one provider-neutral runtime and several thin protocol adapters. The runtime owns sessions, action validation, approval binding, response budgets, artifacts, and profile routing; clients only translate tool schemas and calls.
-
-## MCP clients
-
-Use `codex-adapter/mcp-server.js` with any client that supports MCP stdio. Use `--transport=http` for a Streamable HTTP endpoint. The MCP server is the recommended integration because it also exposes screenshot and large-result artifacts as resources.
-
-## Direct JavaScript SDK
+All supported clients call the same `AgentBrowserRuntime`.
 
 ```js
-import { createBrowserAgent } from "opencode-chromium-browser-plugin";
+import { createBrowserAgent } from "opencode-browser-plugin/sdk";
 
-const browser = createBrowserAgent();
-
-// Pick the schema dialect your model API expects.
-const openAITools = browser.tools("openai");
-const anthropicTools = browser.tools("anthropic");
-const geminiTools = browser.tools("gemini");
-const mcpTools = browser.tools("mcp");
-
-// Dispatch a model tool call through the same validated runtime.
-const result = await browser.call("browser_run", {
-  sessionId: "task-123",
+const agent = createBrowserAgent();
+const tools = agent.tools("openai");
+const result = await agent.call("browser_run", {
+  profile: "Work",
   steps: [
-    { action: "navigate", url: "https://example.com" },
-    { id: "docs", action: "find", value: "documentation" },
-    { action: "click", target: { fromStep: "docs", index: 0 } }
-  ],
-  postObserve: { mode: "inspect" }
+    { id: "target", action: "find", value: "Settings" },
+    { action: "click", target: { fromStep: "target" } }
+  ]
 });
+agent.close();
 ```
 
-The schemas are generated from the same Zod definitions. Provider adapters must not fork tool behavior or maintain independent argument models.
+Use `openai`, `anthropic`, `gemini`, or `mcp` for provider-specific schema syntax. These adapters change only field names and result envelopes; Snowflake-default search, safety, profiles, retries, and artifacts stay in the core.
 
-## OpenCode
+OpenCode V2 uses the native package root export. Stable OpenCode, Codex, and other clients use the universal MCP server. The default tool surface is always four tools.
 
-The repository-local `.opencode/plugins/opencode-browser-adapter.js` loads the four AI-first tools. Run `npm run install:opencode` to register the same entrypoint globally in `~/.config/opencode/plugins/`; a registration guard keeps the tools single-instance when both copies load.
+The same runtime also supports lazy capabilities. Every client requests the network manifest through `browser_observe` and executes `network.inspect` as a `browser_run` capability step; no client-specific fifth tool or schema is added. This includes OpenCode, Codex/MCP, direct OpenAI/Anthropic/Gemini SDK adapters, and the HTTP MCP deployment used by cloud clients.
 
-## Profile portability
+## Agent Skills surface
 
-Clients can pass either a live profile ID or the exact profile label in `profile`. A sole connected profile is selected automatically. With multiple profiles, the tool returns `profile_selection_required` and a compact profile list instead of forcing a separate empty status call.
+The bundled skill ([`skills/opencode-browser-plugin/SKILL.md`](../skills/opencode-browser-plugin/SKILL.md)) follows the open [Agent Skills](https://agentskills.io) standard, so any skills-compatible client can discover it from the standard locations without a provider-specific adapter.
 
-## Approval contract
+Install it for every compatible client at once:
 
-The runtime prevalidates the entire chain. Uploads, clipboard access, close actions, sensitive form input, Enter/Return, and consequential click targets return one `approval_required` result before any browser side effect. The server stores that immutable request; a follow-up `browser_run` containing only the short-lived `approvalToken` executes it.
+```powershell
+opencode-browser-plugin install --client skills
+opencode-browser-plugin install --client skills --dry-run
+opencode-browser-plugin uninstall --client skills
+```
 
-## Compatibility policy
+`install --client skills` copies the skill to:
 
-- Default: four core tools.
-- Migration: `--toolset=legacy` over MCP exposes the original 49 tools. OpenCode always loads the four core tools.
-- Debugging only: `--toolset=debug` exposes both over MCP.
-- Raw JavaScript evaluation is not part of the core action language; the old raw CDP tool remains legacy-only.
+- `~/.codex/skills/opencode-browser-plugin/` — this Codex build's user skill home
+- `~/.claude/skills/opencode-browser-plugin/` — Claude Code, OpenCode, Cursor, Copilot
+- `~/.agents/skills/opencode-browser-plugin/` — the cross-provider standard location
 
-Provider-neutral environment names use the `AGENT_BROWSER_*` prefix (`PROFILE_REGISTRY_DIR`, `IPC_PATH`, `INSTANCE_IPC_PATH`, `SEMANTIC_DIR`, `VISUAL_DIR`, `ARTIFACT_DIR`, and `EXTENSION_ID`). Existing `OPENCODE_BROWSER_*` names remain supported as lower-priority aliases.
+For Codex it also updates `~/.codex/config.toml`: it backs up the file, removes any stale `[[skills.config]]` entry pointing at the legacy `opencode-browser-adapter` skill, and appends an enabled `[[skills.config]]` entry for the installed `SKILL.md` (this Codex build requires explicit enablement rather than pure auto-discovery). Uninstall removes the skill directories and the config entry, and never touches unrelated skills.
+
+The skill ships with [`agents/openai.yaml`](../skills/opencode-browser-plugin/agents/openai.yaml) so ChatGPT and Codex desktop can present it in the Skills picker and declare the browser MCP connector as a dependency.

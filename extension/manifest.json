@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "OpenCode Browser",
-  "version": "0.2.0",
-  "description": "Control Chromium browsers with OpenCode.",
+  "name": "opencode-browser-plugin",
+  "version": "1.0.0",
+  "description": "Control Chromium browsers through the provider-neutral opencode-browser-plugin runtime.",
   "action": {
     "default_icon": {
       "16": "images/icon16.png",
@@ -11,7 +11,7 @@
       "128": "images/icon128.png"
     },
     "default_popup": "popup.html",
-    "default_title": "OpenCode Browser"
+    "default_title": "opencode-browser-plugin"
   },
   "background": {
     "service_worker": "src/background.js",

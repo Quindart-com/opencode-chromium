@@ -3,11 +3,12 @@ import os from "node:os";
 import path from "node:path";
 
 const REGISTRY_VERSION = 1;
+const PLUGIN_NAME = "opencode-browser-plugin";
 
 export function profileRegistryDir() {
   const configured = process.env.AGENT_BROWSER_PROFILE_REGISTRY_DIR ?? process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
   if (configured) return path.resolve(configured);
-  return path.join(os.tmpdir(), "opencode-browser-profiles");
+  return path.join(os.tmpdir(), "agent-browser-profiles");
 }
 
 function safeFileName(value) {
@@ -26,9 +27,15 @@ export function normalizeProfileRegistration(value) {
 
   return {
     version: value.version === REGISTRY_VERSION ? value.version : REGISTRY_VERSION,
+    plugin: PLUGIN_NAME,
+    protocolVersion: String(value.protocolVersion ?? "1"),
     profileId: value.profileId,
+    profileFingerprint: typeof value.profileFingerprint === "string" && value.profileFingerprint.length > 0 ? value.profileFingerprint : value.profileId,
+    connectionId: typeof value.connectionId === "string" && value.connectionId.length > 0 ? value.connectionId : null,
+    connectionGeneration: Number.isInteger(value.connectionGeneration) ? value.connectionGeneration : 1,
     profileLabel: typeof value.profileLabel === "string" && value.profileLabel.length > 0 ? value.profileLabel : null,
     browserName: typeof value.browserName === "string" && value.browserName.length > 0 ? value.browserName : null,
+    browserVersion: typeof value.browserVersion === "string" && value.browserVersion.length > 0 ? value.browserVersion : null,
     extensionId: typeof value.extensionId === "string" && value.extensionId.length > 0 ? value.extensionId : null,
     extensionVersion: typeof value.extensionVersion === "string" && value.extensionVersion.length > 0 ? value.extensionVersion : null,
     hostPid: Number.isInteger(value.hostPid) ? value.hostPid : null,

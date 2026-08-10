@@ -1,21 +1,14 @@
-# Codex, OpenCode, and SDK parity
+# Codex and OpenCode parity
 
-The canonical public contract lives in `browser-core/`. Every client uses the same four schemas and the same `AgentBrowserRuntime`; client adapters only translate the transport/tool shape.
+Codex uses the MCP adapter; OpenCode V2 uses `src/adapters/opencode/index.js`. Both adapters consume the same registry and runtime, so they share:
 
-## Adapter contract
+- four tool names and the same compact schemas;
+- profiles, sessions, tab ownership, retries, settling, approvals, and finalization;
+- Snowflake-default search, explicit lexical/auto alternatives, and explicit Qwen deep search;
+- the on-demand tab-scoped `network.inspect` capability pack, including the same filters, redaction, body approval, and CDP lifecycle projection;
+- artifact metadata and session isolation;
+- version metadata and normalized error codes.
 
-- OpenCode loads `opencode-plugin/src/ai-plugin.js` through the `.opencode/plugins/opencode-browser-adapter.js` entrypoint (locally, or globally via `npm run install:opencode`).
-- Codex and other MCP clients load `codex-adapter/mcp-server.js`, which uses the official MCP SDK.
-- Direct applications use `createBrowserAgent()` and select an OpenAI, Anthropic, Gemini, or MCP schema dialect.
-- All adapters dispatch to the same runtime, approval policy, artifact store, and low-level browser operations.
+Run `bun run test:contracts`, `bun run test:mcp`, and `bun run test:opencode` to compare the protocol envelopes without a live browser.
 
-## Compatibility boundary
-
-The granular implementation remains in `opencode-plugin/src/plugin.js` as the internal engine for `browser-core/`. It is exposed as tools only through `--toolset=legacy` over MCP; OpenCode always loads the four core tools. Changes to new agent behavior belong in `browser-core/`.
-
-## Maintenance rules
-
-- Keep one canonical Zod schema per core tool; generate provider schemas with `schema-adapters.js`.
-- Do not add raw code execution to the typed core action language.
-- Add a regression test for every approval, session, artifact, or response-budget change.
-- Run `npm run check`; it verifies OpenCode, MCP core/legacy modes, schema budgets, and all tests.
+Both clients also load the same bundled skill. OpenCode auto-discovers skills from `.opencode/skills`, `.claude/skills`, and `.agents/skills`; this Codex build reads its user skills from `~/.codex/skills` and honors explicit `[[skills.config]]` enablement. `install --client skills` writes all three standard locations and the Codex config entry so the skill is available in both clients (see [universal-clients.md](universal-clients.md)).

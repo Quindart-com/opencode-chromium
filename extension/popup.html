@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>OpenCode Browser</title>
+    <title>opencode-browser-plugin</title>
     <link rel="stylesheet" href="src/popup.css">
   </head>
   <body>
     <main>
-      <h1>OpenCode Browser</h1>
+      <h1>opencode-browser-plugin</h1>
       <dl>
         <div>
           <dt>Status</dt>
@@ -16,7 +16,7 @@
         </div>
         <div>
           <dt>Host</dt>
-          <dd id="host">com.opencode.browser</dd>
+          <dd id="host">com.opencode.browser.plugin</dd>
         </div>
         <div>
           <dt>Last Check</dt>
@@ -37,7 +37,7 @@
         <div class="form-title">Semantic page search</div>
         <label class="checkbox-row">
           <input id="semantic-enabled" type="checkbox">
-          <span>Enable adaptive semantic retrieval</span>
+          <span>Enable Snowflake semantic retrieval</span>
         </label>
         <label for="semantic-model">Local model cache</label>
         <select id="semantic-model" name="semantic-model"></select>
@@ -45,7 +45,7 @@
         <button type="submit">Save semantic settings</button>
         <button id="semantic-prepare" type="button" class="secondary">Prepare selected model</button>
         <button id="semantic-delete" type="button" class="danger">Delete selected model files</button>
-        <p id="semantic-help">Search is lexical-first. The small adaptive model loads in the background; deep search uses the retained Qwen bundle only when requested.</p>
+        <p id="semantic-help">Snowflake retrieval is the default. Use lexical or auto search for lower latency; deep search uses the retained Qwen bundle only when requested.</p>
       </form>
     </main>
     <script type="module" src="src/popup.js"></script>

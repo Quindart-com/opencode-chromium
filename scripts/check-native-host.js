@@ -7,7 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const HOST_NAME = "com.opencode.browser";
+const HOST_NAME = "com.opencode.browser.plugin";
 const EXTENSION_ID_ENV = "OPENCODE_BROWSER_EXTENSION_ID";
 const MANIFEST_PATH_ENV = "OPENCODE_BROWSER_NATIVE_HOST_MANIFEST_PATH";
 const WINDOWS_REGISTRY_KEYS = {
