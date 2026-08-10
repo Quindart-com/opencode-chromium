@@ -5,6 +5,36 @@ const sessionFields = {
   profile: z.string().min(1).max(160).optional(),
 };
 
+const networkPresetSchema = z.enum(["offline", "slow-2g", "slow-3g", "fast-3g", "slow-4g", "online"]);
+const networkConditionsSchema = z.object({
+  offline: z.boolean().optional(),
+  latency: z.number().min(0).optional(),
+  downloadThroughput: z.number().optional(),
+  uploadThroughput: z.number().optional(),
+});
+
+const environmentSchema = z.object({
+  reset: z.boolean().optional(),
+  viewport: z.object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    deviceScaleFactor: z.number().min(0).optional(),
+    mobile: z.boolean().optional(),
+    touch: z.boolean().optional(),
+  }).optional(),
+  network: z.union([networkPresetSchema, networkConditionsSchema]).optional(),
+  cpuThrottling: z.number().min(1).optional(),
+  colorScheme: z.enum(["light", "dark", "no-preference"]).optional(),
+  geolocation: z.object({
+    latitude: z.number(),
+    longitude: z.number(),
+    accuracy: z.number().min(0).optional(),
+  }).optional(),
+  userAgent: z.string().max(500).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  initScripts: z.array(z.string().max(20000)).max(50).optional(),
+});
+
 const targetSchema = z.object({
   nodeId: z.string().optional(),
   selector: z.string().optional(),
@@ -132,10 +162,11 @@ export function createCoreRegistry(runtime) {
       description: "Manage a named-profile browser session.",
       inputSchema: z.object({
         ...sessionFields,
-        action: z.enum(["open", "new-tab", "claim-tab", "release-tab", "name"]),
+        action: z.enum(["open", "new-tab", "claim-tab", "release-tab", "name", "configure"]),
         tabId: z.number().int().positive().optional(),
         name: z.string().min(1).max(120).optional(),
         scope: z.enum(["session", "user"]).optional(),
+        environment: environmentSchema.optional(),
       }),
       outputSchema: resultSchema,
       annotations: { openWorldHint: true },
@@ -149,6 +180,7 @@ export function createCoreRegistry(runtime) {
           z.number().int().positive(),
           z.object({ tabId: z.number().int().positive(), status: z.enum(["handoff", "deliverable"]).optional() }),
         ])).max(50).optional(),
+        keepEnvironment: z.boolean().optional().describe("Retain applied emulation overrides instead of clearing them."),
       }),
       outputSchema: resultSchema,
       annotations: { destructiveHint: true, openWorldHint: true },
@@ -157,4 +189,4 @@ export function createCoreRegistry(runtime) {
   };
 }
 
-export { observationSchema, resultSchema, settleSchema, stepSchema, targetSchema };
+export { environmentSchema, observationSchema, resultSchema, settleSchema, stepSchema, targetSchema };

@@ -862,6 +862,14 @@ export class AgentBrowserRuntime {
       let value = null;
       if (args.action === "open") {
         value = await this.invoke("browser_list_tabs", { scope: args.scope ?? "session" }, sessionId);
+      } else if (args.action === "configure") {
+        const tabId = args.tabId ?? session.activeTabId ?? (await this.invoke("browser_selected_tab", {}, sessionId))?.id;
+        if (!tabId) throw new Error("configure requires an active tab or an explicit tabId");
+        session.activeTabId = tabId;
+        const environment = args.environment ?? {};
+        const configured = await this.invoke("browser_configure", { tabId, environment }, sessionId);
+        session.environment = environment.reset === true ? {} : { ...(session.environment ?? {}), ...environment };
+        value = { tabId, environment: session.environment, configured };
       } else if (args.action === "new-tab") {
         const tab = await this.invoke("browser_new_tab", {}, sessionId);
         session.activeTabId = tab.id ?? tab.tabId;
@@ -879,7 +887,7 @@ export class AgentBrowserRuntime {
         if (!args.name) throw new Error("name requires name");
         value = await this.invoke("browser_name_session", { name: args.name }, sessionId);
       }
-      return { ...contractMetadata(), ok: true, status: "ready", sessionId, profileId: profile.profileId, activeTabId: session.activeTabId, result: value };
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId, profileId: profile.profileId, activeTabId: session.activeTabId, environment: session.environment ?? {}, result: value };
     } catch (error) {
       return this.failure(sessionId, error);
     }
@@ -890,6 +898,9 @@ export class AgentBrowserRuntime {
     try {
       const session = this.getSession(sessionId);
       await this.selectProfile(session, args.profile);
+      if (args.keepEnvironment !== true && session.environment && Object.keys(session.environment).length > 0 && session.activeTabId) {
+        await this.invoke("browser_configure", { tabId: session.activeTabId, environment: { reset: true } }, sessionId).catch(() => {});
+      }
       const result = await this.invoke("browser_finalize", { keep: args.keep ?? [] }, sessionId);
       this.sessions.delete(sessionId);
       this.artifacts.cleanupSession(sessionId);

@@ -58,9 +58,10 @@
     "browser_clear_download_events",
     "browser_cdp",
     "browser_turn_end",
+    "browser_configure",
     "browser_finalize"
   ],
-  "granularCount": 52,
+  "granularCount": 53,
   "defaultResponseBudget": 4096,
   "protocolVersion": "1",
   "schemaVersion": "1"

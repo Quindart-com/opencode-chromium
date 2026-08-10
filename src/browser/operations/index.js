@@ -1996,6 +1996,76 @@ async function waitForPageReady(context, tabId, waitUntil = "domcontentloaded", 
   throw new Error(`Timed out waiting for page ${waitUntil}; last readyState was ${lastState ?? "unknown"}.${suffix}`);
 }
 
+const NETWORK_PRESETS = Object.freeze({
+  offline: { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 },
+  "slow-2g": { offline: false, latency: 2000, downloadThroughput: 250 * 1024 / 8, uploadThroughput: 50 * 1024 / 8 },
+  "slow-3g": { offline: false, latency: 1500, downloadThroughput: 400 * 1024 / 8, uploadThroughput: 400 * 1024 / 8 },
+  "fast-3g": { offline: false, latency: 560, downloadThroughput: 1.6 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8 },
+  "slow-4g": { offline: false, latency: 170, downloadThroughput: 1.6 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8 },
+  online: { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
+});
+
+function networkConditions(value) {
+  if (typeof value === "string") return NETWORK_PRESETS[value] ?? NETWORK_PRESETS.online;
+  return {
+    offline: value.offline ?? false,
+    latency: value.latency ?? 0,
+    downloadThroughput: value.downloadThroughput ?? -1,
+    uploadThroughput: value.uploadThroughput ?? -1,
+  };
+}
+
+async function applyEnvironment(context, tabId, env) {
+  if (env.viewport) {
+    await cdp(context, tabId, "Emulation.setDeviceMetricsOverride", {
+      width: env.viewport.width,
+      height: env.viewport.height,
+      deviceScaleFactor: env.viewport.deviceScaleFactor ?? 1,
+      mobile: env.viewport.mobile ?? false,
+    }).catch(() => {});
+    if (env.viewport.touch !== undefined) {
+      await cdp(context, tabId, "Emulation.setTouchEmulationEnabled", { enabled: env.viewport.touch }).catch(() => {});
+    }
+  }
+  if (env.cpuThrottling !== undefined) {
+    await cdp(context, tabId, "Emulation.setCPUThrottlingRate", { rate: env.cpuThrottling }).catch(() => {});
+  }
+  if (env.network !== undefined) {
+    await cdp(context, tabId, "Network.emulateNetworkConditions", networkConditions(env.network)).catch(() => {});
+  }
+  if (env.geolocation) {
+    await cdp(context, tabId, "Emulation.setGeolocationOverride", {
+      latitude: env.geolocation.latitude,
+      longitude: env.geolocation.longitude,
+      accuracy: env.geolocation.accuracy ?? 0,
+    }).catch(() => {});
+  }
+  if (env.colorScheme) {
+    await cdp(context, tabId, "Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-color-scheme", value: env.colorScheme }],
+    }).catch(() => {});
+  }
+  if (env.userAgent !== undefined) {
+    await cdp(context, tabId, "Emulation.setUserAgentOverride", { userAgent: env.userAgent }).catch(() => {});
+  }
+  if (env.headers && Object.keys(env.headers).length > 0) {
+    await cdp(context, tabId, "Network.setExtraHTTPHeaders", { headers: env.headers }).catch(() => {});
+  }
+  if (Array.isArray(env.initScripts) && env.initScripts.length > 0) {
+    await cdp(context, tabId, "Page.addScriptToEvaluateOnNewDocument", { source: env.initScripts.join("\n") }).catch(() => {});
+  }
+}
+
+async function resetEnvironment(context, tabId) {
+  await cdp(context, tabId, "Emulation.clearDeviceMetricsOverride").catch(() => {});
+  await cdp(context, tabId, "Emulation.setTouchEmulationEnabled", { enabled: false }).catch(() => {});
+  await cdp(context, tabId, "Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => {});
+  await cdp(context, tabId, "Network.emulateNetworkConditions", NETWORK_PRESETS.online).catch(() => {});
+  await cdp(context, tabId, "Emulation.setEmulatedMedia", {}).catch(() => {});
+  await cdp(context, tabId, "Emulation.setGeolocationOverride", {}).catch(() => {});
+  await cdp(context, tabId, "Network.setExtraHTTPHeaders", { headers: {} }).catch(() => {});
+}
+
 const networkInspectOperation = Object.assign(tool({
   description: "Inspect one controlled tab's request/response lifecycle with bounded, redacted detail.",
   args: NETWORK_INSPECT_ARGS,
@@ -2879,6 +2949,48 @@ return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: a
         },
       }),
 
+      browser_configure: tool({
+        description: "Apply persistent emulation, network, and initialization overrides to a controlled tab.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          environment: tool.schema.object({
+            reset: tool.schema.boolean().optional().describe("Clear all applied overrides instead of applying new ones."),
+            viewport: tool.schema.object({
+              width: tool.schema.number().int().positive(),
+              height: tool.schema.number().int().positive(),
+              deviceScaleFactor: tool.schema.number().min(0).optional(),
+              mobile: tool.schema.boolean().optional(),
+              touch: tool.schema.boolean().optional(),
+            }).optional(),
+            network: tool.schema.union([
+              tool.schema.enum(["offline", "slow-2g", "slow-3g", "fast-3g", "slow-4g", "online"]),
+              tool.schema.object({
+                offline: tool.schema.boolean().optional(),
+                latency: tool.schema.number().min(0).optional(),
+                downloadThroughput: tool.schema.number().optional(),
+                uploadThroughput: tool.schema.number().optional(),
+              }),
+            ]).optional(),
+            cpuThrottling: tool.schema.number().min(1).optional(),
+            colorScheme: tool.schema.enum(["light", "dark", "no-preference"]).optional(),
+            geolocation: tool.schema.object({
+              latitude: tool.schema.number(),
+              longitude: tool.schema.number(),
+              accuracy: tool.schema.number().min(0).optional(),
+            }).optional(),
+            userAgent: tool.schema.string().max(500).optional(),
+            headers: tool.schema.record(tool.schema.string(), tool.schema.string()).optional(),
+            initScripts: tool.schema.array(tool.schema.string().max(20000)).max(50).optional(),
+          }),
+        },
+        async execute(args, context) {
+          const environment = args.environment ?? {};
+          if (environment.reset === true) await resetEnvironment(context, args.tabId);
+          else await applyEnvironment(context, args.tabId, environment);
+          return stringify({ configured: true, tabId: args.tabId, reset: environment.reset === true });
+        },
+      }),
+
       browser_finalize: tool({
         description: "Close agent-created tabs unless kept; release unkept user-claimed tabs without closing them.",
         args: {
@@ -2936,7 +3048,7 @@ export const GRANULAR_OPERATION_NAMES = Object.freeze([
   "browser_locator_fill", "browser_locator_text", "browser_set_file_input", "browser_clipboard_read_text",
 "browser_clipboard_write_text", "browser_enable_inspection", "browser_console_logs",
   "browser_dialog_events", "browser_network_events", "browser_clear_events", "browser_download_events",
-  "browser_clear_download_events", "browser_cdp", "browser_turn_end", "browser_finalize",
+"browser_clear_download_events", "browser_cdp", "browser_turn_end", "browser_configure", "browser_finalize",
 ]);
 
 export const GRANULAR_OPERATION_COUNT = GRANULAR_OPERATION_NAMES.length;
