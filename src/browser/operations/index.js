@@ -2241,11 +2241,13 @@ async execute(args, context) {
         },
       }),
 
-      browser_screenshot: tool({
-        description: "Capture a PNG screenshot from a Chromium tab via CDP.",
+browser_screenshot: tool({
+        description: "Capture a screenshot from a Chromium tab via CDP in png, jpeg, or webp format.",
         args: {
           tabId: tool.schema.number().int().positive(),
           fullPage: tool.schema.boolean().default(false),
+          format: tool.schema.enum(["png", "jpeg", "webp"]).default("png").describe("Capture format. jpeg and webp are significantly smaller than png."),
+          quality: tool.schema.number().int().min(0).max(100).optional().describe("Compression quality for jpeg and webp. Ignored for png."),
           clip: tool.schema.object({
             x: tool.schema.number(),
             y: tool.schema.number(),
@@ -2258,7 +2260,8 @@ async execute(args, context) {
         async execute(args, context) {
           await activate(context, args.tabId);
           await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
-          const params = { format: "png", optimizeForSpeed: true };
+          const params = { format: args.format, optimizeForSpeed: true };
+          if (args.format !== "png" && args.quality !== undefined) params.quality = args.quality;
           if (args.clip) params.clip = { ...args.clip, scale: args.clip.scale ?? 1 };
           if (args.fullPage) {
             const metrics = await cdp(context, args.tabId, "Page.getLayoutMetrics", {}, args.timeoutMs);
@@ -2269,7 +2272,8 @@ async execute(args, context) {
             }
           }
           const result = await cdp(context, args.tabId, "Page.captureScreenshot", params, args.timeoutMs);
-          return stringify({ mimeType: "image/png", base64: result.data });
+          const mimeType = args.format === "png" ? "image/png" : args.format === "jpeg" ? "image/jpeg" : "image/webp";
+          return stringify({ mimeType, base64: result.data });
         },
       }),
 

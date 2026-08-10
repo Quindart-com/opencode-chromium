@@ -31,6 +31,8 @@ const observationSchema = z.object({
   detail: z.enum(["lean", "compact", "full", "debug"]).optional(),
   limit: z.number().int().positive().optional(),
   fullPage: z.boolean().optional(),
+  format: z.enum(["png", "jpeg", "webp"]).optional(),
+  quality: z.number().int().min(0).max(100).optional(),
   searchStrategy: z.enum(["snowflake", "auto", "lexical", "deep"]).optional(),
 }).optional();
 
@@ -62,6 +64,8 @@ const stepSchema = z.object({
   settle: settleSchema,
   delivery: z.enum(["artifact", "inline"]).optional(),
   fullPage: z.boolean().optional(),
+  format: z.enum(["png", "jpeg", "webp"]).optional(),
+  quality: z.number().int().min(0).max(100).optional(),
   retry: z.number().int().min(0).max(3).optional(),
   onError: z.enum(["stop", "continue"]).optional(),
   bypassCache: z.boolean().optional(),
@@ -112,6 +116,8 @@ export function createCoreRegistry(runtime) {
         detail: z.enum(["lean", "compact", "full", "debug"]).optional(),
         limit: z.number().int().positive().optional(),
         fullPage: z.boolean().optional(),
+        format: z.enum(["png", "jpeg", "webp"]).optional(),
+        quality: z.number().int().min(0).max(100).optional(),
         delivery: z.enum(["artifact", "inline"]).optional(),
         searchStrategy: z.enum(["snowflake", "auto", "lexical", "deep"]).optional(),
         pack: z.string().max(64).optional(),

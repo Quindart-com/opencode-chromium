@@ -457,3 +457,23 @@ test("url policy is attached to operation invocation context", async () => {
     runtime.close();
   }
 });
+
+test("screenshot observations forward format and quality to the capture operation", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("shot-format").activeTabId = 42;
+  let captureArgs;
+  runtime.invoke = async (name, args) => {
+    if (name !== "browser_screenshot") throw new Error(`Unexpected operation: ${name}`);
+    captureArgs = args;
+    return { mimeType: "image/webp", base64: Buffer.from("fake").toString("base64") };
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "shot-format", mode: "screenshot", format: "webp", quality: 80 });
+    assert.equal(result.ok, true);
+    assert.equal(captureArgs.format, "webp");
+    assert.equal(captureArgs.quality, 80);
+    assert.equal(result.result.screenshot.mimeType, "image/webp");
+  } finally {
+    runtime.close();
+  }
+});
