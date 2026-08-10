@@ -216,6 +216,7 @@ function requiresApproval(steps = []) {
     const referenced = step.target?.fromStep ? named.get(step.target.fromStep) : null;
     const targetText = JSON.stringify([step.target ?? {}, referenced?.target ?? {}, referenced?.value]);
     if (["upload", "clipboardRead", "clipboardWrite", "close"].includes(step.action)) reasons.push(step.action);
+    if (step.action === "handleDialog" && step.value === "accept") reasons.push("dialog accept");
     if (step.action === "press" && /^(enter|return)$/i.test(step.key ?? "")) reasons.push("submit-capable key press");
     if (["click", "doubleClick"].includes(step.action) && RISK_WORDS.test(targetText)) reasons.push("consequential click target");
     if (["fill", "replaceText", "fillForm", "type"].includes(step.action) && /password|passcode|otp|credit.?card|cvv/i.test(`${targetText} ${JSON.stringify(step.fields ?? {})}`)) {
@@ -253,6 +254,10 @@ function validateSteps(steps) {
     if (step.action === "drag") required(step, "path");
     if (step.action === "upload") required(step, "files");
     if (step.action === "capability") required(step, "capability");
+    if (step.action === "handleDialog") {
+      required(step, "value");
+      if (!["accept", "dismiss"].includes(step.value)) throw new Error("handleDialog value must be accept or dismiss");
+    }
     if (["click", "doubleClick", "hover", "focus", "fill", "replaceText", "select", "upload", "assert"].includes(step.action) && !step.target) {
       throw new Error(`${step.action} requires target`);
     }
@@ -470,6 +475,7 @@ export class AgentBrowserRuntime {
         case "click": return this.clickTarget("browser_click", target, tabId, step, session.sessionId);
         case "doubleClick": return this.clickTarget("browser_double_click", target, tabId, step, session.sessionId);
         case "hover": return this.hoverTarget(target, tabId, session.sessionId);
+        case "handleDialog": return this.invoke("browser_handle_dialog", { tabId, value: step.value, promptText: step.promptText }, session.sessionId);
         case "focus": return this.editTarget(target, tabId, "focus", "", session.sessionId);
         case "fill":
         case "replaceText":
@@ -652,6 +658,7 @@ export class AgentBrowserRuntime {
     if (args.mode === "events") return {
       console: await this.invoke("browser_console_logs", { tabId, limit: clamp(args.limit, 50, 1, 200), raw: false, includeStack: false }, session.sessionId),
       network: summarizeNetworkEvents(await this.invoke("browser_network_events", { tabId, limit: clamp(args.limit, 50, 1, 200) }, session.sessionId), clamp(args.limit, 30, 1, 200)),
+      dialogs: await this.invoke("browser_dialog_events", { tabId, limit: clamp(args.limit, 20, 1, 100) }, session.sessionId),
     };
     if (args.mode === "downloads") return this.invoke("browser_download_events", { limit: clamp(args.limit, 100, 1, 200) }, session.sessionId);
     if (args.mode === "screenshot") return this.screenshot(tabId, args, session.sessionId);

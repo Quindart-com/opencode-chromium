@@ -377,3 +377,55 @@ test("hover by nodeId dispatches the DOM node hover operation", async () => {
     runtime.close();
   }
 });
+
+test("handleDialog dispatches the dialog operation with prompt text", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.executeStep;
+  runtime.resolveTarget = async () => ({});
+  let call;
+  runtime.invoke = async (name, args) => { call = { name, args }; return { handled: true }; };
+  try {
+    const result = await runtime.executeStep(
+      { action: "handleDialog", value: "accept", promptText: "confirmed" },
+      42,
+      new Map(),
+      runtime.getSession("dialog"),
+    );
+    assert.equal(result.handled, true);
+    assert.equal(call.name, "browser_handle_dialog");
+    assert.equal(call.args.value, "accept");
+    assert.equal(call.args.promptText, "confirmed");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("accepting a dialog pauses the chain for approval", async () => {
+  const runtime = fakeRuntime();
+  try {
+    const first = await runtime.run({ sessionId: "dialog-approval", steps: [{ action: "handleDialog", value: "accept" }] });
+    assert.equal(first.status, "approval_required");
+    assert.match(first.reasons.join(" "), /dialog accept/);
+    assert.deepEqual(runtime.executed, []);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("events observation includes a dialogs bucket", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("events-dialogs").activeTabId = 42;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_console_logs") return { events: [] };
+    if (name === "browser_network_events") return { events: [] };
+    if (name === "browser_dialog_events") return { events: [{ event: "opened", type: "confirm", message: "Delete item?" }] };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "events-dialogs", mode: "events" });
+    assert.equal(result.ok, true);
+    assert.equal(result.result.dialogs.events[0].type, "confirm");
+  } finally {
+    runtime.close();
+  }
+});

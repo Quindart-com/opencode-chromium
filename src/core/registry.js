@@ -46,6 +46,7 @@ const stepSchema = z.object({
     message: "Navigation supports http://, https://, and about:blank only",
   }).optional(),
   value: z.string().optional(),
+  promptText: z.string().max(2000).optional(),
   capability: z.string().max(160).optional(),
   input: z.any().optional(),
   key: z.string().optional(),

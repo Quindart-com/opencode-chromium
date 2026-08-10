@@ -30,6 +30,7 @@
     "browser_click",
     "browser_double_click",
     "browser_hover",
+    "browser_handle_dialog",
     "browser_scroll",
     "browser_drag",
     "browser_type",
@@ -50,6 +51,7 @@
     "browser_clipboard_write_text",
     "browser_enable_inspection",
     "browser_console_logs",
+    "browser_dialog_events",
     "browser_network_events",
     "browser_clear_events",
     "browser_download_events",
@@ -58,7 +60,7 @@
     "browser_turn_end",
     "browser_finalize"
   ],
-  "granularCount": 50,
+  "granularCount": 52,
   "defaultResponseBudget": 4096,
   "protocolVersion": "1",
   "schemaVersion": "1"
