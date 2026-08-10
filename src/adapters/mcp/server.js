@@ -50,6 +50,8 @@ export function parseArgs(argv = []) {
     host: "127.0.0.1",
     port: 3210,
     authTokenEnv: "AGENT_BROWSER_AUTH_TOKEN",
+    allowedOrigins: [],
+    blockedOrigins: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -60,6 +62,8 @@ export function parseArgs(argv = []) {
     else if (rawFlag === "--host") options.host = nextValue();
     else if (rawFlag === "--port") options.port = Number(nextValue());
     else if (rawFlag === "--auth-token-env") options.authTokenEnv = nextValue();
+    else if (rawFlag === "--allowed-origin") options.allowedOrigins.push(nextValue());
+    else if (rawFlag === "--blocked-origin") options.blockedOrigins.push(nextValue());
     else if (rawFlag === "--help" || rawFlag === "-h") options.help = true;
     else throw new Error(`Unknown option: ${argument}`);
   }
@@ -240,10 +244,15 @@ export async function startMcpServer(options = parseArgs(process.argv.slice(2)),
 export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.help) {
-    process.stdout.write("Usage: opencode-browser-plugin-mcp [--transport=stdio|http] [--toolset=core|legacy|debug] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN]\n");
+    process.stdout.write("Usage: opencode-browser-plugin-mcp [--transport=stdio|http] [--toolset=core|legacy|debug] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN] [--allowed-origin=PATTERN] [--blocked-origin=PATTERN]\n");
     return;
   }
-  const runtime = createAgentBrowserRuntime();
+  const runtime = createAgentBrowserRuntime({
+    urlPolicyConfig: {
+      allowedOrigins: options.allowedOrigins,
+      blockedOrigins: options.blockedOrigins,
+    },
+  });
   const cleanup = () => {
     runtime.close();
     closeBrowserClients();

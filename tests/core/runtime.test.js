@@ -429,3 +429,31 @@ test("events observation includes a dialogs bucket", async () => {
     runtime.close();
   }
 });
+
+test("url policy is attached to operation invocation context", async () => {
+  const runtime = new AgentBrowserRuntime({
+    urlPolicyConfig: { blockedOrigins: ["https://blocked.example"] },
+    operationFactory: async () => ({
+      tool: {
+        browser_navigate: {
+          args: { url: z.string() },
+          async execute(args, context) {
+            return JSON.stringify({ contextHasPolicy: Boolean(context?.urlPolicy), blocked: context?.urlPolicy?.evaluate(args.url) });
+          },
+        },
+        browser_turn_end: { args: {}, async execute() { return "{}"; } },
+      },
+    }),
+  });
+  runtime.selectProfile = async (session) => { session.profileId = "policy-profile"; return { profileId: "policy-profile" }; };
+  runtime.ensureTab = async (session) => { session.activeTabId = 1; return 1; };
+  try {
+    const result = await runtime.run({ sessionId: "policy-context", steps: [{ action: "navigate", url: "https://blocked.example/x" }] });
+    assert.equal(result.ok, true);
+    assert.equal(result.results[0].result.contextHasPolicy, true);
+    assert.equal(result.results[0].result.blocked.allowed, false);
+    assert.equal(result.results[0].result.blocked.code, "URL_POLICY_BLOCKED");
+  } finally {
+    runtime.close();
+  }
+});
