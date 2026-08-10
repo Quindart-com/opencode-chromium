@@ -53,5 +53,5 @@ test("native OpenCode 1.18 module loading exposes the four core tools", async ()
 test("MCP options and instructions are provider-neutral", () => {
   assert.equal(SERVER_NAME, "opencode-browser-plugin");
   assert.match(SERVER_INSTRUCTIONS, /browser_run/);
-  assert.deepEqual(parseArgs(["--transport=http", "--toolset", "debug", "--port=4321"]), { transport: "http", toolset: "debug", host: "127.0.0.1", port: 4321, authTokenEnv: "AGENT_BROWSER_AUTH_TOKEN" });
+  assert.deepEqual(parseArgs(["--transport=http", "--toolset", "debug", "--port=4321"]), { transport: "http", toolset: "debug", host: "127.0.0.1", port: 4321, authTokenEnv: "AGENT_BROWSER_AUTH_TOKEN", allowedOrigins: [], blockedOrigins: [] });
 });

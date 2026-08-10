@@ -31,6 +31,8 @@ The default network result is lifecycle-only. Headers are redacted, bodies are d
 
 When a result is `approval_required`, review the chain and call `browser_run` again with only `approvalToken`. Never recreate or modify the approved chain. Retrieve screenshots and oversized results from their artifact URI, and call `browser_finalize` when the work is complete while keeping only user-facing deliverables.
 
+Hover elements with a `hover` step to reveal menus and tooltips before clicking. Accept or dismiss JavaScript dialogs with `handleDialog` (`value: "accept" | "dismiss"`, optional `promptText`); accepting a dialog pauses the chain for approval. Capture screenshots as `png`, `jpeg`, or `webp` with an optional `quality` for the compressed formats. Pending dialogs appear in the `dialogs` bucket of `browser_observe` mode `events`.
+
 ```json
 {
   "profile": "Work",
