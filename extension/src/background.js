@@ -387,7 +387,6 @@ function normalizeTab(tab, extra = {}) {
     lastOpened: Number.isFinite(tab.lastAccessed) ? new Date(tab.lastAccessed).toISOString() : null,
     controlled: Boolean(owner),
     sessionId: owner?.sessionId ?? null,
-    origin: owner?.origin ?? null,
     ...extra,
   };
 }
