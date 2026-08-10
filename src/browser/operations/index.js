@@ -6,6 +6,7 @@ import { browserRequest, listBrowserProfiles, resolveBrowserProfile } from "../c
 import { NETWORK_INSPECT_ARGS } from "../../core/network-capability.js";
 import { assertNavigationAllowed } from "../url-policy.js";
 import { inspectNetworkEvents } from "../network.js";
+import { SourceMapResolver, mapCallFrames } from "../../../native-host/src/source-maps.js";
 
 // The browser operation engine is intentionally adapter-neutral. MCP, OpenCode,
 // and direct SDK adapters all consume this same operation registry.
@@ -459,7 +460,7 @@ function compactDialogEvents(response) {
   return { totalEvents: events.length, returned: dialogs.length, open, events: dialogs };
 }
 
-function compactConsoleEvents(response, options = {}) {
+export function compactConsoleEvents(response, options = {}) {
   if (options.raw) return response;
   const events = Array.isArray(response?.events) ? response.events : [];
   const grouped = new Map();
@@ -470,7 +471,8 @@ function compactConsoleEvents(response, options = {}) {
     const key = [event.method, level, text, url].join("\u0000");
     const existing = grouped.get(key);
     const params = event.params ?? {};
-    const frame = params.stackTrace?.callFrames?.[0] ?? params.entry?.stackTrace?.callFrames?.[0] ?? null;
+    const callFrames = params.stackTrace?.callFrames ?? params.entry?.stackTrace?.callFrames ?? [];
+    const frame = callFrames[0] ?? null;
     if (existing) {
       existing.count += 1;
       existing.lastTime = event.time;
@@ -489,6 +491,7 @@ function compactConsoleEvents(response, options = {}) {
       count: 1,
       ...(frame ? { topFrame: { functionName: frame.functionName || null, url: frame.url || null, lineNumber: Number.isInteger(frame.lineNumber) ? frame.lineNumber + 1 : null, columnNumber: Number.isInteger(frame.columnNumber) ? frame.columnNumber + 1 : null } } : {}),
       ...(options.includeStack ? { stackTrace: params.stackTrace ?? params.entry?.stackTrace ?? null } : {}),
+      ...(options.sourceMapped === true && callFrames.length > 0 ? { stack: mapCallFrames(callFrames, options.resolver ?? null) } : {}),
     });
   }
   const compacted = [...grouped.values()].sort((first, second) => String(first.time).localeCompare(String(second.time)));
@@ -2066,6 +2069,44 @@ async function resetEnvironment(context, tabId) {
   await cdp(context, tabId, "Network.setExtraHTTPHeaders", { headers: {} }).catch(() => {});
 }
 
+function fetchSourceMapFromPageExpression(scriptUrl) {
+  return `(async () => {
+    const url = ${JSON.stringify(scriptUrl)};
+    try {
+      const script = await fetch(url, { credentials: "include" });
+      if (!script.ok) return null;
+      const text = await script.text();
+      const match = /\\/\\/#\\s*sourceMappingURL=([^\\s]+)/.exec(text);
+      if (!match) return null;
+      const mapUrl = new URL(match[1], url).href;
+      const map = await fetch(mapUrl, { credentials: "include" });
+      if (!map.ok) return null;
+      return await map.json();
+    } catch {
+      return null;
+    }
+  })()`;
+}
+
+async function fetchConsoleSourceMaps(context, tabId, events, resolver) {
+  const urls = new Set();
+  for (const event of events) {
+    const params = event.params ?? {};
+    const frames = params.stackTrace?.callFrames ?? params.entry?.stackTrace?.callFrames ?? [];
+    for (const frame of frames) {
+      if (typeof frame.url === "string" && frame.url.length > 0) urls.add(frame.url);
+    }
+  }
+  for (const url of urls) {
+    if (resolver.has(url)) continue;
+    const map = await runtimeEvaluate(context, tabId, fetchSourceMapFromPageExpression(url), {
+      timeoutMs: 10000,
+    }).catch(() => null);
+    if (map) resolver.set(url, map);
+  }
+  return resolver;
+}
+
 const networkInspectOperation = Object.assign(tool({
   description: "Inspect one controlled tab's request/response lifecycle with bounded, redacted detail.",
   args: NETWORK_INSPECT_ARGS,
@@ -2849,6 +2890,7 @@ browser_console_logs: tool({
           limit: tool.schema.number().int().positive().default(50),
           raw: tool.schema.boolean().default(false).describe("Return raw CDP payloads instead of compact grouped diagnostics."),
           includeStack: tool.schema.boolean().default(false).describe("Include full stack traces in compact output."),
+          sourceMap: tool.schema.boolean().default(false).describe("Resolve source-mapped stack frames by fetching maps through the page context."),
         },
         async execute(args, context) {
           await enableCdpDomains(context, args.tabId, ["Runtime", "Log"], { optional: true });
@@ -2857,7 +2899,10 @@ browser_console_logs: tool({
             limit: args.limit,
             methods: ["Runtime.consoleAPICalled", "Log.entryAdded"],
           });
-return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack }));
+          if (!args.sourceMap) return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack }));
+          const resolver = new SourceMapResolver();
+          await fetchConsoleSourceMaps(context, args.tabId, response?.events ?? [], resolver);
+          return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack, sourceMapped: true, resolver }));
         },
       }),
 
