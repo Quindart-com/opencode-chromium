@@ -2,18 +2,14 @@
 node_modules/
 **/node_modules/
 package-lock.json
-bun.lock
 
 # Build output
 dist/
 *.tgz
 
-# Local OpenCode install artifacts
-.opencode/node_modules/
-.opencode/package-lock.json
-
 # Local extension/native-host state
 scripts/extension-id.json
+reports/
 
 # Logs and OS files
 *.log

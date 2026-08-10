@@ -113,7 +113,7 @@ function extensionMatches(id, extension, expectedIds) {
   if (expectedIds.length > 0) return expectedIds.includes(id);
   const name = extension?.manifest?.name ?? "";
   const extensionPath = extension?.path ?? "";
-  return /OpenCode Browser/i.test(name) || /Opencode-Plugins/i.test(extensionPath) || /opencode/i.test(extensionPath);
+  return /opencode-browser-plugin/i.test(name) || /opencode-browser-plugin/i.test(extensionPath) || /Opencode-Plugins/i.test(extensionPath);
 }
 
 function inspect(browser, explicitId) {
@@ -157,9 +157,9 @@ try {
   const args = parseArgs(process.argv.slice(2));
   const result = inspect(args.browser, args.extensionId);
   if (args.json) console.log(JSON.stringify(result, null, 2));
-  else if (result.enabled) console.log(`OpenCode Browser extension is installed and enabled in ${args.browser}`);
-  else if (result.installed) console.log(`OpenCode Browser extension is installed but not enabled in ${args.browser}`);
-  else console.log(`OpenCode Browser extension was not found in ${args.browser}`);
+  else if (result.enabled) console.log(`opencode-browser-plugin extension is installed and enabled in ${args.browser}`);
+  else if (result.installed) console.log(`opencode-browser-plugin extension is installed but not enabled in ${args.browser}`);
+  else console.log(`opencode-browser-plugin extension was not found in ${args.browser}`);
   process.exit(result.exitCode);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

@@ -7,7 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const HOST_NAME = "com.opencode.browser";
+const HOST_NAME = "com.opencode.browser.plugin";
 const SUPPORTED_BROWSERS = {
   chrome: {
     windowsRegistryKey: `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${HOST_NAME}`,
@@ -148,7 +148,7 @@ function detectExtensionIds(browser) {
       for (const [id, extension] of Object.entries(settings)) {
         const name = extension?.manifest?.name ?? "";
         const extensionPath = extension?.path ?? "";
-        if (/OpenCode Browser/i.test(name) || /Opencode-Plugins/i.test(extensionPath) || /opencode/i.test(extensionPath)) {
+        if (/opencode-browser-plugin/i.test(name) || /opencode-browser-plugin/i.test(extensionPath) || /Opencode-Plugins/i.test(extensionPath)) {
           ids.add(id);
         }
       }
@@ -229,7 +229,7 @@ function installManifest(args) {
   for (const browser of args.browsers) {
     const extensionIds = args.auto ? detectExtensionIds(browser) : [args.extensionId];
     if (extensionIds.length === 0) {
-      installed.push({ browser, skipped: true, reason: "OpenCode Browser extension was not detected" });
+      installed.push({ browser, skipped: true, reason: "opencode-browser-plugin extension was not detected" });
       continue;
     }
 

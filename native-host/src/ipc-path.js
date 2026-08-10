@@ -11,10 +11,10 @@ export function defaultIpcPath() {
   }
 
   if (process.platform === "win32") {
-    return "\\\\.\\pipe\\opencode-browser";
+    return "\\\\.\\pipe\\agent-browser";
   }
 
-  return path.join(os.tmpdir(), "opencode-browser.sock");
+  return path.join(os.tmpdir(), "agent-browser.sock");
 }
 
 export function instanceIpcPath() {
@@ -24,10 +24,10 @@ export function instanceIpcPath() {
   }
 
   if (process.platform === "win32") {
-    return `\\\\.\\pipe\\opencode-browser-${INSTANCE_ID}`;
+    return `\\\\.\\pipe\\agent-browser-${INSTANCE_ID}`;
   }
 
-  return path.join(os.tmpdir(), `opencode-browser-${INSTANCE_ID}.sock`);
+  return path.join(os.tmpdir(), `agent-browser-${INSTANCE_ID}.sock`);
 }
 
 export function isUnixSocketPath(ipcPath) {
