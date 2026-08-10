@@ -678,7 +678,13 @@ export class AgentBrowserRuntime {
   }
 
   async screenshot(tabId, options, sessionId) {
-    const shot = await this.invoke("browser_screenshot", { tabId, fullPage: options.fullPage ?? false, timeoutMs: options.timeoutMs ?? 30000 }, sessionId);
+    const shot = await this.invoke("browser_screenshot", {
+      tabId,
+      fullPage: options.fullPage ?? false,
+      format: options.format ?? "png",
+      ...(options.quality !== undefined ? { quality: options.quality } : {}),
+      timeoutMs: options.timeoutMs ?? 30000,
+    }, sessionId);
     if (options.delivery === "inline") return shot;
     const artifact = this.artifacts.create({ sessionId, mimeType: shot.mimeType, data: Buffer.from(shot.base64, "base64"), label: "screenshot" });
     return { screenshot: artifact };
