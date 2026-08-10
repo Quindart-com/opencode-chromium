@@ -425,6 +425,33 @@ function consoleEventUrl(event) {
   return params.entry?.url ?? frame?.url ?? null;
 }
 
+function compactDialogEvents(response) {
+  const events = Array.isArray(response?.events) ? response.events : [];
+  const dialogs = [];
+  let open = null;
+  for (const event of events) {
+    const params = event.params ?? {};
+    if (event.method === "Page.javascriptDialogOpening") {
+      open = {
+        type: params.type ?? null,
+        message: compactConsoleValue(params.message) || null,
+        url: params.url ?? null,
+        hasBrowserHandler: params.hasBrowserHandler === true,
+        defaultPrompt: params.defaultPrompt ?? null,
+      };
+      dialogs.push({ event: "opened", ...open });
+    } else if (event.method === "Page.javascriptDialogClosed") {
+      open = null;
+      dialogs.push({
+        event: "closed",
+        result: params.result ?? null,
+        userInput: compactConsoleValue(params.userInput) || null,
+      });
+    }
+  }
+  return { totalEvents: events.length, returned: dialogs.length, open, events: dialogs };
+}
+
 function compactConsoleEvents(response, options = {}) {
   if (options.raw) return response;
   const events = Array.isArray(response?.events) ? response.events : [];
@@ -2313,6 +2340,29 @@ export const createBrowserOperations = async () => {
         },
       }),
 
+      browser_handle_dialog: tool({
+        description: "Accept or dismiss the currently showing JavaScript dialog on a controlled tab.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          value: tool.schema.enum(["accept", "dismiss"]).default("accept"),
+          promptText: tool.schema.string().max(2000).optional().describe("Text to provide when accepting a prompt dialog."),
+        },
+        async execute(args, context) {
+          await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
+          const result = await cdp(context, args.tabId, "Page.handleJavaScriptDialog", {
+            accept: args.value === "accept",
+            ...(args.promptText !== undefined ? { promptText: args.promptText } : {}),
+          }, 5000);
+          return stringify({
+            handled: true,
+            tabId: args.tabId,
+            value: args.value,
+            ...(args.promptText !== undefined ? { promptText: args.promptText } : {}),
+            result,
+          });
+        },
+      }),
+
       browser_scroll: tool({
         description: "Scroll a Chromium tab from a viewport coordinate.",
         args: {
@@ -2706,7 +2756,7 @@ export const createBrowserOperations = async () => {
         },
       }),
 
-      browser_console_logs: tool({
+browser_console_logs: tool({
         description: "Read compact captured console and log events from a Chromium tab.",
         args: {
           tabId: tool.schema.number().int().positive(),
@@ -2721,7 +2771,24 @@ export const createBrowserOperations = async () => {
             limit: args.limit,
             methods: ["Runtime.consoleAPICalled", "Log.entryAdded"],
           });
-          return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack }));
+return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack }));
+        },
+      }),
+
+      browser_dialog_events: tool({
+        description: "Read captured JavaScript dialog lifecycle events from a controlled tab.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          limit: tool.schema.number().int().positive().default(50),
+        },
+        async execute(args, context) {
+          await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
+          const response = await extensionRequest(context, "getCdpEvents", {
+            tabId: args.tabId,
+            limit: args.limit,
+            methods: ["Page.javascriptDialogOpening", "Page.javascriptDialogClosed"],
+          });
+          return stringify(compactDialogEvents(response));
         },
       }),
 
@@ -2847,12 +2914,12 @@ export const GRANULAR_OPERATION_NAMES = Object.freeze([
   "browser_get_tab", "browser_new_tab", "browser_claim_tab", "browser_name_session",
   "browser_navigate", "browser_reload", "browser_back", "browser_forward", "browser_close_tab",
 "browser_history", "browser_screenshot", "browser_move", "browser_click", "browser_double_click",
-  "browser_hover", "browser_scroll", "browser_drag", "browser_type", "browser_keypress", "browser_snapshot",
+  "browser_hover", "browser_handle_dialog", "browser_scroll", "browser_drag", "browser_type", "browser_keypress", "browser_snapshot",
   "browser_dom_snapshot", "browser_page_search", "browser_visual_map", "browser_page_inspect",
   "browser_dom_click", "browser_dom_type", "browser_locator_count", "browser_locator_click",
   "browser_locator_fill", "browser_locator_text", "browser_set_file_input", "browser_clipboard_read_text",
-  "browser_clipboard_write_text", "browser_enable_inspection", "browser_console_logs",
-  "browser_network_events", "browser_clear_events", "browser_download_events",
+"browser_clipboard_write_text", "browser_enable_inspection", "browser_console_logs",
+  "browser_dialog_events", "browser_network_events", "browser_clear_events", "browser_download_events",
   "browser_clear_download_events", "browser_cdp", "browser_turn_end", "browser_finalize",
 ]);
 
