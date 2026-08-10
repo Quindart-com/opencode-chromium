@@ -1,5 +1,5 @@
 export const PLUGIN_NAME = "opencode-browser-plugin";
-export const PLUGIN_VERSION = "1.4.1";
+export const PLUGIN_VERSION = "1.5.0";
 export const PROTOCOL_VERSION = "1";
 export const SCHEMA_VERSION = "1";
 export const CAPABILITY_VERSION = "1";
@@ -11,8 +11,8 @@ export function contractMetadata(overrides = {}) {
     protocolVersion: PROTOCOL_VERSION,
     schemaVersion: SCHEMA_VERSION,
     capabilityVersion: CAPABILITY_VERSION,
-    extensionVersion: overrides.extensionVersion ?? null,
-    nativeHostVersion: overrides.nativeHostVersion ?? null,
+    ...(overrides.extensionVersion != null ? { extensionVersion: overrides.extensionVersion } : {}),
+    ...(overrides.nativeHostVersion != null ? { nativeHostVersion: overrides.nativeHostVersion } : {}),
     ...overrides,
   };
 }

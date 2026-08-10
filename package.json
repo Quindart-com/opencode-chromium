@@ -1,6 +1,6 @@
 {
   "name": "opencode-browser-plugin",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Provider-neutral Chromium browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "type": "module",
