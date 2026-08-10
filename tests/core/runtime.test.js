@@ -540,3 +540,62 @@ test("finalize clears applied environment overrides unless retained", async () =
     runtime.close();
   }
 });
+
+test("inspect observation with a request id drills into the network record", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("net-inspect").activeTabId = 42;
+  let inspectArgs;
+  runtime.invoke = async (name, args) => {
+    if (name !== "browser_network_inspect") throw new Error(`Unexpected operation: ${name}`);
+    inspectArgs = args;
+    return { events: [{ requestId: "99.1", url: "https://example.test/api", method: "POST", status: 200 }] };
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "net-inspect", mode: "inspect", target: { requestId: "99.1" } });
+    assert.equal(result.ok, true);
+    assert.equal(inspectArgs.requestId, "99.1");
+    assert.equal(inspectArgs.includeBody, "none");
+    assert.equal(result.result.events[0].requestId, "99.1");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("artifact body delivery spills network bodies into the artifact store", async () => {
+  const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-body-artifact-test-")) });
+  const runtime = new AgentBrowserRuntime({
+    artifactStore: store,
+    operationFactory: async () => ({
+      tool: {
+        browser_network_inspect: {
+          capabilityOnly: true,
+          args: {
+            tabId: z.number().int().positive(),
+            includeBody: z.enum(["none", "request", "response", "both"]).default("none"),
+            bodyDelivery: z.enum(["inline", "artifact"]).default("inline"),
+          },
+          async execute() {
+            return JSON.stringify({ events: [{ requestId: "1", responseBodyRaw: '{"large":"payload"}' }] });
+          },
+        },
+      },
+    }),
+  });
+  runtime.selectProfile = async (session) => { session.profileId = "body-profile"; return { profileId: "body-profile" }; };
+  runtime.ensureTab = async (session) => { session.activeTabId = 42; return 42; };
+  try {
+    const first = await runtime.run({
+      sessionId: "body-artifact",
+      steps: [{ action: "capability", capability: "network.inspect", input: { tabId: 42, includeBody: "response", bodyDelivery: "artifact" } }],
+    });
+    assert.equal(first.status, "approval_required");
+    const result = await runtime.run({ approvalToken: first.approvalToken });
+    assert.equal(result.ok, true);
+    const event = result.results[0].result.events[0];
+    assert.equal(event.responseBody.artifact.startsWith("browser://sessions/"), true);
+    assert.equal("responseBodyRaw" in event, false);
+    assert.equal(result.results[0].result.bodyDelivery, "artifact");
+  } finally {
+    runtime.close();
+  }
+});
