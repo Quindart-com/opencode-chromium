@@ -11,7 +11,7 @@ const reportDir = path.join(root, "reports");
 fs.mkdirSync(reportDir, { recursive: true });
 const agent = createBrowserAgent();
 try {
-  const report = { generatedAt: new Date().toISOString(), package: "opencode-browser-plugin", version: "1.4.0", schemas: {} };
+  const report = { generatedAt: new Date().toISOString(), package: "opencode-browser-plugin", version: "1.4.1", schemas: {} };
   for (const dialect of ["mcp", "openai", "anthropic", "gemini"]) {
     const json = JSON.stringify(agent.tools(dialect));
     report.schemas[dialect] = { bytes: Buffer.byteLength(json), sha256: createHash("sha256").update(json).digest("hex") };

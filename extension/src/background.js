@@ -1,3 +1,5 @@
+import { resolveTabActivation } from "./focus-policy.js";
+
 const HOST_NAME = "com.opencode.browser.plugin";
 const DEBUGGER_VERSION = "1.3";
 const KEEPALIVE_ALARM = "opencode-browser-plugin-keepalive";
@@ -483,7 +485,9 @@ async function queryTabs(queryInfo) {
 
 async function focusTab(tabId, options = {}) {
   const tab = await getTab(tabId);
-  await chromeCall((done) => chrome.tabs.update(tabId, { active: true }, done)).catch(() => {});
+  if (options.active === true) {
+    await chromeCall((done) => chrome.tabs.update(tabId, { active: true }, done)).catch(() => {});
+  }
   if (options.foreground && Number.isInteger(tab.windowId)) {
     await chromeCall((done) => chrome.windows.update(tab.windowId, { focused: true }, done)).catch(() => {});
   }
@@ -1006,7 +1010,8 @@ rpc.register("activateTab", async (params) => {
   const { session } = ensureControlledTab(params, tabId);
   session.activeTabId = tabId;
   await persistSessions().catch(() => {});
-  return normalizeTab(await focusTab(tabId, { foreground: params.foreground === true }));
+  const activation = resolveTabActivation(params);
+  return normalizeTab(await focusTab(tabId, activation));
 });
 
 rpc.register("moveMouse", moveMouse);

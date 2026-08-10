@@ -25,7 +25,7 @@ export async function runDoctor({ json = false } = {}) {
   const checks = [
     check("node", Number.parseInt(process.versions.node, 10) >= 20, { version: process.versions.node }),
     check("bun", Boolean(process.versions.bun), { version: process.versions.bun ?? null }),
-    check("package", info.name === "opencode-browser-plugin" && info.version === "1.4.0", { name: info.name, version: info.version }),
+    check("package", info.name === "opencode-browser-plugin" && info.version === "1.4.1", { name: info.name, version: info.version }),
     check("build", fs.existsSync(path.join(dist, "build-manifest.json")), { path: "dist" }),
     check("four-tools", tools.length === 4, { tools: tools.map((tool) => tool.name) }),
     check("artifact-directory", (() => { try { fs.mkdirSync(artifactDir, { recursive: true }); return fs.statSync(artifactDir).isDirectory(); } catch { return false; } })(), { configured: Boolean(process.env.AGENT_BROWSER_ARTIFACT_DIR ?? process.env.OPENCODE_BROWSER_ARTIFACT_DIR) }),
