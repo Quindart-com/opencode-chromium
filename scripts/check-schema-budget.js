@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createBrowserAgent } from "../browser-core/index.js";
+import { createBrowserAgent } from "../src/core/index.js";
 
 const MAX_SCHEMA_BYTES = 8000;
 const agent = createBrowserAgent();

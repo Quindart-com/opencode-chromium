@@ -1,9 +1,9 @@
-const HOST_NAME = "com.opencode.browser";
+const HOST_NAME = "com.opencode.browser.plugin";
 const DEBUGGER_VERSION = "1.3";
-const KEEPALIVE_ALARM = "opencode-browser-keepalive";
-const HEARTBEAT_ALARM = "opencode-browser-heartbeat";
+const KEEPALIVE_ALARM = "opencode-browser-plugin-keepalive";
+const HEARTBEAT_ALARM = "opencode-browser-plugin-heartbeat";
 const SESSION_GROUP_COLOR = "green";
-const DELIVERABLE_GROUP_TITLE = "OpenCode Deliverables";
+const DELIVERABLE_GROUP_TITLE = "Browser Deliverables";
 const DELIVERABLE_GROUP_COLOR = "blue";
 const MAX_CDP_EVENTS_PER_TAB = 500;
 const MAX_DOWNLOAD_EVENTS = 200;
@@ -481,11 +481,10 @@ async function queryTabs(queryInfo) {
 
 async function focusTab(tabId, options = {}) {
   const tab = await getTab(tabId);
-  if (!options.foreground) return tab;
-  if (Number.isInteger(tab.windowId)) {
+  await chromeCall((done) => chrome.tabs.update(tabId, { active: true }, done)).catch(() => {});
+  if (options.foreground && Number.isInteger(tab.windowId)) {
     await chromeCall((done) => chrome.windows.update(tab.windowId, { focused: true }, done)).catch(() => {});
   }
-  await chromeCall((done) => chrome.tabs.update(tabId, { active: true }, done)).catch(() => {});
   return getTab(tabId);
 }
 
@@ -805,7 +804,6 @@ async function executeInputGesture(params) {
   let moveSequence = cursorStateByTabId.get(tabId)?.get(cursorId)?.moveSequence ?? 0;
 
   return withTabLock(tabId, async () => {
-    await sendCdpCommand(tabId, "Page.bringToFront", {}, methodTimeoutMs).catch(() => {});
     const results = [];
     const hasCursorSteps = steps.some((s) => s.cursor && Number.isFinite(s.cursor.x) && Number.isFinite(s.cursor.y));
     const cursorPublishInterval = hasCursorSteps && steps.length > 20 ? Math.max(1, Math.floor(steps.length / 20)) : 1;
@@ -955,7 +953,7 @@ rpc.register("getInfo", async () => {
   const profile = await profileMetadata();
   return {
     id: chrome.runtime.id,
-    name: "OpenCode Browser",
+    name: "opencode-browser-plugin",
     version: chrome.runtime.getManifest().version,
     type: "extension",
     profile,

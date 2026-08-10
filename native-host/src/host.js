@@ -10,17 +10,25 @@ import { RpcRelay } from "./rpc-relay.js";
 import { handleSemanticHostMethod } from "./semantic-search.js";
 import { handleVisualHostMethod } from "./visual-map.js";
 
+const PLUGIN_NAME = "opencode-browser-plugin";
+const PROTOCOL_VERSION = "1";
+
 const ipcPath = instanceIpcPath();
 const state = { startedAt: new Date().toISOString(), ipcPath, profile: null };
-let registeredProfileId = null;
+let activeProfileId = null;
 
 function registerProfile(profile) {
-  if (registeredProfileId && registeredProfileId !== profile.profileId) {
-    removeProfileRegistration(registeredProfileId);
+  if (activeProfileId && activeProfileId !== profile.profileId) {
+    removeProfileRegistration(activeProfileId);
   }
 
   const registration = {
     ...profile,
+    plugin: PLUGIN_NAME,
+    protocolVersion: PROTOCOL_VERSION,
+    connectionId: profile.connectionId ?? `${process.pid}-${state.startedAt}`,
+    connectionGeneration: profile.connectionGeneration ?? 1,
+    profileFingerprint: profile.profileFingerprint ?? profile.profileId,
     ipcPath,
     hostPid: process.pid,
     startedAt: state.startedAt,
@@ -28,7 +36,7 @@ function registerProfile(profile) {
   };
   writeProfileRegistration(registration);
   state.profile = registration;
-  registeredProfileId = profile.profileId;
+  activeProfileId = profile.profileId;
 }
 
 const relay = new RpcRelay({
@@ -43,7 +51,7 @@ const relay = new RpcRelay({
 });
 
 function log(message) {
-  process.stderr.write(`[opencode-browser-host] ${message}\n`);
+  process.stderr.write(`[${PLUGIN_NAME}] ${message}\n`);
 }
 
 function prepareSocketPath() {
@@ -57,8 +65,8 @@ function cleanupSocketPath() {
 }
 
 function cleanupProfileRegistration() {
-  if (registeredProfileId) removeProfileRegistration(registeredProfileId);
-  registeredProfileId = null;
+  if (activeProfileId) removeProfileRegistration(activeProfileId);
+  activeProfileId = null;
 }
 
 function createIpcServer() {

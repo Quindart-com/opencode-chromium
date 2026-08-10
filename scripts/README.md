@@ -1,87 +1,34 @@
-# Setup Scripts
+# Setup and diagnostics
 
-Setup and diagnostic helpers for the OpenCode Chromium browser plugin.
+All repository commands use Bun.
 
-## Install Native Host
+## Native host
 
-After loading `extension/` as an unpacked extension, install native messaging manifests for every detected Chromium browser:
-
-```bash
+```powershell
 bun run install:native-host -- --auto --browsers all
-```
-
-Or copy an extension ID from `chrome://extensions`, then run:
-
-```bash
-bun run install:native-host -- --extension-id <extension-id> --browsers chrome
-```
-
-You can try detecting the unpacked extension ID with:
-
-```bash
-bun run find:extension -- brave
-```
-
-For multiple Chromium browsers:
-
-```bash
-bun run install:native-host -- --extension-id <extension-id> --browsers chrome,edge,brave,chromium
-```
-
-## Install OpenCode Plugin
-
-Register the `opencode-browser-adapter` plugin and skill globally for OpenCode. The global plugin file re-exports this repository's entrypoint, so repository changes apply immediately without reinstalling. The script also removes outdated `chromium-browser` plugin/skill registrations:
-
-```bash
-bun run install:opencode
-```
-
-Remove the global registration again:
-
-```bash
-bun run uninstall:opencode
-```
-
-## Check Native Host
-
-```bash
 bun run check:native-host -- --json
 ```
 
-Validate a specific extension ID:
+## Browser and extension checks
 
-```bash
-bun run check:native-host -- chrome --extension-id <extension-id> --json
-```
-
-## Diagnostics
-
-List installed Chromium-family browsers:
-
-```bash
+```powershell
 bun run list:browsers
-```
-
-Check whether Chrome is running:
-
-```bash
 bun run check:browser-running -- --browser chrome
-```
-
-Check whether the OpenCode Browser extension is installed and enabled in a profile:
-
-```bash
 bun run check:extension -- --browser chrome --extension-id <extension-id>
+bun run find:extension -- brave
 ```
 
-Preview the command that would open the selected profile:
+## Build and release checks
 
-```bash
-bun run open:browser -- --browser chrome --dry-run
+```powershell
+bun run build
+bun run check:schemas
+bun run check:package
+bun run check:mcp
+bun run test:opencode
+bun run pack
+bun run test:tarball
+bun run check:release
 ```
 
-Open the selected profile after user confirmation:
-
-```bash
-bun run open:browser -- --browser chrome
-```
+The CLI owns client configuration. Use `opencode-browser-plugin install|configure|uninstall --client ... --dry-run` before changing a real client configuration.

@@ -26,7 +26,7 @@ async function measure(mode) {
 
 const status = await handleSemanticHostMethod("semantic.status");
 const fastModel = status.models.find((model) => model.role === "adaptive");
-if (!useModel || !fastModel?.cache?.cached) process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL = "1";
+if (!useModel || !fastModel?.cache?.cached) process.env.AGENT_BROWSER_DISABLE_SEMANTIC_MODEL = "1";
 const lexical = await measure("lexical");
 const adaptive = await measure("auto");
 const rssMb = Math.round(process.memoryUsage.rss() / 1024 / 1024);
