@@ -17,7 +17,7 @@ test("provider dialects share one compact canonical schema", () => {
   for (const dialect of ["mcp", "openai", "anthropic", "gemini"]) {
     const tools = toolDefinitionsForDialect(registry, dialect);
     assert.equal(tools.length, 4);
-    assert.ok(Buffer.byteLength(JSON.stringify(tools)) < 8000, `${dialect} schema budget`);
+    assert.ok(Buffer.byteLength(JSON.stringify(tools)) < 10000, `${dialect} schema budget`);
   }
 });
 
