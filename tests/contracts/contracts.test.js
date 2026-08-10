@@ -16,7 +16,7 @@ import { ArtifactStore } from "../../src/core/artifacts.js";
 test("the baseline operation inventory is preserved behind the provider-neutral engine", async () => {
   const hooks = await createBrowserOperations();
   assert.equal(Object.keys(hooks.tool).length, GRANULAR_OPERATION_COUNT);
-  assert.equal(GRANULAR_OPERATION_COUNT, 49);
+  assert.equal(GRANULAR_OPERATION_COUNT, 50);
   assert.equal(hooks.tool.browser_page_search.args.mode.parse(undefined), "snowflake");
   const baseline = JSON.parse(fs.readFileSync(path.join(process.cwd(), "tests", "fixtures", "baseline.json"), "utf8"));
   assert.deepEqual(Object.keys(hooks.tool), baseline.granularOperations);

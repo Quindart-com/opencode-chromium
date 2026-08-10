@@ -820,6 +820,15 @@ function interactionHelpersSource() {
       throw new Error('Element is not clickable: safe click points are covered by ' + describeElement(coveredBy) + ': ' + describeElement(element));
     };
 
+    const hoverTarget = (element) => {
+      assertPointerInteractable(element);
+      element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      const rect = visibleRect(element);
+      const x = Math.floor(rect.left + Math.max(1, rect.width - 1) * 0.5);
+      const y = Math.floor(rect.top + Math.max(1, rect.height - 1) * 0.5);
+      return { x, y, tagName: element.localName, text: (element.innerText || element.value || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160) };
+    };
+
     const focusedEditableElement = (includeSelect = false) => {
       let active = document.activeElement;
       while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
@@ -1639,6 +1648,13 @@ export function domNodeClickTargetExpression(nodeId) {
   })()`;
 }
 
+export function domNodeHoverTargetExpression(nodeId) {
+  return `(() => {
+    ${interactionHelpersSource()}
+    return hoverTarget(nodeByIdStrict(${JSON.stringify(nodeId)}));
+  })()`;
+}
+
 export function domNodeEditableExpression(nodeId, options = {}) {
   return `(() => {
     ${interactionHelpersSource()}
@@ -1650,6 +1666,13 @@ export function selectorClickTargetExpression(selector) {
   return `(() => {
     ${interactionHelpersSource()}
     return clickTarget(querySelectorStrict(${JSON.stringify(selector)}));
+  })()`;
+}
+
+export function selectorHoverTargetExpression(selector) {
+  return `(() => {
+    ${interactionHelpersSource()}
+    return hoverTarget(querySelectorStrict(${JSON.stringify(selector)}));
   })()`;
 }
 
@@ -1735,6 +1758,19 @@ async function clickPoint(context, tabId, x, y, button = "left") {
     mouseStep({ ...base, type: "mousePressed", buttons: mouseButtons(button) }, { x, y }, 16),
     mouseStep({ ...base, type: "mouseReleased", buttons: 0 }, { x, y }, 16),
   ]);
+}
+
+async function hoverPoint(context, tabId, x, y) {
+  finiteNumber(x, "x");
+  finiteNumber(y, "y");
+  await activate(context, tabId);
+  await dispatchMouse(context, tabId, {
+    type: "mouseMoved",
+    x,
+    y,
+    buttons: 0,
+    pointerType: "mouse",
+  });
 }
 
 async function insertTextAndVerify(context, tabId, before, text, options = {}) {
@@ -2249,6 +2285,31 @@ export const createBrowserOperations = async () => {
             mouseStep({ ...base, type: "mouseReleased", buttons: 0, clickCount: 2 }, { x: args.x, y: args.y }, 16),
           ]);
           return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y });
+        },
+      }),
+
+      browser_hover: tool({
+        description: "Hover the pointer over a DOM node, CSS selector, or viewport coordinates in a controlled tab.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          nodeId: tool.schema.string().optional().describe("DOM node ID from browser_page_search or browser_dom_snapshot."),
+          selector: tool.schema.string().optional().describe("CSS selector to hover."),
+          x: tool.schema.number().optional().describe("Viewport x coordinate when not using a nodeId or selector."),
+          y: tool.schema.number().optional().describe("Viewport y coordinate when not using a nodeId or selector."),
+        },
+        async execute(args, context) {
+          let point;
+          if (args.nodeId) {
+            point = await runtimeEvaluate(context, args.tabId, domNodeHoverTargetExpression(args.nodeId));
+          } else if (args.selector) {
+            point = await runtimeEvaluate(context, args.tabId, selectorHoverTargetExpression(args.selector));
+          } else {
+            point = { x: args.x, y: args.y };
+            finiteNumber(point.x, "x");
+            finiteNumber(point.y, "y");
+          }
+          await hoverPoint(context, args.tabId, point.x, point.y);
+          return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point });
         },
       }),
 
@@ -2785,8 +2846,8 @@ export const GRANULAR_OPERATION_NAMES = Object.freeze([
   "browser_name_profile", "browser_capabilities", "browser_list_tabs", "browser_selected_tab",
   "browser_get_tab", "browser_new_tab", "browser_claim_tab", "browser_name_session",
   "browser_navigate", "browser_reload", "browser_back", "browser_forward", "browser_close_tab",
-  "browser_history", "browser_screenshot", "browser_move", "browser_click", "browser_double_click",
-  "browser_scroll", "browser_drag", "browser_type", "browser_keypress", "browser_snapshot",
+"browser_history", "browser_screenshot", "browser_move", "browser_click", "browser_double_click",
+  "browser_hover", "browser_scroll", "browser_drag", "browser_type", "browser_keypress", "browser_snapshot",
   "browser_dom_snapshot", "browser_page_search", "browser_visual_map", "browser_page_inspect",
   "browser_dom_click", "browser_dom_type", "browser_locator_count", "browser_locator_click",
   "browser_locator_fill", "browser_locator_text", "browser_set_file_input", "browser_clipboard_read_text",
