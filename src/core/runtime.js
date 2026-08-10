@@ -10,7 +10,7 @@ import { selectProfile as selectConnectedProfile } from "./profiles.js";
 
 const APPROVAL_TTL_MS = 5 * 60 * 1000;
 const RISK_WORDS = /\b(delete|remove|send|submit|publish|post|buy|purchase|pay|checkout|confirm|approve|permission|save|sign[ -]?in|log[ -]?in)\b/i;
-const READ_ACTIONS = new Set(["find", "assert", "screenshot", "clipboardRead"]);
+const READ_ACTIONS = new Set(["find", "hover", "assert", "screenshot", "clipboardRead"]);
 const READ_LEGACY_TOOLS = new Set([
   "browser_page_search", "browser_page_inspect", "browser_visual_map", "browser_dom_snapshot",
   "browser_locator_count", "browser_locator_text", "browser_console_logs", "browser_network_events",
@@ -253,7 +253,7 @@ function validateSteps(steps) {
     if (step.action === "drag") required(step, "path");
     if (step.action === "upload") required(step, "files");
     if (step.action === "capability") required(step, "capability");
-    if (["click", "doubleClick", "focus", "fill", "replaceText", "select", "upload", "assert"].includes(step.action) && !step.target) {
+    if (["click", "doubleClick", "hover", "focus", "fill", "replaceText", "select", "upload", "assert"].includes(step.action) && !step.target) {
       throw new Error(`${step.action} requires target`);
     }
   }
@@ -469,6 +469,7 @@ export class AgentBrowserRuntime {
         case "forward": return this.invoke("browser_forward", { tabId }, session.sessionId);
         case "click": return this.clickTarget("browser_click", target, tabId, step, session.sessionId);
         case "doubleClick": return this.clickTarget("browser_double_click", target, tabId, step, session.sessionId);
+        case "hover": return this.hoverTarget(target, tabId, session.sessionId);
         case "focus": return this.editTarget(target, tabId, "focus", "", session.sessionId);
         case "fill":
         case "replaceText":
@@ -528,6 +529,15 @@ export class AgentBrowserRuntime {
       return this.invoke(toolName, { tabId, x: target.x, y: target.y, button: step.button ?? "left" }, sessionId);
     }
     throw new Error(`${step.action} target needs nodeId, selector, query, or coordinates`);
+  }
+
+  async hoverTarget(target, tabId, sessionId) {
+    if (target.nodeId) return this.invoke("browser_hover", { tabId, nodeId: target.nodeId }, sessionId);
+    if (target.selector) return this.invoke("browser_hover", { tabId, selector: target.selector }, sessionId);
+    if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
+      return this.invoke("browser_hover", { tabId, x: target.x, y: target.y }, sessionId);
+    }
+    throw new Error("hover target needs nodeId, selector, query, or coordinates");
   }
 
   async assertTarget(target, tabId, step, sessionId) {

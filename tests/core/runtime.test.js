@@ -330,3 +330,50 @@ test("opening a named profile returns its tabs immediately", async () => {
     runtime.close();
   }
 });
+
+test("hover resolves a target and dispatches the hover operation without clicking", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.executeStep;
+  runtime.resolveTarget = async () => ({ selector: "#menu" });
+  let call;
+  runtime.invoke = async (name, args) => { call = { name, args }; return { hovered: true }; };
+  try {
+    const result = await runtime.executeStep({ action: "hover", target: { selector: "#menu" } }, 42, new Map(), runtime.getSession("hover"));
+    assert.equal(result.hovered, true);
+    assert.equal(call.name, "browser_hover");
+    assert.equal(call.args.selector, "#menu");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("hover by coordinates dispatches viewport points", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.executeStep;
+  runtime.resolveTarget = async () => ({ x: 10, y: 20 });
+  let call;
+  runtime.invoke = async (name, args) => { call = { name, args }; return { hovered: true }; };
+  try {
+    await runtime.executeStep({ action: "hover", target: { x: 10, y: 20 } }, 42, new Map(), runtime.getSession("hover-coords"));
+    assert.equal(call.name, "browser_hover");
+    assert.equal(call.args.x, 10);
+    assert.equal(call.args.y, 20);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("hover by nodeId dispatches the DOM node hover operation", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.executeStep;
+  runtime.resolveTarget = async () => ({ nodeId: "node-7" });
+  let call;
+  runtime.invoke = async (name, args) => { call = { name, args }; return { hovered: true }; };
+  try {
+    await runtime.executeStep({ action: "hover", target: { nodeId: "node-7" } }, 42, new Map(), runtime.getSession("hover-node"));
+    assert.equal(call.name, "browser_hover");
+    assert.equal(call.args.nodeId, "node-7");
+  } finally {
+    runtime.close();
+  }
+});
