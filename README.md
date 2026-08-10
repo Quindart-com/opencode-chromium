@@ -10,6 +10,8 @@
 - The complete multi-operation browser engine behind explicit compatibility and capability modes.
 - Native hover, JavaScript dialog handling with approval gating, and png/jpeg/webp screenshots with quality control.
 - Server-level origin policy (allowed/blocked origin globs) and file-root restrictions for uploads.
+- Persistent session emulation (viewport, network, CPU, geolocation, color scheme, user agent, headers, init scripts) with automatic reset on finalize.
+- Network request drill-down by requestId with artifact-backed body spillover, and source-mapped console stack traces.
 - Snowflake-default page search with explicit lexical/auto alternatives and Qwen deep retrieval without loading models in the extension.
 - Profile-aware sessions, tab ownership, stale-target recovery, bounded read retries, conditional settling, approvals, and artifact resources.
 - MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
@@ -31,7 +33,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.2.0` under the canonical name `opencode-browser-plugin`.
+The package is released as `1.3.0` under the canonical name `opencode-browser-plugin`.
 
 ## MCP
 
@@ -142,7 +144,7 @@ For deep request/response debugging, request the lazy network pack only when nee
 {"mode":"capabilities","pack":"network"}
 ```
 
-Then execute `network.inspect` in `browser_run` with the target `tabId`. It follows the tab's CDP request/response lifecycle, supports URL/method/type/status filters, and returns redacted headers only when `includeHeaders` is requested. Bodies remain disabled unless explicitly requested and approved.
+Then execute `network.inspect` in `browser_run` with the target `tabId`. It follows the tab's CDP request/response lifecycle, supports URL/method/type/status/requestId filters, and returns redacted headers only when `includeHeaders` is requested. Bodies remain disabled unless explicitly requested and approved; `bodyDelivery: "artifact"` spills opted-in bodies to the artifact store instead of inline previews. `browser_observe` mode `inspect` with `target.requestId` returns a single request's lifecycle detail.
 
 Large results and screenshots are artifact-first. MCP clients retrieve them through `browser://sessions/<session-id>/artifacts/<artifact-id>`; OpenCode can request the same URI with `browser_observe` mode `artifact`.
 

@@ -10,7 +10,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 const errors = [];
 
 if (packageJson.name !== "opencode-browser-plugin") errors.push(`Unexpected package name: ${packageJson.name}`);
-if (packageJson.version !== "1.2.0") errors.push(`Expected release version 1.2.0, found ${packageJson.version}`);
+if (packageJson.version !== "1.3.0") errors.push(`Expected release version 1.3.0, found ${packageJson.version}`);
 if (packageJson.packageManager?.startsWith("bun@") !== true) errors.push("packageManager must pin Bun");
 if (packageJson.exports?.["."] !== "./dist/adapters/opencode/index.js") errors.push("Package root must export the native OpenCode adapter");
 if (packageJson.bin?.["opencode-browser-plugin-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("MCP binary is not canonical");
