@@ -403,7 +403,7 @@ export function keyDispatchEvents(parsed) {
 }
 
 function stringify(value) {
-  return JSON.stringify(value, null, 2);
+  return JSON.stringify(value);
 }
 
 function compactConsoleValue(value) {
@@ -1267,28 +1267,33 @@ export function pageSearchUnitsExpression(options = {}) {
       .sort((first, second) => {
         const byPriority = priority(second) - priority(first);
         if (byPriority) return byPriority;
-        return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
       });
     const units = candidates.slice(0, maxUnits).map((element) => {
       const rect = element.getBoundingClientRect();
       const type = element.getAttribute('type');
-      return {
+      const unit = {
         node_id: idFor(element),
         kind: kindFor(element),
-        tagName: element.localName,
-        role: element.getAttribute('role'),
-        name: nameFor(element) || null,
         text: type === 'password' ? '' : textOf(element, interactive(element) ? 240 : 500),
-        type,
-        placeholder: element.getAttribute('placeholder'),
         selector: selectorFor(element),
-        headingPath: headingPathFor(element),
-        landmark: landmarkFor(element),
         boundingBox: boxFor(element),
         inViewport: inViewport(element),
-        disabled: Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true',
         interactive: interactive(element),
       };
+      const role = element.getAttribute('role');
+      if (role) unit.role = role;
+      const name = nameFor(element);
+      if (name) unit.name = name;
+      if (type) unit.type = type;
+      const placeholder = element.getAttribute('placeholder');
+      if (placeholder) unit.placeholder = placeholder;
+      const headingPath = headingPathFor(element);
+      if (Array.isArray(headingPath) && headingPath.length > 0) unit.headingPath = headingPath;
+      const landmark = landmarkFor(element);
+      if (landmark) unit.landmark = landmark;
+      if (Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true') unit.disabled = true;
+      return unit;
     });
     const scopeBox = scopeInfo.root && scopeInfo.root !== document ? boxFor(scopeInfo.root) : { x: 0, y: 0, width: innerWidth, height: innerHeight };
     return {
@@ -1297,10 +1302,10 @@ export function pageSearchUnitsExpression(options = {}) {
       scope: {
         requested: requestedScope,
         mode: scopeInfo.mode,
-        selector: requestedSelector,
-        node_id: scopeInfo.root && scopeInfo.root !== document ? idFor(scopeInfo.root) : null,
+        ...(requestedSelector ? { selector: requestedSelector } : {}),
+        ...(scopeInfo.root && scopeInfo.root !== document ? { node_id: idFor(scopeInfo.root) } : {}),
         boundingBox: scopeBox,
-        clip: requestedClip,
+        ...(requestedClip ? { clip: requestedClip } : {}),
       },
       totalCandidates: candidates.length,
       truncated: candidates.length > units.length,
@@ -1508,16 +1513,16 @@ export function visualMapExpression(options = {}) {
     });
     const scopeBox = scopeInfo.root && scopeInfo.root !== document ? boxFor(scopeInfo.root) : { x: 0, y: 0, width: innerWidth, height: innerHeight };
     return {
-      url: location.href,
+url: location.href,
       title: document.title,
       query: requestedQuery || null,
       scope: {
         requested: requestedScope,
         mode: scopeInfo.mode,
-        selector: requestedSelector,
-        node_id: scopeInfo.root && scopeInfo.root !== document ? idFor(scopeInfo.root) : null,
+        ...(requestedSelector ? { selector: requestedSelector } : {}),
+        ...(scopeInfo.root && scopeInfo.root !== document ? { node_id: idFor(scopeInfo.root) } : {}),
         boundingBox: scopeBox,
-        clip: requestedClip,
+        ...(requestedClip ? { clip: requestedClip } : {}),
       },
       totalCandidates: candidates.length,
       returned: elements.length,
@@ -1530,6 +1535,7 @@ export function visualMapExpression(options = {}) {
 export function pageInspectExpression(options = {}) {
   const nodeId = typeof options.nodeId === "string" && options.nodeId.length > 0 ? options.nodeId : null;
   const selector = typeof options.selector === "string" && options.selector.length > 0 ? options.selector : null;
+  const detail = options.detail === "debug" || options.detail === "full" ? "debug" : "lean";
   const depth = Number.isInteger(options.depth) && options.depth >= 0 ? Math.min(options.depth, 4) : 2;
   const maxChildren = Number.isInteger(options.maxChildren) && options.maxChildren > 0 ? Math.min(options.maxChildren, 80) : 30;
   const maxText = Number.isInteger(options.maxText) && options.maxText > 0 ? Math.min(options.maxText, 2000) : 700;
@@ -1538,6 +1544,7 @@ export function pageInspectExpression(options = {}) {
     if (!window.__agentBrowserDomNextNodeId) window.__agentBrowserDomNextNodeId = 1;
     const requestedNodeId = ${JSON.stringify(nodeId)};
     const requestedSelector = ${JSON.stringify(selector)};
+    const requestedDetail = ${JSON.stringify(detail)};
     const maxDepth = ${JSON.stringify(depth)};
     const maxChildren = ${JSON.stringify(maxChildren)};
     const maxText = ${JSON.stringify(maxText)};
@@ -1616,27 +1623,29 @@ export function pageInspectExpression(options = {}) {
         margin: style.margin,
         cursor: style.cursor,
         opacity: style.opacity,
-        zIndex: style.zIndex,
+zIndex: style.zIndex,
       };
     };
     const summaryFor = (element, textMax = 220) => {
       const type = element.getAttribute('type');
-      return {
+      const summary = {
         node_id: idFor(element),
         kind: kindFor(element),
-        tagName: element.localName,
-        role: element.getAttribute('role'),
-        name: nameFor(element) || null,
         text: type === 'password' ? '' : textOf(element, textMax),
-        type,
-        placeholder: element.getAttribute('placeholder'),
         selector: selectorFor(element),
         boundingBox: boxFor(element),
         inViewport: (() => { const rect = element.getBoundingClientRect(); return rect.bottom >= 0 && rect.right >= 0 && rect.top <= innerHeight && rect.left <= innerWidth; })(),
-        disabled: Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true',
         interactive: interactive(element),
-        visible: visible(element),
       };
+      const role = element.getAttribute('role');
+      if (role) summary.role = role;
+      const name = nameFor(element);
+      if (name) summary.name = name;
+      if (type) summary.type = type;
+      const placeholder = element.getAttribute('placeholder');
+      if (placeholder) summary.placeholder = placeholder;
+      if (Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true') summary.disabled = true;
+      return summary;
     };
     const childTree = (element, level = 0) => {
       if (level >= maxDepth) return [];
@@ -1653,11 +1662,11 @@ export function pageInspectExpression(options = {}) {
       : requestedSelector
         ? document.querySelector(requestedSelector)
         : null;
-    if (!target) throw new Error(requestedNodeId ? 'DOM node ID not found in current page map: ' + requestedNodeId : 'Selector not found: ' + requestedSelector);
+if (!target) throw new Error(requestedNodeId ? 'DOM node ID not found in current page map: ' + requestedNodeId : 'Selector not found: ' + requestedSelector);
     const contextRoot = target.closest('main,section,article,form,dialog,nav,aside,[role="main"],[role="region"],[role="dialog"],[role="form"]') || target.parentElement || target;
     const ancestors = [];
     for (let node = target.parentElement; node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement; node = node.parentElement) {
-      ancestors.unshift(summaryFor(node, 120));
+      ancestors.unshift(summaryFor(node, 80));
       if (ancestors.length >= 5) break;
     }
     const siblings = target.parentElement
@@ -1671,13 +1680,14 @@ export function pageInspectExpression(options = {}) {
       url: location.href,
       title: document.title,
       requested: { nodeId: requestedNodeId, selector: requestedSelector },
-      target: { ...summaryFor(target, maxText), styles: styleFor(target), html: compact(target.outerHTML, 1600) },
-      contextRoot: summaryFor(contextRoot, maxText),
+      target: requestedDetail === 'debug'
+        ? { ...summaryFor(target, maxText), styles: styleFor(target), html: compact(target.outerHTML, 1600) }
+        : summaryFor(target, maxText),
+      contextRoot: summaryFor(contextRoot, 160),
       ancestors,
       siblings,
       nearbyInteractives,
       children: childTree(target),
-      screenshotClip: boxFor(target),
     };
   })()`;
 }
@@ -2705,10 +2715,11 @@ browser_screenshot: tool({
         args: {
           tabId: tool.schema.number().int().positive(),
           nodeId: tool.schema.string().optional().describe("Node ID from browser_page_search or browser_dom_snapshot."),
-          selector: tool.schema.string().optional().describe("CSS selector to inspect when nodeId is not available."),
+selector: tool.schema.string().optional().describe("CSS selector to inspect when nodeId is not available."),
           depth: tool.schema.number().int().min(0).default(2),
           maxChildren: tool.schema.number().int().positive().default(30),
-          maxText: tool.schema.number().int().positive().default(700),
+          maxText: tool.schema.number().int().positive().default(400),
+          detail: tool.schema.enum(["lean", "compact", "full", "debug"]).default("lean").describe("Includes verbose target html and styles only with debug."),
         },
         async execute(args, context) {
           const profileId = await resolveSessionProfileId(context);

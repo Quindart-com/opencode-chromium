@@ -24,7 +24,8 @@ const PREVIEW_KEY_PRIORITY = [
   "totalCandidates", "totalUnits", "totalNodes", "totalEvents", "returned", "truncated", "mode",
   "result", "results", "elements", "nodes", "events", "console", "network", "node_id", "axNodeId",
   "kind", "role", "name", "label", "value", "text", "method", "type", "statusCode", "requestId",
-  "timestamp", "error", "summary",
+  "timestamp", "error", "summary", "settle", "observation", "target", "contextRoot", "ancestors",
+  "siblings", "nearbyInteractives", "children", "requested", "screenshotClip",
 ];
 
 function stable(value) {
@@ -687,6 +688,7 @@ export class AgentBrowserRuntime {
         depth: args.detail === "full" || args.detail === "debug" ? 2 : 1,
         maxChildren: limit,
         maxText: args.detail === "full" || args.detail === "debug" ? 700 : 280,
+        detail: args.detail ?? "lean",
       }, session.sessionId);
     }
     if (args.mode === "visual") return this.invoke("browser_visual_map", {
