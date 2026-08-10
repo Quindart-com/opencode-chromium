@@ -2994,6 +2994,89 @@ browser_console_logs: tool({
         },
       }),
 
+      browser_trace_record: tool({
+        description: "Record a CDP performance trace for a controlled tab and return computed insights.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          reload: tool.schema.boolean().default(true).describe("Reload the tab so the trace covers a cold navigation."),
+          waitUntil: tool.schema.enum(["none", "domcontentloaded", "load"]).default("load"),
+          durationMs: tool.schema.number().int().positive().max(30000).optional().describe("Capture duration in milliseconds when reload is false."),
+          timeoutMs: tool.schema.number().int().positive().default(60000),
+        },
+        async execute(args, context) {
+          const profileId = await resolveSessionProfileId(context);
+          markProfileUsed(context, profileId);
+          const tabId = args.tabId;
+          await extensionRequest(context, "trace.begin", { tabId });
+          try {
+            await cdp(context, tabId, "Tracing.start", {
+              traceConfig: {
+                recordMode: "recordContinuously",
+                enableScreenshot: false,
+                includedCategories: ["devtools.timeline", "loading", "navigation", "blink.user_timing", "performance", "blink.console"],
+              },
+            }, args.timeoutMs);
+            if (args.reload) {
+              await extensionRequest(context, "reloadTab", { tabId, bypassCache: false });
+              await waitForPageReady(context, tabId, args.waitUntil, args.timeoutMs);
+            } else {
+              await sleep(Math.min(args.durationMs ?? 3000, 30000));
+            }
+            await cdp(context, tabId, "Tracing.end", {}, args.timeoutMs);
+            let collected = null;
+            const deadline = Date.now() + args.timeoutMs;
+            while (Date.now() < deadline) {
+              collected = await extensionRequest(context, "trace.collect", { tabId, clear: false });
+              if (collected.complete) break;
+              await sleep(150);
+            }
+            if (!collected?.complete) {
+              const error = new Error("Performance trace did not complete in time");
+              error.code = "TRACE_TIMEOUT";
+              error.retryable = true;
+              throw error;
+            }
+            const traceJson = `[${collected.chunks.join(",")}]`;
+            const analysis = await browserRequest(
+              "diagnostics.traceAnalyze",
+              { trace: traceJson },
+              { profileId, timeoutMs: Math.max(args.timeoutMs, 30000) },
+            );
+            return stringify({
+              recorded: true,
+              tabId,
+              trace: traceJson,
+              traceEventCount: collected.eventCount,
+              chunkCount: collected.chunkCount,
+              overflowed: collected.overflowed === true,
+              ...analysis,
+            });
+          } finally {
+            await extensionRequest(context, "trace.clear", { tabId }).catch(() => {});
+          }
+        },
+      }),
+
+      browser_trace_analyze: tool({
+        description: "Analyze an existing performance trace JSON document into summary and insights.",
+        args: {
+          trace: tool.schema.string().describe("Concatenated Chrome tracing event JSON array."),
+          url: tool.schema.string().optional(),
+          insight: tool.schema.string().max(120).optional().describe("Filter results to a single insight id."),
+          timeoutMs: tool.schema.number().int().positive().default(30000),
+        },
+        async execute(args, context) {
+          const profileId = await resolveSessionProfileId(context);
+          markProfileUsed(context, profileId);
+          const analysis = await browserRequest(
+            "diagnostics.traceAnalyze",
+            { trace: args.trace, url: args.url, insight: args.insight },
+            { profileId, timeoutMs: args.timeoutMs },
+          );
+          return stringify(analysis);
+        },
+      }),
+
       browser_configure: tool({
         description: "Apply persistent emulation, network, and initialization overrides to a controlled tab.",
         args: {
@@ -3093,7 +3176,7 @@ export const GRANULAR_OPERATION_NAMES = Object.freeze([
   "browser_locator_fill", "browser_locator_text", "browser_set_file_input", "browser_clipboard_read_text",
 "browser_clipboard_write_text", "browser_enable_inspection", "browser_console_logs",
   "browser_dialog_events", "browser_network_events", "browser_clear_events", "browser_download_events",
-"browser_clear_download_events", "browser_cdp", "browser_turn_end", "browser_configure", "browser_finalize",
+"browser_clear_download_events", "browser_cdp", "browser_turn_end", "browser_trace_record", "browser_trace_analyze", "browser_configure", "browser_finalize",
 ]);
 
 export const GRANULAR_OPERATION_COUNT = GRANULAR_OPERATION_NAMES.length;

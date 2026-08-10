@@ -705,10 +705,48 @@ export class AgentBrowserRuntime {
       network: summarizeNetworkEvents(await this.invoke("browser_network_events", { tabId, limit: clamp(args.limit, 50, 1, 200) }, session.sessionId), clamp(args.limit, 30, 1, 200)),
       dialogs: await this.invoke("browser_dialog_events", { tabId, limit: clamp(args.limit, 20, 1, 100) }, session.sessionId),
     };
+    if (args.mode === "diagnostic") return this.diagnostic(args, tabId, session);
     if (args.mode === "downloads") return this.invoke("browser_download_events", { limit: clamp(args.limit, 100, 1, 200) }, session.sessionId);
     if (args.mode === "screenshot") return this.screenshot(tabId, args, session.sessionId);
     if (args.mode === "raw-snapshot") return this.invoke("browser_snapshot", { tabId }, session.sessionId);
     throw new Error(`Unsupported observation mode: ${args.mode}`);
+  }
+
+  async diagnostic(args, tabId, session) {
+    const diagnostic = args.diagnostic ?? {};
+    if (diagnostic.type !== "performance") {
+      throw new Error(`Unsupported diagnostic type: ${diagnostic.type}`);
+    }
+    if (diagnostic.action === "record") {
+      const recorded = await this.invoke("browser_trace_record", {
+        tabId,
+        reload: diagnostic.reload ?? true,
+        waitUntil: diagnostic.waitUntil ?? "load",
+        ...(diagnostic.durationMs !== undefined ? { durationMs: diagnostic.durationMs } : {}),
+        ...(diagnostic.timeoutMs !== undefined ? { timeoutMs: diagnostic.timeoutMs } : {}),
+      }, session.sessionId);
+      if (recorded && typeof recorded.trace === "string") {
+        const artifact = this.artifacts.create({
+          sessionId: session.sessionId,
+          mimeType: "application/json",
+          data: recorded.trace,
+          label: "performance-trace",
+        });
+        const { trace, ...rest } = recorded;
+        return { ...rest, traceArtifact: artifact.uri, traceEventCount: recorded.traceEventCount };
+      }
+      return recorded;
+    }
+    if (diagnostic.action === "inspect") {
+      const artifact = this.artifacts.read(diagnostic.artifact, { sessionId: session.sessionId });
+      if (!artifact) throw new Error("Artifact expired, missing, or belongs to another browser session.");
+      return this.invoke("browser_trace_analyze", {
+        trace: artifact.data.toString("utf8"),
+        ...(diagnostic.url ? { url: diagnostic.url } : {}),
+        ...(diagnostic.insight ? { insight: diagnostic.insight } : {}),
+      }, session.sessionId);
+    }
+    throw new Error(`Unsupported performance action: ${diagnostic.action}`);
   }
 
   async screenshot(tabId, options, sessionId) {

@@ -7,6 +7,7 @@ const DELIVERABLE_GROUP_TITLE = "Browser Deliverables";
 const DELIVERABLE_GROUP_COLOR = "blue";
 const MAX_CDP_EVENTS_PER_TAB = 500;
 const MAX_DOWNLOAD_EVENTS = 200;
+const MAX_TRACE_CHUNKS = 80000;
 const MAX_INLINE_RESPONSE_KEYS = 500;
 const DEFAULT_CDP_TIMEOUT_MS = 10000;
 const DEFAULT_NATIVE_REQUEST_TIMEOUT_MS = 15000;
@@ -18,6 +19,7 @@ const sessions = new Map();
 const attachedTabs = new Map();
 const tabLocks = new Map();
 const cdpEventsByTabId = new Map();
+const traceBuffers = new Map();
 const cursorStateByTabId = new Map();
 const cursorArrivalWaiters = new Map();
 const cursorInjectedTabs = new Set();
@@ -578,6 +580,7 @@ async function untrackTab(sessionId, tabId) {
   if (session.activeTabId === tabId) session.activeTabId = [...session.tabIds].at(-1) ?? null;
   if (!session.tabIds.size) sessions.delete(sessionId);
   cdpEventsByTabId.delete(tabId);
+  traceBuffers.delete(tabId);
   cursorStateByTabId.delete(tabId);
   cursorInjectedTabs.delete(tabId);
   await persistSessions().catch(() => {});
@@ -1036,6 +1039,39 @@ rpc.register("clearCdpEvents", async (params) => {
   return {};
 });
 
+rpc.register("trace.begin", async (params) => {
+  const tabId = tabIdFromParams(params);
+  ensureControlledTab(params, tabId);
+  traceBuffers.set(tabId, { chunks: [], complete: false, overflowed: false, eventCount: 0, startedAt: nowIso(), endTime: null });
+  return { started: true, tabId };
+});
+
+rpc.register("trace.collect", async (params) => {
+  const tabId = tabIdFromParams(params);
+  ensureControlledTab(params, tabId);
+  const buffer = traceBuffers.get(tabId);
+  if (!buffer) return { collecting: false, chunkCount: 0, eventCount: 0, chunks: [] };
+  const clear = params.clear === true;
+  const result = {
+    collecting: true,
+    complete: buffer.complete === true,
+    overflowed: buffer.overflowed === true,
+    chunkCount: buffer.chunks.length,
+    eventCount: buffer.eventCount,
+    startedAt: buffer.startedAt,
+    ...(buffer.complete ? { endTime: buffer.endTime } : {}),
+    chunks: clear ? buffer.chunks.splice(0, buffer.chunks.length) : buffer.chunks,
+  };
+  if (clear) traceBuffers.delete(tabId);
+  return result;
+});
+
+rpc.register("trace.clear", async (params) => {
+  const tabId = tabIdFromParams(params);
+  traceBuffers.delete(tabId);
+  return {};
+});
+
 rpc.register("createTab", async (params) => {
   const id = requiredSessionId(params);
   const session = sessionState(id);
@@ -1249,6 +1285,25 @@ rpc.register("clearDownloadEvents", async () => {
 rpc.register("executeUnhandledCommand", async (params) => ({ handled: false, command: params.command ?? null }));
 
 chrome.debugger.onEvent.addListener((source, method, params) => {
+  const tabId = cdpEventTabId(source);
+  if (Number.isInteger(tabId)) {
+    const buffer = traceBuffers.get(tabId);
+    if (buffer && method === "Tracing.dataCollected") {
+      if (Array.isArray(params.value)) {
+        for (const value of params.value) {
+          buffer.chunks.push(typeof value === "string" ? value : JSON.stringify(value));
+          buffer.eventCount += 1;
+          if (buffer.chunks.length >= MAX_TRACE_CHUNKS) buffer.overflowed = true;
+        }
+      }
+      return;
+    }
+    if (buffer && method === "Tracing.tracingComplete") {
+      buffer.complete = true;
+      buffer.endTime = params.timestamp ?? buffer.endTime;
+      return;
+    }
+  }
   recordCdpEvent(source, method, params);
 });
 
@@ -1259,6 +1314,7 @@ chrome.debugger.onDetach.addListener((source) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   attachedTabs.delete(tabId);
   cdpEventsByTabId.delete(tabId);
+  traceBuffers.delete(tabId);
   cursorStateByTabId.delete(tabId);
   cursorInjectedTabs.delete(tabId);
   const owner = findTabOwner(tabId);
