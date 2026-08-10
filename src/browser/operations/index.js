@@ -211,7 +211,7 @@ for (const domain of domains) {
 }
 
 async function activate(context, tabId) {
-  await extensionRequest(context, "activateTab", { tabId, foreground: false }).catch(() => null);
+  await extensionRequest(context, "activateTab", { tabId, foreground: false, active: false }).catch(() => null);
 }
 
 async function moveCursor(context, tabId, x, y, options = {}) {
