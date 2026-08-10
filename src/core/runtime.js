@@ -338,6 +338,26 @@ export class AgentBrowserRuntime {
     }
   }
 
+  spillNetworkBodies(result, sessionId) {
+    const events = Array.isArray(result?.events) ? result.events : [];
+    for (const event of events) {
+      for (const [rawKey, outKey] of [["requestBodyRaw", "requestBody"], ["responseBodyRaw", "responseBody"]]) {
+        if (typeof event[rawKey] === "string") {
+          const artifact = this.artifacts.create({
+            sessionId,
+            mimeType: "application/json",
+            data: event[rawKey],
+            label: `network-${outKey}`,
+          });
+          event[outKey] = { artifact: artifact.uri, mimeType: artifact.mimeType, length: event[rawKey].length };
+          delete event[rawKey];
+        }
+      }
+    }
+    if (result && typeof result === "object") result.bodyDelivery = "artifact";
+    return result;
+  }
+
   async connectedProfiles({ fresh = false } = {}) {
     const now = Date.now();
     if (!fresh && this.profileCache.expiresAt > now) return this.profileCache.profiles;
@@ -474,7 +494,11 @@ export class AgentBrowserRuntime {
       }
       const input = { ...(step.input ?? {}), ...(tabId && step.input?.tabId === undefined ? { tabId } : {}) };
       const parsed = registry.validate(step.capability, input);
-      return definition.execute(parsed, { sessionID: session.sessionId, sessionId: session.sessionId, profileId: session.profileId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy });
+      const value = await definition.execute(parsed, { sessionID: session.sessionId, sessionId: session.sessionId, profileId: session.profileId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy });
+      if (step.capability === "network.inspect" && parsed.bodyDelivery === "artifact") {
+        return this.spillNetworkBodies(typeof value === "string" ? parseLegacyResult(value) : value, session.sessionId);
+      }
+      return value;
     }
     let target = await this.resolveTarget(step, tabId, prior, session.sessionId);
     const dispatch = async () => {
@@ -647,14 +671,24 @@ export class AgentBrowserRuntime {
       mode: args.searchStrategy ?? "snowflake",
       timeoutMs: ["deep", "snowflake"].includes(args.searchStrategy ?? "snowflake") ? 120000 : 10000,
     }, session.sessionId);
-    if (args.mode === "inspect") return this.invoke("browser_page_inspect", {
-      tabId,
-      nodeId: target.nodeId,
-      selector: target.selector ?? (!target.nodeId ? 'dialog[open], [role="dialog"], body' : undefined),
-      depth: args.detail === "full" || args.detail === "debug" ? 2 : 1,
-      maxChildren: limit,
-      maxText: args.detail === "full" || args.detail === "debug" ? 700 : 280,
-    }, session.sessionId);
+    if (args.mode === "inspect") {
+      if (target.requestId) {
+        return this.invoke("browser_network_inspect", {
+          tabId,
+          requestId: target.requestId,
+          includeBody: "none",
+          limit: 1,
+        }, session.sessionId);
+      }
+      return this.invoke("browser_page_inspect", {
+        tabId,
+        nodeId: target.nodeId,
+        selector: target.selector ?? (!target.nodeId ? 'dialog[open], [role="dialog"], body' : undefined),
+        depth: args.detail === "full" || args.detail === "debug" ? 2 : 1,
+        maxChildren: limit,
+        maxText: args.detail === "full" || args.detail === "debug" ? 700 : 280,
+      }, session.sessionId);
+    }
     if (args.mode === "visual") return this.invoke("browser_visual_map", {
       tabId,
       query: args.query ?? target.query,

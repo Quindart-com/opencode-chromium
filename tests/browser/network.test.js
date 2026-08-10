@@ -121,3 +121,45 @@ test("network inspection filters one tab's request records by URL, method, type,
   assert.equal(result.returned, 1);
   assert.equal(result.events[0].requestId, "1");
 });
+
+test("network inspection filters to a single request id for drill-down", async () => {
+  const result = await inspectNetworkEvents([
+    ...requestEvents({ requestId: "1", url: "https://example.test/a" }),
+    ...requestEvents({ requestId: "2", url: "https://example.test/b" }),
+  ], { requestId: "2" });
+
+  assert.equal(result.totalRequests, 1);
+  assert.equal(result.returned, 1);
+  assert.equal(result.events[0].requestId, "2");
+});
+
+test("artifact body delivery returns full redacted bodies without inline truncation", async () => {
+  const result = await inspectNetworkEvents(requestEvents(), {
+    includeBody: "response",
+    bodyDelivery: "artifact",
+  }, {
+    async getResponseBody() {
+      return { body: '{"token":"private","value":"definitely-not-truncated"}' };
+    },
+  });
+
+  const event = result.events[0];
+  assert.equal("responseBody" in event, false);
+  assert.doesNotMatch(event.responseBodyRaw, /private/);
+  assert.match(event.responseBodyRaw, /definitely-not-truncated/);
+});
+
+test("inline body delivery keeps bounded previews by default", async () => {
+  const result = await inspectNetworkEvents(requestEvents(), {
+    includeBody: "response",
+    bodyMaxChars: 12,
+  }, {
+    async getResponseBody() {
+      return { body: '{"value":"a very long response body that exceeds the preview limit"}' };
+    },
+  });
+
+  const event = result.events[0];
+  assert.equal("responseBodyRaw" in event, false);
+  assert.equal(event.responseBody.truncated, true);
+});

@@ -96,6 +96,20 @@ export function networkBodyPreview(value, maxChars = 4000, options = {}) {
   };
 }
 
+export function networkBodyRedacted(value, options = {}) {
+  if (value === undefined || value === null) return null;
+  const raw = String(value);
+  const mimeType = options.mimeType ?? null;
+  if (options.base64Encoded === true || isBinaryBody(mimeType)) {
+    return null;
+  }
+  try {
+    return JSON.stringify(redact(JSON.parse(raw), { key: "payload" }));
+  } catch {
+    return redact(raw, { key: "payload" }).replace(SENSITIVE_TEXT_FIELD, "$1[REDACTED]");
+  }
+}
+
 function recordFor(records, requestId, order) {
   const key = String(requestId);
   let record = records.get(key);
@@ -257,6 +271,7 @@ function collectNetworkRecords(events, options = {}) {
 }
 
 function matchesNetworkFilter(record, options) {
+  if (options.requestId !== undefined && String(record.requestId) !== String(options.requestId)) return false;
   const urlIncludes = typeof options.urlIncludes === "string" ? options.urlIncludes.toLocaleLowerCase() : null;
   if (urlIncludes && !String(record.url ?? "").toLocaleLowerCase().includes(urlIncludes)) return false;
   const methods = options.methods instanceof Set
@@ -343,6 +358,7 @@ export async function inspectNetworkEvents(events, options = {}, fetcher = {}) {
     limit: Number.isInteger(options.limit) ? Math.max(1, Math.min(options.limit, 200)) : 50,
     includeHeaders: options.includeHeaders === true,
     includeBody: options.includeBody ?? "none",
+    bodyDelivery: options.bodyDelivery ?? "inline",
     bodyMaxChars: Number.isInteger(options.bodyMaxChars) ? Math.max(1, Math.min(options.bodyMaxChars, 12000)) : 4000,
     includeTiming: options.includeTiming !== false,
     urlIncludes: options.urlIncludes,
@@ -350,6 +366,7 @@ export async function inspectNetworkEvents(events, options = {}, fetcher = {}) {
     resourceTypes: options.resourceTypes,
     statusMin: options.statusMin,
     statusMax: options.statusMax,
+    requestId: options.requestId,
   };
   const all = collectNetworkRecords(events, normalized).filter((record) => matchesNetworkFilter(record, normalized));
   const selectedRecords = all.slice(-normalized.limit);
@@ -360,6 +377,7 @@ export async function inspectNetworkEvents(events, options = {}, fetcher = {}) {
   if (normalized.includeBody !== "none") {
     for (const [index, record] of selectedRecords.entries()) {
       const output = outputEvents[index];
+      const artifactDelivery = normalized.bodyDelivery === "artifact";
       if (["request", "both"].includes(normalized.includeBody)) {
         let requestBody = record.requestPostData !== undefined
           ? { body: record.requestPostData, base64Encoded: false }
@@ -373,10 +391,16 @@ export async function inspectNetworkEvents(events, options = {}, fetcher = {}) {
         if (requestBody?.error) output.requestBodyError = requestBody.error;
         else if (requestBody?.unavailable) output.requestBodyError = "request body fetch unavailable";
         else if (requestBody?.body !== undefined) {
-          output.requestBody = networkBodyPreview(requestBody.body, normalized.bodyMaxChars, {
-            base64Encoded: requestBody.base64Encoded,
-            mimeType: record.mimeType,
-          });
+          if (artifactDelivery) {
+            const redacted = networkBodyRedacted(requestBody.body, { base64Encoded: requestBody.base64Encoded, mimeType: record.mimeType });
+            if (redacted !== null) output.requestBodyRaw = redacted;
+            else output.requestBody = networkBodyPreview(requestBody.body, normalized.bodyMaxChars, { base64Encoded: requestBody.base64Encoded, mimeType: record.mimeType });
+          } else {
+            output.requestBody = networkBodyPreview(requestBody.body, normalized.bodyMaxChars, {
+              base64Encoded: requestBody.base64Encoded,
+              mimeType: record.mimeType,
+            });
+          }
         }
       }
       if (["response", "both"].includes(normalized.includeBody)) {
@@ -390,10 +414,16 @@ export async function inspectNetworkEvents(events, options = {}, fetcher = {}) {
         if (responseBody?.error) output.responseBodyError = responseBody.error;
         else if (responseBody?.unavailable) output.responseBodyError = "response body fetch unavailable";
         else if (responseBody?.body !== undefined) {
-          output.responseBody = networkBodyPreview(responseBody.body, normalized.bodyMaxChars, {
-            base64Encoded: responseBody.base64Encoded,
-            mimeType: record.mimeType,
-          });
+          if (artifactDelivery) {
+            const redacted = networkBodyRedacted(responseBody.body, { base64Encoded: responseBody.base64Encoded, mimeType: record.mimeType });
+            if (redacted !== null) output.responseBodyRaw = redacted;
+            else output.responseBody = networkBodyPreview(responseBody.body, normalized.bodyMaxChars, { base64Encoded: responseBody.base64Encoded, mimeType: record.mimeType });
+          } else {
+            output.responseBody = networkBodyPreview(responseBody.body, normalized.bodyMaxChars, {
+              base64Encoded: responseBody.base64Encoded,
+              mimeType: record.mimeType,
+            });
+          }
         }
       }
     }
