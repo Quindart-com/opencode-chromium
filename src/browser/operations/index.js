@@ -630,9 +630,13 @@ async function navigateDataUrl(context, tabId, url) {
   return { tabId, url, loadedAs: "documentContent", mimeType: document.mimeType };
 }
 
-function validateUploadFiles(files) {
+function validateUploadFiles(files, filePolicy = null) {
   if (!Array.isArray(files) || files.length === 0) throw new Error("browser_set_file_input requires at least one file");
   for (const file of files) {
+    if (filePolicy) {
+      filePolicy.assertAllowed(file);
+      continue;
+    }
     if (typeof file !== "string" || file.length === 0) throw new Error("File paths must be non-empty strings");
     if (!path.isAbsolute(file)) throw new Error(`File path must be absolute: ${file}`);
     let stat;
@@ -2702,8 +2706,8 @@ async execute(args, context) {
           selector: tool.schema.string().default("input[type=file]"),
           files: tool.schema.array(tool.schema.string()).describe("Absolute file paths to attach"),
         },
-        async execute(args, context) {
-          validateUploadFiles(args.files);
+async execute(args, context) {
+          validateUploadFiles(args.files, context?.filePolicy);
           await enableCdpDomains(context, args.tabId, ["DOM"], { optional: true });
           const documentResult = await cdp(context, args.tabId, "DOM.getDocument", { depth: 0, pierce: true });
           const queryResult = await cdp(context, args.tabId, "DOM.querySelector", { nodeId: documentResult.root.nodeId, selector: args.selector });
