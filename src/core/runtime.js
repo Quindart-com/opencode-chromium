@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
+import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
 import { contractMetadata } from "./versions.js";
@@ -265,10 +266,15 @@ function validateSteps(steps) {
 }
 
 export class AgentBrowserRuntime {
-  constructor({ artifactStore = new ArtifactStore(), approvalTtlMs = APPROVAL_TTL_MS, operationFactory = createBrowserOperations, logger } = {}) {
+  constructor({ artifactStore = new ArtifactStore(), approvalTtlMs = APPROVAL_TTL_MS, operationFactory = createBrowserOperations, urlPolicy, urlPolicyConfig, logger } = {}) {
     this.artifacts = artifactStore;
     this.approvalTtlMs = approvalTtlMs;
     this.logger = logger ?? createLogger();
+    const envPolicy = urlPolicyFromEnv();
+    this.urlPolicy = urlPolicy ?? createUrlPolicy(combineUrlPolicyConfig(
+      { allowedOrigins: envPolicy.allowedOrigins, blockedOrigins: envPolicy.blockedOrigins },
+      urlPolicyConfig ?? {},
+    ));
     this.sessions = new Map();
     this.approvals = new Map();
     this.profileCache = { expiresAt: 0, profiles: [] };
@@ -294,7 +300,7 @@ export class AgentBrowserRuntime {
     let lastError;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        return parseLegacyResult(await definition.execute(parsed, { sessionID: sessionId, agent: "agent-browser-core" }));
+        return parseLegacyResult(await definition.execute(parsed, { sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy }));
       } catch (error) {
         lastError = error;
         if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 40));
@@ -463,7 +469,7 @@ export class AgentBrowserRuntime {
       }
       const input = { ...(step.input ?? {}), ...(tabId && step.input?.tabId === undefined ? { tabId } : {}) };
       const parsed = registry.validate(step.capability, input);
-      return definition.execute(parsed, { sessionID: session.sessionId, sessionId: session.sessionId, profileId: session.profileId, agent: "agent-browser-core" });
+      return definition.execute(parsed, { sessionID: session.sessionId, sessionId: session.sessionId, profileId: session.profileId, agent: "agent-browser-core", urlPolicy: this.urlPolicy });
     }
     let target = await this.resolveTarget(step, tabId, prior, session.sessionId);
     const dispatch = async () => {

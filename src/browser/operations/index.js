@@ -4,6 +4,7 @@ import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { browserRequest, listBrowserProfiles, resolveBrowserProfile } from "../client.js";
 import { NETWORK_INSPECT_ARGS } from "../../core/network-capability.js";
+import { assertNavigationAllowed } from "../url-policy.js";
 import { inspectNetworkEvents } from "../network.js";
 
 // The browser operation engine is intentionally adapter-neutral. MCP, OpenCode,
@@ -189,11 +190,17 @@ async function enableCdpDomains(context, tabId, domains, options = {}) {
   const key = tabCacheKey(context, profileId, tabId);
   const enabled = enabledDomainsByTabKey.get(key) ?? new Set();
 
-  for (const domain of domains) {
+for (const domain of domains) {
     if (enabled.has(domain)) continue;
     try {
       await cdp(context, tabId, `${domain}.enable`, {}, undefined, { profileId });
       enabled.add(domain);
+      if (domain === "Network" && context?.urlPolicy?.blockedOrigins?.length) {
+        const urls = context.urlPolicy.subresourcePatterns();
+        if (urls.length > 0) {
+          await cdp(context, tabId, "Network.setBlockedURLs", { urls }, undefined, { profileId }).catch(() => {});
+        }
+      }
     } catch (error) {
       if (!options.optional) throw error;
     }
@@ -2154,7 +2161,8 @@ export const createBrowserOperations = async () => {
           waitUntil: tool.schema.enum(["none", "domcontentloaded", "load"]).default("domcontentloaded"),
           timeoutMs: tool.schema.number().int().positive().default(15000),
         },
-        async execute(args, context) {
+async execute(args, context) {
+          assertNavigationAllowed(args.url, context?.urlPolicy);
           let profileId = null;
           const tab = args.tabId
             ? { id: args.tabId }
