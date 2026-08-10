@@ -1,5 +1,5 @@
 export const PLUGIN_NAME = "opencode-browser-plugin";
-export const PLUGIN_VERSION = "1.4.0";
+export const PLUGIN_VERSION = "1.4.1";
 export const PROTOCOL_VERSION = "1";
 export const SCHEMA_VERSION = "1";
 export const CAPABILITY_VERSION = "1";

@@ -9,6 +9,7 @@
 - Four compact default tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`.
 - The complete multi-operation browser engine behind explicit compatibility and capability modes.
 - Native hover, JavaScript dialog handling with approval gating, and png/jpeg/webp screenshots with quality control.
+- Non-intrusive background automation: clicks, typing, and navigation never activate the tab or bring its window forward, so you can keep working while the tool drives a background tab.
 - Server-level origin policy (allowed/blocked origin globs) and file-root restrictions for uploads.
 - Persistent session emulation (viewport, network, CPU, geolocation, color scheme, user agent, headers, init scripts) with automatic reset on finalize.
 - Network request drill-down by requestId with artifact-backed body spillover, and source-mapped console stack traces.
@@ -34,7 +35,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.4.0` under the canonical name `opencode-browser-plugin`.
+The package is released as `1.4.1` under the canonical name `opencode-browser-plugin`.
 
 ## MCP
 
