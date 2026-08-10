@@ -37,9 +37,9 @@ const observationSchema = z.object({
 const stepSchema = z.object({
   id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/).optional(),
   action: z.enum([
-    "navigate", "reload", "back", "forward", "find", "click", "doubleClick", "focus",
+    "navigate", "reload", "back", "forward", "find", "click", "doubleClick", "hover", "focus",
     "fill", "replaceText", "fillForm", "type", "press", "select", "scroll", "drag",
-    "assert", "upload", "clipboardRead", "clipboardWrite", "screenshot", "close", "capability",
+    "assert", "upload", "clipboardRead", "clipboardWrite", "handleDialog", "screenshot", "close", "capability",
   ]),
   target: targetSchema,
   url: z.string().url().refine((value) => /^https?:\/\//i.test(value) || value === "about:blank", {

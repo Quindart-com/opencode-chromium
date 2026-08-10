@@ -29,6 +29,7 @@
     "browser_move",
     "browser_click",
     "browser_double_click",
+    "browser_hover",
     "browser_scroll",
     "browser_drag",
     "browser_type",
@@ -57,7 +58,7 @@
     "browser_turn_end",
     "browser_finalize"
   ],
-  "granularCount": 49,
+  "granularCount": 50,
   "defaultResponseBudget": 4096,
   "protocolVersion": "1",
   "schemaVersion": "1"
