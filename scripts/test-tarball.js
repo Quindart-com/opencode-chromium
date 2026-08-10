@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const tarball = process.argv[2] ?? path.join(root, "opencode-browser-plugin-1.3.0.tgz");
+const tarball = process.argv[2] ?? path.join(root, "opencode-browser-plugin-1.4.0.tgz");
 if (!fs.existsSync(tarball)) throw new Error(`Tarball not found: ${tarball}`);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-plugin-package-"));
 try {

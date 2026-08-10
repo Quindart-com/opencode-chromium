@@ -35,6 +35,8 @@ Hover elements with a `hover` step to reveal menus and tooltips before clicking.
 
 Apply persistent test environments with `browser_session` action `configure` — viewport, network preset or conditions, CPU throttling, geolocation, color scheme, user agent, custom headers, or `initScripts` — then `reset: true` or finalize clears them. Ask for source-mapped console stacks with `browser_console_logs` `sourceMap: true` (or the advanced diagnostics capability path), and drill into a single network request with `browser_observe` mode `inspect` and `target.requestId`.
 
+Record local performance traces through `browser_observe` mode `diagnostic` with `diagnostic.type: "performance"` and `action: "record"`; the raw trace is stored as an artifact and the summary returns LCP, CLS, long tasks, blocking time, and more. Re-analyze a stored trace with `action: "inspect"`. Performance analysis is local-only: field data (CrUX) is never consulted.
+
 ```json
 {
   "profile": "Work",

@@ -12,6 +12,7 @@
 - Server-level origin policy (allowed/blocked origin globs) and file-root restrictions for uploads.
 - Persistent session emulation (viewport, network, CPU, geolocation, color scheme, user agent, headers, init scripts) with automatic reset on finalize.
 - Network request drill-down by requestId with artifact-backed body spillover, and source-mapped console stack traces.
+- Performance diagnostics: `browser_observe` mode `diagnostic` records CDP traces and computes LCP, CLS, long tasks, TBT, and more in the native host; raw traces are artifact-first and CrUX/field data stays off.
 - Snowflake-default page search with explicit lexical/auto alternatives and Qwen deep retrieval without loading models in the extension.
 - Profile-aware sessions, tab ownership, stale-target recovery, bounded read retries, conditional settling, approvals, and artifact resources.
 - MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
@@ -33,7 +34,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.3.0` under the canonical name `opencode-browser-plugin`.
+The package is released as `1.4.0` under the canonical name `opencode-browser-plugin`.
 
 ## MCP
 
