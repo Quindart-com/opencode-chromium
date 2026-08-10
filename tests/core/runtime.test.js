@@ -477,3 +477,66 @@ test("screenshot observations forward format and quality to the capture operatio
     runtime.close();
   }
 });
+
+test("session configure applies an environment and reports it on open", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("env-session").activeTabId = 7;
+  let configureCall;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_configure") { configureCall = args; return { configured: true }; }
+    if (name === "browser_list_tabs") return { tabs: [] };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    const environment = { viewport: { width: 390, height: 844, mobile: true }, colorScheme: "dark", network: "slow-4g" };
+    const configured = await runtime.session({ sessionId: "env-session", action: "configure", tabId: 7, environment });
+    assert.equal(configured.ok, true);
+    assert.equal(configured.result.tabId, 7);
+    assert.deepEqual(configured.result.environment.environment ?? configureCall.environment, environment);
+    assert.equal(configureCall.environment.viewport.width, 390);
+
+    const opened = await runtime.session({ sessionId: "env-session", action: "open" });
+    assert.equal(opened.ok, true);
+    assert.equal(opened.environment.colorScheme, "dark");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("session configure reset clears the tracked environment", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("env-reset").activeTabId = 7;
+  let resetCall;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_configure") { resetCall = args; return { configured: true }; }
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    const result = await runtime.session({ sessionId: "env-reset", action: "configure", tabId: 7, environment: { reset: true } });
+    assert.equal(result.ok, true);
+    assert.equal(resetCall.environment.reset, true);
+    assert.deepEqual(result.result.environment, {});
+  } finally {
+    runtime.close();
+  }
+});
+
+test("finalize clears applied environment overrides unless retained", async () => {
+  const runtime = fakeRuntime();
+  const session = runtime.getSession("env-finalize");
+  session.activeTabId = 7;
+  session.environment = { colorScheme: "dark" };
+  let cleared = false;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_configure") { cleared = args.environment?.reset === true; return { configured: true }; }
+    if (name === "browser_finalize") return { profiles: {} };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    const result = await runtime.finalize({ sessionId: "env-finalize" });
+    assert.equal(result.ok, true);
+    assert.equal(cleared, true);
+  } finally {
+    runtime.close();
+  }
+});
