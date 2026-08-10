@@ -58,10 +58,12 @@
     "browser_clear_download_events",
     "browser_cdp",
     "browser_turn_end",
+    "browser_trace_record",
+    "browser_trace_analyze",
     "browser_configure",
     "browser_finalize"
   ],
-  "granularCount": 53,
+  "granularCount": 55,
   "defaultResponseBudget": 4096,
   "protocolVersion": "1",
   "schemaVersion": "1"

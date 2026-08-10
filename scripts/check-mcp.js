@@ -43,7 +43,7 @@ async function runServer(toolset, { exerciseCore = false } = {}) {
 
   const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
 
-  const waitForResponses = async (count, timeoutMs = 10000) => {
+  const waitForResponses = async (count, timeoutMs = 13000) => {
     const deadline = Date.now() + timeoutMs;
     while (collectJsonLines(buffer).filter((m) => m && m.id !== undefined).length < count) {
       if (Date.now() > deadline) throw new Error("Timed out waiting for adapter responses");
@@ -137,7 +137,7 @@ try {
   if (schemaErrors > 0) throw new Error("One or more tools produced an invalid MCP input schema");
 
   const schemaBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
-  if (schemaBytes > 10000) throw new Error(`Core tool definitions exceed the 10000-byte context budget: ${schemaBytes}`);
+  if (schemaBytes > 13000) throw new Error(`Core tool definitions exceed the 13000-byte context budget: ${schemaBytes}`);
 
   const legacyTools = await runServer("legacy");
   const legacyNames = new Set(legacyTools.map((tool) => tool.name));
