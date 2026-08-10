@@ -20,6 +20,7 @@ function defaultArtifactRoot() {
 function extensionForMime(mimeType) {
   if (mimeType === "image/png") return ".png";
   if (mimeType === "image/jpeg") return ".jpg";
+  if (mimeType === "image/webp") return ".webp";
   if (mimeType === "application/json") return ".json";
   if (mimeType?.startsWith("text/")) return ".txt";
   return ".bin";
