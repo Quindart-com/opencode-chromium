@@ -9,6 +9,7 @@ import { removeProfileRegistration, writeProfileRegistration } from "./profile-r
 import { RpcRelay } from "./rpc-relay.js";
 import { handleSemanticHostMethod } from "./semantic-search.js";
 import { handleVisualHostMethod } from "./visual-map.js";
+import { handleDiagnosticsHostMethod } from "./diagnostics/index.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
 const PROTOCOL_VERSION = "1";
@@ -46,7 +47,9 @@ const relay = new RpcRelay({
   localHandler: async (method, params) => {
     const semantic = await handleSemanticHostMethod(method, params);
     if (semantic !== undefined) return semantic;
-    return handleVisualHostMethod(method, params);
+    const visual = await handleVisualHostMethod(method, params);
+    if (visual !== undefined) return visual;
+    return handleDiagnosticsHostMethod(method, params);
   },
 });
 

@@ -599,3 +599,43 @@ test("artifact body delivery spills network bodies into the artifact store", asy
     runtime.close();
   }
 });
+
+test("diagnostic record stores the trace artifact and returns insights", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("diag").activeTabId = 42;
+  runtime.invoke = async (name, args) => {
+    if (name !== "browser_trace_record") throw new Error(`Unexpected operation: ${name}`);
+    return { recorded: true, trace: '[{"name":"navigationStart","ph":"R","ts":1000000}]', traceEventCount: 1, summary: { LCP: 1200 }, insights: [] };
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "diag", mode: "diagnostic", diagnostic: { type: "performance", action: "record", reload: true } });
+    assert.equal(result.ok, true);
+    assert.equal(result.result.summary.LCP, 1200);
+    assert.match(result.result.traceArtifact, /^browser:\/\/sessions\//);
+    assert.equal("trace" in result.result, false);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("diagnostic inspect analyzes a stored trace artifact", async () => {
+  const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-diag-test-")) });
+const runtime = new AgentBrowserRuntime({ artifactStore: store });
+  runtime.getSession("diag-inspect").activeTabId = 42;
+  runtime.selectProfile = async (session) => { session.profileId = "diag"; return { profileId: "diag" }; };
+  const artifact = store.create({ sessionId: "diag-inspect", data: '[{"name":"navigationStart","ph":"R","ts":1000000}]' });
+  let analyzeArgs;
+  runtime.invoke = async (name, args) => {
+    if (name !== "browser_trace_analyze") throw new Error(`Unexpected operation: ${name}`);
+    analyzeArgs = args;
+    return { insights: [{ id: "lcp" }] };
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "diag-inspect", mode: "diagnostic", diagnostic: { type: "performance", action: "inspect", artifact: artifact.uri, insight: "lcp" } });
+    assert.equal(result.ok, true);
+    assert.equal(analyzeArgs.insight, "lcp");
+    assert.match(analyzeArgs.trace, /navigationStart/);
+  } finally {
+    runtime.close();
+  }
+});

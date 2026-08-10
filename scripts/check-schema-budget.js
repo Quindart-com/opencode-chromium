@@ -2,7 +2,7 @@
 
 import { createBrowserAgent } from "../src/core/index.js";
 
-const MAX_SCHEMA_BYTES = 10000;
+const MAX_SCHEMA_BYTES = 13000;
 const agent = createBrowserAgent();
 try {
   const sizes = {};

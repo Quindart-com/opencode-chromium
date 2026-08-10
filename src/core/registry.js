@@ -53,8 +53,20 @@ const settleSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
 }).optional();
 
+const diagnosticSchema = z.object({
+  type: z.enum(["performance"]),
+  action: z.enum(["record", "inspect"]),
+  reload: z.boolean().optional(),
+  durationMs: z.number().int().positive().max(30000).optional(),
+  waitUntil: z.enum(["none", "domcontentloaded", "load"]).optional(),
+  timeoutMs: z.number().int().positive().max(120000).optional(),
+  artifact: z.string().max(300).optional(),
+  insight: z.string().max(120).optional(),
+  url: z.string().max(500).optional(),
+});
+
 const observationSchema = z.object({
-  mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact"]),
+  mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
   target: targetSchema,
   query: z.string().optional(),
   pack: z.string().max(64).optional(),
@@ -64,6 +76,7 @@ const observationSchema = z.object({
   fullPage: z.boolean().optional(),
   format: z.enum(["png", "jpeg", "webp"]).optional(),
   quality: z.number().int().min(0).max(100).optional(),
+  diagnostic: diagnosticSchema.optional(),
   searchStrategy: z.enum(["snowflake", "auto", "lexical", "deep"]).optional(),
 }).optional();
 
@@ -140,7 +153,7 @@ export function createCoreRegistry(runtime) {
       description: "Observe compact browser evidence.",
       inputSchema: z.object({
         ...sessionFields,
-        mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact"]),
+        mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
         tabId: z.number().int().positive().optional(),
         target: targetSchema,
         query: z.string().optional(),
@@ -153,6 +166,7 @@ export function createCoreRegistry(runtime) {
         searchStrategy: z.enum(["snowflake", "auto", "lexical", "deep"]).optional(),
         pack: z.string().max(64).optional(),
         uri: z.string().max(300).optional(),
+        diagnostic: diagnosticSchema.optional(),
         maxChars: z.number().int().positive().optional(),
       }),
       outputSchema: resultSchema,
