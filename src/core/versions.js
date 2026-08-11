@@ -1,5 +1,19 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 export const PLUGIN_NAME = "opencode-browser-plugin";
-export const PLUGIN_VERSION = "1.5.0";
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+function packageVersion() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+export const PLUGIN_VERSION = packageVersion();
 export const PROTOCOL_VERSION = "1";
 export const SCHEMA_VERSION = "1";
 export const CAPABILITY_VERSION = "1";

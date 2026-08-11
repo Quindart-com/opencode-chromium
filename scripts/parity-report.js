@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createBrowserAgent } from "../src/adapters/sdk/index.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const dialects = ["mcp", "openai", "anthropic", "gemini"];
 
 export function createParityReport() {
@@ -15,7 +16,8 @@ export function createParityReport() {
     const names = tools.mcp.map((tool) => tool.name);
     return {
       generatedAt: new Date().toISOString(),
-      package: "opencode-browser-plugin",
+      package: packageJson.name,
+      version: packageJson.version,
       canonicalTools: names,
       adapters: Object.fromEntries(dialects.map((dialect) => [dialect, {
         names: tools[dialect].map((tool) => tool.name),

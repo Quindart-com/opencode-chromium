@@ -3,7 +3,7 @@
 All supported clients call the same `AgentBrowserRuntime`.
 
 ```js
-import { createBrowserAgent } from "opencode-browser-plugin/sdk";
+import { createBrowserAgent } from "opencode-chromium/sdk";
 
 const agent = createBrowserAgent();
 const tools = agent.tools("openai");
@@ -30,9 +30,9 @@ The bundled skill ([`skills/opencode-browser-plugin/SKILL.md`](../skills/opencod
 Install it for every compatible client at once:
 
 ```powershell
-opencode-browser-plugin install --client skills
-opencode-browser-plugin install --client skills --dry-run
-opencode-browser-plugin uninstall --client skills
+opencode-chromium install --client skills
+opencode-chromium install --client skills --dry-run
+opencode-chromium uninstall --client skills
 ```
 
 `install --client skills` copies the skill to:

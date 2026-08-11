@@ -31,7 +31,7 @@ walk(dist);
 const hash = createHash("sha256");
 for (const file of files.sort()) hash.update(file).update(fs.readFileSync(path.join(dist, file)));
 const manifest = {
-  name: "opencode-browser-plugin",
+  name: packageJson.name,
   version: packageJson.version,
   generatedAt: new Date().toISOString(),
   source: "src",

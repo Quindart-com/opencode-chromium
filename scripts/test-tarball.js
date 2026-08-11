@@ -7,9 +7,11 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const tarball = process.argv[2] ?? path.join(root, "opencode-browser-plugin-1.5.0.tgz");
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const tarballName = `${packageJson.name.replace(/^@/, "").replaceAll("/", "-")}-${packageJson.version}.tgz`;
+const tarball = process.argv[2] ?? path.join(root, tarballName);
 if (!fs.existsSync(tarball)) throw new Error(`Tarball not found: ${tarball}`);
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-plugin-package-"));
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-chromium-package-"));
 try {
   execFileSync("tar", ["-xzf", tarball, "-C", temp], { stdio: "inherit" });
   const packageRoot = path.join(temp, "package");

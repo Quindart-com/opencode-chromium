@@ -1,8 +1,17 @@
 {
-  "name": "opencode-browser-plugin",
+  "name": "opencode-chromium",
   "version": "1.5.0",
   "description": "Provider-neutral Chromium browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quindart-com/opencode-chromium-browser-plugin.git"
+  },
+  "homepage": "https://github.com/Quindart-com/opencode-chromium-browser-plugin#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "type": "module",
   "packageManager": "bun@1.3.6",
   "engines": {
@@ -42,11 +51,13 @@
     "scripts/open-browser-window.js",
     "scripts/pack.js",
     "scripts/package-check.js",
+    "scripts/public-hygiene.js",
     "scripts/release-check.js",
     "scripts/schema-report.js",
     "scripts/local-client-report.js",
     "scripts/parity-report.js",
     "scripts/test-tarball.js",
+    "scripts/check-tag-version.js",
     "assets",
     "LICENSE",
     "README.md",
@@ -62,6 +73,8 @@
     "./versions": "./dist/core/versions.js"
   },
   "bin": {
+    "opencode-chromium": "./dist/cli/index.js",
+    "opencode-chromium-mcp": "./dist/adapters/mcp/server.js",
     "opencode-browser-plugin": "./dist/cli/index.js",
     "opencode-browser-plugin-mcp": "./dist/adapters/mcp/server.js"
   },
@@ -74,12 +87,14 @@
     "agent:server": "bun src/adapters/mcp/server.js",
     "agent:http": "bun src/adapters/mcp/server.js --transport=http",
     "codex:server": "bun src/adapters/mcp/server.js",
-    "check": "bun run check:schemas && bun run check:package && bun run check:mcp && bun run adapter:report && bun test",
+    "check": "bun run check:schemas && bun run check:package && bun run check:mcp && bun run check:public-hygiene && bun run adapter:report && bun test",
     "check:mcp": "bun scripts/check-mcp.js",
     "check:schemas": "bun scripts/check-schema-budget.js",
     "check:package": "bun scripts/package-check.js",
+    "check:public-hygiene": "bun scripts/public-hygiene.js",
     "check:release": "bun scripts/release-check.js",
     "check:release-hygiene": "bun scripts/release-check.js --hygiene-only",
+    "check:tag": "bun scripts/check-tag-version.js",
     "test": "bun test",
     "test:contracts": "bun test tests/contracts tests/adapters",
     "test:mcp": "bun scripts/check-mcp.js",
