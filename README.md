@@ -1,6 +1,6 @@
 <p align="center"><img src="assets/logo.svg" alt="OpenCode Browser Plugin Logo" width="200"/></p>
 
-<h1 align="center">opencode-browser-plugin</h1>
+<h1 align="center">opencode-chromium</h1>
 
 <p align="center"><strong>Provider-neutral Chromium automation for MCP clients, OpenCode V2, Codex, and direct JavaScript agents.</strong></p>
 
@@ -36,7 +36,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.5.0` under the canonical name `opencode-browser-plugin`.
+The package is released as `1.5.0` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
 
 ## MCP
 
@@ -49,7 +49,7 @@ bun run mcp
 Or use the packaged binary:
 
 ```powershell
-opencode-browser-plugin-mcp
+opencode-chromium-mcp
 ```
 
 Loopback Streamable HTTP is available with:
@@ -67,7 +67,7 @@ The package root exports the native adapter using OpenCode 1.18.x's official `{ 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-browser-plugin"]
+  "plugin": ["opencode-chromium"]
 }
 ```
 
@@ -88,9 +88,9 @@ The bundled skill is [skills/opencode-browser-plugin/SKILL.md](skills/opencode-b
 Install it for every skills-compatible client at once:
 
 ```powershell
-opencode-browser-plugin install --client skills
-opencode-browser-plugin install --client skills --dry-run
-opencode-browser-plugin uninstall --client skills
+opencode-chromium install --client skills
+opencode-chromium install --client skills --dry-run
+opencode-chromium uninstall --client skills
 ```
 
 This copies the skill to `~/.codex/skills/`, `~/.claude/skills/`, and `~/.agents/skills/` (under `opencode-browser-plugin/`), and registers an enabled `[[skills.config]]` entry in `~/.codex/config.toml` while removing any stale `opencode-browser-adapter` entry.
@@ -109,14 +109,14 @@ Use `AGENT_BROWSER_*` environment variables for new configuration. The older `OP
 ## CLI
 
 ```powershell
-opencode-browser-plugin doctor --json
-opencode-browser-plugin verify
-opencode-browser-plugin install --client opencode --dry-run
-opencode-browser-plugin install --client opencode-mcp --dry-run
-opencode-browser-plugin install --client codex --dry-run
-opencode-browser-plugin install --client skills --dry-run
-opencode-browser-plugin uninstall --client codex --dry-run
-opencode-browser-plugin uninstall --client skills --dry-run
+opencode-chromium doctor --json
+opencode-chromium verify
+opencode-chromium install --client opencode --dry-run
+opencode-chromium install --client opencode-mcp --dry-run
+opencode-chromium install --client codex --dry-run
+opencode-chromium install --client skills --dry-run
+opencode-chromium uninstall --client codex --dry-run
+opencode-chromium uninstall --client skills --dry-run
 ```
 
 Install and uninstall back up the named configuration before changing it, touch only the canonical entry, support dry runs, and report changed files.
@@ -182,6 +182,8 @@ bun run check:release
 ```
 
 The release check rejects stale V1 paths, personal state, duplicate legacy package surfaces, schema growth beyond budget, and tarballs missing the built adapters.
+
+GitHub Actions runs the same verification on pull requests and `master` pushes. A release is published only from a matching `v*` tag through the protected `npm-production` environment using npm Trusted Publishing; no npm token is stored in the repository or workflow.
 
 ## Security
 

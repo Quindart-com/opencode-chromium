@@ -9,6 +9,6 @@ export function packageInfo() {
     const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
     return { ...contractMetadata(), name: packageJson.name, version: packageJson.version, root };
   } catch {
-    return { ...contractMetadata(), name: "opencode-browser-plugin", version: PLUGIN_VERSION, root };
+    return { ...contractMetadata(), name: "opencode-chromium", version: PLUGIN_VERSION, root };
   }
 }

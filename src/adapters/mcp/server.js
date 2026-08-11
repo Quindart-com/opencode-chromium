@@ -244,7 +244,7 @@ export async function startMcpServer(options = parseArgs(process.argv.slice(2)),
 export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.help) {
-    process.stdout.write("Usage: opencode-browser-plugin-mcp [--transport=stdio|http] [--toolset=core|legacy|debug] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN] [--allowed-origin=PATTERN] [--blocked-origin=PATTERN]\n");
+    process.stdout.write("Usage: opencode-chromium-mcp [--transport=stdio|http] [--toolset=core|legacy|debug] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN] [--allowed-origin=PATTERN] [--blocked-origin=PATTERN]\n");
     return;
   }
   const runtime = createAgentBrowserRuntime({

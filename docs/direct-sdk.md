@@ -1,8 +1,8 @@
 # Direct SDK adapters
 
 ```js
-import { createBrowserAgent } from "opencode-browser-plugin/sdk";
-import { openAITools } from "opencode-browser-plugin/sdk";
+import { createBrowserAgent } from "opencode-chromium/sdk";
+import { openAITools } from "opencode-chromium/sdk";
 
 const agent = createBrowserAgent();
 const openaiTools = openAITools({ runtime: agent.runtime });

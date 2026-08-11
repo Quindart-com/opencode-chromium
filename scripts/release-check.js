@@ -9,11 +9,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const errors = [];
 
-if (packageJson.name !== "opencode-browser-plugin") errors.push(`Unexpected package name: ${packageJson.name}`);
-if (packageJson.version !== "1.5.0") errors.push(`Expected release version 1.5.0, found ${packageJson.version}`);
+if (packageJson.name !== "opencode-chromium") errors.push(`Unexpected package name: ${packageJson.name}`);
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) errors.push(`Invalid package version: ${packageJson.version}`);
 if (packageJson.packageManager?.startsWith("bun@") !== true) errors.push("packageManager must pin Bun");
 if (packageJson.exports?.["."] !== "./dist/adapters/opencode/index.js") errors.push("Package root must export the native OpenCode adapter");
-if (packageJson.bin?.["opencode-browser-plugin-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("MCP binary is not canonical");
+if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium-browser-plugin.git") errors.push("Repository metadata must point to the canonical GitHub repository");
+if (packageJson.publishConfig?.access !== "public") errors.push("Package must be configured for public npm access");
+if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") errors.push("Package must publish to the public npm registry");
+if (packageJson.bin?.["opencode-chromium-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("Canonical MCP binary is missing");
+if (packageJson.bin?.["opencode-chromium"] !== "./dist/cli/index.js") errors.push("Canonical CLI binary is missing");
+if (packageJson.bin?.["opencode-browser-plugin-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("Legacy MCP binary alias is missing");
 
 const forbidden = [["opencode", "plugin"].join("-"), ["browser", "core"].join("-"), ["codex", "adapter"].join("-"), ".opencode", "package-lock.json", ["scripts", "install-opencode.js"].join("/"), ["scripts", "check-opencode-plugin.js"].join("/")];
 const excluded = new Set(["node_modules", ".git", "dist", "reports"]);

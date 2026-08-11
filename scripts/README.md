@@ -25,10 +25,12 @@ bun run build
 bun run check:schemas
 bun run check:package
 bun run check:mcp
+bun run check:public-hygiene
 bun run test:opencode
 bun run pack
 bun run test:tarball
 bun run check:release
+bun run check:tag -- v1.5.0
 ```
 
-The CLI owns client configuration. Use `opencode-browser-plugin install|configure|uninstall --client ... --dry-run` before changing a real client configuration.
+The CLI owns client configuration. Use `opencode-chromium install|configure|uninstall --client ... --dry-run` before changing a real client configuration.
