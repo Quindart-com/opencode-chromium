@@ -3,7 +3,7 @@
 Run:
 
 ```powershell
-opencode-browser-plugin doctor --json
+opencode-chromium doctor --json
 bun run check:native-host -- --json
 bun run check:extension -- --browser chrome --extension-id <extension-id>
 ```

@@ -46,7 +46,7 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "help" || command === "--help") {
-    console.log("Usage: opencode-browser-plugin <install|configure|uninstall|doctor|verify|mcp|version>");
+    console.log("Usage: opencode-chromium <install|configure|uninstall|doctor|verify|mcp|version>");
     return;
   }
   throw new Error(`Unknown command: ${command}`);
