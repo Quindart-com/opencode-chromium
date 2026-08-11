@@ -80,8 +80,11 @@ function removeSkillsConfigBlocks(text, marker) {
 }
 
 function codexSkillBlock(skillMetadataPath) {
+  const resolvedPath = /^[A-Za-z]:[\\/]/.test(skillMetadataPath)
+    ? path.win32.resolve(skillMetadataPath)
+    : path.resolve(skillMetadataPath);
   return `[[skills.config]]
-path = ${JSON.stringify(path.resolve(skillMetadataPath))}
+path = ${JSON.stringify(resolvedPath)}
 enabled = true`;
 }
 
