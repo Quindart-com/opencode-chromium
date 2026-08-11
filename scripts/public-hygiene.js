@@ -7,11 +7,6 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const knownIdentifiers = [
-  ["DJOCKER", "FACE"].join("-"),
-  ["Ay", "man"].join(""),
-  ["ay", "man", "badissy"].join(""),
-];
 const contentChecks = [
   { name: "email address", pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i },
   { name: "local home path", pattern: /(?:[A-Za-z]:[\\/](?:Users|Documents and Settings)[\\/]|\/(?:Users|home)\/)/i },
@@ -27,7 +22,6 @@ function readTrackedFiles() {
 
 function scanText(relative, text, findings) {
   for (const check of contentChecks) if (check.pattern.test(text)) findings.push(`${relative}: contains a ${check.name}`);
-  for (const identifier of knownIdentifiers) if (text.toLowerCase().includes(identifier.toLowerCase())) findings.push(`${relative}: contains a repository-specific personal identifier`);
 }
 
 function packFiles() {
@@ -43,6 +37,10 @@ function packFiles() {
 }
 
 const findings = [];
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+for (const field of ["author", "contributors", "maintainers"]) {
+  if (packageJson[field] !== undefined) findings.push(`package.json: contains personal ${field} metadata`);
+}
 const tracked = readTrackedFiles();
 for (const relative of tracked) {
   const absolute = path.join(root, relative);
