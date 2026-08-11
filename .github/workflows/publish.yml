@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: npm-release-${{ github.ref }}
+  group: npm-release
   cancel-in-progress: false
 
 jobs:
@@ -45,7 +45,9 @@ jobs:
 
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
-        run: bun run check:tag -- "${{ github.ref_name }}"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bun run check:tag -- "$RELEASE_TAG"
 
       - name: Build release tarball
         run: bun run pack
@@ -94,7 +96,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Validate release tag
-        run: bun run check:tag -- "${{ github.ref_name }}"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bun run check:tag -- "$RELEASE_TAG"
 
       - name: Build release
         run: bun run build
