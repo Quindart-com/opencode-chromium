@@ -13,7 +13,25 @@ test("the extension only activates tabs through the explicit focus policy", () =
   assert.match(extensionSource, /chrome\.tabs\.update\(tabId, \{ active: true \}/);
 });
 
+test("window focus is gated behind an explicit foreground request", () => {
+  assert.match(extensionSource, /if \(options\.foreground &&\s*Number\.isInteger\(tab\.windowId\)\)/);
+  assert.match(extensionSource, /chrome\.windows\.update\(tab\.windowId, \{ focused:\s*true \}/);
+});
+
+test("new tabs and windows are created without stealing focus", () => {
+  assert.match(extensionSource, /chrome\.tabs\.create\(\{ active: false, url:\s*"about:blank", windowId \}/);
+  assert.match(extensionSource, /chrome\.windows\.create\(\{ focused: false, type: "normal", url:\s*"about:blank" \}/);
+});
+
+test("tab and window activation appear only inside the focus policy", () => {
+  const tabActivations = extensionSource.match(/active: true/g) ?? [];
+  const windowFocus = extensionSource.match(/focused: true/g) ?? [];
+  assert.equal(tabActivations.length, 1);
+  assert.equal(windowFocus.length, 1);
+});
+
 test("background operation activation requests are always passive", () => {
   const call = /extensionRequest\(context, "activateTab", \{ tabId, foreground: false, active: false \}\)/;
   assert.match(operationsSource, call);
+  assert.doesNotMatch(operationsSource, /extensionRequest\(context, "activateTab"[^\n]*foreground: true/);
 });
