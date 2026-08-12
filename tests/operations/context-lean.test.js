@@ -51,7 +51,7 @@ test("contract metadata omits null component versions but keeps overrides", () =
   assert.equal(Object.hasOwn(contractMetadata(), "extensionVersion"), false);
   assert.equal(Object.hasOwn(contractMetadata(), "nativeHostVersion"), false);
   assert.equal(contractMetadata().plugin, "opencode-browser-plugin");
-  assert.equal(contractMetadata().pluginVersion, "1.5.0");
+  assert.equal(contractMetadata().pluginVersion, "1.5.1");
   assert.equal(contractMetadata({ extensionVersion: "1.0" }).extensionVersion, "1.0");
   assert.equal(contractMetadata({ nativeHostVersion: "2.0" }).nativeHostVersion, "2.0");
 });
