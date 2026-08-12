@@ -20,10 +20,95 @@
 - MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
 - A native OpenCode V2 adapter and shared OpenAI, Anthropic, Gemini, and MCP schema adapters.
 
+## Quick start (npm)
+
+Install the published package once, then connect any supported client. The
+package ships the CLI (`opencode-chromium`), the MCP server
+(`opencode-chromium-mcp`), the browser extension, and the native host
+installer.
+
+| Client                  | Surface                    | Setup                                                                 |
+| ----------------------- | -------------------------- | --------------------------------------------------------------------- |
+| OpenCode V2             | Native plugin              | `"plugin": ["opencode-chromium"]` in `opencode.json`                  |
+| Codex                   | MCP server (stdio)         | `codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp` |
+| Any MCP client          | MCP server (stdio)         | `npx -y opencode-chromium-mcp` as a stdio server                      |
+| Direct JavaScript       | SDK (`opencode-chromium/sdk`) | `import { createAgentBrowserRuntime } from "opencode-chromium/sdk"` |
+
+### 1. Install the package
+
+```powershell
+npm install -g opencode-chromium
+```
+
+### 2. Load the browser extension
+
+Open `chrome://extensions`, enable Developer mode, and load the unpacked
+`extension/` folder from the installed package:
+
+```powershell
+npm root -g
+# load "<that path>\opencode-chromium\extension" as an unpacked extension
+```
+
+The extension ID is derived from the load path, so keep the folder where it
+is. Note the ID shown in `chrome://extensions`.
+
+### 3. Install the native messaging host
+
+```powershell
+node "$(npm root -g)/opencode-chromium/scripts/install-native-host.js" --extension-id <extension-id> --browsers chrome
+```
+
+### 4. Connect a client
+
+OpenCode V2 — add the package name to the global
+`~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-chromium"]
+}
+```
+
+Codex — register the required MCP server:
+
+```powershell
+codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp
+```
+
+Any MCP client — add the stdio server:
+
+```json
+{
+  "mcpServers": {
+    "opencode-browser-plugin": {
+      "command": "npx",
+      "args": ["-y", "opencode-chromium-mcp"]
+    }
+  }
+}
+```
+
+Direct JavaScript — import the SDK runtime or the MCP server programmatically
+(see [docs/direct-sdk.md](docs/direct-sdk.md)).
+
+### 5. Verify
+
+```powershell
+opencode-chromium doctor --json
+opencode-chromium verify
+```
+
+All four tools (`browser_run`, `browser_observe`, `browser_session`,
+`browser_finalize`) are then available in every connected client. Do not
+enable both the native OpenCode adapter and the MCP server in one client
+session unless duplicate tools are intentional.
+
 ## Requirements
 
-- Node.js 20 or newer.
-- Bun 1.1 or newer (the supported package manager and command runner).
+- Node.js 20 or newer for the npm package and SDK.
+- Bun 1.1 or newer when building from source or running the repository scripts.
 - A Chromium-family browser with the unpacked `extension/` loaded.
 - The native messaging host installed for the extension ID.
 
@@ -36,7 +121,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.5.0` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
+The package is released as `1.5.1` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
 
 ## MCP
 
@@ -71,13 +156,23 @@ The package root exports the native adapter using OpenCode 1.18.x's official `{ 
 }
 ```
 
-For a local build, point the client at `dist/adapters/opencode/index.js`. The adapter registers exactly four tools, sets `codemode: false`, and returns a cleanup function for reloads.
+For a local build, point the client at `dist/adapters/opencode/index.js` or
+use the `opencode-chromium install --client opencode` command. The adapter
+registers exactly four tools, sets `codemode: false`, and returns a cleanup
+function for reloads.
 
 The same browser runtime is available through MCP compatibility mode; do not enable both surfaces in one client session unless duplicate tools are intentional.
 
 ## Codex
 
-Register the local MCP server with Bun:
+Register the MCP server from the npm package:
+
+```powershell
+codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp
+codex mcp list
+```
+
+From a local checkout, register `dist/adapters/mcp/server.js` with Bun:
 
 ```powershell
 codex mcp add opencode-browser-plugin -- bun C:\absolute\path\to\dist\adapters\mcp\server.js

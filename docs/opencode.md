@@ -2,7 +2,16 @@
 
 The package root is the native OpenCode entry point. It default-exports the official OpenCode 1.18.x path-plugin module shape (`{ id, server() }`), exposes four direct tools from `server()`, and also exports the V2 `setup` descriptor. The V2 registration path sets `codemode: false` and returns cleanup for repeated activation and reload.
 
-For a local build, use:
+Install the package once (`npm install -g opencode-chromium`) and reference it by name from the global `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-chromium"]
+}
+```
+
+Pin a version with the npm spec (`"opencode-chromium@1.5.1"`) if you prefer locked upgrades. For a local build, use:
 
 ```json
 {
