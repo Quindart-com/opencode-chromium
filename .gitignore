@@ -6,6 +6,7 @@ package-lock.json
 # Build output
 dist/
 *.tgz
+dist-extension/
 
 # Local extension/native-host state
 scripts/extension-id.json
