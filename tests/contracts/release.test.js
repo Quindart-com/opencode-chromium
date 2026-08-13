@@ -10,7 +10,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 describe("release metadata", () => {
   test("uses the public distribution name and canonical repository", () => {
     expect(packageJson.name).toBe("opencode-chromium");
-    expect(packageJson.repository.url).toBe("git+https://github.com/Quindart-com/opencode-chromium-browser-plugin.git");
+    expect(packageJson.repository.url).toBe("git+https://github.com/Quindart-com/opencode-chromium.git");
     expect(packageJson.publishConfig).toEqual({ access: "public", registry: "https://registry.npmjs.org" });
     expect(packageJson.bin["opencode-chromium"]).toBe("./dist/cli/index.js");
     expect(packageJson.bin["opencode-chromium-mcp"]).toBe("./dist/adapters/mcp/server.js");
