@@ -43,7 +43,7 @@ possibility of such damages.
 ## Privacy
 
 Use of the extension is covered by our Privacy Policy, available at
-https://quindart-com.github.io/opencode-chromium/privacy/
+https://quindart-com.github.io/opencode-chromium/PRIVACY.html
 
 ## Termination
 
