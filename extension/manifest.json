@@ -48,7 +48,7 @@
   "web_accessible_resources": [
     {
       "matches": ["<all_urls>"],
-      "resources": ["images/cursor-chat.png"]
+      "resources": ["images/cursor-chat.png", "popup.html"]
     }
   ]
 }
