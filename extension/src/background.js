@@ -141,6 +141,7 @@ class NativeRpc {
   #setStatus(patch) {
     Object.assign(hostStatus, patch, { lastChecked: nowIso() });
     void storageSet({ [HOST_STATUS_STORAGE_KEY]: hostStatus }).catch(() => {});
+    broadcastNativeStatus();
   }
 
   #rejectPending(message) {
@@ -1327,6 +1328,31 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading" || typeof changeInfo.url === "string") cursorInjectedTabs.delete(tabId);
+});
+
+const statusPorts = new Set();
+
+function broadcastNativeStatus() {
+  const payload = { type: "NATIVE_STATUS", status: { ...hostStatus } };
+  for (const port of statusPorts) {
+    try {
+      port.postMessage(payload);
+    } catch {
+      statusPorts.delete(port);
+    }
+  }
+}
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "popup-status") return;
+  statusPorts.add(port);
+  try {
+    port.postMessage({ type: "STATUS_SNAPSHOT", status: { ...hostStatus } });
+  } catch {
+    statusPorts.delete(port);
+    return;
+  }
+  port.onDisconnect.addListener(() => statusPorts.delete(port));
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

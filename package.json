@@ -107,6 +107,9 @@
     "schema:budget": "bun scripts/schema-budget.js",
     "client:report": "bun scripts/local-client-report.js",
     "adapter:report": "bun scripts/parity-report.js",
+    "zip:extension": "bun scripts/build-extension-zip.js",
+    "check:webstore": "bun scripts/webstore-safety-check.js",
+    "webstore:submit": "bun scripts/webstore-submit.js",
     "install:native-host": "bun scripts/install-native-host.js",
     "check:native-host": "bun scripts/check-native-host.js",
     "check:extension": "bun scripts/check-extension-installed.js --json",
@@ -126,7 +129,9 @@
     "zod": "4.2.0"
   },
   "devDependencies": {
-    "yaml": "^2.9.0"
+    "publish-browser-extension": "4.0.5",
+    "yaml": "^2.9.0",
+    "yazl": "3.1.0"
   },
   "overrides": {
     "protobufjs": "7.6.5"

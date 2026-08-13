@@ -1,4 +1,7 @@
 const status = document.querySelector("#status");
+const statusDetail = document.querySelector("#status-detail");
+const statusPill = document.querySelector("#status-pill");
+const statusDot = document.querySelector("#status-dot");
 const host = document.querySelector("#host");
 const lastChecked = document.querySelector("#last-checked");
 const profileId = document.querySelector("#profile-id");
@@ -12,24 +15,73 @@ const semanticModelInfo = document.querySelector("#semantic-model-info");
 const semanticPrepare = document.querySelector("#semantic-prepare");
 const semanticDelete = document.querySelector("#semantic-delete");
 const semanticHelp = document.querySelector("#semantic-help");
+const appVersion = document.querySelector("#app-version");
 
 let semanticModels = [];
 let semanticPoll = null;
+let livePort = null;
+let firstStatusApplied = false;
 
-chrome.runtime.sendMessage({ type: "GET_NATIVE_HOST_STATUS" }, (response) => {
-  const error = chrome.runtime.lastError;
-  if (error) {
-    status.textContent = `Unavailable: ${error.message}`;
+function applyNativeStatus(nativeStatus) {
+  if (!nativeStatus || typeof nativeStatus !== "object") return;
+  const state = nativeStatus.state ?? "unknown";
+  const lastError = nativeStatus.error;
+
+  status.textContent = lastError ? `${state}: ${lastError}` : state;
+  statusDetail.textContent = lastError ? `${state}: ${lastError}` : state;
+  host.textContent = nativeStatus.hostName ?? "com.opencode.browser.plugin";
+  lastChecked.textContent = nativeStatus.lastChecked ? new Date(nativeStatus.lastChecked).toLocaleString() : "-";
+
+  statusPill.classList.remove("pill-ok", "pill-warn", "pill-bad", "pill-unknown");
+  if (state === "connected") statusPill.classList.add("pill-ok");
+  else if (state === "reconnecting" || state === "unknown") statusPill.classList.add("pill-warn");
+  else statusPill.classList.add("pill-bad");
+
+  firstStatusApplied = true;
+}
+
+function requestStatusOnce() {
+  chrome.runtime.sendMessage({ type: "GET_NATIVE_HOST_STATUS" }, (response) => {
+    const error = chrome.runtime.lastError;
+    if (error) {
+      status.textContent = `Unavailable: ${error.message}`;
+      statusDetail.textContent = `Unavailable: ${error.message}`;
+      statusPill.classList.remove("pill-ok", "pill-warn", "pill-unknown");
+      statusPill.classList.add("pill-bad");
+      return;
+    }
+    applyNativeStatus(response?.status);
+  });
+}
+
+function connectLiveStatus() {
+  try {
+    livePort = chrome.runtime.connect({ name: "popup-status" });
+  } catch {
+    requestStatusOnce();
     return;
   }
 
-  const nativeStatus = response?.status ?? {};
-  const state = nativeStatus.state ?? "unknown";
-  const lastError = nativeStatus.error;
-  status.textContent = lastError ? `${state}: ${lastError}` : state;
-  host.textContent = nativeStatus.hostName ?? "com.opencode.browser.plugin";
-  lastChecked.textContent = nativeStatus.lastChecked ? new Date(nativeStatus.lastChecked).toLocaleString() : "-";
-});
+  livePort.onMessage.addListener((message) => {
+    if (message?.type === "NATIVE_STATUS") applyNativeStatus(message.status);
+    if (message?.type === "STATUS_SNAPSHOT") {
+      applyNativeStatus(message.status);
+      firstStatusApplied = true;
+    }
+  });
+
+  const fallbackTimer = setTimeout(() => {
+    if (!firstStatusApplied) requestStatusOnce();
+  }, 800);
+
+  livePort.onDisconnect.addListener(() => {
+    clearTimeout(fallbackTimer);
+    livePort = null;
+    requestStatusOnce();
+  });
+}
+
+connectLiveStatus();
 
 function showProfile(profile) {
   profileId.textContent = profile?.profileId ?? "Unavailable";
@@ -178,5 +230,8 @@ semanticDelete.addEventListener("click", () => {
     renderSemanticStatus(response?.semantic);
   });
 });
+
+const manifest = chrome.runtime.getManifest();
+if (appVersion) appVersion.textContent = `v${manifest.version}`;
 
 loadSemanticStatus();
