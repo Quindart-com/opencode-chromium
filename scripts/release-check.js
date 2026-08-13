@@ -14,7 +14,7 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) erro
 if (packageJson.packageManager?.startsWith("bun@") !== true) errors.push("packageManager must pin Bun");
 if (packageJson.exports?.["."] !== "./dist/adapters/opencode/index.js") errors.push("Package root must export the native OpenCode adapter");
 if (packageJson.exports?.["./server"] !== "./dist/adapters/opencode/index.js") errors.push("Package must expose the ./server entry that opencode npm plugins load");
-if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium-browser-plugin.git") errors.push("Repository metadata must point to the canonical GitHub repository");
+if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium.git") errors.push("Repository metadata must point to the canonical GitHub repository");
 if (packageJson.publishConfig?.access !== "public") errors.push("Package must be configured for public npm access");
 if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") errors.push("Package must publish to the public npm registry");
 if (packageJson.bin?.["opencode-chromium-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("Canonical MCP binary is missing");
