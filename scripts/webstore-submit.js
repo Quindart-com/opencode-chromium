@@ -123,10 +123,13 @@ function errorMessage(error) {
     const causes = error.cause?.errors ?? error.cause;
     if (Array.isArray(causes)) {
       return causes.map((entry) => {
-        const nested = entry?.err;
+        const record = Array.isArray(entry) && entry.length === 2 && typeof entry[1] === "object" ? entry[1] : entry;
+        const nested = record?.err;
         if (nested instanceof Error) return nested.message;
         if (typeof nested === "string") return nested;
-        return entry?.err != null ? String(entry.err) : String(entry ?? "");
+        if (record?.err != null) return String(record.err);
+        if (typeof record === "string") return record;
+        return "[object Object]";
       }).join("\n");
     }
     if (causes instanceof Error) return causes.message;
