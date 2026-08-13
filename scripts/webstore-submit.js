@@ -121,8 +121,16 @@ function errorMessage(error) {
   if (typeof error === "string") return error;
   if (error instanceof Error) {
     const causes = error.cause?.errors ?? error.cause;
-    if (Array.isArray(causes)) return JSON.stringify(causes);
+    if (Array.isArray(causes)) {
+      return causes.map((entry) => {
+        const nested = entry?.err;
+        if (nested instanceof Error) return nested.message;
+        if (typeof nested === "string") return nested;
+        return entry?.err != null ? String(entry.err) : String(entry ?? "");
+      }).join("\n");
+    }
+    if (causes instanceof Error) return causes.message;
     return error.message;
   }
-  return JSON.stringify(error);
+  return String(error);
 }
