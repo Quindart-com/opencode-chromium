@@ -31,6 +31,13 @@ const required = [
 ];
 for (const relative of required) if (!fs.existsSync(path.join(root, relative))) throw new Error(`Build/package file is missing: ${relative}`);
 
+if (process.platform !== "win32") {
+  for (const relative of ["./dist/cli/index.js", "./dist/adapters/mcp/server.js"]) {
+    const mode = fs.statSync(path.join(root, relative)).mode;
+    if ((mode & 0o111) === 0) throw new Error(`Bin target is not executable: ${relative}`);
+  }
+}
+
 const agent = createBrowserAgent();
 try {
   const tools = agent.tools("mcp");
