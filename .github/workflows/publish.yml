@@ -112,5 +112,19 @@ jobs:
           bun run test:tarball
           bun run check:release
 
+      - name: Skip when version already published
+        shell: bash
+        run: |
+          published="$(npm view opencode-chromium@"${RELEASE_TAG#v}" version 2>/dev/null || true)"
+          if [ -n "$published" ]; then
+            echo "Version $published is already published on npm; skipping publish step."
+            echo "ALREADY_PUBLISHED=true" >> "$GITHUB_ENV"
+          else
+            echo "ALREADY_PUBLISHED=false" >> "$GITHUB_ENV"
+          fi
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
       - name: Publish with npm Trusted Publishing
+        if: env.ALREADY_PUBLISHED != 'true'
         run: npm publish --access public --ignore-scripts
