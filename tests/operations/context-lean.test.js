@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { createBrowserOperations, pageInspectExpression, pageSearchUnitsExpression, visualMapExpression } from "../../src/browser/operations/index.js";
 import { contractMetadata } from "../../src/core/versions.js";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const packageVersion = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
 
 test("lean inspect omits verbose target html and styles by default", () => {
   const expression = pageInspectExpression({ nodeId: "node-1" });
@@ -51,7 +57,7 @@ test("contract metadata omits null component versions but keeps overrides", () =
   assert.equal(Object.hasOwn(contractMetadata(), "extensionVersion"), false);
   assert.equal(Object.hasOwn(contractMetadata(), "nativeHostVersion"), false);
   assert.equal(contractMetadata().plugin, "opencode-browser-plugin");
-  assert.equal(contractMetadata().pluginVersion, "1.5.2");
+  assert.equal(contractMetadata().pluginVersion, packageVersion);
   assert.equal(contractMetadata({ extensionVersion: "1.0" }).extensionVersion, "1.0");
   assert.equal(contractMetadata({ nativeHostVersion: "2.0" }).nativeHostVersion, "2.0");
 });
