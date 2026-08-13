@@ -19,6 +19,10 @@ fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(dist, { recursive: true });
 fs.cpSync(path.join(root, "src"), dist, { recursive: true });
 
+for (const relative of ["cli/index.js", "adapters/mcp/server.js"]) {
+  fs.chmodSync(path.join(dist, relative), 0o755);
+}
+
 const files = [];
 function walk(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
