@@ -13,6 +13,7 @@ if (packageJson.name !== "opencode-chromium") errors.push(`Unexpected package na
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) errors.push(`Invalid package version: ${packageJson.version}`);
 if (packageJson.packageManager?.startsWith("bun@") !== true) errors.push("packageManager must pin Bun");
 if (packageJson.exports?.["."] !== "./dist/adapters/opencode/index.js") errors.push("Package root must export the native OpenCode adapter");
+if (packageJson.exports?.["./server"] !== "./dist/adapters/opencode/index.js") errors.push("Package must expose the ./server entry that opencode npm plugins load");
 if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium-browser-plugin.git") errors.push("Repository metadata must point to the canonical GitHub repository");
 if (packageJson.publishConfig?.access !== "public") errors.push("Package must be configured for public npm access");
 if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") errors.push("Package must publish to the public npm registry");

@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Provider-neutral Chromium browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -66,6 +66,7 @@
   ],
   "exports": {
     ".": "./dist/adapters/opencode/index.js",
+    "./server": "./dist/adapters/opencode/index.js",
     "./core": "./dist/core/index.js",
     "./mcp": "./dist/adapters/mcp/server.js",
     "./sdk": "./dist/adapters/sdk/index.js",
