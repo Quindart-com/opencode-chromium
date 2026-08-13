@@ -12,7 +12,44 @@ dist-extension/
 scripts/extension-id.json
 reports/
 
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+id_rsa*
+id_ed25519*
+*.secret
+secrets/
+credentials*.json
+*application_default_credentials*.json
+.npmrc
+npmrc
+*.authToken*
+*_authToken*
+
+# Local tool state that can hold account credentials
+*.sqlite3
+*.sqlite
+gcloud_*
+.credential*
+*credential-store*
+
+# IDE and editor directories
+.idea/
+.vscode/
+*.suo
+*.sln.docstates
+*.swp
+.nyc_output/
+coverage/
+
 # Logs and OS files
 *.log
 .DS_Store
 Thumbs.db
+desktop.ini

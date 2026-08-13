@@ -61,6 +61,41 @@ console.log(JSON.stringify({
   action: dryRun ? "validating credentials and package (no store changes)" : "uploading and publishing",
 }, null, 2));
 
+async function itemDraftVersion() {
+  try {
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+    const { access_token: accessToken } = await tokenResponse.json();
+    const response = await fetch(`https://www.googleapis.com/chromewebstore/v1.1/items/${extensionId}?projection=DRAFT`, {
+      headers: { Authorization: `Bearer ${accessToken}`, "x-goog-api-version": "2" },
+    });
+    if (!response.ok) return null;
+    const item = await response.json();
+    return item.draftState?.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+if (!dryRun) {
+  const existingVersion = await itemDraftVersion();
+  if (existingVersion === packageJson.version) {
+    console.log(`Version ${packageJson.version} already exists on the store item (it may be under review); skipping submission to avoid clobbering it.`);
+    process.exit(0);
+  }
+  if (existingVersion && existingVersion !== packageJson.version) {
+    console.log(`Store item has draft ${existingVersion} (different from ${packageJson.version}); proceeding with the submission.`);
+  }
+}
+
 const results = await submit(config);
 console.log(JSON.stringify(results, null, 2));
 const chromeResult = results.chrome;
