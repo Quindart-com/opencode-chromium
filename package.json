@@ -5,9 +5,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Quindart-com/opencode-chromium-browser-plugin.git"
+    "url": "git+https://github.com/Quindart-com/opencode-chromium.git"
   },
-  "homepage": "https://github.com/Quindart-com/opencode-chromium-browser-plugin#readme",
+  "homepage": "https://github.com/Quindart-com/opencode-chromium#readme",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org"

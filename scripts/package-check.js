@@ -11,7 +11,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 const metadataErrors = [];
 if (packageJson.name !== "opencode-chromium") metadataErrors.push(`Unexpected package name: ${packageJson.name}`);
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) metadataErrors.push(`Invalid package version: ${packageJson.version}`);
-if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium-browser-plugin.git") metadataErrors.push("Repository metadata must point to the canonical GitHub repository");
+if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium.git") metadataErrors.push("Repository metadata must point to the canonical GitHub repository");
 if (packageJson.publishConfig?.access !== "public") metadataErrors.push("Package must be configured for public npm access");
 if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") metadataErrors.push("Package must publish to the public npm registry");
 if (packageJson.bin?.["opencode-chromium"] !== "./dist/cli/index.js") metadataErrors.push("Canonical CLI binary is missing");
