@@ -51,7 +51,7 @@ jobs:
         run: bun run check:webstore
 
       - name: Upload release artifact
-        uses: actions/upload-artifact@ea4f37a34031cbbd8a1bc5127abda3f3613a81d8 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: opencode-chromium-extension
           if-no-files-found: error
