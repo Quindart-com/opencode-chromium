@@ -121,7 +121,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.5.1` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
+The package is released as `1.5.2` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
 
 ## MCP
 
