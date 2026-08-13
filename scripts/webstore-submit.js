@@ -96,22 +96,33 @@ if (!dryRun) {
   }
 }
 
-const results = await submit(config);
-console.log(JSON.stringify(results, null, 2));
-const chromeResult = results.chrome;
-if (!chromeResult?.success) {
-  const detail = typeof chromeResult?.err === "string"
-    ? chromeResult.err
-    : JSON.stringify(chromeResult?.err ?? "unknown error");
+const results = await submit(config).catch((error) => {
+  const detail = errorMessage(error);
   if (detail.includes("ITEM_NOT_UPDATABLE")) {
     console.log("Chrome Web Store item is under review, so an upload is refused by the store platform right now. This is expected: the update will apply on the next release run once the review concludes.");
     process.exit(0);
   }
   console.error(`Chrome Web Store submission failed: ${detail}`);
   process.exit(1);
+});
+console.log(JSON.stringify(results, null, 2));
+const chromeResult = results.chrome;
+if (!chromeResult?.success) {
+  console.error(`Chrome Web Store submission failed: ${errorMessage(chromeResult?.err)}`);
+  process.exit(1);
 }
 if (dryRun) {
   console.log("Dry run passed: credentials and package are ready for a real submission.");
 } else {
   console.log("Chrome Web Store submission succeeded.");
+}
+
+function errorMessage(error) {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) {
+    const causes = error.cause?.errors ?? error.cause;
+    if (Array.isArray(causes)) return JSON.stringify(causes);
+    return error.message;
+  }
+  return JSON.stringify(error);
 }
