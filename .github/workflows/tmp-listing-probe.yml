@@ -1,0 +1,46 @@
+name: tmp-listing-probe
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Probe listing metadata API
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const id = process.env.CHROME_EXTENSION_ID;
+          const token = await (async () => {
+            const r = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: process.env.CHROME_CLIENT_ID,
+                client_secret: process.env.CHROME_CLIENT_SECRET,
+                refresh_token: process.env.CHROME_REFRESH_TOKEN,
+                grant_type: "refresh_token",
+              }),
+            });
+            return (await r.json()).access_token;
+          })();
+          const headers = {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "x-goog-api-version": "2",
+          };
+          const current = await (await fetch(`https://www.googleapis.com/chromewebstore/v1.1/items/${id}?projection=DRAFT`, { headers })).json();
+          console.log("CURRENT:", JSON.stringify({ status: current.status, name: current.name, category: current.category, description: current.description?.slice?.(0, 80) ?? null, defaultLocale: current.defaultLocale, draftState: current.draftState && { version: current.draftState.version, status: current.draftState.status, errors: current.draftState.errors }, detail: current.detail === undefined }, null, 2));
+          const patch = await fetch(`https://www.googleapis.com/chromewebstore/v1.1/items/${id}`, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ category: "Developer Tools" }),
+          });
+          const patchBody = await patch.text();
+          console.log("PATCH-CATEGORY:", patch.status, patchBody.slice(0, 500));
+          NODE
