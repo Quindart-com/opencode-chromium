@@ -669,6 +669,8 @@ function fileUploadError(error) {
 }
 
 function mouseStep(commandParams, cursor, delayMs = 0) {
+  // Native mouse input is intentionally reserved for drag gestures. Chromium
+  // focuses the renderer when it receives these injected pointer events.
   return {
     method: "Input.dispatchMouseEvent",
     commandParams,
@@ -696,10 +698,6 @@ function interpolatePath(points, maxStep = 16) {
     }
   }
   return output;
-}
-
-async function dispatchMouse(context, tabId, params) {
-  return cdp(context, tabId, "Input.dispatchMouseEvent", params);
 }
 
 async function runtimeEvaluate(context, tabId, expression, options = {}) {
@@ -859,6 +857,55 @@ function interactionHelpersSource() {
         coveredBy = hit;
       }
       throw new Error('Element is not clickable: safe click points are covered by ' + describeElement(coveredBy) + ': ' + describeElement(element));
+    };
+
+    // Keep ordinary activation inside the page. HTMLElement.click() preserves
+    // the historical click behavior without sending a renderer-focusing CDP
+    // mouse event through the browser widget.
+    const backgroundClick = (element, point, options = {}) => {
+      assertPointerInteractable(element);
+      const button = options.button || 'left';
+      const clickCount = Math.max(1, Math.floor(Number(options.clickCount) || 1));
+      const buttonCode = button === 'right' ? 2 : button === 'middle' ? 1 : 0;
+      const eventInit = (detail) => ({
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        detail,
+        screenX: Number(point?.x) || 0,
+        screenY: Number(point?.y) || 0,
+        clientX: Number(point?.x) || 0,
+        clientY: Number(point?.y) || 0,
+        button: buttonCode,
+        buttons: button === 'right' ? 2 : button === 'middle' ? 4 : 1,
+      });
+
+      if (button === 'left') {
+        for (let count = 1; count <= clickCount; count += 1) element.click();
+        if (clickCount > 1) element.dispatchEvent(new MouseEvent('dblclick', eventInit(clickCount)));
+      } else if (button === 'right') {
+        element.dispatchEvent(new MouseEvent('contextmenu', eventInit(1)));
+      } else {
+        element.dispatchEvent(new MouseEvent('auxclick', eventInit(1)));
+      }
+    };
+
+    const backgroundHover = (element, point) => {
+      assertPointerInteractable(element);
+      const eventInit = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: Number(point?.x) || 0,
+        clientY: Number(point?.y) || 0,
+        screenX: Number(point?.x) || 0,
+        screenY: Number(point?.y) || 0,
+        button: 0,
+        buttons: 0,
+      };
+      element.dispatchEvent(new MouseEvent('mouseover', eventInit));
+      element.dispatchEvent(new MouseEvent('mouseenter', { ...eventInit, bubbles: false }));
+      element.dispatchEvent(new MouseEvent('mousemove', eventInit));
     };
 
     const hoverTarget = (element) => {
@@ -1699,6 +1746,24 @@ export function domNodeClickTargetExpression(nodeId) {
   })()`;
 }
 
+function backgroundClickExpression(targetExpression, options = {}) {
+  const clickOptions = {
+    button: options.button ?? "left",
+    clickCount: options.clickCount ?? 1,
+  };
+  return `(() => {
+    ${interactionHelpersSource()}
+    const element = ${targetExpression};
+    const target = clickTarget(element);
+    backgroundClick(element, target, ${JSON.stringify(clickOptions)});
+    return target;
+  })()`;
+}
+
+export function domNodeClickExpression(nodeId) {
+  return backgroundClickExpression(`nodeByIdStrict(${JSON.stringify(nodeId)})`);
+}
+
 export function domNodeHoverTargetExpression(nodeId) {
   return `(() => {
     ${interactionHelpersSource()}
@@ -1717,6 +1782,54 @@ export function selectorClickTargetExpression(selector) {
   return `(() => {
     ${interactionHelpersSource()}
     return clickTarget(querySelectorStrict(${JSON.stringify(selector)}));
+  })()`;
+}
+
+export function selectorClickExpression(selector) {
+  return backgroundClickExpression(`querySelectorStrict(${JSON.stringify(selector)})`);
+}
+
+export function clickAtPointExpression(x, y, options = {}) {
+  finiteNumber(x, "x");
+  finiteNumber(y, "y");
+  const clickOptions = {
+    button: options.button ?? "left",
+    clickCount: options.clickCount ?? 1,
+  };
+  return `(() => {
+    ${interactionHelpersSource()}
+    const point = { x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)} };
+    const element = document.elementFromPoint(point.x, point.y);
+    if (!element) throw new Error('No element at viewport point: ' + point.x + ', ' + point.y);
+    assertPointerInteractable(element);
+    visibleRect(element);
+    backgroundClick(element, point, ${JSON.stringify(clickOptions)});
+    return {
+      x: point.x,
+      y: point.y,
+      tagName: element.localName,
+      text: (element.innerText || element.value || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+    };
+  })()`;
+}
+
+export function hoverAtPointExpression(x, y) {
+  finiteNumber(x, "x");
+  finiteNumber(y, "y");
+  return `(() => {
+    ${interactionHelpersSource()}
+    const point = { x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)} };
+    const element = document.elementFromPoint(point.x, point.y);
+    if (!element) throw new Error('No element at viewport point: ' + point.x + ', ' + point.y);
+    assertPointerInteractable(element);
+    visibleRect(element);
+    backgroundHover(element, point);
+    return {
+      x: point.x,
+      y: point.y,
+      tagName: element.localName,
+      text: (element.innerText || element.value || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+    };
   })()`;
 }
 
@@ -1803,25 +1916,14 @@ async function clickPoint(context, tabId, x, y, button = "left") {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   await activate(context, tabId);
-  const base = { x, y, button, clickCount: 1, pointerType: "mouse" };
-  await inputGesture(context, tabId, [
-    mouseStep({ ...base, type: "mouseMoved", buttons: 0 }, { x, y }),
-    mouseStep({ ...base, type: "mousePressed", buttons: mouseButtons(button) }, { x, y }, 16),
-    mouseStep({ ...base, type: "mouseReleased", buttons: 0 }, { x, y }, 16),
-  ]);
+  return runtimeEvaluate(context, tabId, clickAtPointExpression(x, y, { button }), { userGesture: true });
 }
 
 async function hoverPoint(context, tabId, x, y) {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   await activate(context, tabId);
-  await dispatchMouse(context, tabId, {
-    type: "mouseMoved",
-    x,
-    y,
-    buttons: 0,
-    pointerType: "mouse",
-  });
+  return runtimeEvaluate(context, tabId, hoverAtPointExpression(x, y), { userGesture: false });
 }
 
 async function insertTextAndVerify(context, tabId, before, text, options = {}) {
@@ -1970,22 +2072,16 @@ async function scrollTab(context, tabId, args) {
   await activate(context, tabId);
   const point = await scrollPoint(context, tabId, args.x, args.y);
   const before = await runtimeEvaluate(context, tabId, scrollSnapshotExpression(point.x, point.y), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
-  await dispatchMouse(context, tabId, {
-    type: "mouseWheel",
-    x: point.x,
-    y: point.y,
-    deltaX: args.scrollX,
-    deltaY: args.scrollY,
-    pointerType: "mouse",
-  });
-  await sleep(100);
-  const afterWheel = await runtimeEvaluate(context, tabId, scrollSnapshotExpression(point.x, point.y), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
-  if (didScroll(before, afterWheel) || (args.scrollX === 0 && args.scrollY === 0)) {
-    return { scrolled: didScroll(before, afterWheel), fallbackUsed: false, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: afterWheel };
+  if (args.scrollX === 0 && args.scrollY === 0) {
+    return { scrolled: false, fallbackUsed: false, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: before };
   }
 
-  const fallback = await runtimeEvaluate(context, tabId, scrollFallbackExpression(point.x, point.y, args.scrollX, args.scrollY), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
-  return { scrolled: didScroll(fallback.before, fallback.after), fallbackUsed: true, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: fallback.after };
+  const result = await runtimeEvaluate(context, tabId, scrollFallbackExpression(point.x, point.y, args.scrollX, args.scrollY), {
+    timeoutMs: 3000,
+    runtimeTimeoutMs: 1000,
+    userGesture: false,
+  });
+  return { scrolled: didScroll(result.before, result.after), fallbackUsed: true, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: result.after };
 }
 
 async function waitForPageReady(context, tabId, waitUntil = "domcontentloaded", timeoutMs = 15000) {
@@ -2440,14 +2536,7 @@ browser_screenshot: tool({
           finiteNumber(args.x, "x");
           finiteNumber(args.y, "y");
           await activate(context, args.tabId);
-          const base = { x: args.x, y: args.y, button: args.button, pointerType: "mouse" };
-          await inputGesture(context, args.tabId, [
-            mouseStep({ ...base, type: "mouseMoved", buttons: 0, clickCount: 1 }, { x: args.x, y: args.y }),
-            mouseStep({ ...base, type: "mousePressed", buttons: mouseButtons(args.button), clickCount: 1 }, { x: args.x, y: args.y }, 16),
-            mouseStep({ ...base, type: "mouseReleased", buttons: 0, clickCount: 1 }, { x: args.x, y: args.y }, 16),
-            mouseStep({ ...base, type: "mousePressed", buttons: mouseButtons(args.button), clickCount: 2 }, { x: args.x, y: args.y }, 48),
-            mouseStep({ ...base, type: "mouseReleased", buttons: 0, clickCount: 2 }, { x: args.x, y: args.y }, 16),
-          ]);
+          await runtimeEvaluate(context, args.tabId, clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2 }), { userGesture: true });
           return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y });
         },
       }),
@@ -2739,8 +2828,8 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           nodeId: tool.schema.string(),
         },
         async execute(args, context) {
-          const target = await runtimeEvaluate(context, args.tabId, domNodeClickTargetExpression(args.nodeId));
-          await clickPoint(context, args.tabId, target.x, target.y);
+          await activate(context, args.tabId);
+          const target = await runtimeEvaluate(context, args.tabId, domNodeClickExpression(args.nodeId), { userGesture: true });
           return stringify({ clicked: true, tabId: args.tabId, nodeId: args.nodeId, target });
         },
       }),
@@ -2786,8 +2875,8 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           selector: tool.schema.string(),
         },
         async execute(args, context) {
-          const target = await runtimeEvaluate(context, args.tabId, selectorClickTargetExpression(args.selector));
-          await clickPoint(context, args.tabId, target.x, target.y);
+          await activate(context, args.tabId);
+          const target = await runtimeEvaluate(context, args.tabId, selectorClickExpression(args.selector), { userGesture: true });
           return stringify({ clicked: true, tabId: args.tabId, selector: args.selector, target });
         },
       }),
