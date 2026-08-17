@@ -42,10 +42,7 @@ npm install -g opencode-chromium
 
 ### 2. Load the browser extension
 
-> **Chrome Web Store — coming soon.** The opencode-chromium extension is being
-> published to the Chrome Web Store, so you'll be able to install it in one
-> click instead of loading it manually. Until then, use the unpacked flow below
-> (the extension and native host stay fully local either way).
+> **[Install opencode-chromium from the Chrome Web Store](https://chromewebstore.google.com/detail/opencode-chromium/hdljmmpfnhojebplbbgdgejoobmjcbml?authuser=0&hl=en).** The unpacked flow below remains available for development and local testing.
 
 Open `chrome://extensions`, enable Developer mode, and load the unpacked
 `extension/` folder from the installed package:
@@ -126,7 +123,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.5.2` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
+The package is released as `1.6.1` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
 
 ## MCP
 
