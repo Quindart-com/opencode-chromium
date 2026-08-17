@@ -69,5 +69,6 @@ the extension's store listing will note the change before it takes effect.
 Questions about this policy?
 
 Email: **contact@quindart.com**<br>
+Website: [quindart.com](https://quindart.com)<br>
 Publisher: Quindart — 2/F, Tower 1, Tern Centre, 237 Queen's Road Central,
 Sheung Wan, Hong Kong
