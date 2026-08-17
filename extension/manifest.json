@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "opencode-chromium",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "OpenCode browser automation. Readable extension, native messaging host, and OpenCode plugin for Chromium.",
   "action": {
     "default_icon": {
