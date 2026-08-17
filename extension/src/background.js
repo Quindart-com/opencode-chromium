@@ -5,7 +5,7 @@ const DEBUGGER_VERSION = "1.3";
 const KEEPALIVE_ALARM = "opencode-browser-plugin-keepalive";
 const HEARTBEAT_ALARM = "opencode-browser-plugin-heartbeat";
 const SESSION_GROUP_COLOR = "green";
-const DELIVERABLE_GROUP_TITLE = "Browser Deliverables";
+const DELIVERABLE_GROUP_TITLE = "OpenCode Deliverables";
 const DELIVERABLE_GROUP_COLOR = "blue";
 const MAX_CDP_EVENTS_PER_TAB = 500;
 const MAX_DOWNLOAD_EVENTS = 200;
@@ -534,24 +534,36 @@ async function ensureSessionGroup(id, tabId) {
 async function ensureDeliverableGroup(tabId) {
   if (!chrome.tabs.group || !chrome.tabGroups) return null;
 
+  const tab = await getTab(tabId);
+  const windowId = tab.windowId;
+  let groupId = null;
+
   if (Number.isInteger(deliverableGroupId)) {
-    try {
-      await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId], groupId: deliverableGroupId }, done));
-      return deliverableGroupId;
-    } catch {
-      deliverableGroupId = null;
+    const cachedGroup = await chromeCall((done) => chrome.tabGroups.get(deliverableGroupId, done)).catch(() => null);
+    if (cachedGroup?.title === DELIVERABLE_GROUP_TITLE && cachedGroup.windowId === windowId) {
+      groupId = cachedGroup.id;
     }
   }
 
-  const groupId = await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId] }, done));
+  if (!Number.isInteger(groupId) && typeof chrome.tabGroups.query === "function") {
+    const groups = await chromeCall((done) => chrome.tabGroups.query({ windowId }, done)).catch(() => []);
+    groupId = groups.find((group) => group.title === DELIVERABLE_GROUP_TITLE && group.windowId === windowId)?.id ?? null;
+  }
+
+  if (!Number.isInteger(groupId)) {
+    groupId = await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId] }, done));
+    await chromeCall((done) => {
+      chrome.tabGroups.update(
+        groupId,
+        { title: DELIVERABLE_GROUP_TITLE, color: DELIVERABLE_GROUP_COLOR },
+        done,
+      );
+    }).catch(() => {});
+  } else {
+    await chromeCall((done) => chrome.tabs.group({ tabIds: [tabId], groupId }, done));
+  }
+
   deliverableGroupId = groupId;
-  await chromeCall((done) => {
-    chrome.tabGroups.update(
-      groupId,
-      { title: DELIVERABLE_GROUP_TITLE, color: DELIVERABLE_GROUP_COLOR },
-      done,
-    );
-  }).catch(() => {});
   return groupId;
 }
 

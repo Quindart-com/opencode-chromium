@@ -30,7 +30,7 @@ bun run test:opencode
 bun run pack
 bun run test:tarball
 bun run check:release
-bun run check:tag -- v1.5.2
+bun run check:tag -- v1.6.1
 ```
 
 The CLI owns client configuration. Use `opencode-chromium install|configure|uninstall --client ... --dry-run` before changing a real client configuration.
