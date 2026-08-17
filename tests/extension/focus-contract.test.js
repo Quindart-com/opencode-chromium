@@ -35,3 +35,10 @@ test("background operation activation requests are always passive", () => {
   assert.match(operationsSource, call);
   assert.doesNotMatch(operationsSource, /extensionRequest\(context, "activateTab"[^\n]*foreground: true/);
 });
+
+test("finalized deliverables use the dedicated OpenCode group", () => {
+  assert.match(extensionSource, /const DELIVERABLE_GROUP_TITLE = "OpenCode Deliverables";/);
+  assert.match(extensionSource, /chrome\.tabGroups\.query\(\{ windowId \}, done\)/);
+  assert.match(extensionSource, /group\.title === DELIVERABLE_GROUP_TITLE && group\.windowId === windowId/);
+  assert.match(extensionSource, /if \(status === "deliverable"\) \{\s*await ensureDeliverableGroup\(tabId\)/);
+});
