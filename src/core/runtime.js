@@ -289,6 +289,7 @@ export class AgentBrowserRuntime {
     this.legacyToolsPromise = operationFactory().then((hooks) => hooks.tool);
     this.capabilityRegistry = null;
     this._memoryReader = null;
+    this.memoryChainSequence = 0;
   }
 
   memoryReader() {
@@ -321,12 +322,22 @@ export class AgentBrowserRuntime {
     const tools = await this.legacyToolsPromise;
     const definition = tools[name];
     if (!definition) throw new Error(`Legacy operation is unavailable: ${name}`);
-    const parsed = z.object(definition.args).parse(args ?? {});
+    const { memory_chain_id, memory_step_index, memory_label, ...cleanArgs } = args ?? {};
+    const parsed = z.object(definition.args).parse(cleanArgs ?? {});
     const attempts = READ_LEGACY_TOOLS.has(name) ? 2 : 1;
     let lastError;
+    const memoryStep = memory_chain_id !== undefined
+      ? { chainId: String(memory_chain_id), stepIndex: memory_step_index ?? null, label: memory_label ?? null }
+      : null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        return parseLegacyResult(await definition.execute(parsed, { sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy }));
+        return parseLegacyResult(await definition.execute(parsed, {
+          sessionID: sessionId,
+          agent: "agent-browser-core",
+          urlPolicy: this.urlPolicy,
+          filePolicy: this.filePolicy,
+          ...(memoryStep ? { memoryStep } : {}),
+        }));
       } catch (error) {
         lastError = error;
         if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 40));
@@ -499,11 +510,12 @@ export class AgentBrowserRuntime {
     return target;
   }
 
-  async executeStep(step, tabId, prior, session) {
+  async executeStep(step, tabId, prior, session, chainId = null, stepIndex = null) {
     const timeoutMs = clamp(step.timeoutMs, 15000, 250, 60000);
+    const mem = (params) => this.memoryStepParams(step, params, chainId, stepIndex);
     if (step.action === "find") {
       const query = step.target?.query ?? step.value ?? "";
-      return this.invoke("browser_page_search", { tabId, query, maxResults: 20, detail: "lean", mode: "snowflake", timeoutMs }, session.sessionId);
+      return this.invoke("browser_page_search", mem({ tabId, query, maxResults: 20, detail: "lean", mode: "snowflake", timeoutMs }), session.sessionId);
     }
     if (step.action === "capability") {
       const registry = await this.capabilities();
@@ -524,39 +536,39 @@ export class AgentBrowserRuntime {
     let target = await this.resolveTarget(step, tabId, prior, session.sessionId);
     const dispatch = async () => {
       switch (step.action) {
-        case "navigate": return this.invoke("browser_navigate", { tabId, url: step.url, waitUntil: step.waitUntil ?? "domcontentloaded", timeoutMs }, session.sessionId);
-        case "reload": return this.invoke("browser_reload", { tabId, bypassCache: step.bypassCache ?? false }, session.sessionId);
-        case "back": return this.invoke("browser_back", { tabId }, session.sessionId);
-        case "forward": return this.invoke("browser_forward", { tabId }, session.sessionId);
-        case "click": return this.clickTarget("browser_click", target, tabId, step, session.sessionId);
-        case "doubleClick": return this.clickTarget("browser_double_click", target, tabId, step, session.sessionId);
-        case "hover": return this.hoverTarget(target, tabId, session.sessionId);
-        case "handleDialog": return this.invoke("browser_handle_dialog", { tabId, value: step.value, promptText: step.promptText }, session.sessionId);
-        case "focus": return this.editTarget(target, tabId, "focus", "", session.sessionId);
+        case "navigate": return this.invoke("browser_navigate", mem({ tabId, url: step.url, waitUntil: step.waitUntil ?? "domcontentloaded", timeoutMs }), session.sessionId);
+        case "reload": return this.invoke("browser_reload", mem({ tabId, bypassCache: step.bypassCache ?? false }), session.sessionId);
+        case "back": return this.invoke("browser_back", mem({ tabId }), session.sessionId);
+        case "forward": return this.invoke("browser_forward", mem({ tabId }), session.sessionId);
+        case "click": return this.clickTarget("browser_click", target, tabId, step, session.sessionId, chainId, stepIndex);
+        case "doubleClick": return this.clickTarget("browser_double_click", target, tabId, step, session.sessionId, chainId, stepIndex);
+        case "hover": return this.hoverTarget(target, tabId, session.sessionId, chainId, stepIndex);
+        case "handleDialog": return this.invoke("browser_handle_dialog", mem({ tabId, value: step.value, promptText: step.promptText }), session.sessionId);
+        case "focus": return this.editTarget(target, tabId, "focus", "", session.sessionId, chainId, stepIndex);
         case "fill":
         case "replaceText":
-        case "select": return this.editTarget(target, tabId, "replace", step.value, session.sessionId);
+        case "select": return this.editTarget(target, tabId, "replace", step.value, session.sessionId, chainId, stepIndex);
         case "fillForm": {
           const fields = [];
           for (const [selector, value] of Object.entries(step.fields)) {
-            fields.push(await this.invoke("browser_locator_fill", { tabId, selector, value, mode: "replace" }, session.sessionId));
+            fields.push(await this.invoke("browser_locator_fill", mem({ tabId, selector, value, mode: "replace" }), session.sessionId));
           }
           return { filled: fields.length, fields };
         }
         case "type": {
-          if (target.nodeId || target.selector) return this.editTarget(target, tabId, "append", step.value, session.sessionId);
-          return this.invoke("browser_type", { tabId, text: step.value }, session.sessionId);
+          if (target.nodeId || target.selector) return this.editTarget(target, tabId, "append", step.value, session.sessionId, chainId, stepIndex);
+          return this.invoke("browser_type", mem({ tabId, text: step.value }), session.sessionId);
         }
-        case "press": return this.invoke("browser_keypress", { tabId, key: step.key }, session.sessionId);
-        case "scroll": return this.invoke("browser_scroll", { tabId, x: target.x, y: target.y, scrollX: step.scrollX ?? 0, scrollY: step.scrollY ?? 0 }, session.sessionId);
-        case "drag": return this.invoke("browser_drag", { tabId, path: step.path, button: step.button ?? "left" }, session.sessionId);
-        case "assert": return this.assertTarget(target, tabId, step, session.sessionId);
-        case "upload": return this.invoke("browser_set_file_input", { tabId, selector: target.selector ?? "input[type=file]", files: step.files }, session.sessionId);
-        case "clipboardRead": return this.invoke("browser_clipboard_read_text", { tabId }, session.sessionId);
-        case "clipboardWrite": return this.invoke("browser_clipboard_write_text", { tabId, text: step.value }, session.sessionId);
-        case "screenshot": return this.screenshot(tabId, step, session.sessionId);
+        case "press": return this.invoke("browser_keypress", mem({ tabId, key: step.key }), session.sessionId);
+        case "scroll": return this.invoke("browser_scroll", mem({ tabId, x: target.x, y: target.y, scrollX: step.scrollX ?? 0, scrollY: step.scrollY ?? 0 }), session.sessionId);
+        case "drag": return this.invoke("browser_drag", mem({ tabId, path: step.path, button: step.button ?? "left" }), session.sessionId);
+        case "assert": return this.assertTarget(target, tabId, step, session.sessionId, chainId, stepIndex);
+        case "upload": return this.invoke("browser_set_file_input", mem({ tabId, selector: target.selector ?? "input[type=file]", files: step.files }), session.sessionId);
+        case "clipboardRead": return this.invoke("browser_clipboard_read_text", mem({ tabId }), session.sessionId);
+        case "clipboardWrite": return this.invoke("browser_clipboard_write_text", mem({ tabId, text: step.value }), session.sessionId);
+        case "screenshot": return this.screenshot(tabId, step, session.sessionId, chainId, stepIndex);
         case "close": {
-          const result = await this.invoke("browser_close_tab", { tabId }, session.sessionId);
+          const result = await this.invoke("browser_close_tab", mem({ tabId }), session.sessionId);
           session.activeTabId = null;
           return result;
         }
@@ -572,50 +584,69 @@ export class AgentBrowserRuntime {
     }
   }
 
-  async editTarget(target, tabId, mode, value, sessionId) {
-    if (target.nodeId) return this.invoke("browser_dom_type", { tabId, nodeId: target.nodeId, text: value, mode }, sessionId);
-    if (target.selector) return this.invoke("browser_locator_fill", { tabId, selector: target.selector, value, mode }, sessionId);
+  memoryStepParams(step, params, chainId = null, stepIndex = null) {
+    const target = step?.target ?? {};
+    let label = target?.query ?? target?.selector ?? target?.label ?? null;
+    if (!label && ["click", "doubleClick", "hover", "press"].includes(step?.action) && typeof step?.value === "string") {
+      label = step.value;
+    }
+    if (typeof label === "string") label = label.replace(/\s+/g, " ").trim().slice(0, 64);
+    return {
+      ...params,
+      ...(chainId ? { memory_chain_id: chainId } : {}),
+      ...(stepIndex != null ? { memory_step_index: stepIndex } : {}),
+      ...(label ? { memory_label: label } : {}),
+    };
+  }
+
+  async editTarget(target, tabId, mode, value, sessionId, chainId = null, stepIndex = null) {
+    const mem = (params) => this.memoryStepParams({ target }, params, chainId, stepIndex);
+    if (target.nodeId) return this.invoke("browser_dom_type", mem({ tabId, nodeId: target.nodeId, text: value, mode }), sessionId);
+    if (target.selector) return this.invoke("browser_locator_fill", mem({ tabId, selector: target.selector, value, mode }), sessionId);
     throw new Error("Editable target needs nodeId, selector, or query");
   }
 
-  async clickTarget(toolName, target, tabId, step, sessionId) {
+  async clickTarget(toolName, target, tabId, step, sessionId, chainId = null, stepIndex = null) {
+    const mem = (params) => this.memoryStepParams(step, params, chainId, stepIndex);
     if (target.nodeId) {
       if (toolName === "browser_double_click") throw new Error("doubleClick requires selector or coordinates");
-      return this.invoke("browser_dom_click", { tabId, nodeId: target.nodeId }, sessionId);
+      return this.invoke("browser_dom_click", mem({ tabId, nodeId: target.nodeId }), sessionId);
     }
     if (target.selector) {
       if (toolName === "browser_double_click") throw new Error("doubleClick by selector is not supported; use coordinates");
-      return this.invoke("browser_locator_click", { tabId, selector: target.selector }, sessionId);
+      return this.invoke("browser_locator_click", mem({ tabId, selector: target.selector }), sessionId);
     }
     if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
-      return this.invoke(toolName, { tabId, x: target.x, y: target.y, button: step.button ?? "left" }, sessionId);
+      return this.invoke(toolName, mem({ tabId, x: target.x, y: target.y, button: step.button ?? "left" }), sessionId);
     }
     throw new Error(`${step.action} target needs nodeId, selector, query, or coordinates`);
   }
 
-  async hoverTarget(target, tabId, sessionId) {
-    if (target.nodeId) return this.invoke("browser_hover", { tabId, nodeId: target.nodeId }, sessionId);
-    if (target.selector) return this.invoke("browser_hover", { tabId, selector: target.selector }, sessionId);
+  async hoverTarget(target, tabId, sessionId, chainId = null, stepIndex = null) {
+    const mem = (params) => this.memoryStepParams({ target }, params, chainId, stepIndex);
+    if (target.nodeId) return this.invoke("browser_hover", mem({ tabId, nodeId: target.nodeId }), sessionId);
+    if (target.selector) return this.invoke("browser_hover", mem({ tabId, selector: target.selector }), sessionId);
     if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
-      return this.invoke("browser_hover", { tabId, x: target.x, y: target.y }, sessionId);
+      return this.invoke("browser_hover", mem({ tabId, x: target.x, y: target.y }), sessionId);
     }
     throw new Error("hover target needs nodeId, selector, query, or coordinates");
   }
 
-  async assertTarget(target, tabId, step, sessionId) {
+  async assertTarget(target, tabId, step, sessionId, chainId = null, stepIndex = null) {
+    const mem = (params) => this.memoryStepParams(step, params, chainId, stepIndex);
     const condition = step.condition ?? "exists";
     if (!target.selector && target.nodeId && condition === "exists") {
-      await this.invoke("browser_page_inspect", { tabId, nodeId: target.nodeId }, sessionId);
+      await this.invoke("browser_page_inspect", mem({ tabId, nodeId: target.nodeId }), sessionId);
       return { passed: true, condition, nodeId: target.nodeId };
     }
     if (!target.selector) throw new Error("assert requires target.selector, or nodeId for an exists check");
     if (condition === "exists" || condition === "not-exists") {
-      const { count } = await this.invoke("browser_locator_count", { tabId, selector: target.selector }, sessionId);
+      const { count } = await this.invoke("browser_locator_count", mem({ tabId, selector: target.selector }), sessionId);
       const passed = condition === "exists" ? count > 0 : count === 0;
       if (!passed) throw new Error(`Assertion failed: ${target.selector} ${condition}`);
       return { passed, condition, count };
     }
-    const { text } = await this.invoke("browser_locator_text", { tabId, selector: target.selector }, sessionId);
+    const { text } = await this.invoke("browser_locator_text", mem({ tabId, selector: target.selector }), sessionId);
     const expected = step.value ?? "";
     const passed = condition === "equals" ? text === expected : text.includes(expected);
     if (!passed) throw new Error(`Assertion failed: text ${condition} ${JSON.stringify(expected)}`);
@@ -771,14 +802,14 @@ export class AgentBrowserRuntime {
     throw new Error(`Unsupported performance action: ${diagnostic.action}`);
   }
 
-  async screenshot(tabId, options, sessionId) {
-    const shot = await this.invoke("browser_screenshot", {
+  async screenshot(tabId, options, sessionId, chainId = null, stepIndex = null) {
+    const shot = await this.invoke("browser_screenshot", this.memoryStepParams({ target: {} }, {
       tabId,
       fullPage: options.fullPage ?? false,
       format: options.format ?? "png",
       ...(options.quality !== undefined ? { quality: options.quality } : {}),
       timeoutMs: options.timeoutMs ?? 30000,
-    }, sessionId);
+    }, chainId, stepIndex), sessionId);
     if (options.delivery === "inline") return shot;
     const artifact = this.artifacts.create({ sessionId, mimeType: shot.mimeType, data: Buffer.from(shot.base64, "base64"), label: "screenshot" });
     return { screenshot: artifact };
@@ -838,6 +869,7 @@ export class AgentBrowserRuntime {
       const prior = new Map();
       const results = [];
       let failed = false;
+      const chainId = `${session.sessionId}:${this.memoryChainSequence++}`;
       try {
         for (const [index, step] of request.steps.entries()) {
           let value;
@@ -845,7 +877,7 @@ export class AgentBrowserRuntime {
           const attempts = READ_ACTIONS.has(step.action) ? (step.retry ?? 0) + 1 : 1;
           for (let attempt = 1; attempt <= attempts; attempt += 1) {
             try {
-              value = await this.executeStep(step, tabId, prior, session);
+              value = await this.executeStep(step, tabId, prior, session, chainId, index);
               lastError = null;
               break;
             } catch (error) {
