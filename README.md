@@ -23,15 +23,19 @@
 ## Quick start (npm)
 
 Install the published package once, then connect any supported client. The
-package ships the CLI (`opencode-chromium`), the MCP server
+package ships the CLI (`opencode-chromium`), the MCP server bin
 (`opencode-chromium-mcp`), the browser extension, and the native host
-installer.
+installer:
+
+```powershell
+npx -y opencode-chromium-mcp
+```
 
 | Client                  | Surface                    | Setup                                                                 |
 | ----------------------- | -------------------------- | --------------------------------------------------------------------- |
 | OpenCode V2             | Native plugin              | `"plugin": ["opencode-chromium"]` in `opencode.json`                  |
 | Codex                   | MCP server (stdio)         | `codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp` |
-| Any MCP client          | MCP server (stdio)         | `npx -y opencode-chromium-mcp` as a stdio server                      |
+| Any MCP client          | MCP server (stdio)         | `npx -y opencode-chromium-mcp` as a stdio server |
 | Direct JavaScript       | SDK (`opencode-chromium/sdk`) | `import { createAgentBrowserRuntime } from "opencode-chromium/sdk"` |
 
 ### 1. Install the package
