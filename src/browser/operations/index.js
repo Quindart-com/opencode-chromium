@@ -3219,15 +3219,15 @@ browser_console_logs: tool({
         },
       }),
 
-      browser_finalize: tool({
-        description: "Close agent-created tabs unless kept; release unkept user-claimed tabs without closing them.",
+browser_finalize: tool({
+        description: "Keep user-facing tabs as blue OpenCode Deliverables; close agent-created tabs unless kept; release unkept user-claimed tabs without closing them.",
         args: {
           keep: tool.schema.array(
             tool.schema.union([
               tool.schema.number().int().positive(),
               tool.schema.object({
                 tabId: tool.schema.number().int().positive(),
-                status: tool.schema.enum(["handoff", "deliverable"]).default("handoff"),
+                status: tool.schema.enum(["handoff", "deliverable"]).default("deliverable"),
                 profileId: tool.schema.string().optional(),
               }),
             ]),
@@ -3235,7 +3235,7 @@ browser_console_logs: tool({
         },
         async execute(args, context) {
           const profileIds = await targetProfileIdsForSession(context);
-          const keep = args.keep.map((item) => (typeof item === "number" ? { tabId: item, status: "handoff" } : item));
+          const keep = args.keep.map((item) => (typeof item === "number" ? { tabId: item, status: "deliverable" } : item));
           if (profileIds.length > 1 && keep.some((item) => !item.profileId)) {
             throw new Error("browser_finalize keep items must include profileId when multiple browser profiles were used");
           }
