@@ -2,6 +2,14 @@ name: Secure npm release
 
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "store/**"
+      - "assets/**"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "*.md"
   push:
     branches:
       - master
