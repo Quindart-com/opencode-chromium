@@ -366,7 +366,7 @@ function currentCursorStates(tabId) {
 
 function normalizeKeepItem(item) {
   const tabId = Number.isInteger(item) ? item : item?.tabId ?? item?.tab_id ?? item?.tab?.id;
-  const status = Number.isInteger(item) ? "deliverable" : item?.status ?? "deliverable";
+  const status = Number.isInteger(item) ? "handoff" : item?.status ?? "handoff";
   if (!Number.isInteger(tabId)) throw new Error("Expected keep item tabId");
   if (status !== "handoff" && status !== "deliverable") throw new Error(`Unsupported keep status: ${status}`);
   return { tabId, status };
@@ -1242,8 +1242,8 @@ rpc.register("finalizeTabs", async (params) => {
     if (status) {
       if (status === "deliverable") {
         await ensureDeliverableGroup(tabId).catch(() => {});
+        await untrackTab(id, tabId);
       }
-      await untrackTab(id, tabId);
       continue;
     }
 
@@ -1253,7 +1253,7 @@ rpc.register("finalizeTabs", async (params) => {
       continue;
     }
 
-    await chromeCall((done) => chrome.tabs.remove(tabId, done));
+    await chromeCall((done) => chrome.tabs.remove(tabId, done)).catch(() => {});
     await untrackTab(id, tabId);
   }
   await persistSessions().catch(() => {});
