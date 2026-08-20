@@ -1,10 +1,11 @@
 import { tool as openCodeTool } from "@opencode-ai/plugin";
 import { define } from "@opencode-ai/plugin/v2/promise";
 import { createAgentBrowserRuntime } from "../../core/runtime.js";
-import { createCoreRegistry } from "../../core/registry.js";
+import { createCoreRegistry, createMemoryRegistry } from "../../core/registry.js";
 import { dispatchBrowserTool, jsonSchemaFor } from "../../core/schema-adapters.js";
 import { contractMetadata, PLUGIN_NAME, PLUGIN_VERSION } from "../../core/versions.js";
 import { createLogger } from "../../core/logging.js";
+import { memoryEnabledForServer } from "../../memory/index.js";
 
 function concise(result) {
   const text = JSON.stringify(result);
@@ -64,7 +65,7 @@ function legacyTool(name, definition, runtime) {
 
 function createLegacyOpenCodeHooks(options = {}) {
   const runtime = options.runtime ?? createAgentBrowserRuntime(options);
-  const registry = createCoreRegistry(runtime);
+  const registry = { ...createCoreRegistry(runtime), ...(options.memory ?? memoryEnabledForServer() ? createMemoryRegistry(runtime) : {}) };
   const tools = Object.fromEntries(Object.entries(registry).map(([name, definition]) => [name, legacyTool(name, definition, runtime)]));
   let disposed = false;
   return {
@@ -91,7 +92,7 @@ async function registerWithContext(ctx, name, tool) {
 
 export async function createOpenCodeSetup(ctx = {}, options = {}) {
   const runtime = options.runtime ?? ctx.runtime ?? createAgentBrowserRuntime(options);
-  const registry = createCoreRegistry(runtime);
+  const registry = { ...createCoreRegistry(runtime), ...(options.memory ?? memoryEnabledForServer() ? createMemoryRegistry(runtime) : {}) };
   const tools = Object.fromEntries(Object.entries(registry).map(([name, definition]) => [name, nativeTool(name, definition, runtime)]));
   const logger = options.logger ?? ctx.logger ?? createLogger({ name: PLUGIN_NAME, sink: process.stderr });
   for (const [name, tool] of Object.entries(tools)) {

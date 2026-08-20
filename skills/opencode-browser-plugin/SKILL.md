@@ -15,6 +15,8 @@ Choose the browser surface deliberately. An explicit user request for a named pr
 
 When browser setup succeeds but discovery or selection fails, read `docs/troubleshooting.md` — topic `#discovery` — before retrying. When extension or native-host installation or communication fails, read `#installation` before taking another recovery action.
 
+When the user asks to continue, resume, or recall what a prior session did — or when the target describes a workflow you or a previous run already attempted — consult local action memory instead of re-exploring from scratch: call `memory_status` first, then one bounded `memory_search "<task intent>"` (and `memory_query` only for provenance) before broader page or tab discovery. Treat results as evidence, not a transcript: reuse confirmed routes, treat returned negative lessons as what failed, verify current page state through the least intrusive observation, and ask the user when intent is missing. Never consult memory for unrelated tasks, and continue normally when memory is absent, disabled, unhealthy, or search returns nothing.
+
 For deeper network inspection of one controlled tab, request the lazy network pack and then run `network.inspect`:
 
 ```json

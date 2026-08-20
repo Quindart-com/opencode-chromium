@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Action Memory</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Action Memory</h1>
+    <span id="health-pill" class="pill pill-neutral">checking…</span>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button id="tab-maintenance" class="tab active" role="tab" aria-selected="true">Maintenance</button>
+    <button id="tab-dashboard" class="tab" role="tab" aria-selected="false">Dashboard</button>
+  </nav>
+
+  <main>
+    <section id="panel-maintenance" class="panel active">
+      <div class="card">
+        <h2>Capture</h2>
+        <div class="row">
+          <button id="memory-enable" class="btn btn-primary">Enable</button>
+          <button id="memory-pause" class="btn">Pause</button>
+          <button id="memory-resume" class="btn">Resume</button>
+          <button id="memory-disable" class="btn btn-danger">Disable</button>
+        </div>
+        <p id="capture-note" class="note"></p>
+      </div>
+
+      <div class="card">
+        <h2>Storage quota</h2>
+        <div class="row">
+          <label for="quota-value">Database size limit</label>
+          <span id="quota-value" class="value"></span>
+        </div>
+        <input id="quota-slider" type="range" min="100" max="10240" step="100" value="100" />
+        <div class="row">
+          <label class="checkbox"><input id="power-user" type="checkbox" /> Power user mode</label>
+          <span id="power-note" class="note">Power user lets you raise the database limit. The database can get large — keep an eye on disk usage.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Negative lessons</h2>
+        <div class="row">
+          <label for="purge-days">Purge negative lessons unused for</label>
+          <input id="purge-days" type="number" min="1" max="365" value="7" /> days
+          <button id="prune-now" class="btn">Prune now</button>
+        </div>
+        <p class="note">Failed actions that weren't matched again for this long are cleaned up. Longer negative chains are kept longer because they carry more learning. Confirmed successful actions are never auto-purged.</p>
+      </div>
+
+      <div class="card">
+        <h2>Share</h2>
+        <div class="row">
+          <button id="export-json" class="btn">Export JSON</button>
+          <label class="btn file-btn">Import JSON<input id="import-json" type="file" accept="application/json" hidden /></label>
+        </div>
+        <p id="share-note" class="note"></p>
+      </div>
+    </section>
+
+    <section id="panel-dashboard" class="panel">
+      <div class="card hero">
+        <div class="hero-row">
+          <div class="hero-stat">
+            <span id="success-badge" class="badge">—</span>
+            <span class="badge-label">success rate</span>
+          </div>
+          <div class="hero-copy">
+            <p id="hero-line"></p>
+            <p class="note">Every confirmed action reinforces what works. Your memory gets stronger with every session.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Last 14 days</h2>
+        <div id="chart" class="chart"></div>
+        <p id="chart-empty" class="note">No activity recorded yet — memory grows as you use it.</p>
+      </div>
+
+      <div class="card stats">
+        <div class="stat"><span id="stat-signatures">0</span><span class="stat-label">actions remembered</span></div>
+        <div class="stat"><span id="stat-chains">0</span><span class="stat-label">chains</span></div>
+        <div class="stat"><span id="stat-negatives">0</span><span class="stat-label">negative lessons</span></div>
+        <div class="stat"><span id="stat-hits">0</span><span class="stat-label">memory hits</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Storage</h2>
+        <div class="quota-track"><div id="quota-fill" class="quota-fill"></div></div>
+        <p id="quota-usage" class="note"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>
