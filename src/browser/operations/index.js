@@ -3219,8 +3219,8 @@ browser_console_logs: tool({
         },
       }),
 
-      browser_finalize: tool({
-        description: "Close agent-created tabs unless kept; release unkept user-claimed tabs without closing them.",
+browser_finalize: tool({
+        description: "End the session: keep tabs as \"deliverable\" (user-facing output, moved to the blue OpenCode Deliverables group) or \"handoff\" (work continues later, stays in the session's green group); default is handoff. Close agent-created tabs unless kept; release unkept user-claimed tabs without closing them.",
         args: {
           keep: tool.schema.array(
             tool.schema.union([
