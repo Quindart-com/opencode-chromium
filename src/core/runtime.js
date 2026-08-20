@@ -4,6 +4,8 @@ import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
 import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
+import { MemoryStore, EmbedQueue } from "../memory/index.js";
+import { embedMemoryTexts } from "../../native-host/src/semantic-search.js";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
 import { contractMetadata } from "./versions.js";
@@ -286,6 +288,24 @@ export class AgentBrowserRuntime {
     this.profileCache = { expiresAt: 0, profiles: [] };
     this.legacyToolsPromise = operationFactory().then((hooks) => hooks.tool);
     this.capabilityRegistry = null;
+    this._memoryReader = null;
+  }
+
+  memoryReader() {
+    if (!this._memoryReader) {
+      const queue = new EmbedQueue({
+        embed: async (texts) => embedMemoryTexts(texts),
+        onResults: (rows, model, dims) => {
+          this._memoryReader?.applyEmbeddings(rows, model, dims);
+        },
+      });
+      queue.setQueryEmbedder(async (query) => {
+        const result = await embedMemoryTexts([query]);
+        return result?.vectors?.[0] ?? null;
+      });
+      this._memoryReader = new MemoryStore({ embedQueue: queue });
+    }
+    return this._memoryReader;
   }
 
   getSession(sessionId) {
@@ -984,11 +1004,54 @@ export class AgentBrowserRuntime {
     }
   }
 
+  async memoryStatus(args = {}, context = {}) {
+    try {
+      const store = this.memoryReader();
+      return { ...contractMetadata(), ok: true, status: "ready", result: store.status() };
+    } catch (error) {
+      return this.failure(null, error);
+    }
+  }
+
+  async memoryQuery(args = {}, context = {}) {
+    try {
+      const store = this.memoryReader();
+      const result = store.query({
+        limit: args.limit,
+        capability: args.capability,
+        hostname: args.hostname,
+        sessionId: args.session_id,
+        sinceId: args.since_id,
+        untilId: args.until_id,
+      });
+      return { ...contractMetadata(), ok: true, status: "ready", result };
+    } catch (error) {
+      return this.failure(null, error);
+    }
+  }
+
+  async memorySearch(args = {}, context = {}) {
+    try {
+      const store = this.memoryReader();
+      const result = await store.search({
+        query: args.query,
+        limit: args.limit,
+        kind: args.kind ?? "all",
+        hostname: args.hostname,
+      });
+      return { ...contractMetadata(), ok: true, status: "ready", result };
+    } catch (error) {
+      return this.failure(null, error);
+    }
+  }
+
   close() {
     this.artifacts.close();
     this.sessions.clear();
     this.approvals.clear();
     this.capabilityRegistry = null;
+    this._memoryReader?.close();
+    this._memoryReader = null;
     closeBrowserClients();
   }
 }

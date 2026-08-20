@@ -13,6 +13,10 @@
     "default_popup": "popup.html",
     "default_title": "opencode-chromium"
   },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "background": {
     "service_worker": "src/background.js",
     "type": "module"

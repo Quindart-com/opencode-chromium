@@ -5,6 +5,7 @@ import { main as mcpMain } from "../adapters/mcp/server.js";
 import { configureClient } from "./configure.js";
 import { runDoctor } from "./doctor.js";
 import { installClient } from "./install.js";
+import { runMemoryCommand } from "./memory.js";
 import { uninstallClient } from "./uninstall.js";
 import { verify } from "./verify.js";
 import { packageInfo } from "./version.js";
@@ -21,6 +22,7 @@ function has(argv, flag) {
 export async function main(argv = process.argv.slice(2)) {
   const [command = "doctor", ...rest] = argv;
   if (command === "mcp") return mcpMain(rest);
+  if (command === "memory" || command === "history") return runMemoryCommand(rest);
   if (command === "version" || command === "--version" || command === "-v") {
     console.log(JSON.stringify(packageInfo(), null, 2));
     return;

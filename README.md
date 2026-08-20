@@ -41,6 +41,7 @@ follow announcements on
 - Persistent session emulation (viewport, network, CPU, geolocation, color scheme, user agent, headers, init scripts) with automatic reset on finalize.
 - Network request drill-down by requestId with artifact-backed body spillover, and source-mapped console stack traces.
 - Performance diagnostics: `browser_observe` mode `diagnostic` records CDP traces and computes LCP, CLS, long tasks, TBT, and more in the native host; raw traces are artifact-first and CrUX/field data stays off.
+- Action Memory (opt-in): a local, vector-searchable record of what worked and what failed, so later sessions reuse confirmed routes — searched by meaning, self-correcting via chain lineage, with maintenance controls and a dashboard in the extension. See [docs/action-memory.md](docs/action-memory.md).
 - Snowflake-default page search with explicit lexical/auto alternatives and Qwen deep retrieval without loading models in the extension.
 - Profile-aware sessions, tab ownership, stale-target recovery, bounded read retries, conditional settling, approvals, and artifact resources.
 - MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
