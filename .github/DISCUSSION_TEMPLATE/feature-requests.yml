@@ -1,0 +1,28 @@
+title: "💡 Proposal: <one-line summary>"
+body: |
+  ## Problem
+
+  _What can't you do today, or what breaks your workflow today? Concrete
+  scenarios beat feature names._
+
+  ## Proposed behavior
+
+  _How should the runtime, extension, native host, or skills behave after this
+  change? Who is it for, and when do they use it? Which client (OpenCode V2,
+  MCP, Codex, SDK) does it affect, if any is known?_
+
+  ## Alternatives considered
+
+  _What have you tried or considered already — workarounds, other tools,
+  connector code — and why are they not enough?_
+
+  ## Impact & risks
+
+  _Tool-set or schema changes, new permissions, privacy impact, breaking
+  changes: call them out so the maintainers can triage quickly._
+
+  ---
+
+  🌱 **Vote with 👍/❤️ reactions.** The maintainers triage voted proposals into
+  the roadmap and tag them with their status. Proposals that link a pull
+  request are prioritized.
