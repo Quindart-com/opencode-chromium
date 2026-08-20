@@ -66,7 +66,7 @@ test("consultation policy instructs status-then-search before re-exploration", a
 
 test("extension advertises the options page, popup entry, and host call channel", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8"));
-  assert.equal(manifest.options_ui.page, "options.html");
+  assert.equal(manifest.options_ui.page, "src/options.html");
   assert.equal(manifest.options_ui.open_in_tab, true);
   const background = fs.readFileSync(path.join(root, "extension", "src", "background.js"), "utf8");
   assert.match(background, /"MEMORY_CALL"/);
