@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 const sessionFields = {
-  sessionId: z.string().min(1).max(160).optional(),
-  profile: z.string().min(1).max(160).optional(),
+  sessionId: z.string().min(1).max(160).nullable().optional(),
+  profile: z.string().min(1).max(160).nullable().optional(),
 };
 
 const networkPresetSchema = z.enum(["offline", "slow-2g", "slow-3g", "fast-3g", "slow-4g", "online"]);
@@ -208,7 +208,7 @@ export function createMemoryRegistry(runtime) {
   return {
     memory_status: {
       description: "Report local action-memory availability: capture state, model, quota, purge settings, and success-rate statistics. Read-only; reveals no memory content.",
-      inputSchema: z.object({}),
+      inputSchema: z.object({ ...sessionFields }),
       outputSchema: resultSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
       execute: (args, context) => runtime.memoryStatus(args, context),
@@ -216,6 +216,7 @@ export function createMemoryRegistry(runtime) {
     memory_query: {
       description: "Return bounded metadata-only signatures recorded for prior browser sessions (capability, hostname, bounded label, confirmed and failed counts) so a continued run can pick up where an earlier one left off. Never includes URLs, paths, typed text, arguments, results, or window titles. Results may enter model context.",
       inputSchema: z.object({
+        ...sessionFields,
         limit: z.number().int().min(1).max(200).optional(),
         capability: z.string().min(1).max(128).optional(),
         hostname: z.string().min(1).max(255).optional(),
@@ -230,6 +231,7 @@ export function createMemoryRegistry(runtime) {
     memory_search: {
       description: "Semantically search local action memory: embed the query and return the top-k matching actions or ready-to-run chains, ranked by similarity times confidence. Confirmed actions rank above repeated failures; failures return with a failed-count badge as negative lessons. Query text is never stored.",
       inputSchema: z.object({
+        ...sessionFields,
         query: z.string().min(1).max(512),
         limit: z.number().int().min(1).max(20).optional(),
         kind: z.enum(["all", "action", "chain"]).optional(),

@@ -365,6 +365,22 @@ export class MemoryStore {
     return await this.embedQueue.embedQuery(this, { query, bound, candidates, vectors, modelId: this.meta.model_id ?? null, kind, hostname });
   }
 
+  async reindex({ embed = null, batchSize = 16 } = {}) {
+    let embedded = 0;
+    const missing = this.db.prepare("SELECT fingerprint, signature FROM signatures WHERE embedding IS NULL ORDER BY id DESC LIMIT 2000").all();
+    for (let start = 0; start < missing.length; start += batchSize) {
+      const batch = missing.slice(start, start + batchSize);
+      if (!embed) break;
+      const result = await embed(batch.map((row) => row.signature)).catch(() => null);
+      if (!result?.vectors?.length) break;
+      this.applyEmbeddings(batch.map((row, index) => ({ fingerprint: row.fingerprint, values: result.vectors[index] })), result.model, result.dims);
+      embedded += batch.length;
+    }
+    const heads = this.db.prepare("SELECT id FROM chains WHERE replaced_by IS NULL").all();
+    for (const chain of heads) composeChainEmbeddingFor(this, chain.id);
+    return { embedded, embedded_total: embedded, heads: heads.length, model: this.meta.model_id ?? null, dims: Number(this.meta.dims ?? 0) || null };
+  }
+
   recordHit() {
     this.writeMeta("memory_hits", Number(this.meta.memory_hits ?? 0) + 1);
   }
