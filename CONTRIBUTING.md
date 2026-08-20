@@ -2,6 +2,19 @@
 
 Contributions are welcome.
 
+## Feature proposals
+
+The roadmap is user-driven. Propose ideas as a
+[feature request discussion](https://github.com/Quindart-com/opencode-chromium/discussions/categories/feature-requests)
+rather than a GitHub issue:
+
+- Describe the problem and the workflow it should unlock, not just a solution
+  name.
+- Others vote with reactions (👍/❤️); the maintainers triage voted proposals
+  into roadmap items and tag them with status.
+- Substantive design work (schemas, permission changes, security impact)
+  should still come as a pull request that links the discussion.
+
 ## Development Setup
 
 ```bash
