@@ -7,6 +7,9 @@ codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp
 codex mcp list
 ```
 
+`opencode-chromium-mcp` is published on npm as a standalone launcher for the
+MCP server shipped inside `opencode-chromium`, so `npx` resolves it directly.
+
 From a local checkout, register `dist/adapters/mcp/server.js` with Bun instead:
 
 ```powershell
