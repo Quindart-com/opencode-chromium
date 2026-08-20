@@ -4,6 +4,31 @@
 
 <p align="center"><strong>Provider-neutral Chromium automation for MCP clients, OpenCode V2, Codex, and direct JavaScript agents.</strong></p>
 
+<p align="center">
+  <a href="https://github.com/Quindart-com/opencode-chromium/stargazers"><img src="https://img.shields.io/github/stars/Quindart-com/opencode-chromium?style=flat&logo=github&label=stars" alt="GitHub stars"/></a>
+  <a href="https://github.com/Quindart-com/opencode-chromium/discussions"><img src="https://img.shields.io/badge/roadmap-Discussions-3fb950" alt="Roadmap discussions"/></a>
+</p>
+
+<p align="center">
+  <a href="https://star-history.com/#Quindart-com/opencode-chromium&Date"><img src="https://api.star-history.com/svg?repos=Quindart-com/opencode-chromium&type=Date" alt="Star history chart" width="680"/></a>
+</p>
+
+## Community and roadmap
+
+The roadmap is shaped by users. Open a proposal, upvote proposals with
+reactions, and ask questions on
+[GitHub Discussions](https://github.com/Quindart-com/opencode-chromium/discussions/categories/feature-requests):
+
+- **Feature requests** — describe the problem and the workflow it should unlock;
+  others vote with 👍/❤️ reactions. The maintainers triage voted proposals into
+  upcoming work.
+- **Roadmap status** — triaged proposals are tagged with their status
+  (`planned`, `in progress`, `released`) and announced in
+  release notes, so you always know where an idea stands.
+- **Protocol** — feature requests are about what this repository publishes
+  (runtime, extension, native host, skills); bug reports and security findings
+  belong in GitHub Issues instead.
+
 ## What it provides
 
 - Four compact default tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`.
