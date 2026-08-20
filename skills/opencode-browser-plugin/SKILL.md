@@ -11,6 +11,10 @@ Use `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`.
 
 Reuse `sessionId`. Page search uses the Snowflake model by default. Pass `searchStrategy: "lexical"` for lowest latency, `"auto"` for lexical-first adaptive retrieval, or `"deep"` for multilingual, code-heavy, or genuinely semantic retrieval. Request advanced descriptions with `browser_observe` mode `capabilities`, then execute a capability through a `browser_run` step without adding top-level tools.
 
+Choose the browser surface deliberately. An explicit user request for a named profile or browser wins over URL-based selection; when no profile is named, let the target URL select the profile; with neither, use the default profile. Selection and discovery stay read-only — never inspect cookies, storage, profiles, passwords, or session stores. When authentication blocks a requested navigation, ask the user to sign in directly in their browser; do not substitute another profile or bypass the sign-in with a search engine, a mirror site, or any other source.
+
+When browser setup succeeds but discovery or selection fails, read `docs/troubleshooting.md` — topic `#discovery` — before retrying. When extension or native-host installation or communication fails, read `#installation` before taking another recovery action.
+
 For deeper network inspection of one controlled tab, request the lazy network pack and then run `network.inspect`:
 
 ```json
@@ -29,7 +33,12 @@ For deeper network inspection of one controlled tab, request the lazy network pa
 
 The default network result is lifecycle-only. Headers are redacted, bodies are disabled by default, and `includeBody: "request" | "response" | "both"` is bounded, redacted, and approval-gated.
 
-When a result is `approval_required`, review the chain and call `browser_run` again with only `approvalToken`. Never recreate or modify the approved chain. Retrieve screenshots and oversized results from their artifact URI, and call `browser_finalize` when the work is complete while keeping only user-facing deliverables.
+When a result is `approval_required`, review the chain and call `browser_run` again with only `approvalToken`. Never recreate or modify the approved chain. Retrieve screenshots and oversized results from their artifact URI. When the work is complete, call `browser_finalize` and pass `keep` only for tabs that must survive:
+
+- `{"tabId": <id>, "status": "deliverable"}` — the live tab itself is the user-facing output: a created or edited document, spreadsheet, dashboard, checkout, submitted form result, or a page the user explicitly asked to keep open. Deliverables move into the blue **OpenCode Deliverables** group.
+- `{"tabId": <id>, "status": "handoff"}` (the default when a status is omitted) — work must continue from the live page in a later turn: a page waiting for user input, login, approval, payment, CAPTCHA, or an unfinished workflow. Handoffs stay inside the session's green group and remain available in later turns; mark them again at the end of that later turn if they must survive it too, because the latest mark per tab wins.
+- Do not keep research, search, source, intermediate, duplicate, blank, or error pages. Extract what you need and let finalize close them.
+- Agent-created tabs that are not kept are closed; user-claimed tabs that are not kept are released without closing.
 
 Hover elements with a `hover` step to reveal menus and tooltips before clicking. Accept or dismiss JavaScript dialogs with `handleDialog` (`value: "accept" | "dismiss"`, optional `promptText`); accepting a dialog pauses the chain for approval. Capture screenshots as `png`, `jpeg`, or `webp` with an optional `quality` for the compressed formats. Pending dialogs appear in the `dialogs` bucket of `browser_observe` mode `events`.
 

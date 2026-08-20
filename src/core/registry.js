@@ -188,12 +188,12 @@ export function createCoreRegistry(runtime) {
       execute: (args, context) => runtime.session(args, context),
     },
     browser_finalize: {
-      description: "Finalize a browser session.",
+      description: "Finalize a browser session. 'deliverable' moves a kept tab into the blue OpenCode Deliverables group; 'handoff' (default) keeps a tab inside the session so work can continue in a later turn. Agent-owned unkept tabs close and user-claimed unkept tabs are released.",
       inputSchema: z.object({
         ...sessionFields,
         keep: z.array(z.union([
           z.number().int().positive(),
-          z.object({ tabId: z.number().int().positive(), status: z.enum(["handoff", "deliverable"]).optional() }),
+          z.object({ tabId: z.number().int().positive(), status: z.enum(["handoff", "deliverable"]).optional().describe("'deliverable' moves the tab to the blue OpenCode Deliverables group as a user-facing output; 'handoff' (default) keeps it in the session for later turns.") }),
         ])).max(50).optional(),
         keepEnvironment: z.boolean().optional().describe("Retain applied emulation overrides instead of clearing them."),
       }),
