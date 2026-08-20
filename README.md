@@ -17,6 +17,7 @@
 - Performance diagnostics: `browser_observe` mode `diagnostic` records CDP traces and computes LCP, CLS, long tasks, TBT, and more in the native host; raw traces are artifact-first and CrUX/field data stays off.
 - Snowflake-default page search with explicit lexical/auto alternatives and Qwen deep retrieval without loading models in the extension.
 - Profile-aware sessions, tab ownership, stale-target recovery, bounded read retries, conditional settling, approvals, and artifact resources.
+- Opt-in encrypted Computer History (off by default): bounded metadata-only action memory rehydrates continued and recalled sessions with fewer re-exploration mistakes. See [docs/computer-history.md](docs/computer-history.md).
 - MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
 - A native OpenCode V2 adapter and shared OpenAI, Anthropic, Gemini, and MCP schema adapters.
 

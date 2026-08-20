@@ -54,6 +54,17 @@ automation bridge:
 You grant or deny these permissions at load time, and you can remove the
 extension at any time.
 
+## Computer History (opt-in, encrypted, local)
+
+Computer History is **off by default**. When you deliberately run
+`opencode-chromium history enable`, the plugin records bounded metadata about
+agent-mediated browser actions (action capability, target hostname, outcome,
+timestamps) into a locally encrypted store. It never records typed text,
+screenshots, raw arguments or results, URLs and paths, window titles, or
+clipboard contents, and no history data ever leaves your machine. You can
+pause, disable, inspect, or cryptographically delete the store and its key at
+any time from the CLI. See [docs/computer-history.md](computer-history.md).
+
 ## Children
 
 This extension is not directed to children, and it does not collect information

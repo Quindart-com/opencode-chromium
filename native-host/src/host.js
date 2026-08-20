@@ -7,6 +7,7 @@ import { FrameDecoder, writeFrame } from "./framing.js";
 import { instanceIpcPath, isUnixSocketPath } from "./ipc-path.js";
 import { removeProfileRegistration, writeProfileRegistration } from "./profile-registry.js";
 import { RpcRelay } from "./rpc-relay.js";
+import { HistoryCapture, HistoryStore } from "./history/index.js";
 import { handleSemanticHostMethod } from "./semantic-search.js";
 import { handleVisualHostMethod } from "./visual-map.js";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.js";
@@ -17,6 +18,9 @@ const PROTOCOL_VERSION = "1";
 const ipcPath = instanceIpcPath();
 const state = { startedAt: new Date().toISOString(), ipcPath, profile: null };
 let activeProfileId = null;
+
+const historyStore = new HistoryStore();
+const historyCapture = new HistoryCapture({ store: historyStore });
 
 function registerProfile(profile) {
   if (activeProfileId && activeProfileId !== profile.profileId) {
@@ -44,6 +48,7 @@ const relay = new RpcRelay({
   state,
   extensionWriter: (message) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
+  history: historyCapture,
   localHandler: async (method, params) => {
     const semantic = await handleSemanticHostMethod(method, params);
     if (semantic !== undefined) return semantic;
@@ -112,6 +117,8 @@ function shutdownHost(reason, exitCode = 0) {
   if (shutdownStarted) return;
   shutdownStarted = true;
   log(reason);
+  relay.flushHistory();
+  historyStore.close();
   cleanupProfileRegistration();
   relay.shutdown(reason);
   server.close(() => {

@@ -17,12 +17,18 @@ export class RpcRelay {
   #state;
   #onProfile;
   #localHandler;
+  #history;
 
-  constructor({ extensionWriter, state, onProfile, localHandler }) {
+  constructor({ extensionWriter, state, onProfile, localHandler, history = null }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
     this.#onProfile = onProfile;
     this.#localHandler = localHandler;
+    this.#history = history;
+  }
+
+  flushHistory() {
+    this.#history?.flush?.();
   }
 
   addClient(socket) {
@@ -96,14 +102,19 @@ export class RpcRelay {
       }
 
       const extensionId = this.#nextRequestId++;
+      const capture = this.#history?.startAgentRequest(message) ?? null;
       const timeout = setTimeout(() => {
         const pending = this.#deletePending(extensionId);
-        if (pending) void this.#writeClientError(pending.socket, pending.clientId, -32000, `Timed out waiting for extension response to ${message.method}`);
+        if (pending) {
+          this.#history?.completeAgentRequest?.(pending.capture, "failed", "timeout");
+          void this.#writeClientError(pending.socket, pending.clientId, -32000, `Timed out waiting for extension response to ${message.method}`);
+        }
       }, requestTimeoutMs(message));
       this.#setPending(extensionId, {
         clientId: message.id,
         socket,
         timeout,
+        capture,
       });
       try {
         await this.#extensionWriter({ ...message, id: extensionId });
@@ -179,6 +190,15 @@ export class RpcRelay {
   async #handleExtensionResponse(message) {
     const pending = this.#deletePending(message.id);
     if (!pending) return;
+    this.#history?.noteResponse?.(message.result);
+    if (pending.capture) {
+      const error = message.error?.data && typeof message.error.data === "object" && typeof message.error.data.code === "string"
+        ? message.error.data.code
+        : typeof message.error?.code === "number"
+          ? `rpc-${message.error.code}`
+          : null;
+      this.#history?.completeAgentRequest?.(pending.capture, message.error ? "failed" : "confirmed", error);
+    }
     await writeFrame(pending.socket, { ...message, id: pending.clientId });
   }
 

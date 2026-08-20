@@ -37,6 +37,16 @@ Apply persistent test environments with `browser_session` action `configure` —
 
 Record local performance traces through `browser_observe` mode `diagnostic` with `diagnostic.type: "performance"` and `action: "record"`; the raw trace is stored as an artifact and the summary returns LCP, CLS, long tasks, blocking time, and more. Re-analyze a stored trace with `action: "inspect"`. Performance analysis is local-only: field data (CrUX) is never consulted.
 
+## Computer History
+
+When the user asks you to continue, resume, recall recent browser activity, or pick up a prior browser session, consult Computer History before re-exploring the page:
+
+1. Call `history_status` first and preserve any disabled, paused, or unhealthy state in your reasoning.
+2. When useful and authorized, call `history_query` once with a bounded recent slice (`limit`, optionally `session_id`) before broader page discovery.
+3. Treat returned events as metadata-only leads — which site, which action capability, and whether the outcome was confirmed — then verify the current live state through the least intrusive appropriate step.
+4. History never includes URLs, paths, typed text, arguments, or results: treat omitted content as unknown and never reconstruct it.
+5. Continue normally after absence, denial, empty results, or a recoverable history failure; do not query history for unrelated tasks merely because the tools exist.
+
 ```json
 {
   "profile": "Work",

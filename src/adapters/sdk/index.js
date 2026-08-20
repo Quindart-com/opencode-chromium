@@ -4,7 +4,7 @@ import { dispatchBrowserTool, toolDefinitionsForDialect } from "../../core/schem
 
 export function createBrowserAgent(options = {}) {
   const runtime = options.runtime ?? createAgentBrowserRuntime(options);
-  const registry = createCoreRegistry(runtime);
+  const registry = createCoreRegistry(runtime, { history: options.history ?? false });
   return {
     runtime,
     registry,

@@ -4,6 +4,7 @@ import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
 import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
+import { HistoryStore } from "../history/index.js";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
 import { contractMetadata } from "./versions.js";
@@ -286,6 +287,12 @@ export class AgentBrowserRuntime {
     this.profileCache = { expiresAt: 0, profiles: [] };
     this.legacyToolsPromise = operationFactory().then((hooks) => hooks.tool);
     this.capabilityRegistry = null;
+    this._historyReader = null;
+  }
+
+  historyReader() {
+    if (!this._historyReader) this._historyReader = new HistoryStore();
+    return this._historyReader;
   }
 
   getSession(sessionId) {
@@ -981,6 +988,30 @@ export class AgentBrowserRuntime {
       return { ...contractMetadata(), ok: true, status: "finalized", sessionId, result };
     } catch (error) {
       return this.failure(sessionId, error);
+    }
+  }
+
+  async historyStatus(args = {}, context = {}) {
+    try {
+      const store = this.historyReader();
+      return { ...contractMetadata(), ok: true, status: "ready", result: store.status() };
+    } catch (error) {
+      return this.failure(null, error);
+    }
+  }
+
+  async historyQuery(args = {}, context = {}) {
+    try {
+      const store = this.historyReader();
+      const result = store.query({
+        limit: args.limit,
+        sessionId: args.session_id,
+        sinceSequence: args.since_sequence,
+        untilSequence: args.until_sequence,
+      });
+      return { ...contractMetadata(), ok: true, status: "ready", result };
+    } catch (error) {
+      return this.failure(null, error);
     }
   }
 

@@ -21,6 +21,7 @@ import { artifactUriTemplate } from "../../core/artifacts.js";
 import { contractMetadata, PLUGIN_NAME, PLUGIN_VERSION } from "../../core/versions.js";
 import { createBrowserOperations } from "../../browser/operations/index.js";
 import { closeBrowserClients } from "../../browser/client.js";
+import { historyEnabledForServer } from "../../history/index.js";
 
 export const SERVER_NAME = PLUGIN_NAME;
 export const SERVER_INSTRUCTIONS = [
@@ -29,6 +30,7 @@ export const SERVER_INSTRUCTIONS = [
   "Page search uses Snowflake by default; request lexical or auto for lower-latency retrieval, and deep for genuinely semantic, multilingual, or code-heavy matching.",
   "For a specific tab's deeper network debugging, request browser_observe mode capabilities with pack network, then execute network.inspect inside browser_run; bodies are opt-in and approval-gated.",
   "Approval-required results must be followed by browser_run with only the approvalToken. Call browser_finalize when finished.",
+  "When asked to continue, resume, or recall what a prior browser run did, check history_status and then one bounded history_query before re-exploring; treat events as metadata-only leads (site, capability, outcome), never as a transcript.",
 ].join(" ");
 
 function rootDir() {
@@ -115,8 +117,8 @@ function mcpSchema(schema) {
   };
 }
 
-export async function registerCoreTools(server, runtime, fallbackSessionId) {
-  const registry = createCoreRegistry(runtime);
+export async function registerCoreTools(server, runtime, fallbackSessionId, { history = false } = {}) {
+  const registry = createCoreRegistry(runtime, { history });
   for (const [name, definition] of Object.entries(registry)) {
     server.registerTool(name, {
       description: definition.description,
@@ -176,9 +178,9 @@ export async function registerLegacyTools(server, fallbackSessionId) {
   }
 }
 
-export async function createServer({ runtime, toolset = "core", fallbackSessionId = `mcp-${randomUUID()}` } = {}) {
+export async function createServer({ runtime, toolset = "core", fallbackSessionId = `mcp-${randomUUID()}`, history = historyEnabledForServer() } = {}) {
   const server = new McpServer({ name: SERVER_NAME, version: packageVersion() }, { instructions: SERVER_INSTRUCTIONS });
-  if (toolset === "core" || toolset === "debug") await registerCoreTools(server, runtime ?? createAgentBrowserRuntime(), fallbackSessionId);
+  if (toolset === "core" || toolset === "debug") await registerCoreTools(server, runtime ?? createAgentBrowserRuntime(), fallbackSessionId, { history });
   if (toolset === "legacy" || toolset === "debug") await registerLegacyTools(server, fallbackSessionId);
   return server;
 }

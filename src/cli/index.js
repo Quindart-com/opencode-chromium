@@ -8,6 +8,7 @@ import { installClient } from "./install.js";
 import { uninstallClient } from "./uninstall.js";
 import { verify } from "./verify.js";
 import { packageInfo } from "./version.js";
+import { runHistoryCommand } from "./history.js";
 
 function valueAfter(argv, flag) {
   const index = argv.indexOf(flag);
@@ -45,8 +46,12 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(JSON.stringify({ ok: true, ...publicResult, changedFiles }, null, 2));
     return;
   }
+  if (command === "history") {
+    await runHistoryCommand(rest);
+    return;
+  }
   if (command === "help" || command === "--help") {
-    console.log("Usage: opencode-chromium <install|configure|uninstall|doctor|verify|mcp|version>");
+    console.log("Usage: opencode-chromium <install|configure|uninstall|doctor|verify|history|mcp|version>");
     return;
   }
   throw new Error(`Unknown command: ${command}`);

@@ -129,8 +129,8 @@ const resultSchema = z.object({
   error: errorSchema.optional(),
 }).passthrough();
 
-export function createCoreRegistry(runtime) {
-  return {
+export function createCoreRegistry(runtime, { history = false } = {}) {
+  const registry = {
     browser_run: {
       description: "Run an action chain with settle and post-observation.",
       inputSchema: z.object({
@@ -202,6 +202,32 @@ export function createCoreRegistry(runtime) {
       execute: (args, context) => runtime.finalize(args, context),
     },
   };
+
+  if (history) {
+    Object.assign(registry, {
+      history_status: {
+        description: "Report local browser-action history availability, encryption, retention, quota, and health. Read-only; no history content is revealed by this tool.",
+        inputSchema: z.object({}),
+        outputSchema: resultSchema,
+        annotations: { readOnlyHint: true, openWorldHint: true },
+        execute: (args, context) => runtime.historyStatus(args, context),
+      },
+      history_query: {
+        description: "Return bounded metadata-only events recorded for prior browser sessions: which sites, capabilities, and outcomes an earlier run produced, so a continued run can verify state instead of re-exploring from scratch. Events never include URLs, paths, typed text, arguments, or results, and results may enter model context.",
+        inputSchema: z.object({
+          limit: z.number().int().min(1).max(200).optional(),
+          session_id: z.string().min(1).max(128).optional(),
+          since_sequence: z.number().int().min(1).optional(),
+          until_sequence: z.number().int().min(1).optional(),
+        }),
+        outputSchema: resultSchema,
+        annotations: { readOnlyHint: true, openWorldHint: true },
+        execute: (args, context) => runtime.historyQuery(args, context),
+      },
+    });
+  }
+
+  return registry;
 }
 
 export { environmentSchema, observationSchema, resultSchema, settleSchema, stepSchema, targetSchema };

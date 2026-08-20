@@ -19,7 +19,7 @@ Options:
 --blocked-origin=PATTERN
 ```
 
-Core mode exposes exactly `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Debug mode adds diagnostics; legacy mode exposes the preserved 52 granular operations for migration and regression testing only.
+Core mode exposes `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. When Computer History is enabled (see `docs/computer-history.md`), the read-only `history_status` and `history_query` tools are registered as well. Debug mode adds diagnostics; legacy mode exposes the preserved 52 granular operations for migration and regression testing only.
 
 Origin policy is server-level and never per-call. `--allowed-origin` and `--blocked-origin` accept glob patterns such as `https://*.example.com`; the equivalent environment variables are `AGENT_BROWSER_ALLOWED_ORIGINS` and `AGENT_BROWSER_BLOCKED_ORIGINS` (comma- or semicolon-separated). Blocked origins are rejected at navigation time and, when the Network domain is enabled, at the subresource level through `Network.setBlockedURLs`. Uploads can be restricted to a set of roots with `AGENT_BROWSER_ALLOWED_FILE_ROOTS`.
 
