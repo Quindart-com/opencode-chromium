@@ -42,3 +42,8 @@ test("finalized deliverables use the dedicated OpenCode group", () => {
   assert.match(extensionSource, /group\.title === DELIVERABLE_GROUP_TITLE && group\.windowId === windowId/);
   assert.match(extensionSource, /if \(status === "deliverable"\) \{\s*await ensureDeliverableGroup\(tabId\)/);
 });
+
+test("kept tabs default to the blue deliverables group", () => {
+  assert.match(extensionSource, /Number\.isInteger\(item\) \? "deliverable" : item\?\.status \?\? "deliverable"/);
+  assert.match(operationsSource, /status: tool\.schema\.enum\(\["handoff", "deliverable"\]\)\.default\("deliverable"\)/);
+});

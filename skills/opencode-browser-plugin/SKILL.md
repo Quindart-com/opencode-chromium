@@ -29,7 +29,7 @@ For deeper network inspection of one controlled tab, request the lazy network pa
 
 The default network result is lifecycle-only. Headers are redacted, bodies are disabled by default, and `includeBody: "request" | "response" | "both"` is bounded, redacted, and approval-gated.
 
-When a result is `approval_required`, review the chain and call `browser_run` again with only `approvalToken`. Never recreate or modify the approved chain. Retrieve screenshots and oversized results from their artifact URI, and call `browser_finalize` when the work is complete while keeping only user-facing deliverables.
+When a result is `approval_required`, review the chain and call `browser_run` again with only `approvalToken`. Never recreate or modify the approved chain. Retrieve screenshots and oversized results from their artifact URI. When the work is complete, call `browser_finalize` and keep only user-facing deliverables with `keep: [{"tabId": <id>, "status": "deliverable"}]` — kept deliverables move into the blue "OpenCode Deliverables" group; use `"status": "handoff"` only to keep a tab open without that group. Agent-owned tabs that are not kept are closed; user-claimed tabs that are not kept are released without closing.
 
 Hover elements with a `hover` step to reveal menus and tooltips before clicking. Accept or dismiss JavaScript dialogs with `handleDialog` (`value: "accept" | "dismiss"`, optional `promptText`); accepting a dialog pauses the chain for approval. Capture screenshots as `png`, `jpeg`, or `webp` with an optional `quality` for the compressed formats. Pending dialogs appear in the `dialogs` bucket of `browser_observe` mode `events`.
 
