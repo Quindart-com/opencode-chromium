@@ -1,5 +1,26 @@
 import fs from "node:fs";
-import { MemoryStore, memoryRootDir } from "../memory/index.js";
+import { EmbedQueue, MemoryStore, memoryRootDir, embeddingEnabled } from "../memory/index.js";
+import { embedMemoryTexts } from "../../native-host/src/semantic-search.js";
+
+function openCliStore() {
+  const root = memoryRootDir();
+  let queue = null;
+  if (embeddingEnabled()) {
+    queue = new EmbedQueue({
+      embed: async (texts) => embedMemoryTexts(texts),
+      onResults: (rows, model, dims) => {
+        store?.applyEmbeddings(rows, model, dims);
+      },
+    });
+    queue.setQueryEmbedder(async (query) => {
+      const result = await embedMemoryTexts([query]);
+      return result?.vectors?.[0] ?? null;
+    });
+  }
+  let store = new MemoryStore({ root, embedQueue: queue });
+  if (queue) queue.onResults = (rows, model, dims) => store.applyEmbeddings(rows, model, dims);
+  return store;
+}
 
 function parseLimit(value, fallback = 50) {
   if (value === undefined) return fallback;
@@ -33,6 +54,7 @@ const USAGE = {
   search: "opencode-chromium memory search \"<query>\" [--k 8] [--kind all|action|chain] [--hostname domain] [--json]",
   chains: "opencode-chromium memory chains [list|show <id|fingerprint>] [--json]",
   prune: "opencode-chromium memory prune [--days N] [--json]",
+  reindex: "opencode-chromium memory reindex [--json]",
   config: "opencode-chromium memory config <get|set> <key> [value] [--json]",
   stats: "opencode-chromium memory stats [--json]",
   export: "opencode-chromium memory export <file> [--json]",
@@ -47,8 +69,7 @@ function commandUsage(command) {
 export async function runMemoryCommand(argv) {
   const [subcommand = "status", ...rest] = argv;
   const json = rest.includes("--json");
-  const root = memoryRootDir();
-  const store = new MemoryStore({ root });
+  const store = openCliStore();
   let result;
 
   try {
@@ -111,6 +132,10 @@ export async function runMemoryCommand(argv) {
       case "prune": {
         const daysIndex = rest.indexOf("--days");
         result = store.prune({ days: daysIndex !== -1 ? Number(rest[daysIndex + 1]) : undefined });
+        break;
+      }
+      case "reindex": {
+        result = await store.reindex({ embed: async (texts) => embedMemoryTexts(texts) });
         break;
       }
       case "config": {

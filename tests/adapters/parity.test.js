@@ -8,6 +8,9 @@ import { mcpTools } from "../../src/adapters/sdk/mcp.js";
 import plugin, { createOpenCodeSetup } from "../../src/adapters/opencode/index.js";
 import { SERVER_NAME, SERVER_INSTRUCTIONS, parseArgs } from "../../src/adapters/mcp/server.js";
 
+// Adapter surface tests must not depend on the host machine's action-memory state.
+process.env.OPENCODE_BROWSER_MEMORY = "0";
+
 test("all schema adapters expose exactly the four canonical tools", () => {
   const agent = createBrowserAgent();
   try {

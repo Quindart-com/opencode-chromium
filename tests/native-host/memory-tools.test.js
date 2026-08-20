@@ -29,7 +29,8 @@ test("memory tools expose inspection-ready schemas", async () => {
   assert.ok(querySchema.session_id);
   assert.ok(querySchema.capability);
   const statusSchema = memory.memory_status.inputSchema.shape;
-  assert.equal(Object.keys(statusSchema).length, 0);
+  assert.ok(statusSchema.sessionId, "sessionId is advertised for opencode session tools");
+  assert.ok(statusSchema.profile);
 });
 
 test("MCP and OpenCode adapters gate memory tools by the environment", async () => {
