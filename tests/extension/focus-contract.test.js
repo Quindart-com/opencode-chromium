@@ -43,7 +43,23 @@ test("finalized deliverables use the dedicated OpenCode group", () => {
   assert.match(extensionSource, /if \(status === "deliverable"\) \{\s*await ensureDeliverableGroup\(tabId\)/);
 });
 
-test("kept tabs default to the blue deliverables group", () => {
-  assert.match(extensionSource, /Number\.isInteger\(item\) \? "deliverable" : item\?\.status \?\? "deliverable"/);
-  assert.match(operationsSource, /status: tool\.schema\.enum\(\["handoff", "deliverable"\]\)\.default\("deliverable"\)/);
+test("kept tabs default to handoff", () => {
+  assert.match(extensionSource, /Number\.isInteger\(item\) \? "handoff" : item\?\.status \?\? "handoff"/);
+  assert.match(operationsSource, /status: tool\.schema\.enum\(\["handoff", "deliverable"\]\)\.default\("handoff"\)/);
+});
+
+test("handoff keeps a tab tracked in the session; only deliverables are untracked", () => {
+  assert.match(
+    extensionSource,
+    /if \(status === "deliverable"\) \{\s*await ensureDeliverableGroup\(tabId\)\.catch\(\(\) => \{\}\);\s*await untrackTab\(id, tabId\);\s*\}/,
+  );
+  const statusBranch = extensionSource.match(/if \(status\) \{[\s\S]*?\n    \}/)?.[0] ?? "";
+  const deliverableBlock = statusBranch.match(/if \(status === "deliverable"\) \{[\s\S]*?\n      \}/)?.[0] ?? "";
+  assert.ok(statusBranch.includes("continue;"));
+  assert.equal((statusBranch.match(/untrackTab/g) ?? []).length, 1);
+  assert.equal((deliverableBlock.match(/untrackTab/g) ?? []).length, 1);
+});
+
+test("unkept agent tabs close tolerantly", () => {
+  assert.match(extensionSource, /await chromeCall\(\(done\) => chrome\.tabs\.remove\(tabId, done\)\)\.catch\(\(\) => \{\}\)/);
 });
