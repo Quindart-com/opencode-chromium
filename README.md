@@ -10,22 +10,23 @@
 </p>
 
 <p align="center">
-  <a href="https://star-history.com/#Quindart-com/opencode-chromium&Date"><img src="https://api.star-history.com/svg?repos=Quindart-com/opencode-chromium&type=Date" alt="Star history chart" width="680"/></a>
+  <a href="https://github.com/Quindart-com/opencode-chromium/stargazers"><img src="assets/star-history.svg" alt="Star history chart" width="680"/></a>
 </p>
 
 ## Community and roadmap
 
-The roadmap is shaped by users. Open a proposal, upvote proposals with
-reactions, and ask questions on
-[GitHub Discussions](https://github.com/Quindart-com/opencode-chromium/discussions/categories/feature-requests):
+The roadmap is shaped by users — open a proposal, upvote with reactions, and
+follow announcements on
+[GitHub Discussions](https://github.com/Quindart-com/opencode-chromium/discussions):
 
-- **Feature requests** — describe the problem and the workflow it should unlock;
-  others vote with 👍/❤️ reactions. The maintainers triage voted proposals into
-  upcoming work.
-- **Roadmap status** — triaged proposals are tagged with their status
-  (`planned`, `in progress`, `released`) and announced in
-  release notes, so you always know where an idea stands.
-- **Protocol** — feature requests are about what this repository publishes
+- **Feature requests** — start a proposal (the template keeps it structured):
+  describe the problem and the workflow it should unlock; others vote with
+  👍/❤️ reactions. The maintainers triage voted proposals into upcoming work
+  and tag them with their status (`planned`, `in progress`, `released`).
+  [Open a proposal →](https://github.com/Quindart-com/opencode-chromium/discussions/categories/feature-requests)
+- **Announcements** — releases, roadmap status, and maintainer notes.
+  [Follow announcements →](https://github.com/Quindart-com/opencode-chromium/discussions/categories/announcements)
+- **Protocol** — feature requests concern what this repository publishes
   (runtime, extension, native host, skills); bug reports and security findings
   belong in GitHub Issues instead.
 
