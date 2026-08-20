@@ -257,8 +257,6 @@ const memoryNegatives = document.querySelector("#memory-negatives");
 const memoryHits = document.querySelector("#memory-hits");
 const memoryChart = document.querySelector("#memory-chart");
 const memoryEnable = document.querySelector("#memory-enable");
-const memoryPause = document.querySelector("#memory-pause");
-const memoryResume = document.querySelector("#memory-resume");
 const memoryDisable = document.querySelector("#memory-disable");
 const quotaSlider = document.querySelector("#quota-slider");
 const quotaNow = document.querySelector("#quota-now");
@@ -325,9 +323,9 @@ function memoryPillClass(health) {
 }
 
 function memoryStateLabel(status) {
-  if (status.health === "quota_reached") return "Quota reached — capture paused";
-  if (!status.enabled) return "Memory is off";
-  return status.paused ? "Capture paused" : "Capture is on";
+  if (status.health === "quota_reached") return "Limit reached";
+  if (!status.enabled) return "Disabled";
+  return status.paused ? "Paused" : "Enabled";
 }
 
 function renderMemoryState(status) {
@@ -347,15 +345,13 @@ function renderMemoryState(status) {
 
   memoryEnable.disabled = memoryBusy || status.enabled;
   memoryDisable.disabled = memoryBusy || !status.enabled;
-  memoryPause.disabled = memoryBusy || !status.enabled || status.paused;
-  memoryResume.disabled = memoryBusy || !status.enabled || !status.paused;
 
   const quotaMb = Number(status.quota_bytes) / MB;
   quotaSlider.value = String(Math.round(quotaMb));
   quotaNow.textContent = formatBytes(status.quota_bytes);
   quotaCaption.textContent = status.power_user
-    ? `Power user mode — up to 10 GB.`
-    : `Standard limit. Enable power user below to raise it.`;
+    ? `Expanded storage enabled — up to 10 GB.`
+    : `Standard limit. Turn on expanded storage to raise it.`;
   quotaSlider.disabled = memoryBusy || !status.power_user;
   powerUser.checked = status.power_user === true;
   powerNote.hidden = status.power_user !== true;
@@ -368,8 +364,13 @@ function renderMemoryState(status) {
 
 function renderMemoryChart(daily) {
   memoryChart.replaceChildren();
+  memoryChart.hidden = true;
   const days = (Array.isArray(daily) ? daily : []).slice(-14);
-  if (days.length === 0) return;
+  if (days.length === 0 || !days.some((day) => (day.confirmed ?? 0) + (day.failed ?? 0) > 0)) return;
+  memoryChart.hidden = false;
+  const chartStyles = getComputedStyle(document.documentElement);
+  const failedColor = chartStyles.getPropertyValue("--bad").trim() || "#cf222e";
+  const confirmedColor = chartStyles.getPropertyValue("--ok").trim() || "#1a7f37";
   const width = 320;
   const height = 64;
   const pad = 14;
@@ -392,7 +393,7 @@ function renderMemoryChart(daily) {
       rect.setAttribute("y", pad + plotHeight - failed);
       rect.setAttribute("width", barWidth);
       rect.setAttribute("height", failed);
-      rect.setAttribute("fill", "#cf222e");
+      rect.setAttribute("fill", failedColor);
       rect.setAttribute("opacity", "0.7");
       svg.append(rect);
     }
@@ -402,7 +403,7 @@ function renderMemoryChart(daily) {
       rect.setAttribute("y", pad + plotHeight - failed - confirmed);
       rect.setAttribute("width", barWidth);
       rect.setAttribute("height", confirmed);
-      rect.setAttribute("fill", "#1a7f37");
+      rect.setAttribute("fill", confirmedColor);
       rect.setAttribute("rx", 1);
       svg.append(rect);
     }
@@ -437,14 +438,12 @@ async function refreshMemory() {
     memoryStatePill.textContent = "unavailable";
     memoryStatePill.className = "pill pill-bad";
     memoryStateLine.textContent = error instanceof Error ? error.message : String(error);
-    for (const button of [memoryEnable, memoryPause, memoryResume, memoryDisable]) button.disabled = true;
+    for (const button of [memoryEnable, memoryDisable]) button.disabled = true;
   }
 }
 
-memoryEnable.addEventListener("click", () => void runMemoryAction("memory.enable", "Memory enabled — capture is on."));
-memoryPause.addEventListener("click", () => void runMemoryAction("memory.pause", "Capture paused."));
-memoryResume.addEventListener("click", () => void runMemoryAction("memory.resume", "Capture resumed."));
-memoryDisable.addEventListener("click", () => void runMemoryAction("memory.disable", "Memory disabled — capture is off."));
+memoryEnable.addEventListener("click", () => void runMemoryAction("memory.enable", "Action memory enabled."));
+memoryDisable.addEventListener("click", () => void runMemoryAction("memory.disable", "Action memory disabled."));
 
 quotaSlider.addEventListener("change", async () => {
   const valueMb = Number(quotaSlider.value);
@@ -465,7 +464,7 @@ powerUser.addEventListener("change", async () => {
   memoryBusy = true;
   try {
     await memoryCall("memory.configure", { power_user: powerUser.checked });
-    memoryFeedbackText(powerUser.checked ? "Power user mode on — the slider now goes up to 10 GB." : "Power user mode off — back to the standard limit.");
+    memoryFeedbackText(powerUser.checked ? "Expanded storage enabled — the limit can now reach 10 GB." : "Expanded storage disabled — the standard limit is restored.");
   } catch (error) {
     memoryFeedbackText(error instanceof Error ? error.message : String(error), true);
   } finally {
