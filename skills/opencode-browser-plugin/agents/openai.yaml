@@ -14,5 +14,6 @@ dependencies:
       description: "MCP server exposing browser_run, browser_observe, browser_session, and browser_finalize"
       transport: "stdio"
       command:
-        - "bun"
-        - "dist/adapters/mcp/server.js"
+        - "npx"
+        - "-y"
+        - "opencode-chromium-mcp"
