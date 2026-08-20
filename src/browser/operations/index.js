@@ -30,9 +30,13 @@ function sessionParams(context, params = {}) {
   const sessionId = sessionKey(context);
   const turnId = contextValue(context, ["messageID", "messageId", "turnID", "turnId", "requestID", "requestId"])
     ?? sessionId;
+  const step = context?.memoryStep;
   return {
     session_id: sessionId,
     turn_id: turnId,
+    ...(step?.chainId ? { memory_chain_id: step.chainId } : {}),
+    ...(step?.stepIndex != null ? { memory_step_index: step.stepIndex } : {}),
+    ...(step?.label ? { memory_label: step.label } : {}),
     ...params,
   };
 }
