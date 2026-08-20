@@ -70,7 +70,8 @@ export function memoryEnabledForServer() {
     const db = openDatabase(root);
     try {
       const row = db.prepare("SELECT value FROM meta WHERE key = ?").get("enabled");
-      return row?.value === "1";
+      const value = String(row?.value ?? "");
+      return value === "true" || value === "1";
     } finally {
       closeDatabase(db);
     }

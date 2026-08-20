@@ -954,7 +954,9 @@ export async function handleSemanticHostMethod(method, params = {}) {
 async function embedMemoryLocal({ texts = [], modelId = null } = {}) {
   const list = Array.isArray(texts) ? texts.filter((text) => typeof text === "string" && text.length > 0) : [];
   if (list.length === 0) return { model: null, dims: null, vectors: [] };
-  const model = await prepareSemanticModelLocal(modelId ?? getSemanticSettings().modelId);
+  const selected = modelId ?? getSemanticSettings().modelId;
+  await prepareSemanticModelLocal(selected);
+  const model = modelById(selected);
   if (!model) return { model: null, dims: null, vectors: [] };
   const extractor = await loadEmbedding(model);
   const vectors = [];
