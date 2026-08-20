@@ -14,7 +14,7 @@
     "default_title": "opencode-chromium"
   },
   "options_ui": {
-    "page": "options.html",
+    "page": "src/options.html",
     "open_in_tab": true
   },
   "background": {
