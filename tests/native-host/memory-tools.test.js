@@ -99,3 +99,17 @@ test("host handles memory extension methods locally", async () => {
   assert.match(relay, /noteResponse/);
   assert.match(relay, /completeAgentRequest/);
 });
+
+test("runtime attaches chain metadata to executed steps", () => {
+  const runtime = fs.readFileSync(path.join(root, "src", "core", "runtime.js"), "utf8");
+  assert.match(runtime, /memoryStepParams\(step, params, chainId, stepIndex\)/);
+  assert.match(runtime, /memory_chain_id: chainId/);
+  assert.match(runtime, /memory_step_index: stepIndex/);
+  assert.match(runtime, /memory_label: label/);
+  assert.match(runtime, /memoryChainSequence\+\+/);
+  assert.match(runtime, /executeStep\(step, tabId, prior, session, chainId, index\)/);
+  // typed values never become labels: only click/hover/press element text may, and only via a guarded allowlist
+  const labelSource = runtime.slice(runtime.indexOf("memoryStepParams(step, params"), runtime.indexOf("async editTarget"));
+  assert.match(labelSource, /\["click", "doubleClick", "hover", "press"\]/);
+  assert.match(labelSource, /slice\(0, 64\)/);
+});
