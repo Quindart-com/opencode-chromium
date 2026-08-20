@@ -9,7 +9,8 @@ The roadmap is user-driven. Propose ideas as a
 rather than a GitHub issue:
 
 - Describe the problem and the workflow it should unlock, not just a solution
-  name.
+  name. The per-category discussion template (`.github/DISCUSSION_TEMPLATE/`)
+  keeps proposals structured.
 - Others vote with reactions (👍/❤️); the maintainers triage voted proposals
   into roadmap items and tag them with status.
 - Substantive design work (schemas, permission changes, security impact)

@@ -1,0 +1,2 @@
+# The agent-skills spec test requires LF line endings for SKILL.md frontmatter
+skills/**/SKILL.md text eol=lf
