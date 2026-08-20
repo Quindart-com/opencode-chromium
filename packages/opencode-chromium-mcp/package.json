@@ -1,0 +1,28 @@
+{
+  "name": "opencode-chromium-mcp",
+  "version": "1.0.0",
+  "description": "Standalone npx entry for the opencode-chromium MCP server: provider-neutral Chromium browser automation.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "opencode-chromium-mcp": "bin/mcp.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "opencode-chromium": "^1.6.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quindart-com/opencode-chromium.git"
+  },
+  "homepage": "https://github.com/Quindart-com/opencode-chromium#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
+}

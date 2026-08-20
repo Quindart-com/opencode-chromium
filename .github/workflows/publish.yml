@@ -44,7 +44,7 @@ jobs:
         run: bun run check
 
       - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref_name, 'opencode-chromium-mcp-v')
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: bun run check:tag -- "$RELEASE_TAG"
@@ -128,3 +128,62 @@ jobs:
       - name: Publish with npm Trusted Publishing
         if: env.ALREADY_PUBLISHED != 'true'
         run: npm publish --access public --ignore-scripts
+
+  publish-shim:
+    name: Publish opencode-chromium-mcp shim
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/opencode-chromium-mcp-v')
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: npm-production
+      url: https://www.npmjs.com/package/opencode-chromium-mcp
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js for npm OIDC
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Verify npm CLI
+        shell: bash
+        run: |
+          npm_version="$(npm --version)"
+          node -e 'const [major, minor, patch] = process.argv[1].split(".").map(Number); if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) process.exit(1)' "$npm_version"
+          echo "Using npm $npm_version"
+
+      - name: Validate shim release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          expected="opencode-chromium-mcp-v$(node -p "require('./packages/opencode-chromium-mcp/package.json').version")"
+          if [ "$expected" != "$RELEASE_TAG" ]; then
+            echo "Shim release tag $RELEASE_TAG does not match $expected." >&2
+            exit 1
+          fi
+          echo "Shim release tag matches $expected"
+
+      - name: Skip when version already published
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          published="$(npm view opencode-chromium-mcp@"${RELEASE_TAG#opencode-chromium-mcp-v}" version 2>/dev/null || true)"
+          if [ -n "$published" ]; then
+            echo "Version $published is already published on npm; skipping publish step."
+            echo "ALREADY_PUBLISHED=true" >> "$GITHUB_ENV"
+          else
+            echo "ALREADY_PUBLISHED=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Publish shim with npm Trusted Publishing
+        if: env.ALREADY_PUBLISHED != 'true'
+        run: npm publish --access public --ignore-scripts
+        working-directory: packages/opencode-chromium-mcp
