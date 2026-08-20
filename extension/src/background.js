@@ -366,7 +366,7 @@ function currentCursorStates(tabId) {
 
 function normalizeKeepItem(item) {
   const tabId = Number.isInteger(item) ? item : item?.tabId ?? item?.tab_id ?? item?.tab?.id;
-  const status = Number.isInteger(item) ? "handoff" : item?.status ?? "handoff";
+  const status = Number.isInteger(item) ? "deliverable" : item?.status ?? "deliverable";
   if (!Number.isInteger(tabId)) throw new Error("Expected keep item tabId");
   if (status !== "handoff" && status !== "deliverable") throw new Error(`Unsupported keep status: ${status}`);
   return { tabId, status };
