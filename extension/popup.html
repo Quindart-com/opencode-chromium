@@ -56,7 +56,7 @@
             <label for="profile-label">Profile label</label>
             <div class="input-row">
               <input id="profile-label" name="profile-label" type="text" maxlength="80" placeholder="work, personal, staging">
-              <button type="submit">Save</button>
+              <button type="submit" class="button button-primary">Save</button>
             </div>
             <p id="profile-help">Labels stay local and are used only to pick the right open browser profile.</p>
           </form>
@@ -83,18 +83,17 @@
       </section>
 
       <section id="view-memory" class="view" hidden>
-        <div class="card memory-card">
+        <div class="card memory-card memory-control-card">
           <div class="memory-head">
             <div>
-              <h2>Capture</h2>
-              <span id="memory-state-line" class="memory-state-line">Checking memory state...</span>
+              <h2>Action memory</h2>
+              <span class="memory-state-line">Save successful browser actions locally to speed up repeat tasks.</span>
             </div>
-            <span id="memory-state-pill" class="pill pill-neutral">checking</span>
+            <span id="memory-state-pill" class="pill pill-neutral" hidden aria-hidden="true">checking</span>
           </div>
-          <div class="memory-actions">
-            <button id="memory-enable" class="button button-primary" type="button">Enable</button>
-            <button id="memory-pause" class="button" type="button">Pause</button>
-            <button id="memory-resume" class="button" type="button">Resume</button>
+          <span id="memory-state-line" class="visually-hidden" aria-live="polite">Checking memory state...</span>
+          <div class="memory-actions memory-toggle-actions">
+            <button id="memory-enable" class="button button-success" type="button">Enable</button>
             <button id="memory-disable" class="button button-danger" type="button">Disable</button>
           </div>
           <p id="memory-feedback" class="feedback" role="status"></p>
@@ -103,7 +102,7 @@
         <div class="card memory-card">
           <div class="memory-head">
             <div>
-              <h2>Database size limit</h2>
+              <h2>Storage limit</h2>
               <span id="quota-caption" class="memory-state-line"></span>
             </div>
             <span id="quota-now" class="quota-now"></span>
@@ -114,9 +113,9 @@
           </div>
           <label class="checkbox-row power-row">
             <input id="power-user" type="checkbox">
-            <span>Power user — raise the database limit</span>
+            <span>Expanded storage — allow up to 10 GB</span>
           </label>
-          <p id="power-note" class="help-note" hidden>The database can get large — keep an eye on disk usage.</p>
+          <p id="power-note" class="help-note" hidden>Expanded storage can use more disk space.</p>
           <div class="quota-track"><div id="quota-fill" class="quota-fill"></div></div>
           <p id="quota-usage" class="help-note"></p>
         </div>
@@ -124,40 +123,40 @@
         <div class="card memory-card">
           <div class="memory-head">
             <div>
-              <h2>Negative lessons</h2>
-              <span class="memory-state-line">Failed actions that are not found again get cleaned up. Confirmed actions are never auto-purged.</span>
+              <h2>Cleanup</h2>
+              <span class="memory-state-line">Unsuccessful actions age out automatically. Confirmed actions remain.</span>
             </div>
           </div>
           <div class="memory-actions">
-            <label class="purge-label" for="purge-days">Purge after</label>
+            <label class="purge-label" for="purge-days">Remove after</label>
             <input id="purge-days" class="purge-days" type="number" min="1" max="365" value="7">
             <span class="purge-unit">days</span>
-            <button id="prune-now" class="button" type="button">Prune now</button>
+            <button id="prune-now" class="button" type="button">Clean up now</button>
           </div>
         </div>
 
         <div class="card memory-card">
           <div class="memory-head">
             <div>
-              <h2>Your memory at a glance</h2>
-              <span class="memory-state-line">Every confirmed action makes the memory stronger.</span>
+              <h2>Overview</h2>
+              <span class="memory-state-line">A quick read on how your memory is growing.</span>
             </div>
           </div>
           <div class="memory-stats">
             <div class="memory-stat"><span id="memory-success" class="memory-success">—</span><span class="stat-label">success rate</span></div>
             <div class="memory-stat"><span id="memory-actions">0</span><span class="stat-label">actions</span></div>
             <div class="memory-stat"><span id="memory-chains">0</span><span class="stat-label">chains</span></div>
-            <div class="memory-stat"><span id="memory-negatives">0</span><span class="stat-label">negatives</span></div>
-            <div class="memory-stat"><span id="memory-hits">0</span><span class="stat-label">memory hits</span></div>
+            <div class="memory-stat"><span id="memory-negatives">0</span><span class="stat-label">lessons</span></div>
+            <div class="memory-stat"><span id="memory-hits">0</span><span class="stat-label">hits</span></div>
           </div>
-          <div id="memory-chart" class="memory-chart" aria-label="Confirmed versus failed actions per day"></div>
+          <div id="memory-chart" class="memory-chart" hidden aria-label="Confirmed versus failed actions per day"></div>
         </div>
 
         <div class="card memory-card">
           <div class="memory-head">
             <div>
-              <h2>Share</h2>
-              <span class="memory-state-line">The store contains no personal content, so snapshots are shareable.</span>
+              <h2>Share memory</h2>
+              <span class="memory-state-line">Snapshots contain no personal page content.</span>
             </div>
           </div>
           <div class="memory-actions">
