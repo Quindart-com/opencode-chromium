@@ -74,6 +74,9 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
   assert.match(popupHtml, /quota-slider/);
   assert.match(popupHtml, /power-user/);
   assert.match(popupHtml, /memory-chart/);
+  assert.match(popupHtml, /id="memory-enable"/);
+  assert.match(popupHtml, /id="memory-disable"/);
+  assert.doesNotMatch(popupHtml, /id="memory-(?:pause|resume)"/);
   const popupJs = fs.readFileSync(path.join(root, "extension", "src", "popup.js"), "utf8");
   assert.match(popupJs, /memory\.stats/);
   assert.match(popupJs, /memory\.configure/);
@@ -81,6 +84,7 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
   assert.match(popupJs, /memory\.disable/);
   assert.match(popupJs, /memory\.prune/);
   assert.match(popupJs, /quota-slider/);
+  assert.doesNotMatch(popupJs, /memory(?:Pause|Resume)|memory\.(?:pause|resume)/);
   const background = fs.readFileSync(path.join(root, "extension", "src", "background.js"), "utf8");
   assert.match(background, /"MEMORY_CALL"/);
   assert.match(background, /rpc\.request\(message\.method/);

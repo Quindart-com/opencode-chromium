@@ -767,10 +767,10 @@ async function sendCdpCommand(tabId, method, commandParams, timeoutMs) {
     }, timeoutMs);
 
     chrome.debugger.sendCommand({ tabId }, method, commandParams, (result) => {
+      const error = chrome.runtime.lastError;
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
-      const error = chrome.runtime.lastError;
       if (error) reject(new Error(error.message));
       else resolve(result ?? {});
     });
