@@ -1,10 +1,10 @@
 import { createAgentBrowserRuntime } from "../../core/runtime.js";
-import { createCoreRegistry } from "../../core/registry.js";
+import { createCoreRegistry, createMemoryRegistry } from "../../core/registry.js";
 import { dispatchBrowserTool, toolDefinitionsForDialect } from "../../core/schema-adapters.js";
 
 export function createBrowserAgent(options = {}) {
   const runtime = options.runtime ?? createAgentBrowserRuntime(options);
-  const registry = createCoreRegistry(runtime);
+  const registry = { ...createCoreRegistry(runtime), ...(options.memory ? createMemoryRegistry(runtime) : {}) };
   return {
     runtime,
     registry,

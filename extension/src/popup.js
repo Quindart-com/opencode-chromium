@@ -22,6 +22,13 @@ let semanticPoll = null;
 let livePort = null;
 let firstStatusApplied = false;
 
+const memoryLink = document.querySelector("#memory-link");
+memoryLink?.addEventListener("click", () => {
+  if (chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
+  }
+});
+
 function applyNativeStatus(nativeStatus) {
   if (!nativeStatus || typeof nativeStatus !== "object") return;
   const state = nativeStatus.state ?? "unknown";
