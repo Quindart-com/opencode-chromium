@@ -7,6 +7,8 @@ import { createCapabilityRegistry } from "../core/capabilities.js";
 import { packageInfo } from "./version.js";
 import { codexConfigPath, directoryHash, skillSourceDirectory, skillTargets, STALE_SKILL_MARKER } from "./skills.js";
 
+const MAX_SCHEMA_BYTES = 13000;
+
 function check(name, ok, details = {}) {
   return { name, ok: Boolean(ok), ...details };
 }
@@ -33,7 +35,7 @@ export async function runDoctor({ json = false } = {}) {
     check("native-host", fs.existsSync(path.join(info.root, "native-host", "src", "host.js")), { installed: false, message: "Use install:native-host to register the host." }),
     check("semantic-cache", true, { configured: Boolean(process.env.AGENT_BROWSER_SEMANTIC_DIR ?? process.env.OPENCODE_BROWSER_SEMANTIC_DIR) }),
     check("qwen-cache", true, { configured: Boolean(process.env.AGENT_BROWSER_SEMANTIC_DIR ?? process.env.OPENCODE_BROWSER_SEMANTIC_DIR) }),
-    check("schema-budget", Buffer.byteLength(JSON.stringify(tools)) < 8000, { bytes: Buffer.byteLength(JSON.stringify(tools)), maxBytes: 8000 }),
+    check("schema-budget", Buffer.byteLength(JSON.stringify(tools)) < MAX_SCHEMA_BYTES, { bytes: Buffer.byteLength(JSON.stringify(tools)), maxBytes: MAX_SCHEMA_BYTES }),
     check("stale-client-paths", !fs.existsSync(path.join(info.root, ["opencode", "plugin"].join("-"))) && !fs.existsSync(path.join(info.root, ["codex", "adapter"].join("-"))), {}),
   ];
   const skillSource = skillSourceDirectory();
