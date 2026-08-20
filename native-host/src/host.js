@@ -7,9 +7,10 @@ import { FrameDecoder, writeFrame } from "./framing.js";
 import { instanceIpcPath, isUnixSocketPath } from "./ipc-path.js";
 import { removeProfileRegistration, writeProfileRegistration } from "./profile-registry.js";
 import { RpcRelay } from "./rpc-relay.js";
-import { handleSemanticHostMethod } from "./semantic-search.js";
+import { handleSemanticHostMethod, embedMemoryTexts } from "./semantic-search.js";
 import { handleVisualHostMethod } from "./visual-map.js";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.js";
+import { EmbedQueue, MemoryCapture, MemoryStore } from "./memory/index.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
 const PROTOCOL_VERSION = "1";
@@ -40,18 +41,63 @@ function registerProfile(profile) {
   activeProfileId = profile.profileId;
 }
 
+let memoryStore = null;
+const memoryQueue = new EmbedQueue({
+  embed: async (texts) => embedMemoryTexts(texts),
+  onResults: (rows, model, dims) => {
+    if (!memoryStore) return;
+    memoryStore.applyEmbeddings(rows, model, dims);
+    if (model) memoryStore.writeMeta("model_id", model);
+    if (Number.isInteger(dims)) memoryStore.writeMeta("dims", dims);
+  },
+});
+memoryQueue.setQueryEmbedder(async (query) => {
+  const result = await embedMemoryTexts([query]);
+  return result?.vectors?.[0] ?? null;
+});
+try {
+  memoryStore = new MemoryStore({ embedQueue: memoryQueue });
+} catch (error) {
+  log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
+}
+const memoryCapture = memoryStore ? new MemoryCapture({ store: memoryStore }) : null;
+
 const relay = new RpcRelay({
   state,
   extensionWriter: (message) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
+  memory: memoryCapture,
   localHandler: async (method, params) => {
     const semantic = await handleSemanticHostMethod(method, params);
     if (semantic !== undefined) return semantic;
     const visual = await handleVisualHostMethod(method, params);
     if (visual !== undefined) return visual;
-    return handleDiagnosticsHostMethod(method, params);
+    const diagnostics = handleDiagnosticsHostMethod(method, params);
+    if (diagnostics !== undefined) return diagnostics;
+    if (method.startsWith("memory.")) return handleMemoryHostMethod(method, params);
+    return undefined;
   },
 });
+
+function handleMemoryHostMethod(method, params = {}) {
+  if (!memoryStore) {
+    if (method === "memory.stats") {
+      return { supported: false, enabled: false, health: "storage_unavailable", error: "No supported embedded SQLite runtime (bun:sqlite or node:sqlite)" };
+    }
+    return { error: "memory_storage_unavailable" };
+  }
+  if (method === "memory.stats") return memoryStore.status();
+  if (method === "memory.search") return memoryStore.search(params);
+  if (method === "memory.configure") return memoryStore.configure(params);
+  if (method === "memory.prune") return memoryStore.prune(params);
+  if (method === "memory.enable") return memoryStore.enable();
+  if (method === "memory.disable") return memoryStore.disable();
+  if (method === "memory.pause") return memoryStore.pause();
+  if (method === "memory.resume") return memoryStore.resume();
+  if (method === "memory.export") return memoryStore.exportJson();
+  if (method === "memory.import") return memoryStore.importJson(params);
+  return undefined;
+}
 
 function log(message) {
   process.stderr.write(`[${PLUGIN_NAME}] ${message}\n`);
@@ -112,6 +158,8 @@ function shutdownHost(reason, exitCode = 0) {
   if (shutdownStarted) return;
   shutdownStarted = true;
   log(reason);
+  relay.flushMemory();
+  memoryStore?.close();
   cleanupProfileRegistration();
   relay.shutdown(reason);
   server.close(() => {

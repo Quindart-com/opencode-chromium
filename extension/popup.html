@@ -22,57 +22,150 @@
         </div>
       </header>
 
-      <section class="card" aria-labelledby="connection-title">
-        <h2 id="connection-title">Connection</h2>
-        <dl id="connection-list">
-          <div>
-            <dt>Status</dt>
-            <dd id="status-detail">Checking...</dd>
-          </div>
-          <div>
-            <dt>Host</dt>
-            <dd id="host">com.opencode.browser.plugin</dd>
-          </div>
-          <div>
-            <dt>Last Check</dt>
-            <dd id="last-checked">-</dd>
-          </div>
-          <div>
-            <dt>Profile ID</dt>
-            <dd id="profile-id" class="mono">Checking...</dd>
-          </div>
-        </dl>
+      <nav class="view-tabs" role="tablist" aria-label="Extension views">
+        <button id="tab-connection" class="view-tab active" role="tab" aria-selected="true" type="button">Connection</button>
+        <button id="tab-memory" class="view-tab" role="tab" aria-selected="false" type="button">Action Memory</button>
+      </nav>
+
+      <section id="view-connection" class="view">
+        <div class="card" aria-labelledby="connection-title">
+          <h2 id="connection-title">Connection</h2>
+          <dl id="connection-list">
+            <div>
+              <dt>Status</dt>
+              <dd id="status-detail">Checking...</dd>
+            </div>
+            <div>
+              <dt>Host</dt>
+              <dd id="host">com.opencode.browser.plugin</dd>
+            </div>
+            <div>
+              <dt>Last Check</dt>
+              <dd id="last-checked">-</dd>
+            </div>
+            <div>
+              <dt>Profile ID</dt>
+              <dd id="profile-id" class="mono">Checking...</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="card" aria-labelledby="profile-title">
+          <h2 id="profile-title">Profile</h2>
+          <form id="profile-form">
+            <label for="profile-label">Profile label</label>
+            <div class="input-row">
+              <input id="profile-label" name="profile-label" type="text" maxlength="80" placeholder="work, personal, staging">
+              <button type="submit" class="button button-primary">Save</button>
+            </div>
+            <p id="profile-help">Labels stay local and are used only to pick the right open browser profile.</p>
+          </form>
+        </div>
+
+        <div class="card" aria-labelledby="semantic-title">
+          <h2 id="semantic-title">Semantic page search</h2>
+          <form id="semantic-form">
+            <label class="checkbox-row">
+              <input id="semantic-enabled" type="checkbox">
+              <span>Enable Snowflake semantic retrieval</span>
+            </label>
+            <label for="semantic-model">Local model cache</label>
+            <select id="semantic-model" name="semantic-model"></select>
+            <div id="semantic-model-info" class="model-info">Loading model options...</div>
+            <div class="button-row">
+              <button type="submit" class="primary">Save settings</button>
+              <button id="semantic-prepare" type="button" class="secondary">Prepare model</button>
+              <button id="semantic-delete" type="button" class="danger">Delete files</button>
+            </div>
+            <p id="semantic-help">Snowflake retrieval is the default. Use lexical or auto search for lower latency; deep search uses the retained Qwen bundle only when requested.</p>
+          </form>
+        </div>
       </section>
 
-      <section class="card" aria-labelledby="profile-title">
-        <h2 id="profile-title">Profile</h2>
-        <form id="profile-form">
-          <label for="profile-label">Profile label</label>
-          <div class="input-row">
-            <input id="profile-label" name="profile-label" type="text" maxlength="80" placeholder="work, personal, staging">
-            <button type="submit">Save</button>
+      <section id="view-memory" class="view" hidden>
+        <div class="card memory-card memory-control-card">
+          <div class="memory-head">
+            <div>
+              <h2>Action memory</h2>
+              <span class="memory-state-line">Save successful browser actions locally to speed up repeat tasks.</span>
+            </div>
+            <span id="memory-state-pill" class="pill pill-neutral" hidden aria-hidden="true">checking</span>
           </div>
-          <p id="profile-help">Labels stay local and are used only to pick the right open browser profile.</p>
-        </form>
-      </section>
+          <span id="memory-state-line" class="visually-hidden" aria-live="polite">Checking memory state...</span>
+          <div class="memory-actions memory-toggle-actions">
+            <button id="memory-enable" class="button button-success" type="button">Enable</button>
+            <button id="memory-disable" class="button button-danger" type="button">Disable</button>
+          </div>
+          <p id="memory-feedback" class="feedback" role="status"></p>
+        </div>
 
-      <section class="card" aria-labelledby="semantic-title">
-        <h2 id="semantic-title">Semantic page search</h2>
-        <form id="semantic-form">
-          <label class="checkbox-row">
-            <input id="semantic-enabled" type="checkbox">
-            <span>Enable Snowflake semantic retrieval</span>
+        <div class="card memory-card">
+          <div class="memory-head">
+            <div>
+              <h2>Storage limit</h2>
+              <span id="quota-caption" class="memory-state-line"></span>
+            </div>
+            <span id="quota-now" class="quota-now"></span>
+          </div>
+          <input id="quota-slider" class="quota-slider" type="range" min="100" max="10240" step="100" value="100" disabled>
+          <div class="quota-scale">
+            <span>100 MB</span><span>2.5 GB</span><span>5 GB</span><span>10 GB</span>
+          </div>
+          <label class="checkbox-row power-row">
+            <input id="power-user" type="checkbox">
+            <span>Expanded storage — allow up to 10 GB</span>
           </label>
-          <label for="semantic-model">Local model cache</label>
-          <select id="semantic-model" name="semantic-model"></select>
-          <div id="semantic-model-info" class="model-info">Loading model options...</div>
-          <div class="button-row">
-            <button type="submit" class="primary">Save settings</button>
-            <button id="semantic-prepare" type="button" class="secondary">Prepare model</button>
-            <button id="semantic-delete" type="button" class="danger">Delete files</button>
+          <p id="power-note" class="help-note" hidden>Expanded storage can use more disk space.</p>
+          <div class="quota-track"><div id="quota-fill" class="quota-fill"></div></div>
+          <p id="quota-usage" class="help-note"></p>
+        </div>
+
+        <div class="card memory-card">
+          <div class="memory-head">
+            <div>
+              <h2>Cleanup</h2>
+              <span class="memory-state-line">Unsuccessful actions age out automatically. Confirmed actions remain.</span>
+            </div>
           </div>
-          <p id="semantic-help">Snowflake retrieval is the default. Use lexical or auto search for lower latency; deep search uses the retained Qwen bundle only when requested.</p>
-        </form>
+          <div class="memory-actions">
+            <label class="purge-label" for="purge-days">Remove after</label>
+            <input id="purge-days" class="purge-days" type="number" min="1" max="365" value="7">
+            <span class="purge-unit">days</span>
+            <button id="prune-now" class="button" type="button">Clean up now</button>
+          </div>
+        </div>
+
+        <div class="card memory-card">
+          <div class="memory-head">
+            <div>
+              <h2>Overview</h2>
+              <span class="memory-state-line">A quick read on how your memory is growing.</span>
+            </div>
+          </div>
+          <div class="memory-stats">
+            <div class="memory-stat"><span id="memory-success" class="memory-success">—</span><span class="stat-label">success rate</span></div>
+            <div class="memory-stat"><span id="memory-actions">0</span><span class="stat-label">actions</span></div>
+            <div class="memory-stat"><span id="memory-chains">0</span><span class="stat-label">chains</span></div>
+            <div class="memory-stat"><span id="memory-negatives">0</span><span class="stat-label">lessons</span></div>
+            <div class="memory-stat"><span id="memory-hits">0</span><span class="stat-label">hits</span></div>
+          </div>
+          <div id="memory-chart" class="memory-chart" hidden aria-label="Confirmed versus failed actions per day"></div>
+        </div>
+
+        <div class="card memory-card">
+          <div class="memory-head">
+            <div>
+              <h2>Share memory</h2>
+              <span class="memory-state-line">Snapshots contain no personal page content.</span>
+            </div>
+          </div>
+          <div class="memory-actions">
+            <button id="export-json" class="button" type="button">Export JSON</button>
+            <label class="button file-button" for="import-json">Import JSON</label>
+            <input id="import-json" type="file" accept="application/json" hidden>
+          </div>
+          <p id="share-feedback" class="feedback" role="status"></p>
+        </div>
       </section>
 
       <footer id="app-footer">
