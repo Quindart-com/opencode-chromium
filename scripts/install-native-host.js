@@ -66,13 +66,14 @@ const USER_DATA_DIRS = {
 };
 
 function usage() {
-  console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id>] [--browsers chrome,edge,brave,chromium|all]");
+  console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id> ...] [--browsers chrome,edge,brave,chromium|all]");
   console.error("");
   console.error("The extension ID is visible on chrome://extensions after loading extension/ as unpacked.");
+  console.error("When no ID is given, scripts/extension-id.json is used (repeat --extension-id to allow more than one).");
 }
 
 function parseArgs(argv) {
-  const args = { browsers: ["chrome"] };
+  const args = { browsers: ["chrome"], extensionIds: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") {
@@ -80,7 +81,7 @@ function parseArgs(argv) {
       process.exit(0);
     }
     if (arg === "--extension-id") {
-      args.extensionId = argv[++i];
+      args.extensionIds.push(argv[++i]);
       continue;
     }
     if (arg === "--auto") {
@@ -95,8 +96,16 @@ function parseArgs(argv) {
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
-  if (!args.extensionId) args.extensionId = process.env.AGENT_BROWSER_EXTENSION_ID ?? process.env.OPENCODE_BROWSER_EXTENSION_ID;
-  if (!args.extensionId && !args.auto) throw new Error("Missing --extension-id, OPENCODE_BROWSER_EXTENSION_ID, or --auto");
+  if (args.extensionIds.length === 0) {
+    const env = process.env.AGENT_BROWSER_EXTENSION_ID ?? process.env.OPENCODE_BROWSER_EXTENSION_ID;
+    if (env) args.extensionIds = env.split(",").map((id) => id.trim()).filter(Boolean);
+  }
+  if (args.extensionIds.length === 0 && !args.auto) {
+    const config = readJsonIfPresent(path.join(repoRoot(), "scripts", "extension-id.json"));
+    const configured = Array.isArray(config?.extensionIds) ? config.extensionIds : typeof config?.extensionId === "string" ? [config.extensionId] : [];
+    args.extensionIds = configured.filter((id) => typeof id === "string" && id.length > 0);
+  }
+  if (args.extensionIds.length === 0 && !args.auto) throw new Error("Missing --extension-id, OPENCODE_BROWSER_EXTENSION_ID, or --auto");
   for (const browser of args.browsers) {
     if (!SUPPORTED_BROWSERS[browser]) throw new Error(`Unsupported browser: ${browser}`);
   }
@@ -227,7 +236,7 @@ function installManifest(args) {
   const installed = [];
   const allExtensionIds = [];
   for (const browser of args.browsers) {
-    const extensionIds = args.auto ? detectExtensionIds(browser) : [args.extensionId];
+    const extensionIds = args.auto ? detectExtensionIds(browser) : args.extensionIds;
     if (extensionIds.length === 0) {
       installed.push({ browser, skipped: true, reason: "opencode-browser-plugin extension was not detected" });
       continue;
