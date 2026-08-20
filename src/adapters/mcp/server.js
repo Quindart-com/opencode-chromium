@@ -15,12 +15,13 @@ import {
 } from "@modelcontextprotocol/node";
 import { z } from "zod";
 import { createAgentBrowserRuntime } from "../../core/runtime.js";
-import { createCoreRegistry } from "../../core/registry.js";
+import { createCoreRegistry, createMemoryRegistry } from "../../core/registry.js";
 import { jsonSchemaFor } from "../../core/schema-adapters.js";
 import { artifactUriTemplate } from "../../core/artifacts.js";
 import { contractMetadata, PLUGIN_NAME, PLUGIN_VERSION } from "../../core/versions.js";
 import { createBrowserOperations } from "../../browser/operations/index.js";
 import { closeBrowserClients } from "../../browser/client.js";
+import { memoryEnabledForServer } from "../../memory/index.js";
 
 export const SERVER_NAME = PLUGIN_NAME;
 export const SERVER_INSTRUCTIONS = [
@@ -114,12 +115,13 @@ function mcpSchema(schema) {
     },
   };
 }
-
-export async function registerCoreTools(server, runtime, fallbackSessionId) {
-  const registry = createCoreRegistry(runtime);
-  for (const [name, definition] of Object.entries(registry)) {
-    server.registerTool(name, {
-      description: definition.description,
+export async function registerCoreTools(server, runtime, fallbackSessionId, { memory = false } = {}) {
+  const registries = [createCoreRegistry(runtime)];
+  if (memory) registries.push(createMemoryRegistry(runtime));
+  for (const registry of registries) {
+    for (const [name, definition] of Object.entries(registry)) {
+      server.registerTool(name, {
+        description: definition.description,
       inputSchema: mcpSchema(definition.inputSchema),
       outputSchema: mcpSchema(definition.outputSchema),
       annotations: definition.annotations,
@@ -137,6 +139,7 @@ export async function registerCoreTools(server, runtime, fallbackSessionId) {
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result, isError: true };
       }
     });
+  }
   }
 
   server.registerResource(
@@ -176,9 +179,9 @@ export async function registerLegacyTools(server, fallbackSessionId) {
   }
 }
 
-export async function createServer({ runtime, toolset = "core", fallbackSessionId = `mcp-${randomUUID()}` } = {}) {
+export async function createServer({ runtime, toolset = "core", fallbackSessionId = `mcp-${randomUUID()}`, memory = memoryEnabledForServer() } = {}) {
   const server = new McpServer({ name: SERVER_NAME, version: packageVersion() }, { instructions: SERVER_INSTRUCTIONS });
-  if (toolset === "core" || toolset === "debug") await registerCoreTools(server, runtime ?? createAgentBrowserRuntime(), fallbackSessionId);
+  if (toolset === "core" || toolset === "debug") await registerCoreTools(server, runtime ?? createAgentBrowserRuntime(), fallbackSessionId, { memory });
   if (toolset === "legacy" || toolset === "debug") await registerLegacyTools(server, fallbackSessionId);
   return server;
 }

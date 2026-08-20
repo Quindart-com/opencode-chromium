@@ -1,3 +1,15 @@
+#app-footer .memory-link {
+  display: block;
+  margin: 0 auto 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 6px;
+  background: #f6f8fa;
+  color: #1f6feb;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 :root {
   --bg: #f8fafc;
   --surface: #ffffff;
