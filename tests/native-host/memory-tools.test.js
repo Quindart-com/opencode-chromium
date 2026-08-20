@@ -64,23 +64,28 @@ test("consultation policy instructs status-then-search before re-exploration", a
   assert.match(policy, /continue normally when memory is absent/);
 });
 
-test("extension advertises the options page, popup entry, and host call channel", () => {
+test("extension surfaces memory settings and dashboard inside the popup", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8"));
-  assert.equal(manifest.options_ui.page, "src/options.html");
-  assert.equal(manifest.options_ui.open_in_tab, true);
+  assert.equal(manifest.options_ui, undefined, "no separate options tab; memory lives in the popup");
+  const popupHtml = fs.readFileSync(path.join(root, "extension", "popup.html"), "utf8");
+  assert.match(popupHtml, /tab-memory/);
+  assert.match(popupHtml, /id="view-memory"/);
+  assert.match(popupHtml, /quota-slider/);
+  assert.match(popupHtml, /power-user/);
+  assert.match(popupHtml, /memory-chart/);
+  const popupJs = fs.readFileSync(path.join(root, "extension", "src", "popup.js"), "utf8");
+  assert.match(popupJs, /memory\.stats/);
+  assert.match(popupJs, /memory\.configure/);
+  assert.match(popupJs, /memory\.enable/);
+  assert.match(popupJs, /memory\.disable/);
+  assert.match(popupJs, /memory\.prune/);
+  assert.match(popupJs, /quota-slider/);
   const background = fs.readFileSync(path.join(root, "extension", "src", "background.js"), "utf8");
   assert.match(background, /"MEMORY_CALL"/);
   assert.match(background, /rpc\.request\(message\.method/);
-  const popup = fs.readFileSync(path.join(root, "extension", "popup.html"), "utf8");
-  assert.match(popup, /memory-link/);
-  const options = fs.readFileSync(path.join(root, "extension", "src", "options.js"), "utf8");
-  assert.match(options, /memory\.stats/);
-  assert.match(options, /memory\.configure/);
-  assert.match(options, /quota-slider/);
-  const optionsHtml = fs.readFileSync(path.join(root, "extension", "src", "options.html"), "utf8");
-  assert.match(optionsHtml, /power-user/);
   const css = fs.readFileSync(path.join(root, "extension", "src", "popup.css"), "utf8");
-  assert.match(css, /memory-link/);
+  assert.match(css, /view-tab/);
+  assert.match(css, /memory-card/);
 });
 
 test("host handles memory extension methods locally", async () => {
