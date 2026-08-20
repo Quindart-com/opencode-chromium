@@ -1038,10 +1038,11 @@ export class AgentBrowserRuntime {
 
   async memoryStatus(args = {}, context = {}) {
     try {
+      if (!this._memoryReader?.open) this.memoryReader();
       const store = this.memoryReader();
-      return { ...contractMetadata(), ok: true, status: "ready", result: store.status() };
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result: store.status() };
     } catch (error) {
-      return this.failure(null, error);
+      return this.failure(args.sessionId ?? null, error);
     }
   }
 
@@ -1052,13 +1053,13 @@ export class AgentBrowserRuntime {
         limit: args.limit,
         capability: args.capability,
         hostname: args.hostname,
-        sessionId: args.session_id,
+        sessionId: args.session_id ?? args.sessionId,
         sinceId: args.since_id,
         untilId: args.until_id,
       });
-      return { ...contractMetadata(), ok: true, status: "ready", result };
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
     } catch (error) {
-      return this.failure(null, error);
+      return this.failure(args.sessionId ?? null, error);
     }
   }
 
@@ -1071,9 +1072,9 @@ export class AgentBrowserRuntime {
         kind: args.kind ?? "all",
         hostname: args.hostname,
       });
-      return { ...contractMetadata(), ok: true, status: "ready", result };
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
     } catch (error) {
-      return this.failure(null, error);
+      return this.failure(args.sessionId ?? null, error);
     }
   }
 
