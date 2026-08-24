@@ -1,12 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 250" role="img" aria-label="Star history for Quindart-com/opencode-chromium">
   <rect width="680" height="250" rx="10" fill="#ffffff"/>
   <text x="48" y="26" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="700" fill="#1f2328">Star history</text>
-  <text x="660" y="26" text-anchor="end" font-family="inherit" font-size="12" fill="#59636e">7 stars</text>
+  <text x="660" y="26" text-anchor="end" font-family="inherit" font-size="12" fill="#59636e">8 stars</text>
   <path d="M48,194H660" stroke="#d1d9e0" stroke-width="1.5" fill="none"/>
-  <path d="M354.0,40.0" stroke="#0969da" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="354.0" cy="40.0" r="3.5" fill="#0969da"/>
+  <path d="M48.0,59.3 L660.0,40.0" stroke="#0969da" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="48.0" cy="59.3" r="3.5" fill="#0969da"/>
+  <circle cx="660.0" cy="40.0" r="3.5" fill="#0969da"/>
   <text x="48" y="220" font-family="inherit" font-size="11" fill="#59636e">2026-08-20</text>
-  <text x="660" y="220" text-anchor="end" font-family="inherit" font-size="11" fill="#59636e">2026-08-20</text>
-  <text x="48" y="34" font-family="inherit" font-size="11" fill="#59636e">7 ★</text>
-  <text x="48" y="242" font-family="inherit" font-size="10" fill="#8c959f">Updated 2026-08-20 · generated from the GitHub API by a repository workflow</text>
+  <text x="660" y="220" text-anchor="end" font-family="inherit" font-size="11" fill="#59636e">2026-08-24</text>
+  <text x="48" y="34" font-family="inherit" font-size="11" fill="#59636e">8 ★</text>
+  <text x="48" y="242" font-family="inherit" font-size="10" fill="#8c959f">Updated 2026-08-24 · generated from the GitHub API by a repository workflow</text>
 </svg>
