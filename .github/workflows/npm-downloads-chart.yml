@@ -1,4 +1,4 @@
-name: Update star history chart
+name: Update NPM downloads chart
 
 on:
   schedule:
@@ -12,31 +12,29 @@ permissions:
   contents: write
 
 concurrency:
-  group: star-chart
+  group: npm-downloads-chart
   cancel-in-progress: false
 
 jobs:
   update:
-    name: Refresh star history chart
+    name: Refresh NPM downloads chart
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Update chart data and SVG
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/star-chart.mjs
+        run: node scripts/npm-downloads-chart.mjs
 
       - name: Commit chart updates
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/star-history.json assets/star-history.svg
+          git add assets/npm-downloads.json assets/npm-downloads.svg
           if git diff --cached --quiet; then
-            echo "Star history unchanged; nothing to commit."
+            echo "NPM downloads history unchanged; nothing to commit."
           else
-            git commit -m "chore: update star history chart"
+            git commit -m "chore: update NPM downloads chart"
             git push origin HEAD:master
           fi
