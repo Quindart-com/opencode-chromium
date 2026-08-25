@@ -68,27 +68,28 @@ test("consultation policy instructs status-then-search before re-exploration", a
 test("extension surfaces memory settings and dashboard inside the popup", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8"));
   assert.equal(manifest.options_ui, undefined, "no separate options tab; memory lives in the popup");
-  const popupHtml = fs.readFileSync(path.join(root, "extension", "popup.html"), "utf8");
-  assert.match(popupHtml, /tab-memory/);
-  assert.match(popupHtml, /id="view-memory"/);
-  assert.match(popupHtml, /quota-slider/);
-  assert.match(popupHtml, /power-user/);
-  assert.match(popupHtml, /memory-chart/);
-  assert.match(popupHtml, /id="memory-enable"/);
-  assert.match(popupHtml, /id="memory-disable"/);
-  assert.doesNotMatch(popupHtml, /id="memory-(?:pause|resume)"/);
-  const popupJs = fs.readFileSync(path.join(root, "extension", "src", "popup.js"), "utf8");
-  assert.match(popupJs, /memory\.stats/);
-  assert.match(popupJs, /memory\.configure/);
-  assert.match(popupJs, /memory\.enable/);
-  assert.match(popupJs, /memory\.disable/);
-  assert.match(popupJs, /memory\.prune/);
-  assert.match(popupJs, /quota-slider/);
-  assert.doesNotMatch(popupJs, /memory(?:Pause|Resume)|memory\.(?:pause|resume)/);
-  const background = fs.readFileSync(path.join(root, "extension", "src", "background.js"), "utf8");
+  const popupSource = ["App.tsx", "ConnectionView.tsx", "MemoryView.tsx", "api.ts"]
+    .map((file) => fs.readFileSync(path.join(root, "extension-src", "entrypoints", "popup", file), "utf8"))
+    .join("\n");
+  assert.match(popupSource, /tab-memory|Action Memory/);
+  assert.match(popupSource, /id=\"view-memory\"|id=\"memory-state-line\"/);
+  assert.match(popupSource, /quota-slider/);
+  assert.match(popupSource, /power-user/);
+  assert.match(popupSource, /MemoryChart|memory-chart/);
+  assert.match(popupSource, /memory-enable|memory\.enable/);
+  assert.match(popupSource, /memory-disable|memory\.disable/);
+  assert.doesNotMatch(popupSource, /memory-(?:pause|resume)|memory\.(?:pause|resume)/);
+  assert.match(popupSource, /memory\.stats/);
+  assert.match(popupSource, /memory\.configure/);
+  assert.match(popupSource, /memory\.prune/);
+  const background = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "background", "runtime.js"), "utf8");
   assert.match(background, /"MEMORY_CALL"/);
   assert.match(background, /rpc\.request\(message\.method/);
-  const css = fs.readFileSync(path.join(root, "extension", "src", "popup.css"), "utf8");
+  const runtimeChunk = fs.readdirSync(path.join(root, "extension", "chunks")).find((file) => /^runtime-.+\.js$/.test(file));
+  assert.ok(runtimeChunk, "WXT emitted the background runtime chunk");
+  const builtBackground = fs.readFileSync(path.join(root, "extension", "chunks", runtimeChunk), "utf8");
+  assert.match(builtBackground, /MEMORY_CALL/);
+  const css = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "popup", "popup.css"), "utf8");
   assert.match(css, /view-tab/);
   assert.match(css, /memory-card/);
 });
