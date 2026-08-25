@@ -767,10 +767,10 @@ async function sendCdpCommand(tabId, method, commandParams, timeoutMs) {
     }, timeoutMs);
 
     chrome.debugger.sendCommand({ tabId }, method, commandParams, (result) => {
+      const error = chrome.runtime.lastError;
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
-      const error = chrome.runtime.lastError;
       if (error) reject(new Error(error.message));
       else resolve(result ?? {});
     });
@@ -1368,6 +1368,14 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "MEMORY_CALL") {
+    rpc.connect();
+    rpc.request(message.method, message.params ?? {}, { timeoutMs: 60000 })
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: errorMessage(error) }));
+    return true;
+  }
+
   if (message?.type === "GET_HOST_STATUS" || message?.type === "GET_NATIVE_HOST_STATUS") {
     sendResponse({ status: hostStatus });
     return true;
