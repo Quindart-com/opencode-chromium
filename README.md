@@ -150,6 +150,7 @@ session unless duplicate tools are intentional.
 ```powershell
 bun install --frozen-lockfile
 bun run build
+bun run build:extension
 bun test
 bun run check
 ```
@@ -228,9 +229,12 @@ This copies the skill to `~/.codex/skills/`, `~/.claude/skills/`, and `~/.agents
 Load `extension/` as an unpacked extension, then install the host:
 
 ```powershell
+bun run build:extension
 bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 bun run check:native-host -- --json
 ```
+
+The extension source lives in `extension-src/`: WXT owns the entrypoints, `entrypoints/popup/App.tsx` is the shared UI root, and static files live under `public/`. Use `bun run extension:dev` for development, `bun run typecheck:extension` for TypeScript checks, and `bun run build:extension` for the Chrome Web Store-ready package.
 
 Use `AGENT_BROWSER_*` environment variables for new configuration. The older `OPENCODE_BROWSER_*` names remain lower-priority aliases through the 1.x compatibility window.
 
