@@ -5,12 +5,12 @@
 <p align="center"><strong>Provider-neutral Chromium automation for MCP clients, OpenCode V2, Codex, and direct JavaScript agents.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Quindart-com/opencode-chromium/stargazers"><img src="https://img.shields.io/github/stars/Quindart-com/opencode-chromium?style=flat&logo=github&label=stars" alt="GitHub stars"/></a>
+  <a href="https://www.npmjs.com/package/opencode-chromium"><img src="https://img.shields.io/npm/dw/opencode-chromium?style=flat&logo=npm&label=weekly%20downloads" alt="NPM weekly downloads"/></a>
   <a href="https://github.com/Quindart-com/opencode-chromium/discussions"><img src="https://img.shields.io/badge/roadmap-Discussions-3fb950" alt="Roadmap discussions"/></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Quindart-com/opencode-chromium/stargazers"><img src="assets/star-history.svg" alt="Star history chart" width="680"/></a>
+  <a href="https://www.npmjs.com/package/opencode-chromium"><img src="assets/npm-downloads.svg" alt="NPM weekly download history" width="680"/></a>
 </p>
 
 ## Community and roadmap
