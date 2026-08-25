@@ -1,84 +1,14 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>opencode-chromium</title>
-    <link rel="stylesheet" href="src/popup.css">
+    <script type="module" crossorigin src="/chunks/popup-C7pR_5-7.js"></script>
+    <link rel="modulepreload" crossorigin href="/chunks/browser-wMmptMuf.js">
+    <link rel="stylesheet" crossorigin href="/assets/popup-Xx22U0ma.css">
   </head>
   <body>
-    <main>
-      <header id="app-header">
-        <img id="app-logo" src="images/icon48.png" width="48" height="48" alt="opencode-chromium logo">
-        <div id="app-identity">
-          <h1>opencode-chromium</h1>
-          <p id="app-subtitle">
-            <span id="app-version">Extension</span> &middot; Local browser automation
-          </p>
-        </div>
-        <div id="status-pill" class="pill pill-unknown" role="status">
-          <span id="status-dot" aria-hidden="true"></span>
-          <span id="status">Checking connection...</span>
-        </div>
-      </header>
-
-      <section class="card" aria-labelledby="connection-title">
-        <h2 id="connection-title">Connection</h2>
-        <dl id="connection-list">
-          <div>
-            <dt>Status</dt>
-            <dd id="status-detail">Checking...</dd>
-          </div>
-          <div>
-            <dt>Host</dt>
-            <dd id="host">com.opencode.browser.plugin</dd>
-          </div>
-          <div>
-            <dt>Last Check</dt>
-            <dd id="last-checked">-</dd>
-          </div>
-          <div>
-            <dt>Profile ID</dt>
-            <dd id="profile-id" class="mono">Checking...</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section class="card" aria-labelledby="profile-title">
-        <h2 id="profile-title">Profile</h2>
-        <form id="profile-form">
-          <label for="profile-label">Profile label</label>
-          <div class="input-row">
-            <input id="profile-label" name="profile-label" type="text" maxlength="80" placeholder="work, personal, staging">
-            <button type="submit">Save</button>
-          </div>
-          <p id="profile-help">Labels stay local and are used only to pick the right open browser profile.</p>
-        </form>
-      </section>
-
-      <section class="card" aria-labelledby="semantic-title">
-        <h2 id="semantic-title">Semantic page search</h2>
-        <form id="semantic-form">
-          <label class="checkbox-row">
-            <input id="semantic-enabled" type="checkbox">
-            <span>Enable Snowflake semantic retrieval</span>
-          </label>
-          <label for="semantic-model">Local model cache</label>
-          <select id="semantic-model" name="semantic-model"></select>
-          <div id="semantic-model-info" class="model-info">Loading model options...</div>
-          <div class="button-row">
-            <button type="submit" class="primary">Save settings</button>
-            <button id="semantic-prepare" type="button" class="secondary">Prepare model</button>
-            <button id="semantic-delete" type="button" class="danger">Delete files</button>
-          </div>
-          <p id="semantic-help">Snowflake retrieval is the default. Use lexical or auto search for lower latency; deep search uses the retained Qwen bundle only when requested.</p>
-        </form>
-      </section>
-
-      <footer id="app-footer">
-        <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">Source on GitHub</a>
-      </footer>
-    </main>
-    <script type="module" src="src/popup.js"></script>
+    <div id="root"></div>
   </body>
 </html>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveTabActivation } from "../../extension/src/focus-policy.js";
+import { resolveTabActivation } from "../../extension-src/entrypoints/background/focus-policy.js";
 
 test("background operations never activate the tab or focus the window", () => {
   assert.deepEqual(resolveTabActivation({}), { active: false, foreground: false });
