@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createBrowserOperations } from "../src/browser/operations/index.js";
 import { createAgentBrowserRuntime } from "../src/core/runtime.js";
-import { createCoreRegistry } from "../src/core/registry.js";
+import { createCoreRegistry, createMemoryRegistry } from "../src/core/registry.js";
 
 const ADAPTER_SERVER_NAME = "opencode-browser-plugin";
 
@@ -29,11 +29,11 @@ function collectJsonLines(buffer) {
   return results;
 }
 
-async function runServer(toolset, { exerciseCore = false } = {}) {
+async function runServer(toolset, { exerciseCore = false, env = {} } = {}) {
   const serverPath = path.join(adapterDir(), "src", "adapters", "mcp", "server.js");
   if (!fs.existsSync(serverPath)) throw new Error(`Adapter not found: ${serverPath}`);
 
-  const child = spawn(process.execPath, [serverPath, `--toolset=${toolset}`], { stdio: ["pipe", "pipe", "inherit"] });
+  const child = spawn(process.execPath, [serverPath, `--toolset=${toolset}`], { stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, ...env } });
   child.stdout.setEncoding("utf8");
 
   let buffer = "";
@@ -115,7 +115,7 @@ try {
   const legacyExpected = Object.keys(hooks?.tool ?? {});
   if (legacyExpected.length === 0) throw new Error("Shared plugin exposed no legacy tools");
 
-  const tools = await runServer("core", { exerciseCore: true });
+  const tools = await runServer("core", { exerciseCore: true, env: { OPENCODE_BROWSER_MEMORY: "0" } });
 
   const listed = new Map(tools.map((tool) => [tool.name, tool]));
   const missing = coreExpected.filter((name) => !listed.has(name));
@@ -138,6 +138,17 @@ try {
 
   const schemaBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
   if (schemaBytes > 13000) throw new Error(`Core tool definitions exceed the 13000-byte context budget: ${schemaBytes}`);
+
+  const memoryTools = await runServer("core", { env: { OPENCODE_BROWSER_MEMORY: "1" } });
+  const memoryNames = new Set(memoryTools.map((tool) => tool.name));
+  const memoryExpected = Object.keys(createMemoryRegistry(runtime));
+  const memoryMissing = memoryExpected.filter((name) => !memoryNames.has(name));
+  if (memoryMissing.length > 0) throw new Error(`Memory tools missing when enabled: ${memoryMissing.join(", ")}`);
+  for (const name of memoryExpected) {
+    const tool = memoryTools.find((entry) => entry.name === name);
+    if (typeof tool?.description !== "string" || tool.description.length === 0) throw new Error(`${name} is missing a description`);
+    if (!tool.inputSchema?.properties?.["sessionId"]) throw new Error(`${name} must advertise the sessionId field`);
+  }
 
   const legacyTools = await runServer("legacy");
   const legacyNames = new Set(legacyTools.map((tool) => tool.name));

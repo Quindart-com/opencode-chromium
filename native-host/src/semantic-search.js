@@ -894,6 +894,10 @@ export async function rankPageUnits(input = {}) {
   return rankPageUnitsLocal(input);
 }
 
+export async function embedMemoryTexts(texts, { modelId = null, timeoutMs = 900000 } = {}) {
+  return handleSemanticHostMethod("semantic.embedMemory", { texts, modelId, timeoutMs });
+}
+
 export async function handleSemanticHostMethod(method, params = {}) {
   if (method === "semantic.workerStatus") return semanticStatus();
   if (method === "semantic.getSettings" || method === "semantic.status") {
@@ -939,7 +943,28 @@ export async function handleSemanticHostMethod(method, params = {}) {
       });
     }
   }
+  if (method === "semantic.embedMemory") {
+    if (IS_SEMANTIC_WORKER) return embedMemoryLocal(params);
+    const timeoutMs = Number.isFinite(params.timeoutMs) ? Math.min(Math.max(params.timeoutMs, 250), 900000) : 900000;
+    return semanticWorkerRequest("semantic.embedMemory", params, timeoutMs);
+  }
   return undefined;
+}
+
+async function embedMemoryLocal({ texts = [], modelId = null } = {}) {
+  const list = Array.isArray(texts) ? texts.filter((text) => typeof text === "string" && text.length > 0) : [];
+  if (list.length === 0) return { model: null, dims: null, vectors: [] };
+  const selected = modelId ?? getSemanticSettings().modelId;
+  await prepareSemanticModelLocal(selected);
+  const model = modelById(selected);
+  if (!model) return { model: null, dims: null, vectors: [] };
+  const extractor = await loadEmbedding(model);
+  const vectors = [];
+  for (const text of list) {
+    const [vector] = await embedTexts(extractor, modelQuery(model, text), model);
+    vectors.push(Array.isArray(vector) ? vector : Array.from(vector ?? []));
+  }
+  return { model: model.id, dims: model.embedding.dimensions, vectors };
 }
 
 if (IS_SEMANTIC_WORKER) {

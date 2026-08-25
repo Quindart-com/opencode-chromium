@@ -23,12 +23,12 @@ remote server. Everything runs locally.
   in `chrome.storage.local` so you can choose which open browser profile a tool
   call should use. You can clear it at any time from the extension popup.
 
-## Data flows
+## Content boundaries
 
-- **All communication stays on your device.** The extension talks to a native
-  messaging host installed on your computer over the browser's native messaging
-  channel. Neither the extension nor the host sends data to Quindart, any cloud
-  provider, or any third-party service.
+- **No network egress.** All communication stays on your device. The extension
+  talks to a native messaging host installed on your computer over the
+  browser's native messaging channel. Neither the extension nor the host sends
+  data to Quindart, any cloud provider, or any third-party service.
 - **Local models, local data.** Optional semantic page search downloads a model
   bundle (a standard Hugging Face transformer) to a local cache directory you
   can inspect and delete from the extension popup. Search happens locally in
@@ -36,6 +36,21 @@ remote server. Everything runs locally.
 - **No accounts, no telemetry.** The extension has no accounts, does not use
   analytics, and does not phone home. The vocabulary used with the native host
   never leaves your machine.
+
+## Action Memory
+
+The opt-in **Action Memory** feature (off by default) stores a structured,
+vector-searchable record of agent browser actions in a local SQLite database.
+By design it contains **no personal content**: no URLs, window titles, typed
+text, form values, keystrokes, clipboard contents, screenshots, file paths, or
+accessibility trees — only capability names, hostnames, bounded element labels
+(≤ 64 characters), outcomes, and timestamps. There is no encryption because
+there is nothing personal to protect: the record is a what/where/result log,
+not a transcript. Export (`memory export`) produces a shareable JSON snapshot
+of the same bounded metadata; delete (`memory delete --yes`) permanently
+removes the database. Confirmed actions are never auto-purged; stale failed
+lessons are cleaned up automatically per the quota and purge settings shown in
+the Action Memory dashboard (extension popup → Action Memory).
 
 ## Permissions and why they exist
 
