@@ -85,9 +85,17 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
   const background = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "background", "runtime.js"), "utf8");
   assert.match(background, /"MEMORY_CALL"/);
   assert.match(background, /rpc\.request\(message\.method/);
+  const backgroundEntrypoint = fs.readFileSync(
+    path.join(root, "extension-src", "entrypoints", "background", "index.js"),
+    "utf8",
+  );
+  assert.match(backgroundEntrypoint, /import ["']\.\/runtime\.js["']/);
+  assert.doesNotMatch(backgroundEntrypoint, /import\(["']\.\/runtime\.js/);
   const runtimeChunk = fs.readdirSync(path.join(root, "extension", "chunks")).find((file) => /^runtime-.+\.js$/.test(file));
-  assert.ok(runtimeChunk, "WXT emitted the background runtime chunk");
-  const builtBackground = fs.readFileSync(path.join(root, "extension", "chunks", runtimeChunk), "utf8");
+  const builtBackground = fs.readFileSync(
+    runtimeChunk ? path.join(root, "extension", "chunks", runtimeChunk) : path.join(root, "extension", "background.js"),
+    "utf8",
+  );
   assert.match(builtBackground, /MEMORY_CALL/);
   const css = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "popup", "popup.css"), "utf8");
   assert.match(css, /view-tab/);
