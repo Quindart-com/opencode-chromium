@@ -5,12 +5,12 @@
 <p align="center"><strong>Provider-neutral Chromium automation for MCP clients, OpenCode V2, Codex, and direct JavaScript agents.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Quindart-com/opencode-chromium/stargazers"><img src="https://img.shields.io/github/stars/Quindart-com/opencode-chromium?style=flat&logo=github&label=stars" alt="GitHub stars"/></a>
+  <a href="https://www.npmjs.com/package/opencode-chromium"><img src="https://img.shields.io/npm/dw/opencode-chromium?style=flat&logo=npm&label=weekly%20downloads" alt="NPM weekly downloads"/></a>
   <a href="https://github.com/Quindart-com/opencode-chromium/discussions"><img src="https://img.shields.io/badge/roadmap-Discussions-3fb950" alt="Roadmap discussions"/></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Quindart-com/opencode-chromium/stargazers"><img src="assets/star-history.svg" alt="Star history chart" width="680"/></a>
+  <a href="https://www.npmjs.com/package/opencode-chromium"><img src="assets/npm-downloads.svg" alt="NPM weekly download history" width="680"/></a>
 </p>
 
 ## Community and roadmap
@@ -41,6 +41,7 @@ follow announcements on
 - Persistent session emulation (viewport, network, CPU, geolocation, color scheme, user agent, headers, init scripts) with automatic reset on finalize.
 - Network request drill-down by requestId with artifact-backed body spillover, and source-mapped console stack traces.
 - Performance diagnostics: `browser_observe` mode `diagnostic` records CDP traces and computes LCP, CLS, long tasks, TBT, and more in the native host; raw traces are artifact-first and CrUX/field data stays off.
+- Action Memory (opt-in): a local, vector-searchable record of what worked and what failed, so later sessions reuse confirmed routes — searched by meaning, self-correcting via chain lineage, with maintenance controls and a dashboard in the extension. See [docs/action-memory.md](docs/action-memory.md).
 - Snowflake-default page search with explicit lexical/auto alternatives and Qwen deep retrieval without loading models in the extension.
 - Profile-aware sessions, tab ownership, stale-target recovery, bounded read retries, conditional settling, approvals, and artifact resources.
 - MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
@@ -149,6 +150,7 @@ session unless duplicate tools are intentional.
 ```powershell
 bun install --frozen-lockfile
 bun run build
+bun run build:extension
 bun test
 bun run check
 ```
@@ -227,9 +229,12 @@ This copies the skill to `~/.codex/skills/`, `~/.claude/skills/`, and `~/.agents
 Load `extension/` as an unpacked extension, then install the host:
 
 ```powershell
+bun run build:extension
 bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 bun run check:native-host -- --json
 ```
+
+The extension source lives in `extension-src/`: WXT owns the entrypoints, `entrypoints/popup/App.tsx` is the shared UI root, and static files live under `public/`. Use `bun run extension:dev` for development, `bun run typecheck:extension` for TypeScript checks, and `bun run build:extension` for the Chrome Web Store-ready package.
 
 Use `AGENT_BROWSER_*` environment variables for new configuration. The older `OPENCODE_BROWSER_*` names remain lower-priority aliases through the 1.x compatibility window.
 
