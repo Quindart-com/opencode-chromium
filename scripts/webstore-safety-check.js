@@ -48,10 +48,7 @@ const entryNames = new Set(files.map((file) => file.relative));
 const expectedEntries = new Set([
   "manifest.json",
   "popup.html",
-  "src/background.js",
-  "src/focus-policy.js",
-  "src/popup.css",
-  "src/popup.js",
+  "background.js",
   "content-scripts/cursor.js",
   "images/cursor-chat.png",
   "images/icon16.png",
@@ -63,6 +60,8 @@ const expectedEntries = new Set([
 for (const entry of expectedEntries) {
   if (!entryNames.has(entry)) errors.push(`Extension zip is missing entry: ${entry}`);
 }
+if (![...entryNames].some((entry) => /^chunks\/popup-[^/]+\.js$/.test(entry))) errors.push("Extension popup bundle is missing");
+if (![...entryNames].some((entry) => /^assets\/popup-[^/]+\.css$/.test(entry))) errors.push("Extension popup stylesheet is missing");
 for (const entry of entryNames) {
   if (/[.]tgz$|[.]pem$|[.]key$|[.]env$|package-lock[.]json$/.test(entry)) errors.push(`Forbidden entry in extension package: ${entry}`);
 }
