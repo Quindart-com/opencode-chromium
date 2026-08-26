@@ -11,7 +11,7 @@ Install the package once (`npm install -g opencode-chromium`) and reference it b
 }
 ```
 
-Pin a version with the npm spec (`"opencode-chromium@1.6.1"`) if you prefer locked upgrades. For a local build, use:
+Pin a version with the npm spec (`"opencode-chromium@1.6.2"`) if you prefer locked upgrades. For a local build, use:
 
 ```json
 {
