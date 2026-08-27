@@ -12,10 +12,6 @@ Draft.
 
 > The service worker uses a one-minute `alarms` keepalive so an active automation session does not go idle and drop the native messaging connection while an agent is working.
 
-## bookmarks
-
-> Agents can list bookmarks to help users pick a page to automate (e.g. "open my saved work tab"). Bookmarks are only read when a tool call from a user-started session requests them; they are never modified or transmitted.
-
 ## debugger
 
 > The extension drives real input automation (mouse, keyboard, scroll, drag) and page-state capture through the Chrome DevTools Protocol on tabs a session explicitly controls. The debugger attaches only when a tool call asks for it and detaches when the call or session ends.
@@ -23,10 +19,6 @@ Draft.
 ## downloads
 
 > Download lifecycle events (started/completed/cancelled) are reported back to the agent so it can wait for and locate files it triggered. Events stay local; nothing is uploaded anywhere.
-
-## favicon
-
-> Favicons are loaded so tab listings returned to the agent are human-readable. Favicon data is used locally only.
 
 ## history
 
@@ -40,14 +32,6 @@ Draft.
 
 > The extension communicates exclusively with the locally installed native messaging host (`com.opencode.browser.plugin`) that runs the agent's browser bridge. This channel is local-only; no remote servers are involved.
 
-## notifications
-
-> Notifications surface short status/keepalive feedback during long-running automation so the user sees the session is still active. Locally generated only.
-
-## readingList
-
-> Lets an agent offer to save a page to the user's reading list when asked. Read/write only on explicit request, local only.
-
 ## remote code use
 
 > The extension does not use remote code. It does not load or execute code from any remote server, and its content security policy is locked to `script-src 'self'`; no `eval` or `new Function` is used anywhere.
@@ -55,10 +39,6 @@ Draft.
 ## scripting
 
 > `scripting` injects the extension's own bundled cursor-overlay content script into controlled tabs and executes the review-friendly DOM helpers needed for automation. Only bundled, static files are injected — never remote or generated code.
-
-## sessions
-
-> Sessions lets a session restore its tab set if the browser restarts mid-automation, so agent work survives crashes instead of losing the user's pages. State is snapshotted locally only.
 
 ## storage
 
@@ -71,10 +51,6 @@ Draft.
 ## tabs
 
 > Tabs are the core resource being automated: the agent opens, claims, lists, navigates, reloads, and closes tabs the user asked it to manage. New automation tabs are created in the background without stealing focus.
-
-## topSites
-
-> `topSites` lets the agent check whether a page the user asked for is already open in a pinned/frequent tab before creating a duplicate. Read locally, never transmitted.
 
 ## Data usage certification
 
