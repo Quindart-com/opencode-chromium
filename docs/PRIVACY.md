@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** August 13, 2026
+**Effective date:** August 27, 2026
 
 This privacy policy applies to the **opencode-chromium** extension for Chromium-based
 browsers (Chrome, Edge, Brave), published by Quindart.
@@ -57,14 +57,13 @@ the Action Memory dashboard (extension popup → Action Memory).
 The extension requests the permissions it needs to operate as a general-purpose
 automation bridge:
 
-- `tabs`, `sessions`, `tabGroups`, `bookmarks`, `history`, `topSites`,
-  `readingList`, `downloads`, `downloads.ui`, `favicon`, `notifications`,
-  `storage`: read and manage the parts of the browser you explicitly ask an
-  agent to work with.
+- `tabs`, `tabGroups`, `history`, `downloads`, `storage`: read and manage the
+  parts of the browser you explicitly ask an agent to work with.
 - `scripting`, `<all_urls>`, `debugger`: inspect page structure, run input
   automation, and capture what the agent needs to see. Pages are only touched
   when a tool call from a session you started asks for it.
-- `nativeMessaging`: communicates with the locally installed native host.
+- `nativeMessaging`, `alarms`: communicate with the locally installed native
+  host and keep the service worker responsive during active sessions.
 
 You grant or deny these permissions at load time, and you can remove the
 extension at any time.
