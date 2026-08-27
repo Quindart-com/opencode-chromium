@@ -13,21 +13,14 @@ const errors = [];
 const NOJOB_EXTENSION_ID = "piojnjijlmddhnnamahoopgbjcbcobaa";
 const EXPECTED_PERMISSIONS = [
   "alarms",
-  "bookmarks",
   "debugger",
   "downloads",
-  "downloads.ui",
-  "favicon",
   "history",
   "nativeMessaging",
-  "notifications",
-  "readingList",
   "scripting",
-  "sessions",
   "storage",
   "tabGroups",
   "tabs",
-  "topSites",
 ];
 
 function walk(directory, prefix) {

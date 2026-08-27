@@ -32,9 +32,9 @@ How it works:
 
 This extension is a general-purpose automation bridge, so it asks for the browser permissions it needs to serve any of its documented features:
 
-- **tabs, sessions, tabGroups, bookmarks, history, topSites, readingList, storage:** manage the tabs and browser state an agent session explicitly works with, and remember your per-profile label locally.
+- **tabs, tabGroups, history, storage:** manage the tabs and browser state an agent session explicitly works with, search browsing history when requested, and remember your per-profile label locally.
 - **scripting, <all_urls>, debugger:** inspect pages, run coordinate input, and capture page state. Pages are only touched when a tool call from a session you started asks for it; the extension never acts on its own.
-- **downloads, downloads.ui, notifications, favicon:** report download lifecycle events to the agent, show status, and load favicons for tab listings.
+- **downloads:** report download lifecycle events to the agent so it can wait for and locate files it triggered.
 - **nativeMessaging:** the sole channel to the locally installed host executable. No remote servers are involved.
 - **alarms:** keeps the service worker alive so automation sessions stay responsive while open.
 
