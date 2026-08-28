@@ -613,7 +613,7 @@ p {
   line-height: 1.4;
 }
 
-.switch {
+button.switch {
   position: relative;
   flex: 0 0 auto;
   width: 42px;
@@ -626,7 +626,7 @@ p {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.switch .switch-knob {
+button.switch .switch-knob {
   position: absolute;
   top: 2px;
   left: 2px;
@@ -638,16 +638,16 @@ p {
   transition: transform 0.15s ease;
 }
 
-.switch.on {
+button.switch.on {
   border-color: var(--accent);
   background: linear-gradient(135deg, var(--accent), var(--accent-hover));
 }
 
-.switch.on .switch-knob {
+button.switch.on .switch-knob {
   transform: translateX(18px);
 }
 
-.switch.on:focus-visible {
+button.switch.on:focus-visible {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
