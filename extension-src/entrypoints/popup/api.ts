@@ -16,11 +16,14 @@ export type SemanticModel = {
   id: string;
   label: string;
   description?: string;
+  role?: "adaptive" | "deep";
+  default?: boolean;
+  parameters?: string;
+  dimensions?: number;
+  contextLength?: string;
   embedding?: { id?: string };
   reranker?: { id?: string };
   benchmark?: { label?: string; value?: string | number };
-  parameters?: string;
-  dimensions?: number;
   cache?: { cached?: boolean };
 };
 
