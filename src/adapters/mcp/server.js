@@ -85,7 +85,7 @@ function equalSecret(first, second) {
 }
 
 function conciseText(result) {
-  const text = JSON.stringify(result);
+  const text = JSON.stringify(sanitizeImagePayloads(result));
   return text.length <= 4000 ? text : JSON.stringify({
     ok: result.ok,
     status: result.status,
@@ -95,6 +95,66 @@ function conciseText(result) {
     ...contractMetadata(),
   });
 }
+
+const IMAGE_ATTACHMENT_LIMIT = 4;
+
+function inlineImagePayload(value) {
+  return typeof value?.base64 === "string" && typeof value?.mimeType === "string" && value.mimeType.startsWith("image/") ? value : null;
+}
+
+function* imageCandidates(value, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 4) return;
+  const inline = inlineImagePayload(value);
+  if (inline) {
+    yield inline;
+    return;
+  }
+  if (typeof value.mimeType === "string" && value.mimeType.startsWith("image/") && !value.base64 && (value.artifactId || value.uri)) {
+    yield value;
+    return;
+  }
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      for (const entry of child) yield* imageCandidates(entry, depth + 1);
+    } else if (child && typeof child === "object") {
+      yield* imageCandidates(child, depth + 1);
+    }
+  }
+}
+
+function mcpImageContent(result, runtime) {
+  try {
+    const images = [];
+    for (const candidate of imageCandidates(result)) {
+      if (images.length >= IMAGE_ATTACHMENT_LIMIT) break;
+      if (typeof candidate.base64 === "string") {
+        images.push({ type: "image", data: candidate.base64, mimeType: candidate.mimeType });
+      } else if (runtime?.artifacts) {
+        const artifact = runtime.artifacts.read(candidate.artifactId ?? candidate.uri);
+        if (artifact?.data) images.push({ type: "image", data: Buffer.from(artifact.data).toString("base64"), mimeType: candidate.mimeType });
+      }
+    }
+    return images;
+  } catch {
+    // Image content is an enhancement; never fail the tool result for it.
+  }
+  return [];
+}
+
+function sanitizeImagePayloads(value, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 4) return value;
+  if (Array.isArray(value)) return value.map((entry) => sanitizeImagePayloads(entry, depth + 1));
+  const inline = inlineImagePayload(value);
+  if (inline) {
+    const { base64, ...rest } = inline;
+    return { ...rest, base64Bytes: Math.floor(base64.replace(/=+$/, "").length * 0.75), imageDelivery: "content" };
+  }
+  const output = {};
+  for (const [key, child] of Object.entries(value)) output[key] = sanitizeImagePayloads(child, depth + 1);
+  return output;
+}
+
+export { mcpImageContent, sanitizeImagePayloads };
 
 function mcpSchema(schema) {
   const jsonSchema = jsonSchemaFor(schema);
@@ -129,9 +189,10 @@ export async function registerCoreTools(server, runtime, fallbackSessionId, { me
       try {
         const parsed = definition.inputSchema.parse(args ?? {});
         const result = definition.outputSchema.parse(await definition.execute(parsed, { sessionID: fallbackSessionId, sessionId: fallbackSessionId, agent: "mcp" }));
+        const images = mcpImageContent(result, runtime);
         return {
-          content: [{ type: "text", text: conciseText(result) }],
-          structuredContent: result,
+          content: [{ type: "text", text: conciseText(result) }, ...images],
+          structuredContent: sanitizeImagePayloads(result),
           isError: result.ok === false && result.status !== "approval_required",
         };
       } catch (error) {
