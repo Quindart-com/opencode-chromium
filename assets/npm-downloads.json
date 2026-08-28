@@ -1,10 +1,73 @@
-[
-  {
-    "date": "2026-08-24",
-    "downloads": 96
-  },
-  {
-    "date": "2026-08-25",
-    "downloads": 82
-  }
-]
+{
+  "granularity": "day",
+  "series": [
+    {
+      "date": "2026-08-11",
+      "downloads": 97
+    },
+    {
+      "date": "2026-08-12",
+      "downloads": 19
+    },
+    {
+      "date": "2026-08-13",
+      "downloads": 399
+    },
+    {
+      "date": "2026-08-14",
+      "downloads": 0
+    },
+    {
+      "date": "2026-08-15",
+      "downloads": 9
+    },
+    {
+      "date": "2026-08-16",
+      "downloads": 10
+    },
+    {
+      "date": "2026-08-17",
+      "downloads": 150
+    },
+    {
+      "date": "2026-08-18",
+      "downloads": 25
+    },
+    {
+      "date": "2026-08-19",
+      "downloads": 19
+    },
+    {
+      "date": "2026-08-20",
+      "downloads": 18
+    },
+    {
+      "date": "2026-08-21",
+      "downloads": 6
+    },
+    {
+      "date": "2026-08-22",
+      "downloads": 5
+    },
+    {
+      "date": "2026-08-23",
+      "downloads": 9
+    },
+    {
+      "date": "2026-08-24",
+      "downloads": 14
+    },
+    {
+      "date": "2026-08-25",
+      "downloads": 11
+    },
+    {
+      "date": "2026-08-26",
+      "downloads": 147
+    },
+    {
+      "date": "2026-08-27",
+      "downloads": 157
+    }
+  ]
+}
