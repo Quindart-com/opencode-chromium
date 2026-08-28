@@ -36,6 +36,12 @@ remote server. Everything runs locally.
 - **No accounts, no telemetry.** The extension has no accounts, does not use
   analytics, and does not phone home. The vocabulary used with the native host
   never leaves your machine.
+- **No device identification.** The plugin, extension, and native host never
+  read machine IDs, hostnames, usernames, MAC addresses, hardware serials, or
+  install IDs, and never compute device fingerprints. The only persistent
+  identifier is a random per-profile UUID generated locally for routing
+  requests to the browser profile you selected; it never leaves your device.
+  A repository contract test and the release hygiene scan pin this guarantee.
 
 ## Action Memory
 
