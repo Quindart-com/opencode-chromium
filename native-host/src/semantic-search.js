@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { AutoModelForCausalLM, AutoTokenizer, env, pipeline } from "@huggingface/transformers";
 
-const SETTINGS_VERSION = 3;
+const SETTINGS_VERSION = 4;
 const DEFAULT_MODEL_ID = "snowflake-arctic-embed-xs";
 const DEEP_MODEL_ID = "qwen3-0.6b-retrieval";
 const DEFAULT_MAX_RESULTS = 20;
@@ -25,6 +25,7 @@ export const SEMANTIC_MODELS = [
   {
     id: DEFAULT_MODEL_ID,
     label: "Snowflake Arctic Embed XS",
+    default: true,
     description: "Default English page retrieval with a compact 22.6M parameter Snowflake embedding model. Use lexical or auto explicitly when lower latency is preferred.",
     parameters: "22.6M",
     contextLength: "512",
@@ -42,6 +43,29 @@ export const SEMANTIC_MODELS = [
     benchmark: {
       label: "Model-card retrieval benchmark",
       value: "Stronger than base MiniLM at the same size class",
+      note: "Browser-specific latency and recall are verified by local fixtures.",
+    },
+  },
+  {
+    id: "snowflake-arctic-embed-m",
+    label: "Snowflake Arctic Embed M",
+    description: "Larger Snowflake retrieval model with stronger relevance at 768 dimensions. Choose it when quality matters more than local disk and memory footprint.",
+    parameters: "108.9M",
+    contextLength: "512",
+    dimensions: 768,
+    role: "adaptive",
+    embedding: {
+      id: "Snowflake/snowflake-arctic-embed-m",
+      baseModel: "Snowflake/snowflake-arctic-embed-m",
+      dtype: "q8",
+      pooling: "cls",
+      dimensions: 768,
+      parameters: "108.9M",
+      queryPrefix: "Represent this sentence for searching relevant passages: ",
+    },
+    benchmark: {
+      label: "Model-card retrieval benchmark",
+      value: "Stronger than XS at the same 512-token context",
       note: "Browser-specific latency and recall are verified by local fixtures.",
     },
   },
@@ -201,11 +225,15 @@ function modelById(modelId) {
 
 function normalizeSettings(value = {}) {
   const enabled = value.enabled === undefined ? true : value.enabled === true;
+  const requestedModelId = typeof value.modelId === "string" ? value.modelId : null;
+  const modelId = requestedModelId && SEMANTIC_MODELS.some((model) => model.id === requestedModelId && model.role === "adaptive")
+    ? requestedModelId
+    : DEFAULT_MODEL_ID;
   return {
     version: SETTINGS_VERSION,
     enabled,
     strategy: enabled ? "snowflake" : "lexical",
-    modelId: DEFAULT_MODEL_ID,
+    modelId,
     deepModelId: DEEP_MODEL_ID,
   };
 }
@@ -236,7 +264,12 @@ export function getSemanticSettings() {
 }
 
 export function setSemanticSettings(input = {}) {
-  const next = normalizeSettings({ ...getSemanticSettings(), ...input });
+  const current = getSemanticSettings();
+  const merge = { ...current, ...input };
+  if (typeof input?.modelId === "string" && !SEMANTIC_MODELS.some((model) => model.id === input.modelId && model.role === "adaptive")) {
+    merge.modelId = current.modelId;
+  }
+  const next = normalizeSettings(merge);
   settingsCache = next;
   settingsCachePath = settingsPath();
   writeJsonAtomic(settingsCachePath, next);
@@ -790,7 +823,7 @@ async function rankPageUnitsLocal(input = {}) {
     return formatRanking(base, { enabled: settings.enabled, mode: "lexical", searchStrategy: requestedMode });
   }
 
-  const model = modelById(requestedMode === "deep" ? settings.deepModelId : DEFAULT_MODEL_ID);
+  const model = modelById(requestedMode === "deep" ? settings.deepModelId : settings.modelId);
   if (requestedMode === "snowflake" && !settings.enabled) {
     return formatRanking(base, {
       enabled: settings.enabled,
@@ -938,7 +971,7 @@ export async function handleSemanticHostMethod(method, params = {}) {
         searchStrategy: params.mode ?? "snowflake",
         degraded: true,
         degradationReason: /timed?\s*out/i.test(String(error)) ? "semantic-timeout" : "semantic-worker-failure",
-        model: modelById(params.mode === "deep" ? DEEP_MODEL_ID : DEFAULT_MODEL_ID),
+        model: modelById(params.mode === "deep" ? DEEP_MODEL_ID : getSemanticSettings().modelId),
         modelError: error instanceof Error ? error.message : String(error),
       });
     }
