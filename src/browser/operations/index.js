@@ -15,6 +15,13 @@ const tool = Object.assign((definition) => definition, { schema: z });
 const selectedProfilesBySession = new Map();
 const usedProfilesBySession = new Map();
 
+const MAX_CAPTURE_DIMENSION = 16384;
+const MAX_CAPTURE_BASE64_CHARS = 4_000_000;
+
+function screenshotMime(format) {
+  return format === "png" ? "image/png" : format === "jpeg" ? "image/jpeg" : "image/webp";
+}
+
 function contextValue(context, keys) {
   for (const key of keys) {
     if (context?.[key] !== undefined && context?.[key] !== null) return String(context[key]);
@@ -2462,11 +2469,11 @@ async execute(args, context) {
         },
       }),
 
-browser_screenshot: tool({
-        description: "Capture a screenshot from a Chromium tab via CDP in png, jpeg, or webp format.",
+      browser_screenshot: tool({
+        description: "Capture a screenshot from a Chromium tab via CDP. fullPage:false captures the visible viewport; fullPage:true captures the entire scrollable page. The payload is sized for direct visual inspection.",
         args: {
           tabId: tool.schema.number().int().positive(),
-          fullPage: tool.schema.boolean().default(false),
+          fullPage: tool.schema.boolean().default(false).describe("false (default) captures the visible viewport; true captures the full scrollable page height."),
           format: tool.schema.enum(["png", "jpeg", "webp"]).default("png").describe("Capture format. jpeg and webp are significantly smaller than png."),
           quality: tool.schema.number().int().min(0).max(100).optional().describe("Compression quality for jpeg and webp. Ignored for png."),
           clip: tool.schema.object({
@@ -2484,17 +2491,34 @@ browser_screenshot: tool({
           const params = { format: args.format, optimizeForSpeed: true };
           if (args.format !== "png" && args.quality !== undefined) params.quality = args.quality;
           if (args.clip) params.clip = { ...args.clip, scale: args.clip.scale ?? 1 };
+          let capture = { fullPage: args.fullPage };
           if (args.fullPage) {
             const metrics = await cdp(context, args.tabId, "Page.getLayoutMetrics", {}, args.timeoutMs);
-            const size = metrics.contentSize ?? metrics.cssContentSize;
-            if (size) {
-              params.captureBeyondViewport = true;
-              params.clip = { x: 0, y: 0, width: Math.ceil(size.width), height: Math.ceil(size.height), scale: 1 };
+            const size = metrics?.contentSize ?? metrics?.cssContentSize;
+            if (!size || !(size.width > 0) || !(size.height > 0)) {
+              throw new Error("The page did not report layout metrics, so the full-page height is unknown. Retry with fullPage:false to capture the visible viewport.");
             }
+            const width = Math.ceil(size.width);
+            const height = Math.ceil(size.height);
+            const scale = Math.min(1, MAX_CAPTURE_DIMENSION / Math.max(width, height));
+            capture = { fullPage: true, width, height, scale };
+            params.captureBeyondViewport = true;
+            params.clip = { x: 0, y: 0, width, height, scale };
           }
-          const result = await cdp(context, args.tabId, "Page.captureScreenshot", params, args.timeoutMs);
-          const mimeType = args.format === "png" ? "image/png" : args.format === "jpeg" ? "image/jpeg" : "image/webp";
-          return stringify({ mimeType, base64: result.data });
+          let result = await cdp(context, args.tabId, "Page.captureScreenshot", params, args.timeoutMs);
+          let mimeType = screenshotMime(args.format);
+          if (result.data.length > MAX_CAPTURE_BASE64_CHARS && args.format !== "jpeg") {
+            const reduced = { ...params, format: "jpeg", quality: Math.min(params.quality ?? 100, 75) };
+            result = await cdp(context, args.tabId, "Page.captureScreenshot", reduced, args.timeoutMs);
+            mimeType = "image/jpeg";
+            capture.formatApplied = "jpeg";
+          }
+          return stringify({
+            mimeType,
+            base64: result.data,
+            ...capture,
+            bytes: Math.floor(result.data.length * 0.75),
+          });
         },
       }),
 

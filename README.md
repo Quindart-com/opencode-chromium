@@ -35,7 +35,7 @@ follow announcements on
 - Four compact default tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`.
 - The complete multi-operation browser engine behind explicit compatibility and capability modes.
 - Context-lean evidence: observation summaries omit empty fields, duplicate text, and verbose `html`/`styles` (available only through `detail: "debug"`), and inline responses stay within the 4,096-character budget with oversized output spilled to artifact resources.
-- Native hover, JavaScript dialog handling with approval gating, and png/jpeg/webp screenshots with quality control.
+- Native hover, JavaScript dialog handling with approval gating, and png/jpeg/webp screenshots with quality control. Screenshot captures reach OpenCode and MCP clients as real images for direct visual inspection: `fullPage: false` grabs the visible viewport, `fullPage: true` captures the entire scrollable page (dimension-capped, with automatic jpeg compression for oversized captures).
 - Non-intrusive background automation: clicks, typing, and navigation never activate the tab or bring its window forward, so you can keep working while the tool drives a background tab.
 - Server-level origin policy (allowed/blocked origin globs) and file-root restrictions for uploads.
 - Persistent session emulation (viewport, network, CPU, geolocation, color scheme, user agent, headers, init scripts) with automatic reset on finalize.
@@ -281,7 +281,7 @@ For deep request/response debugging, request the lazy network pack only when nee
 
 Then execute `network.inspect` in `browser_run` with the target `tabId`. It follows the tab's CDP request/response lifecycle, supports URL/method/type/status/requestId filters, and returns redacted headers only when `includeHeaders` is requested. Bodies remain disabled unless explicitly requested and approved; `bodyDelivery: "artifact"` spills opted-in bodies to the artifact store instead of inline previews. `browser_observe` mode `inspect` with `target.requestId` returns a single request's lifecycle detail.
 
-Large results and screenshots are artifact-first. MCP clients retrieve them through `browser://sessions/<session-id>/artifacts/<artifact-id>`; OpenCode can request the same URI with `browser_observe` mode `artifact`.
+Large results and screenshots are artifact-first. Screenshot captures are additionally delivered inline as images to OpenCode (tool attachments) and MCP clients (image content), so the model sees the page; MCP clients can also retrieve the original bytes through `browser://sessions/<session-id>/artifacts/<artifact-id>`, and OpenCode can request the same URI with `browser_observe` mode `artifact`.
 
 ## Repository layout
 
