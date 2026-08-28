@@ -16,25 +16,18 @@ function statusText(status: NativeStatus): string {
   return status.error ? `${state}: ${status.error}` : state;
 }
 
-function modelDescription(model: SemanticModel | undefined): string {
-  if (!model) return "No model metadata available.";
-  const cache = model.cache?.cached ? "cached locally" : "not cached yet";
-  const reranker = model.reranker?.id ? ` Reranker: ${model.reranker.id}.` : "";
-  return `${model.description ?? "Local semantic retrieval model."} Embedding: ${model.embedding?.id ?? "n/a"}.${reranker} Benchmark: ${model.benchmark?.label ?? "quality"} ${model.benchmark?.value ?? "n/a"}. Size: ${model.parameters ?? "n/a"}, ${model.dimensions ?? "n/a"} dimensions, ${cache}.`;
-}
-
 function semanticStatusText(semantic: SemanticState): string {
   const load = semantic.load ?? {};
-  const model = semantic.models?.find((item) => item.id === load.modelId) ?? semantic.models?.[0];
+  const model = semantic.models?.find((item) => item.id === load.modelId);
   const cacheDir = semantic.cacheDir ? ` Cache: ${semantic.cacheDir}` : "";
   if (load.state === "loading") {
     const progress = Number.isFinite(load.progress) ? ` ${load.progress}%` : "";
     const component = load.component ? ` ${load.component}` : "";
-    return `Preparing${component} for ${model?.label ?? "model"}...${progress}${cacheDir}`;
+    return `Downloading ${component ?? "model"} for ${model?.label ?? load.modelId ?? "model"}...${progress}${cacheDir}`;
   }
-  if (load.state === "ready") return `Ready: ${model?.label ?? load.modelId}.${cacheDir}`;
+  if (load.state === "ready") return `Ready: ${model?.label ?? load.modelId ?? "model"}.${cacheDir}`;
   if (load.state === "error") return `Model error: ${load.error ?? "unknown error"}.${cacheDir}`;
-  return `Snowflake retrieval is the default. Lexical and auto search remain available; download and load failures degrade safely.${cacheDir}`;
+  return "Retrieval runs locally with the active model and falls back to lexical ranking. Deep search loads Qwen on demand; download failures degrade safely.";
 }
 
 export default function ConnectionView({ status }: ConnectionViewProps): React.JSX.Element {
@@ -88,10 +81,12 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
 
   const models = semantic?.models ?? [];
   const settings = semantic?.settings ?? {};
-  const selectedModel = useMemo(
-    () => models.find((model) => model.id === settings.modelId) ?? models[0],
-    [models, settings.modelId],
-  );
+  const enabled = settings.enabled === true;
+  const activeModelId = settings.modelId;
+  const load = semantic?.load;
+  const loading = load?.state === "loading";
+  const adaptiveModels = useMemo(() => models.filter((model) => model.role !== "deep"), [models]);
+  const deepModel = useMemo(() => models.find((model) => model.role === "deep"), [models]);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -130,16 +125,88 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
     }
   }
 
-  async function saveSemantic(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await updateSemantic(
-      {
-        type: "SET_SEMANTIC_SETTINGS",
-        enabled: settings.enabled === true,
-        modelId: selectedModel?.id,
-        preload: settings.enabled === true,
-      },
-      "Saving semantic settings...",
+  function toggleSemantic(next: boolean) {
+    void updateSemantic(
+      { type: "SET_SEMANTIC_SETTINGS", enabled: next, modelId: activeModelId, preload: next },
+      next ? "Enabling semantic retrieval..." : "Disabling semantic retrieval...",
+    );
+  }
+
+  function useModel(model: SemanticModel) {
+    void updateSemantic(
+      { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: model.id, preload: true },
+      `Switching retrieval to ${model.label}...`,
+    );
+  }
+
+  function prepareModel(model: SemanticModel) {
+    void updateSemantic({ type: "PREPARE_SEMANTIC_MODEL", modelId: model.id }, `Downloading ${model.label}...`);
+  }
+
+  function deleteModel(model: SemanticModel) {
+    if (window.confirm(`Delete local files for ${model.label}? They can be downloaded again later.`)) {
+      void updateSemantic({ type: "DELETE_SEMANTIC_MODEL", modelId: model.id }, `Deleting local files for ${model.label}...`);
+    }
+  }
+
+  function renderModelCard(model: SemanticModel) {
+    const isAdaptive = model.role !== "deep";
+    const isActive = isAdaptive && model.id === activeModelId;
+    const cached = model.cache?.cached === true;
+    const busyForModel = semanticBusy || (loading && load?.modelId === model.id);
+    return (
+      <div key={model.id} className={`model-card${isActive ? " active" : ""}`} data-model-id={model.id}>
+        <div className="model-head">
+          <span className="model-name">{model.label}</span>
+          {model.default === true ? <span className="badge badge-default">Default</span> : null}
+          <span className={`badge ${cached ? "badge-ok" : "badge-neutral"}`}>{cached ? "Ready" : "Not downloaded"}</span>
+        </div>
+        <div className="model-meta">
+          {model.parameters ?? "n/a"} · {model.dimensions ?? "n/a"}-dim · ctx {model.contextLength ?? "512"}
+          {isAdaptive ? "" : " · deep search only"}
+        </div>
+        <div className="model-desc">{model.description ?? "Local retrieval model."}</div>
+        {model.benchmark?.value ? <div className="model-bench">{model.benchmark.label}: {model.benchmark.value}</div> : null}
+        <div className="model-actions">
+          {isAdaptive && isActive ? (
+            <span className="model-active-note" aria-label="Active retrieval model">Active</span>
+          ) : null}
+          {isAdaptive && !isActive ? (
+            <button
+              type="button"
+              className="button-use"
+              disabled={busyForModel}
+              onClick={() => useModel(model)}
+            >
+              Use
+            </button>
+          ) : null}
+          {!isAdaptive ? (
+            <span className="model-active-note">On demand</span>
+          ) : null}
+          <button
+            type="button"
+            className="button-prepare"
+            disabled={busyForModel}
+            onClick={() => prepareModel(model)}
+          >
+            {cached ? "Re-download" : "Download"}
+          </button>
+          <button
+            type="button"
+            className="button-delete"
+            disabled={busyForModel || !cached}
+            onClick={() => deleteModel(model)}
+          >
+            Delete
+          </button>
+        </div>
+        {loading && load?.modelId === model.id ? (
+          <div className="model-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number.isFinite(load?.progress) ? load?.progress : undefined}>
+            <div className="model-progress-fill" style={{ width: `${Math.max(4, Math.min(100, load?.progress ?? 4))}%` }} />
+          </div>
+        ) : null}
+      </div>
     );
   }
 
@@ -189,54 +256,30 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
 
       <div className="card" aria-labelledby="semantic-title">
         <h2 id="semantic-title">Semantic page search</h2>
-        <form id="semantic-form" onSubmit={saveSemantic}>
-          <label className="checkbox-row">
-            <input
-              id="semantic-enabled"
-              type="checkbox"
-              checked={settings.enabled === true}
-              onChange={(event) => setSemantic((current) => ({ ...current, settings: { ...current?.settings, enabled: event.target.checked } }))}
-            />
-            <span>Enable Snowflake semantic retrieval</span>
-          </label>
-          <label htmlFor="semantic-model">Local model cache</label>
-          <select
-            id="semantic-model"
-            name="semantic-model"
-            value={selectedModel?.id ?? ""}
-            onChange={(event) => setSemantic((current) => ({ ...current, settings: { ...current?.settings, modelId: event.target.value } }))}
-            disabled={semanticBusy || models.length === 0}
-          >
-            {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-          </select>
-          <div id="semantic-model-info" className="model-info">{modelDescription(selectedModel)}</div>
-          <div className="button-row">
-            <button type="submit" className="primary" disabled={semanticBusy}>Save settings</button>
-            <button
-              id="semantic-prepare"
-              type="button"
-              className="secondary"
-              disabled={semanticBusy || !selectedModel}
-              onClick={() => void updateSemantic({ type: "PREPARE_SEMANTIC_MODEL", modelId: selectedModel?.id }, "Starting local model preparation...")}
-            >
-              Prepare model
-            </button>
-            <button
-              id="semantic-delete"
-              type="button"
-              className="danger"
-              disabled={semanticBusy || !selectedModel}
-              onClick={() => {
-                if (selectedModel && window.confirm(`Delete local files for ${selectedModel.label}? They can be downloaded again later.`)) {
-                  void updateSemantic({ type: "DELETE_SEMANTIC_MODEL", modelId: selectedModel.id }, "Deleting local model files...");
-                }
-              }}
-            >
-              Delete files
-            </button>
+        <div className="semantic-toggle-row">
+          <div className="semantic-toggle-copy">
+            <span className="semantic-toggle-title">Semantic retrieval</span>
+            <span className="semantic-toggle-sub">Local page ranking with lexical fallback</span>
           </div>
-          <p id="semantic-help">{semanticHelp}</p>
-        </form>
+          <button
+            id="semantic-enabled"
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Enable semantic retrieval"
+            className={`switch${enabled ? " on" : ""}`}
+            disabled={semanticBusy}
+            onClick={() => toggleSemantic(!enabled)}
+          >
+            <span className="switch-knob" />
+          </button>
+        </div>
+        <div id="semantic-model-list" className="model-list" aria-label="Retrieval models">
+          {adaptiveModels.map(renderModelCard)}
+          {deepModel ? renderModelCard(deepModel) : null}
+        </div>
+        <p id="semantic-help">{semanticHelp}</p>
+        {semantic?.cacheDir ? <p id="semantic-cache-path" className="mono cache-path">{semantic.cacheDir}</p> : null}
       </div>
     </section>
   );

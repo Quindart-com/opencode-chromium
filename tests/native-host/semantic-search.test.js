@@ -15,7 +15,7 @@ test("persists semantic settings in configured local directory", async () => {
 
     assert.equal(semanticDataDir(), dir);
     assert.equal(status.settings.enabled, true);
-    assert.equal(status.settings.version, 3);
+    assert.equal(status.settings.version, 4);
     assert.equal(status.settings.strategy, "snowflake");
     assert.equal(status.settings.modelId, "snowflake-arctic-embed-xs");
     assert.equal(status.settings.deepModelId, "qwen3-0.6b-retrieval");
@@ -88,13 +88,44 @@ test("Snowflake is the default ranking strategy while lexical remains explicit",
 test("semantic host method returns model metadata", async () => {
   const result = await handleSemanticHostMethod("semantic.listModels", {});
 
-  assert.equal(result.models.length, 2);
+  assert.equal(result.models.length, 3);
   assert.equal(result.models[0].id, "snowflake-arctic-embed-xs");
   assert.equal(result.models[0].dimensions, 384);
-  assert.equal(result.models[1].id, "qwen3-0.6b-retrieval");
-  assert.ok(result.models[1].embedding.id.includes("Qwen3-Embedding"));
-  assert.ok(result.models[1].reranker.id.includes("Qwen3-Reranker"));
+  assert.equal(result.models[1].id, "snowflake-arctic-embed-m");
+  assert.equal(result.models[1].dimensions, 768);
+  assert.equal(result.models[1].embedding.id, "Snowflake/snowflake-arctic-embed-m");
+  assert.equal(result.models[2].id, "qwen3-0.6b-retrieval");
+  assert.ok(result.models[2].embedding.id.includes("Qwen3-Embedding"));
+  assert.ok(result.models[2].reranker.id.includes("Qwen3-Reranker"));
   assert.ok(result.models[0].benchmark.value);
+});
+
+test("any adaptive model can be selected as the active retrieval model while deep stays fixed", async () => {
+  const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+  const previousDisabled = process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-semantic-active-test-"));
+  process.env.OPENCODE_BROWSER_SEMANTIC_DIR = dir;
+  process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL = "1";
+
+  try {
+    const status = setSemanticSettings({ enabled: true, modelId: "snowflake-arctic-embed-m" });
+    assert.equal(status.settings.modelId, "snowflake-arctic-embed-m");
+
+    const ranked = await rankPageUnits({
+      query: "workspace members",
+      units: [{ node_id: "node-1", text: "Workspace member permissions" }],
+    });
+    assert.equal(ranked.model.id, "snowflake-arctic-embed-m");
+
+    const rejected = setSemanticSettings({ enabled: true, modelId: "qwen3-0.6b-retrieval" });
+    assert.equal(rejected.settings.modelId, "snowflake-arctic-embed-m");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+    else process.env.OPENCODE_BROWSER_SEMANTIC_DIR = previous;
+    if (previousDisabled === undefined) delete process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
+    else process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL = previousDisabled;
+  }
 });
 
 test("legacy model settings migrate to Snowflake-default retrieval while retaining Qwen for deep search", async () => {
