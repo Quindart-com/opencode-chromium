@@ -40,10 +40,16 @@ This extension is a general-purpose automation bridge, so it asks for the browse
 
 All data stays on your device. See the privacy policy (link above) for details.
 
-## Single listing screenshot
+## Listing screenshots and promo tiles
 
-- provider `store/opencode-chromium-1280x800.png`
-- (optional promo tile `store/opencode-chromium-440x280.png`)
+All listing art is generated from popup renders with `scripts/compose-store-art.ps1`
+(see the script header for usage). Current set:
+
+- `store/opencode-chromium-1280x800.png` — hero: popup connection view
+- `store/opencode-chromium-1280x800-semantic.png` — semantic page search model cards
+- `store/opencode-chromium-1280x800-memory.png` — Action Memory dashboard
+- `store/opencode-chromium-440x280.png` — small promo tile
+- `store/opencode-chromium-1400x560.png` — marquee promo tile
 
 ## Review notes
 
