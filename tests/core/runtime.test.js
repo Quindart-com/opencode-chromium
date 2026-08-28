@@ -478,6 +478,29 @@ test("screenshot observations forward format and quality to the capture operatio
   }
 });
 
+test("screenshot observations forward fullPage and inline delivery keeps capture geometry", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("shot-page").activeTabId = 42;
+  let captureArgs;
+  runtime.invoke = async (name, args) => {
+    if (name !== "browser_screenshot") throw new Error(`Unexpected operation: ${name}`);
+    captureArgs = args;
+    return { mimeType: "image/png", base64: Buffer.from("fake").toString("base64"), fullPage: true, width: 1280, height: 4200, scale: 1, bytes: 4 };
+  };
+  try {
+    await runtime.observe({ sessionId: "shot-page", mode: "screenshot", fullPage: true });
+    assert.equal(captureArgs.fullPage, true);
+
+    const inline = await runtime.observe({ sessionId: "shot-page", mode: "screenshot", delivery: "inline" });
+    assert.equal(inline.result.mimeType, "image/png");
+    assert.equal(inline.result.fullPage, true);
+    assert.equal(inline.result.width, 1280);
+    assert.equal(inline.result.height, 4200);
+  } finally {
+    runtime.close();
+  }
+});
+
 test("session configure applies an environment and reports it on open", async () => {
   const runtime = fakeRuntime();
   runtime.getSession("env-session").activeTabId = 7;

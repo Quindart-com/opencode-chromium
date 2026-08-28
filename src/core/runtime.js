@@ -566,7 +566,15 @@ export class AgentBrowserRuntime {
         case "upload": return this.invoke("browser_set_file_input", mem({ tabId, selector: target.selector ?? "input[type=file]", files: step.files }), session.sessionId);
         case "clipboardRead": return this.invoke("browser_clipboard_read_text", mem({ tabId }), session.sessionId);
         case "clipboardWrite": return this.invoke("browser_clipboard_write_text", mem({ tabId, text: step.value }), session.sessionId);
-        case "screenshot": return this.screenshot(tabId, step, session.sessionId, chainId, stepIndex);
+        case "screenshot": {
+          const shot = await this.screenshot(tabId, step, session.sessionId, chainId, stepIndex);
+          if (typeof shot?.base64 === "string") {
+            const { base64, ...capture } = shot;
+            const artifact = this.artifacts.create({ sessionId: session.sessionId, mimeType: shot.mimeType, data: Buffer.from(base64, "base64"), label: "screenshot" });
+            return { screenshot: artifact, capture };
+          }
+          return shot;
+        }
         case "close": {
           const result = await this.invoke("browser_close_tab", mem({ tabId }), session.sessionId);
           session.activeTabId = null;
@@ -963,6 +971,9 @@ export class AgentBrowserRuntime {
       if (!tabId) throw new Error("No controlled tab is selected. Create or claim one with browser_session.");
       session.activeTabId = tabId;
       const value = await this.observeValue(args, tabId, session);
+      if (args.mode === "screenshot" && args.delivery === "inline") {
+        return { ...contractMetadata(), ok: true, status: "observed", sessionId, profileId: session.profileId, tabId, result: value };
+      }
       const payload = { ok: true, status: "observed", sessionId, profileId: session.profileId, tabId, result: value };
       const inlineValue = args.mode === "raw-snapshot" ? summarizeAccessibilitySnapshot(value, clamp(args.limit, 40, 1, 200)) : value;
       return this.compact(payload, sessionId, clamp(args.maxChars, 4096, 512, 20000), "observe", { ...payload, result: inlineValue });
