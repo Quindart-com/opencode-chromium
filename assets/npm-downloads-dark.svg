@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 220" role="img" aria-label="NPM downloads for opencode-chromium, daily">
+  <rect width="680" height="220" rx="12" fill="#0d1117"/>
+  <text x="46" y="18" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="700" fill="#e6edf3">NPM downloads · daily</text>
+  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#4493f8">157 yesterday</text>
+  <path d="M46,180.0H656" stroke="#21262d" stroke-width="1.2" stroke-dasharray="none" fill="none"/>
+  <text x="38" y="184.0" text-anchor="end" font-size="10.5" fill="#9198a1">0</text>
+  <path d="M46,102.0H656" stroke="#21262d" stroke-width="1" stroke-dasharray="3 5" fill="none"/>
+  <text x="38" y="106.0" text-anchor="end" font-size="10.5" fill="#9198a1">200</text>
+  <path d="M46,24.0H656" stroke="#21262d" stroke-width="1" stroke-dasharray="3 5" fill="none"/>
+  <text x="38" y="28.0" text-anchor="end" font-size="10.5" fill="#9198a1">400</text>
+  <defs>
+    <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgba(68,147,248,0.24)"/>
+      <stop offset="1" stop-color="rgba(68,147,248,0.02)"/>
+    </linearGradient>
+  </defs>
+  <path d="M46.0,142.2 L84.1,172.6 L122.3,24.4 L160.4,180.0 L198.5,176.5 L236.6,176.1 L274.8,121.5 L312.9,170.3 L351.0,172.6 L389.1,173.0 L427.3,177.7 L465.4,178.1 L503.5,176.5 L541.6,174.5 L579.8,175.7 L617.9,122.7 L656.0,118.8 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
+  <path d="M46.0,142.2 L84.1,172.6 L122.3,24.4 L160.4,180.0 L198.5,176.5 L236.6,176.1 L274.8,121.5 L312.9,170.3 L351.0,172.6 L389.1,173.0 L427.3,177.7 L465.4,178.1 L503.5,176.5 L541.6,174.5 L579.8,175.7 L617.9,122.7 L656.0,118.8" stroke="#4493f8" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="656.0" cy="118.8" r="4" fill="#4493f8" stroke="#0d1117" stroke-width="1.6"/>
+  <text x="648.0" y="108.8" text-anchor="end" font-size="10.5" font-weight="600" fill="#e6edf3">157</text>
+  <text x="46" y="210" font-size="10.5" fill="#9198a1">Aug 11</text>
+  <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#9198a1">Aug 19</text>
+  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#9198a1">Aug 27</text>
+</svg>
