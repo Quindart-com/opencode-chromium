@@ -30,3 +30,29 @@ describe("release metadata", () => {
     expect(() => checkTagVersion("v99.0.0")).toThrow(/does not match package version/);
   });
 });
+
+describe("privacy contract", () => {
+  const runtimeDirectories = ["src", "native-host/src", "extension-src/entrypoints", "extension-src/public"];
+  const deviceIdentifierPattern =
+    /\/etc\/machine-id|MachineGuid|getMac|node-machine-id|os\.hostname\s*\(|os\.userInfo\s*\(|wmic\s+csproduct|IOPlatformUUID|sentry\.io|posthog\.com|segment\.io|amplitude\.com|analytics\.google\.com/i;
+
+  test("shipped runtime code never reads device identifiers or reports telemetry", () => {
+    const offenders = [];
+    for (const directory of runtimeDirectories) {
+      const absolute = path.join(root, directory);
+      if (!fs.existsSync(absolute)) continue;
+      const walk = (current) => {
+        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+          const entryPath = path.join(current, entry.name);
+          if (entry.isDirectory()) walk(entryPath);
+          else if (/\.(?:js|mjs|cjs|ts|tsx)$/.test(entry.name)) {
+            const text = fs.readFileSync(entryPath, "utf8");
+            if (deviceIdentifierPattern.test(text)) offenders.push(path.relative(root, entryPath));
+          }
+        }
+      };
+      walk(absolute);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
