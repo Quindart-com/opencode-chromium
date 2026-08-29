@@ -80,6 +80,7 @@
     "opencode-browser-plugin-mcp": "./dist/adapters/mcp/server.js"
   },
   "scripts": {
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || exit 0",
     "build": "bun scripts/build.js",
     "clean": "bun scripts/build.js --clean",
     "host": "bun native-host/src/host.js",
