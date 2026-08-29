@@ -16,6 +16,18 @@ const contentChecks = [
   { name: "telemetry endpoint", pattern: /(?:https?:\/\/)?(?:[\w.-]*\.)?(?:sentry\.io|posthog\.com|segment\.io|amplitude\.com|analytics\.google\.com|cloudflareinsights\.com)/i },
   { name: "device identifier lookup", pattern: /(?:\/etc\/machine-id|MachineGuid|getMac|node-machine-id|os\.hostname\s*\(|os\.userInfo\s*\(|wmic\s+csproduct|IOPlatformUUID|hardware\s+serial)/i },
   { name: "install or device id field", pattern: /["'`]?(?:installId|installationId|deviceId|machineId|hwid|clientUuid|anonymousId)["'`]?\s*[:=]/i },
+  {
+    // Stored reversed and rebuilt at runtime so neither the identifiers nor
+    // their fragments are searchable in Git history.
+    name: "personal identifier",
+    pattern: new RegExp(
+      ["namyA", "yssidabnamya", "yssidab namya", "ECAF-REKCOJD"]
+        .map((value) => [...value].reverse().join(""))
+        .map((value) => `\\b${value.replace(/\s+/g, "\\s+")}\\b`)
+        .join("|"),
+      "i",
+    ),
+  },
 ];
 const forbiddenPackagePath = /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|reports\/|tests\/|node_modules\/|scripts\/extension-id\.json|.*\.tgz$)/i;
 // Legal documents intentionally carry the publisher's public contact address.

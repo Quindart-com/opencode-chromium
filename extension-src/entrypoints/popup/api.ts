@@ -8,7 +8,8 @@ export type NativeStatus = {
 };
 
 export type Profile = {
-  profileId: string;
+  profileId?: string;
+  profileIdMasked?: string;
   profileLabel: string | null;
 };
 
@@ -37,7 +38,7 @@ export type SemanticState = {
     component?: string;
     error?: string;
   };
-  cacheDir?: string;
+  cache?: { kind?: string };
 };
 
 export type MemoryStatus = {

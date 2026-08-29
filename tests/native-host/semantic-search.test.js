@@ -201,3 +201,29 @@ test("delete semantic model removes cached embedding and reranker directories", 
     else process.env.OPENCODE_BROWSER_SEMANTIC_DIR = previous;
   }
 });
+
+test("semantic status and model listing never expose the raw cache path", async () => {
+  const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-semantic-test-"));
+  process.env.OPENCODE_BROWSER_SEMANTIC_DIR = dir;
+
+  try {
+    setSemanticSettings({ enabled: true, modelId: "snowflake-arctic-embed-xs" });
+
+    const status = await handleSemanticHostMethod("semantic.status");
+    assert.equal(status.cacheDir, undefined);
+    assert.equal(status.cache?.kind, "local");
+
+    const listing = await handleSemanticHostMethod("semantic.listModels");
+    assert.equal(listing.cacheDir, undefined);
+    assert.equal(listing.cache?.kind, "local");
+
+    const diagnostics = await handleSemanticHostMethod("semantic.cacheDiagnostics");
+    assert.equal(typeof diagnostics.cacheDir, "string");
+    assert.equal(path.dirname(diagnostics.cacheDir), dir);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+    else process.env.OPENCODE_BROWSER_SEMANTIC_DIR = previous;
+  }
+});

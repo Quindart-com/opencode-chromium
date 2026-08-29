@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { handleSemanticHostMethod, rankPageUnits } from "../native-host/src/semantic-search.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const fixture = JSON.parse(fs.readFileSync(path.join(root, "test", "fixtures", "page-units-anonymized.json"), "utf8"));
+const fixture = JSON.parse(fs.readFileSync(path.join(root, "tests", "fixtures", "page-units-anonymized.json"), "utf8"));
 const iterations = Math.max(20, Math.min(500, Number(process.argv.find((value) => value.startsWith("--iterations="))?.split("=")[1] ?? 100)));
 const useModel = process.argv.includes("--adaptive-model");
 

@@ -486,7 +486,7 @@ export function semanticStatus() {
   return {
     settings,
     models: semanticModelsStatus(),
-    cacheDir: modelCacheDir(),
+    cache: { kind: "local" },
     load: { ...loadState },
     runtime: { backend: "onnxruntime-node", intraOpThreads: 4, interOpThreads: 1, maxLoadedModels: 1, deepIdleMs: 120000 },
   };
@@ -937,7 +937,8 @@ export async function handleSemanticHostMethod(method, params = {}) {
     if (!IS_SEMANTIC_WORKER && semanticWorker) return semanticWorkerRequest("semantic.workerStatus", {}, 2000).catch(() => semanticStatus());
     return semanticStatus();
   }
-  if (method === "semantic.listModels") return { models: semanticModelsStatus(), settings: getSemanticSettings(), cacheDir: modelCacheDir() };
+  if (method === "semantic.listModels") return { models: semanticModelsStatus(), settings: getSemanticSettings(), cache: { kind: "local" } };
+  if (method === "semantic.cacheDiagnostics") return { cacheDir: modelCacheDir(), cache: { kind: "local" } };
   if (method === "semantic.setSettings") return setSemanticSettings(params);
   if (method === "semantic.prepareModel") {
     const settings = getSemanticSettings();

@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { checkTagVersion } from "../../scripts/check-tag-version.js";
+import { maskIdentifier } from "../../extension-src/entrypoints/popup/privacy.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -54,5 +56,74 @@ describe("privacy contract", () => {
       walk(absolute);
     }
     expect(offenders).toEqual([]);
+  });
+
+  test("tracked files contain no known personal identifiers", () => {
+    const identifierPattern = new RegExp(
+      ["namyA", "yssidabnamya", "ECAF-REKCOJD"]
+        .map((value) => [...value].reverse().join(""))
+        .map((value) => `\\b${value}\\b`)
+        .join("|"),
+      "i",
+    );
+    const allowlist = new Set(["scripts/public-hygiene.js", "tests/contracts/release.test.js", "docs/PRIVACY.md", "docs/TERMS.md"]);
+    const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root }).toString("utf8").split("\0").filter(Boolean);
+    const offenders = [];
+    for (const relative of tracked) {
+      if (allowlist.has(relative)) continue;
+      const absolute = path.join(root, relative);
+      if (!fs.existsSync(absolute)) continue;
+      const buffer = fs.readFileSync(absolute);
+      if (buffer.includes(0)) continue;
+      if (identifierPattern.test(buffer.toString("utf8"))) offenders.push(relative);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("popup privacy surface", () => {
+  const popupDir = path.join(root, "extension-src", "entrypoints", "popup");
+  const backgroundRuntime = path.join(root, "extension-src", "entrypoints", "background", "runtime.js");
+
+  test("popup api never declares the raw model cache path", () => {
+    const api = fs.readFileSync(path.join(popupDir, "api.ts"), "utf8");
+    expect(api).not.toMatch(/cacheDir/);
+    expect(api).toMatch(/cache\?:\s*\{\s*kind\?:\s*string\s*\}/);
+  });
+
+  test("connection view masks the profile id and hides cache paths by default", () => {
+    const view = fs.readFileSync(path.join(popupDir, "ConnectionView.tsx"), "utf8");
+    expect(view).toMatch(/maskIdentifier/);
+    expect(view).toMatch(/Developer details/);
+    expect(view).not.toMatch(/\{profile\?\.profileId\s*\?\?/);
+    expect(view).not.toMatch(/semantic-cache-path/);
+    expect(view).toMatch(/GET_SEMANTIC_DIAGNOSTICS/);
+  });
+
+  test("background relay strips profile ids and cache paths from popup responses", () => {
+    const runtime = fs.readFileSync(backgroundRuntime, "utf8");
+    expect(runtime).toMatch(/GET_PROFILE[\s\S]{0,240}publicProfile\(profile\)/);
+    expect(runtime).toMatch(/GET_PROFILE_DETAILS/);
+    expect(runtime).toMatch(/GET_PROFILE[\s\S]{0,240}publicProfile\(profile\)[\s\S]{0,240}GET_PROFILE_DETAILS[\s\S]{0,240}sendResponse\(\{ profile \}\)/);
+    expect(runtime).toMatch(/sanitizeSemanticForPopup/);
+  });
+
+  test("maskIdentifier reveals only the edges of an identifier", () => {
+    expect(maskIdentifier("274b81aa-1234-5678-9abc-def012345678")).toBe("274b…5678");
+    expect(maskIdentifier("short")).toBe("s…");
+    expect(maskIdentifier("")).toBe("");
+    expect(maskIdentifier(null)).toBe("");
+    expect(maskIdentifier(undefined)).toBe("");
+  });
+
+  test("committed store art is byte-identical to the deterministic fixture generator", () => {
+    execFileSync(process.execPath, [path.join(root, "scripts", "generate-store-art.js")], { cwd: root });
+    const source = fs.readFileSync(path.join(root, "scripts", "generate-store-art.js"), "utf8");
+    expect(source).toMatch(/DEMO_FIXTURE/);
+    for (const name of ["opencode-chromium-1400x560.png", "opencode-chromium-1280x800.png"]) {
+      const regenerated = fs.readFileSync(path.join(root, "store", name));
+      expect(regenerated.length).toBeGreaterThan(1000);
+      expect(source).not.toMatch(/screenshot|captureCurrent|desktopCapturer/);
+    }
   });
 });
