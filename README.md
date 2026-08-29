@@ -10,7 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/opencode-chromium"><img src="assets/npm-downloads.svg" alt="NPM weekly download history" width="680"/></a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/npm-downloads-dark.svg">
+    <img src="assets/npm-downloads.svg" alt="NPM weekly download history" width="680"/>
+  </picture>
 </p>
 
 ## Community and roadmap
