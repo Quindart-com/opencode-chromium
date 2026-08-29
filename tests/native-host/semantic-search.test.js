@@ -15,7 +15,7 @@ test("persists semantic settings in configured local directory", async () => {
 
     assert.equal(semanticDataDir(), dir);
     assert.equal(status.settings.enabled, true);
-    assert.equal(status.settings.version, 4);
+    assert.equal(status.settings.version, 5);
     assert.equal(status.settings.strategy, "semantic");
     assert.equal(status.settings.modelId, "snowflake-arctic-embed-xs");
     assert.equal(status.settings.deepModelId, "qwen3-0.6b-retrieval");
@@ -117,15 +117,18 @@ test("snowflake remains a deprecated alias for the semantic strategy", async () 
 test("semantic host method returns model metadata", async () => {
   const result = await handleSemanticHostMethod("semantic.listModels", {});
 
-  assert.equal(result.models.length, 3);
+  assert.equal(result.models.length, 4);
+  const byId = Object.fromEntries(result.models.map((model) => [model.id, model]));
   assert.equal(result.models[0].id, "snowflake-arctic-embed-xs");
   assert.equal(result.models[0].dimensions, 384);
   assert.equal(result.models[1].id, "snowflake-arctic-embed-m");
   assert.equal(result.models[1].dimensions, 768);
   assert.equal(result.models[1].embedding.id, "Snowflake/snowflake-arctic-embed-m");
-  assert.equal(result.models[2].id, "qwen3-0.6b-retrieval");
-  assert.ok(result.models[2].embedding.id.includes("Qwen3-Embedding"));
-  assert.ok(result.models[2].reranker.id.includes("Qwen3-Reranker"));
+  const qwen = byId["qwen3-0.6b-retrieval"];
+  assert.ok(qwen, "Qwen3 deep model must remain in the registry");
+  assert.equal(qwen.role, "deep");
+  assert.ok(qwen.embedding.id.includes("Qwen3-Embedding"));
+  assert.ok(qwen.reranker.id.includes("Qwen3-Reranker"));
   assert.ok(result.models[0].benchmark.value);
 });
 
@@ -250,6 +253,93 @@ test("semantic status and model listing never expose the raw cache path", async 
     const diagnostics = await handleSemanticHostMethod("semantic.cacheDiagnostics");
     assert.equal(typeof diagnostics.cacheDir, "string");
     assert.equal(path.dirname(diagnostics.cacheDir), dir);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+    else process.env.OPENCODE_BROWSER_SEMANTIC_DIR = previous;
+  }
+});
+
+function embeddingGemma() {
+  return handleSemanticHostMethod("semantic.listModels", {}).then((result) => result.models.find((model) => model.id === "embeddinggemma-300m"));
+}
+
+test("EmbeddingGemma is an adaptive model that can never become the deep strategy", async () => {
+  const gemma = await embeddingGemma();
+
+  assert.ok(gemma, "EmbeddingGemma must appear in the model registry");
+  assert.equal(gemma.role, "adaptive");
+  assert.equal(gemma.id, "embeddinggemma-300m");
+  assert.equal(gemma.embedding.id, "onnx-community/embeddinggemma-300m-ONNX");
+  assert.notEqual(gemma.id, "qwen3-0.6b-retrieval");
+});
+
+test("EmbeddingGemma supports q4 and q8 only and rejects fp16", async () => {
+  const gemma = await embeddingGemma();
+
+  assert.deepEqual(gemma.supportedDtypes, ["q4", "q8"]);
+  assert.equal(gemma.supportedDtypes.includes("fp16"), false);
+  assert.equal(gemma.embedding.dtype, "q4");
+});
+
+test("EmbeddingGemma MRL dimensions are restricted and 256 is the default", async () => {
+  const gemma = await embeddingGemma();
+
+  assert.deepEqual(gemma.supportedDimensions, [128, 256, 512, 768]);
+  assert.equal(gemma.defaultDimensions, 256);
+  assert.equal(gemma.dimensions, 256);
+  assert.equal(gemma.nativeDimensions, 768);
+});
+
+test("MRL truncation returns the requested length and re-normalizes", async () => {
+  const { truncateAndRenormalize } = await import("../../native-host/src/semantic-search.js");
+  const vector = Array.from({ length: 768 }, (_, index) => (index % 2 === 0 ? 0.5 : -0.25));
+
+  const truncated = truncateAndRenormalize(vector, 256);
+
+  assert.equal(truncated.length, 256);
+  const norm = Math.sqrt(truncated.reduce((sum, value) => sum + value * value, 0));
+  assert.ok(Math.abs(norm - 1) < 1e-6, `expected unit norm, got ${norm}`);
+  assert.deepEqual(truncateAndRenormalize(vector, 768).length, 768);
+  assert.deepEqual(truncateAndRenormalize(vector, 2048).length, 768);
+});
+
+test("EmbeddingGemma uses distinct query and document prompts", async () => {
+  const gemma = await embeddingGemma();
+
+  assert.ok(gemma.embedding.queryPrefix.startsWith("task: search result"));
+  assert.ok(gemma.embedding.documentPrefix.startsWith("title:"));
+  assert.notEqual(gemma.embedding.queryPrefix, gemma.embedding.documentPrefix);
+  assert.equal(gemma.embedding.promptVersion, "prompt-v1");
+});
+
+test("embedding profiles encode model, dtype, dimensions, and prompt version", async () => {
+  const { embeddingProfileFor } = await import("../../native-host/src/semantic-search.js");
+  const gemma = await embeddingGemma();
+
+  assert.equal(embeddingProfileFor(gemma), "embeddinggemma-300m:q4:d256:prompt-v1");
+  const wide = { ...gemma, embedding: { ...gemma.embedding, dimensions: 768 } };
+  assert.equal(embeddingProfileFor(wide), "embeddinggemma-300m:q4:d768:prompt-v1");
+  const snowflake = await handleSemanticHostMethod("semantic.listModels", {}).then((result) => result.models[0]);
+  assert.notEqual(embeddingProfileFor(snowflake), embeddingProfileFor(gemma));
+});
+
+test("embedding dimension settings validate against the active model and persist", async () => {
+  const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-semantic-dims-test-"));
+  process.env.OPENCODE_BROWSER_SEMANTIC_DIR = dir;
+
+  try {
+    const accepted = setSemanticSettings({ enabled: true, modelId: "embeddinggemma-300m", embeddingDims: 512 });
+    assert.equal(accepted.settings.modelId, "embeddinggemma-300m");
+    assert.equal(accepted.settings.embeddingDims, 512);
+
+    const rejected = setSemanticSettings({ enabled: true, modelId: "embeddinggemma-300m", embeddingDims: 96 });
+    assert.equal(rejected.settings.embeddingDims, 512, "invalid dimensions must be rejected while retaining the previous value");
+
+    const status = await handleSemanticHostMethod("semantic.status", {});
+    const gemma = status.models.find((model) => model.id === "embeddinggemma-300m");
+    assert.equal(gemma.dimensions, 512, "status must report the configured effective dimensions");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
