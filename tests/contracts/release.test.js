@@ -45,6 +45,11 @@ describe("release metadata", () => {
     expect(compareVersions("2.0.0", "2.0.0-rc.1")).toBe(1);
     expect(compareVersions("2.0.0-rc.2", "2.0.0-rc.1")).toBe(1);
   });
+
+  test("creates GitHub releases without relying on a checked-out repository", () => {
+    const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "publish.yml"), "utf8");
+    expect(workflow).toMatch(/gh release create[^\n]+--repo "\$GITHUB_REPOSITORY"/);
+  });
 });
 
 describe("privacy contract", () => {

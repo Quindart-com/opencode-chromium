@@ -186,7 +186,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
           RELEASE_VERSION: ${{ needs.release-metadata.outputs.version }}
-        run: gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "opencode-chromium $RELEASE_VERSION" --generate-notes
+        run: gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "opencode-chromium $RELEASE_VERSION" --generate-notes
 
   webstore-release:
     name: Publish browser extension
