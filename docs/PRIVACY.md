@@ -41,7 +41,13 @@ remote server. Everything runs locally.
   install IDs, and never compute device fingerprints. The only persistent
   identifier is a random per-profile UUID generated locally for routing
   requests to the browser profile you selected; it never leaves your device.
-  A repository contract test and the release hygiene scan pin this guarantee.
+  The extension popup shows this identifier **masked** by default (first and
+  last four characters only); the full value is revealed or copied only through
+  an explicit "Developer details" action. Cache locations are shown as "Local
+  model cache"; the raw path is only ever copied on explicit request, never
+  rendered. A repository contract test and the release hygiene scan pin these
+  guarantees, and store-listing images are generated from deterministic demo
+  fixtures rather than live popups.
 
 ## Action Memory
 
@@ -49,14 +55,20 @@ The opt-in **Action Memory** feature (off by default) stores a structured,
 vector-searchable record of agent browser actions in a local SQLite database.
 By design it contains **no personal content**: no URLs, window titles, typed
 text, form values, keystrokes, clipboard contents, screenshots, file paths, or
-accessibility trees — only capability names, hostnames, bounded element labels
-(≤ 64 characters), outcomes, and timestamps. There is no encryption because
-there is nothing personal to protect: the record is a what/where/result log,
-not a transcript. Export (`memory export`) produces a shareable JSON snapshot
-of the same bounded metadata; delete (`memory delete --yes`) permanently
-removes the database. Confirmed actions are never auto-purged; stale failed
-lessons are cleaned up automatically per the quota and purge settings shown in
-the Action Memory dashboard (extension popup → Action Memory).
+accessibility trees — only action names, hostnames, bounded element labels
+(≤ 64 characters, passed through a privacy normalizer that strips email
+addresses, UUIDs, long account-like numbers, URL query strings, tokens, and
+filesystem paths), outcomes, and timestamps. Steps that need a value or URL at
+replay time are stored as flags only; the value always comes from the live
+agent request and is never persisted. Search queries are embedded for the
+lookup and never stored; searchable chain text is generated purely from the
+privacy-safe structured fields. There is no encryption because there is
+nothing personal to protect: the record is a what/where/result log, not a
+transcript. Export (`memory export`) produces a shareable JSON snapshot of the
+same bounded metadata; delete (`memory delete --yes`) permanently removes the
+database. Confirmed actions are never auto-purged; stale failed lessons are
+cleaned up automatically per the quota and purge settings shown in the Action
+Memory dashboard (extension popup → Action Memory).
 
 ## Permissions and why they exist
 
