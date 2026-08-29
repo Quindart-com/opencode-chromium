@@ -318,7 +318,7 @@ bun run check:release
 
 The release check rejects stale V1 paths, personal state, duplicate legacy package surfaces, schema growth beyond budget, and tarballs missing the built adapters.
 
-GitHub Actions runs the same verification on pull requests and `master` pushes. When `package.json` advances to a higher SemVer version on `master`, the protected release workflow validates the matching extension manifest, publishes npm through Trusted Publishing, submits the extension to the Chrome Web Store, and creates the matching GitHub tag and generated release notes. No npm token is stored in the repository or workflow, and maintainers do not create release tags manually.
+Contributors run the verification suite locally before review. GitHub Actions reserves the complete release gate for a forward SemVer change to `package.json` on `master`; that workflow validates the matching extension manifest, publishes npm through Trusted Publishing, submits the extension to the Chrome Web Store, and creates the matching GitHub tag and generated release notes. GitHub's native secret scanning and push protection guard remote pushes without consuming Actions minutes. No npm token is stored in the repository or workflow, and maintainers do not create release tags manually.
 
 ## Security
 
