@@ -500,7 +500,7 @@ export class AgentBrowserRuntime {
         query: target.query,
         maxResults: Math.max(1, (target.index ?? 0) + 1),
         detail: "lean",
-        mode: "snowflake",
+        mode: "semantic",
       }, sessionId);
       const candidate = resultCandidates(search)[target.index ?? 0];
       if (!candidate) throw new Error(`No page target matched: ${target.query}`);
@@ -515,7 +515,7 @@ export class AgentBrowserRuntime {
     const mem = (params) => this.memoryStepParams(step, params, chainId, stepIndex);
     if (step.action === "find") {
       const query = step.target?.query ?? step.value ?? "";
-      return this.invoke("browser_page_search", mem({ tabId, query, maxResults: 20, detail: "lean", mode: "snowflake", timeoutMs }), session.sessionId);
+      return this.invoke("browser_page_search", mem({ tabId, query, maxResults: 5, detail: "lean", mode: "auto", timeoutMs }), session.sessionId);
     }
     if (step.action === "capability") {
       const registry = await this.capabilities();
@@ -728,8 +728,8 @@ export class AgentBrowserRuntime {
       query: args.query ?? target.query ?? "",
       maxResults: limit,
       detail: args.detail ?? "lean",
-      mode: args.searchStrategy ?? "snowflake",
-      timeoutMs: ["deep", "snowflake"].includes(args.searchStrategy ?? "snowflake") ? 120000 : 10000,
+      mode: args.searchStrategy ?? "auto",
+      timeoutMs: ["deep", "semantic", "snowflake"].includes(args.searchStrategy) ? 120000 : 10000,
     }, session.sessionId);
     if (args.mode === "inspect") {
       if (target.requestId) {
@@ -760,7 +760,7 @@ export class AgentBrowserRuntime {
     }, session.sessionId);
     if (args.mode === "extract") return target.selector
       ? this.invoke("browser_locator_text", { tabId, selector: target.selector }, session.sessionId)
-      : this.invoke("browser_page_search", { tabId, query: args.query ?? target.query ?? "main content", maxResults: limit, detail: args.detail ?? "compact", mode: args.searchStrategy ?? "snowflake", timeoutMs: ["deep", "snowflake"].includes(args.searchStrategy ?? "snowflake") ? 120000 : 10000 }, session.sessionId);
+      : this.invoke("browser_page_search", { tabId, query: args.query ?? target.query ?? "main content", maxResults: limit, detail: args.detail ?? "compact", mode: args.searchStrategy ?? "auto", timeoutMs: ["deep", "semantic", "snowflake"].includes(args.searchStrategy) ? 120000 : 10000 }, session.sessionId);
     if (args.mode === "events") return {
       console: await this.invoke("browser_console_logs", { tabId, limit: clamp(args.limit, 50, 1, 200), raw: false, includeStack: false }, session.sessionId),
       network: summarizeNetworkEvents(await this.invoke("browser_network_events", { tabId, limit: clamp(args.limit, 50, 1, 200) }, session.sessionId), clamp(args.limit, 30, 1, 200)),
