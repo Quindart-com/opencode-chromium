@@ -313,6 +313,13 @@ test("EmbeddingGemma uses distinct query and document prompts", async () => {
   assert.equal(gemma.embedding.promptVersion, "prompt-v1");
 });
 
+test("EmbeddingGemma reads the exported sentence embedding instead of token features", () => {
+  const source = fs.readFileSync(path.resolve("native-host", "src", "semantic-search.js"), "utf8");
+  assert.match(source, /AutoModel\.from_pretrained\(model\.embedding\.id/);
+  assert.match(source, /outputs\?\.sentence_embedding/);
+  assert.doesNotMatch(source, /adapter === "embeddinggemma"[\s\S]{0,300}pooling: "none"/);
+});
+
 test("embedding profiles encode model, dtype, dimensions, and prompt version", async () => {
   const { embeddingProfileFor } = await import("../../native-host/src/semantic-search.js");
   const gemma = await embeddingGemma();

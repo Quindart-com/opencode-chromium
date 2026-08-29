@@ -25,7 +25,7 @@ The local model registry currently ships four models:
 | --- | --- | --- | --- | --- |
 | Snowflake Arctic Embed XS | Adaptive (default) | 22.6M | 384 | Compact default; the safest latency/quality trade-off. |
 | Snowflake Arctic Embed M | Adaptive (optional) | 108.9M | 768 | Stronger relevance at 768 dimensions; larger disk and memory footprint. |
-| Google EmbeddingGemma 300M | Adaptive (optional) | 308M | 128/256/512/768 (MRL) | Multilingual on-device model with a 2K context and Matryoshka output dimensions; q4 deployment stays under 200 MB of RAM. 256 dimensions is the default and recommended balance. |
+| Google EmbeddingGemma 300M | Adaptive (optional) | 308M | 128/256/512/768 (MRL) | Compact multilingual on-device model with a 2K context and Matryoshka output dimensions. 256 dimensions is the default and recommended balance. |
 | Qwen3 0.6B Retrieval + Reranker | Deep | 0.6B + 0.6B | 1024 | Embedding plus reranker for multilingual, code-heavy, or genuinely semantic tasks; loaded on demand by deep search only. |
 
 EmbeddingGemma uses a dedicated adapter: it reads the model's

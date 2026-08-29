@@ -1,6 +1,13 @@
 name: Chrome Web Store release
 
 on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: "Validate the package without publishing it"
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
@@ -60,7 +67,8 @@ jobs:
   submit:
     name: Submit to Chrome Web Store
     if: >-
-      github.event_name == 'workflow_dispatch'
+      github.event_name == 'workflow_call'
+      || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     needs: verify
     runs-on: ubuntu-latest
@@ -91,5 +99,5 @@ jobs:
 
       - name: Submit to Chrome Web Store
         env:
-          DRY_RUN_FLAG: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true && '--dry-run' || '' }}
+          DRY_RUN_FLAG: ${{ inputs.dry_run == true && '--dry-run' || '' }}
         run: bun run webstore:submit -- $DRY_RUN_FLAG

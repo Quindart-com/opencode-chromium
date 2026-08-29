@@ -61,6 +61,53 @@ test("approval follow-up rejects retransmitted or changed action chains", async 
   }
 });
 
+test("memory replay refuses a recipe whose actions differ from the live request", async () => {
+  const runtime = fakeRuntime();
+  const events = [];
+  runtime.memoryReader = () => ({
+    meta: { enabled: "true" },
+    search: async () => ({ results: [{ kind: "chain_v2", id: 7, confidence: 0.9, steps: [{ action: "hover", target_label: "Submit" }] }] }),
+    usageEvent: (event) => events.push(event),
+  });
+  try {
+    const replay = await runtime.tryMemoryReplay(
+      { memoryIntent: "submit", steps: [{ action: "click", target: { query: "Submit" } }] },
+      runtime.getSession("memory-mismatch"),
+      42,
+    );
+    assert.equal(replay, null);
+    assert.deepEqual(runtime.executed, []);
+    assert.equal(events.at(-1).reason, "recipe_mismatch");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("high-level memory records use the live tab hostname", async () => {
+  const runtime = fakeRuntime();
+  let recorded;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_get_tab") return { id: 42, url: "https://checkout.example.com/cart?token=secret" };
+    if (name === "memory.recordStep") recorded = args;
+    return {};
+  };
+  try {
+    const session = runtime.getSession("memory-hostname");
+    await runtime.recordMemoryStep({
+      chainId: "chain",
+      position: 0,
+      step: { action: "find", target: { query: "checkout" } },
+      tabId: 42,
+      success: true,
+      durationMs: 1,
+      errorCode: null,
+    }, session);
+    assert.equal(recorded.hostname, "checkout.example.com");
+  } finally {
+    runtime.close();
+  }
+});
+
 test("network body inspection is approval-gated without changing the default tool surface", async () => {
   const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-network-approval-test-")) });
   const runtime = new AgentBrowserRuntime({
