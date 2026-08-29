@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/opencode-chromium"><img src="https://img.shields.io/npm/dw/opencode-chromium?style=flat&logo=npm&label=weekly%20downloads" alt="NPM weekly downloads"/></a>
   <a href="https://github.com/Quindart-com/opencode-chromium/discussions"><img src="https://img.shields.io/badge/roadmap-Discussions-3fb950" alt="Roadmap discussions"/></a>
+  <a href="https://chromewebstore.google.com/detail/opencode-chromium/hdljmmpfnhojebplbbgdgejoobmjcbml?authuser=0&amp;hl=en"><img src="https://img.shields.io/badge/Install_in_Chrome_Web_Store-Download-4285F4?style=flat&amp;logo=googlechrome&amp;logoColor=white" alt="Install opencode-chromium from the Chrome Web Store"/></a>
 </p>
 
 <p align="center">
