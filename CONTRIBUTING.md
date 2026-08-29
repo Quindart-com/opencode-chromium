@@ -39,3 +39,17 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 ## Security-Sensitive Changes
 
 Changes to extension permissions, native messaging, file upload behavior, clipboard access, or CDP execution should explain the security impact in the PR description.
+
+## Releases
+
+`package.json` is the canonical release version. For a release PR, advance it to a higher SemVer version and set `extension/manifest.json` to the same value. Run the complete release gate before merging:
+
+```bash
+bun run build
+bun run check
+bun run pack
+bun run test:tarball
+bun run check:release
+```
+
+After the version bump reaches `master`, GitHub Actions automatically publishes npm with Trusted Publishing, submits the extension, and creates the matching `v<version>` GitHub release with generated notes. Do not create the root package tag manually. The compatibility shim under `packages/opencode-chromium-mcp` retains its separate `opencode-chromium-mcp-v<version>` release tag because it has an independent version lifecycle.

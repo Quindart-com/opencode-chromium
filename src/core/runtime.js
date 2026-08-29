@@ -101,6 +101,10 @@ function resultCandidates(value) {
   return [];
 }
 
+function usesLongSearchTimeout(strategy) {
+  return ["deep", "semantic", "snowflake"].includes(strategy);
+}
+
 function publicProfiles(profiles) {
   return profiles.map((profile) => ({
     profileId: profile.profileId,
@@ -610,7 +614,8 @@ export class AgentBrowserRuntime {
     }
   }
 
-  memoryStepParams(step, params, chainId = null, stepIndex = null) {    const target = step?.target ?? {};
+  memoryStepParams(step, params, chainId = null, stepIndex = null) {
+    const target = step?.target ?? {};
     let label = target?.query ?? target?.selector ?? target?.label ?? null;
     if (!label && ["click", "doubleClick", "hover", "press"].includes(step?.action) && typeof step?.value === "string") {
       label = step.value;
@@ -629,6 +634,26 @@ export class AgentBrowserRuntime {
       return this.memoryReader().meta.enabled === "true";
     } catch {
       return false;
+    }
+  }
+
+  async memoryHostname(step, tabId, session) {
+    let candidate = step?.action === "navigate" ? step.url : null;
+    if (!candidate && session.memoryHostname) return session.memoryHostname;
+    if (!candidate) {
+      try {
+        const tab = await this.invoke("browser_get_tab", { tabId }, session.sessionId);
+        candidate = tab?.url ?? null;
+      } catch {
+        return null;
+      }
+    }
+    try {
+      const hostname = new URL(candidate).hostname.toLowerCase() || null;
+      session.memoryHostname = hostname;
+      return hostname;
+    } catch {
+      return null;
     }
   }
 
@@ -655,6 +680,14 @@ export class AgentBrowserRuntime {
     if (!match || steps.length === 0) return null;
     if (match.confidence < MEMORY_REPLAY_MIN_CONFIDENCE) {
       store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: false, reason: "below_confidence" });
+      return null;
+    }
+    if (steps.length !== request.steps?.length || steps.some((step, index) => step.action !== request.steps[index]?.action)) {
+      store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "recipe_mismatch" });
+      return null;
+    }
+    if (requiresApproval(steps).length > 0) {
+      store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "approval_required" });
       return null;
     }
     const bound = [];
@@ -685,16 +718,21 @@ export class AgentBrowserRuntime {
     const prior = new Map();
     const results = [];
     let allOk = true;
+    let completedMutation = false;
+    let uncertainMutation = false;
     for (const [index, step] of bound.entries()) {
       try {
         const value = await this.executeStep(step, tabId, prior, session, replayChainId, index);
+        if (!READ_ACTIONS.has(step.action)) completedMutation = true;
         if (step.target?.query) prior.set(`replay-${index}`, value);
         results.push({ index, action: step.action, ok: true });
-        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: true, durationMs: 0, errorCode: null }, session.sessionId).catch(() => {});
+        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: true, durationMs: 0, errorCode: null }, session).catch(() => {});
       } catch (error) {
         allOk = false;
-        results.push({ index, action: step.action, ok: false, error: errorDetails(error) });
-        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: false, durationMs: 0, errorCode: errorDetails(error).code ?? "unknown" }, session.sessionId).catch(() => {});
+        const detail = errorDetails(error);
+        uncertainMutation = !READ_ACTIONS.has(step.action) && detail.uncertain === true;
+        results.push({ index, action: step.action, ok: false, error: detail });
+        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: false, durationMs: 0, errorCode: detail.code ?? "unknown" }, session).catch(() => {});
         break;
       }
     }
@@ -702,6 +740,9 @@ export class AgentBrowserRuntime {
     if (!allOk) {
       store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "stale_step" });
       store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: false, stepsReused: results.filter((item) => item.ok).length, reason: "stale_step" });
+      if (completedMutation || uncertainMutation) {
+        return { stepsReused: results.filter((item) => item.ok).length, results, failed: true };
+      }
       return null;
     }
     store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: true, stepsReused: results.length });
@@ -710,7 +751,7 @@ export class AgentBrowserRuntime {
 
   // One high-level browser step produces exactly one memory record, whatever
   // the step expands to at the RPC layer. Only privacy-safe fields persist.
-  async recordMemoryStep({ chainId, position, step, tabId, success, durationMs, errorCode }, sessionId) {
+  async recordMemoryStep({ chainId, position, step, tabId, success, durationMs, errorCode }, session) {
     const target = step.target ?? {};
     const summary = {
       action: step.action,
@@ -720,16 +761,18 @@ export class AgentBrowserRuntime {
         selector: target.query ? null : target.selector ?? null,
       },
     };
+    const hostname = await this.memoryHostname(step, tabId, session);
     await this.invoke("memory.recordStep", {
       chainId,
       position,
       action: summary.action,
       tabId,
+      hostname,
       target: summary.target,
       success: success === true,
       durationMs,
       errorCode,
-    }, sessionId);
+    }, session.sessionId);
   }
 
   async editTarget(target, tabId, mode, value, sessionId, chainId = null, stepIndex = null) {
@@ -856,7 +899,7 @@ export class AgentBrowserRuntime {
         maxResults: limit,
         detail: args.detail ?? prefs.detail,
         mode: args.searchStrategy ?? prefs.mode,
-        timeoutMs: ["deep", "semantic", "snowflake"].includes(args.searchStrategy) ? 120000 : 10000,
+        timeoutMs: usesLongSearchTimeout(args.searchStrategy ?? prefs.mode) ? 120000 : 10000,
       }, session.sessionId);
     }
     if (args.mode === "inspect") {
@@ -890,7 +933,7 @@ export class AgentBrowserRuntime {
       const prefs = await this.searchPreferences(session);
       return target.selector
         ? this.invoke("browser_locator_text", { tabId, selector: target.selector }, session.sessionId)
-        : this.invoke("browser_page_search", { tabId, query: args.query ?? target.query ?? "main content", maxResults: limit, detail: args.detail ?? prefs.detail, mode: args.searchStrategy ?? prefs.mode, timeoutMs: ["deep", "semantic", "snowflake"].includes(args.searchStrategy) ? 120000 : 10000 }, session.sessionId);
+        : this.invoke("browser_page_search", { tabId, query: args.query ?? target.query ?? "main content", maxResults: limit, detail: args.detail ?? prefs.detail, mode: args.searchStrategy ?? prefs.mode, timeoutMs: usesLongSearchTimeout(args.searchStrategy ?? prefs.mode) ? 120000 : 10000 }, session.sessionId);
     }
     if (args.mode === "events") return {
       console: await this.invoke("browser_console_logs", { tabId, limit: clamp(args.limit, 50, 1, 200), raw: false, includeStack: false }, session.sessionId),
@@ -1009,13 +1052,15 @@ export class AgentBrowserRuntime {
         const replay = await this.tryMemoryReplay(request, session, tabId).catch(() => null);
         if (replay) {
           return this.compact({
-            ok: true,
-            status: "memory_replay",
+            ok: replay.failed !== true,
+            status: replay.failed === true ? "partial" : "memory_replay",
             sessionId,
             profileId: session.profileId,
             tabId: session.activeTabId,
             memory: { used: true, stepsReused: replay.stepsReused, fallback: false },
-            summary: `Replayed ${replay.stepsReused} remembered steps`,
+            summary: replay.failed === true
+              ? `Stopped after ${replay.stepsReused} remembered steps to avoid repeating a mutation with uncertain state`
+              : `Replayed ${replay.stepsReused} remembered steps`,
             results: replay.results,
           }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
         }
@@ -1049,7 +1094,7 @@ export class AgentBrowserRuntime {
               success: lastError == null,
               durationMs: Date.now() - stepStarted,
               errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : null,
-            }, sessionId).catch(() => {});
+            }, session).catch(() => {});
           }
           if (lastError) {
             failed = true;

@@ -205,7 +205,7 @@ export class MemoryStore {
       target_label: safe.label,
       target_role: safe.role,
       selector: safe.selector,
-      requiresRuntimeValue: safeAction === "fill" || safeAction === "replaceText" || safeAction === "select" || safeAction === "type" || safeAction === "navigate",
+      requiresRuntimeValue: safeAction === "fill" || safeAction === "replaceText" || safeAction === "select" || safeAction === "type",
       requiresRuntimeUrl: safeAction === "navigate",
       success: success === true,
     };
@@ -232,7 +232,7 @@ export class MemoryStore {
     if (!existing) {
       this.db.prepare(
         "INSERT INTO memory_chains_v2 (fingerprint, safe_summary, recipe_json, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)",
-      ).run(fingerprint, chainId, JSON.stringify([recipe]), now, now);
+      ).run(fingerprint, "", JSON.stringify([recipe]), now, now);
       return;
     }
     let steps = [];
@@ -281,8 +281,7 @@ export class MemoryStore {
 
   #queueEmbedV2(kind, fingerprint, text) {
     if (!this.embedQueue) return;
-    const queued = this.embedQueue.push({ fingerprint: `v2:${kind}:${fingerprint}`, kind: `v2_${kind}`, text });
-    if (!queued) this.writeMeta("embedding_queue_drops", Number(this.meta.embedding_queue_drops ?? 0) + 1);
+    this.embedQueue.push({ fingerprint: `v2:${kind}:${fingerprint}`, kind: `v2_${kind}`, text });
   }
 
   applyEmbeddingV2({ fingerprint, values, modelId = null, dims = null, embeddingProfile = null }) {
@@ -314,8 +313,13 @@ export class MemoryStore {
   }
 
   unindexedCounts() {
-    const actions = this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL").get().n;
-    const chains = this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE embedding IS NULL").get().n;
+    const activeProfile = typeof this.meta.embedding_profile === "string" ? this.meta.embedding_profile : null;
+    const actions = activeProfile
+      ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL OR embedding_profile IS NOT ?").get(activeProfile).n
+      : this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL").get().n;
+    const chains = activeProfile
+      ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE embedding IS NULL OR embedding_profile IS NOT ?").get(activeProfile).n
+      : this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE embedding IS NULL").get().n;
     return { unindexed_actions: actions, unindexed_chains: chains };
   }
 
@@ -673,8 +677,11 @@ export class MemoryStore {
 
     let v2Embedded = 0;
     if (rebuildV2 && embed) {
-      const staleActions = this.db.prepare("SELECT fingerprint, action, hostname, target_label, target_role FROM memory_actions_v2 WHERE embedding IS NULL OR embedding_profile IS ?").all(this.meta.embedding_profile ?? "__none__");
-      const staleChains = this.db.prepare("SELECT fingerprint, safe_summary FROM memory_chains_v2 WHERE (embedding IS NULL OR embedding_profile IS ?) AND replaced_by IS NULL").all(this.meta.embedding_profile ?? "__none__");
+      // An explicit rebuild may follow a model/profile setting change. The
+      // target profile is only known after `embed` returns, so rebuild every
+      // live v2 row instead of comparing against the previous profile.
+      const staleActions = this.db.prepare("SELECT fingerprint, action, hostname, target_label, target_role FROM memory_actions_v2").all();
+      const staleChains = this.db.prepare("SELECT fingerprint, safe_summary FROM memory_chains_v2 WHERE replaced_by IS NULL").all();
       const v2Batch = [
         ...staleActions.map((row) => ({ fingerprint: row.fingerprint, text: chainSearchText(row.hostname, [{ action: row.action, target_role: row.target_role, target_label: row.target_label }]) })),
         ...staleChains.map((row) => ({ fingerprint: row.fingerprint, text: row.safe_summary })),

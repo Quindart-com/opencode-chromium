@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
-import { AutoModelForCausalLM, AutoTokenizer, env, pipeline } from "@huggingface/transformers";
+import { AutoModel, AutoModelForCausalLM, AutoTokenizer, env, pipeline } from "@huggingface/transformers";
 
 const SETTINGS_VERSION = 5;
 const AGENT_RESULT_COUNTS = [3, 5, 8, 12, 20];
@@ -93,7 +93,7 @@ export const SEMANTIC_MODELS = [
   {
     id: "embeddinggemma-300m",
     label: "Google EmbeddingGemma 300M",
-    description: "Multilingual on-device embedding model with Matryoshka output dimensions (128/256/512/768). 256 dimensions is the recommended size-to-quality balance; quantized deployment stays under 200 MB of RAM.",
+    description: "Multilingual on-device embedding model with Matryoshka output dimensions (128/256/512/768). 256 dimensions is the recommended size-to-quality balance.",
     parameters: "308M",
     contextLength: "2048",
     dimensions: 256,
@@ -116,7 +116,7 @@ export const SEMANTIC_MODELS = [
     },
     benchmark: {
       label: "Model-card retrieval benchmark",
-      value: "Strong multilingual retrieval under 200 MB RAM (q4)",
+      value: "Strong compact multilingual retrieval (q4)",
       note: "Browser-specific latency and recall are verified by local fixtures before this becomes the default.",
     },
   },
@@ -466,11 +466,30 @@ async function loadEmbedding(model) {
   if (embeddingPipelines.has(model.id)) return embeddingPipelines.get(model.id);
   await unloadModelsExcept(model.id);
   configureTransformersCache();
-  const extractor = await pipeline("feature-extraction", model.embedding.id, {
-    dtype: model.embedding.dtype,
-    session_options: ONNX_SESSION_OPTIONS,
-    progress_callback: progressFor(model, "embedding"),
-  });
+  let extractor;
+  if (model.embedding.adapter === "embeddinggemma") {
+    const tokenizer = await AutoTokenizer.from_pretrained(model.embedding.id, {
+      progress_callback: progressFor(model, "embedding-tokenizer"),
+    });
+    const embeddingModel = await AutoModel.from_pretrained(model.embedding.id, {
+      dtype: model.embedding.dtype,
+      session_options: ONNX_SESSION_OPTIONS,
+      progress_callback: progressFor(model, "embedding"),
+    });
+    extractor = async (texts) => {
+      const inputs = tokenizer(texts, { padding: true, truncation: true });
+      const outputs = await embeddingModel(inputs);
+      if (!outputs?.sentence_embedding) throw new Error("EmbeddingGemma export did not return sentence_embedding");
+      return outputs.sentence_embedding;
+    };
+    extractor.dispose = async () => disposeMaybe(embeddingModel);
+  } else {
+    extractor = await pipeline("feature-extraction", model.embedding.id, {
+      dtype: model.embedding.dtype,
+      session_options: ONNX_SESSION_OPTIONS,
+      progress_callback: progressFor(model, "embedding"),
+    });
+  }
   await unloadModelsExcept(model.id);
   embeddingPipelines.set(model.id, extractor);
   return extractor;
@@ -721,9 +740,9 @@ function modelDocument(model, text) {
 async function embedTexts(extractor, texts, model) {
   const list = Array.isArray(texts) ? texts : [texts];
   if (model.embedding.adapter === "embeddinggemma") {
-    // The ONNX conversion exports sentence_embedding directly; Matryoshka
-    // truncation must be followed by re-normalization (model-card contract).
-    const tensor = await extractor(list, { pooling: "none" });
+    // The dedicated loader returns sentence_embedding directly; Matryoshka
+    // truncation must then be followed by re-normalization.
+    const tensor = await extractor(list);
     const rows = rowsFromTensor(tensor, list.length);
     return rows.map((row) => truncateAndRenormalize(row, model.embedding.dimensions));
   }

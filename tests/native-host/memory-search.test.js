@@ -180,7 +180,7 @@ test("usage events replace the inflated hits counter", async () => {
 test("typed values, full URLs, and paths never enter v2 recipes", async () => {
   const { store, root } = openMemory();
   const recorded = store.recordStep({
-    chainId: "chain-pii",
+    chainId: "274b81aa-1234-5678-9abc-def012345678",
     position: 0,
     action: "fill",
     hostname: "example.com",
@@ -188,7 +188,9 @@ test("typed values, full URLs, and paths never enter v2 recipes", async () => {
     success: true,
   });
   assert.ok(recorded.accepted);
-  const finalized = store.finalizeChain({ chainId: "chain-pii", success: true });
+  const pending = store.db.prepare("SELECT safe_summary FROM memory_chains_v2").get();
+  assert.equal(pending.safe_summary, "", "transient chain identifiers must never be persisted as summaries");
+  const finalized = store.finalizeChain({ chainId: "274b81aa-1234-5678-9abc-def012345678", success: true });
   assert.ok(finalized.accepted);
   const summary = store.db.prepare("SELECT safe_summary, recipe_json FROM memory_chains_v2 WHERE id = ?").get(finalized.chainId);
   assert.doesNotMatch(summary.safe_summary, /user@company\.com/);
@@ -197,6 +199,38 @@ test("typed values, full URLs, and paths never enter v2 recipes", async () => {
   const recipe = JSON.parse(action.recipe_json);
   assert.notEqual(recipe.target_label, "user@company.com");
   assert.equal(recipe.selector, null, "selector containing PII must be rejected");
+  assert.equal(recipe.requiresRuntimeUrl, false);
+  store.close();
+  removeRoot(root);
+});
+
+test("navigate recipes bind only the live URL and stale embedding profiles are rebuilt", async () => {
+  const { store, root } = openMemory();
+  const recorded = store.recordStep({ chainId: "navigate-chain", position: 0, action: "navigate", hostname: "example.com", success: true });
+  store.finalizeChain({ chainId: "navigate-chain", success: true });
+  await store.embedQueue.flush();
+  const recipe = JSON.parse(store.db.prepare("SELECT recipe_json FROM memory_actions_v2 WHERE id = ?").get(recorded.actionId).recipe_json);
+  assert.equal(recipe.requiresRuntimeValue, false);
+  assert.equal(recipe.requiresRuntimeUrl, true);
+
+  const nextProfileEmbed = async (texts) => {
+    const result = await lexicalVectors().embed(texts);
+    return { ...result, embeddingProfile: "fixture-next:q8:d64:prompt-v1" };
+  };
+  const result = await store.reindex({ embed: nextProfileEmbed });
+  assert.ok(result.v2_embedded >= 1);
+  assert.equal(store.db.prepare("SELECT embedding_profile FROM memory_actions_v2 WHERE id = ?").get(recorded.actionId).embedding_profile, "fixture-next:q8:d64:prompt-v1");
+  store.close();
+  removeRoot(root);
+});
+
+test("embedding queue drops are counted once", () => {
+  const root = tempRoot();
+  const queue = new EmbedQueue({ embed: async () => ({ vectors: [] }), capacity: 0 });
+  const store = new MemoryStore({ root, embedQueue: queue });
+  store.enable();
+  store.recordStep({ action: "click", target: { label: "Go" } });
+  assert.equal(Number(store.meta.embedding_queue_drops), 1);
   store.close();
   removeRoot(root);
 });

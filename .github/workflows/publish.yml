@@ -14,7 +14,7 @@ on:
     branches:
       - master
     tags:
-      - "v*"
+      - "opencode-chromium-mcp-v*"
 
 permissions:
   contents: read
@@ -24,8 +24,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-metadata:
+    name: Detect version bump
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version.outputs.should_release || steps.validation.outputs.should_release }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: No release for validation-only events
+        if: github.event_name != 'push' || github.ref != 'refs/heads/master'
+        id: validation
+        run: echo "should_release=false" >> "$GITHUB_OUTPUT"
+
+      - name: Check out full history
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect a forward version bump
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node scripts/check-version-bump.js --before "$BEFORE_SHA" --github-output "$GITHUB_OUTPUT"
+
   verify:
     name: Verify package
+    needs: release-metadata
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -52,9 +79,9 @@ jobs:
         run: bun run check
 
       - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref_name, 'opencode-chromium-mcp-v')
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.release-metadata.outputs.should_release == 'true'
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
         run: bun run check:tag -- "$RELEASE_TAG"
 
       - name: Build release tarball
@@ -68,8 +95,8 @@ jobs:
 
   publish:
     name: Publish to npm
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: verify
+    if: needs.release-metadata.outputs.should_release == 'true'
+    needs: [release-metadata, verify]
     runs-on: ubuntu-latest
     environment:
       name: npm-production
@@ -105,7 +132,7 @@ jobs:
 
       - name: Validate release tag
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
         run: bun run check:tag -- "$RELEASE_TAG"
 
       - name: Build release
@@ -131,7 +158,7 @@ jobs:
             echo "ALREADY_PUBLISHED=false" >> "$GITHUB_ENV"
           fi
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
 
       - name: Publish with npm Trusted Publishing
         if: env.ALREADY_PUBLISHED != 'true'
@@ -140,7 +167,7 @@ jobs:
   publish-shim:
     name: Publish opencode-chromium-mcp shim
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/opencode-chromium-mcp-v')
-    needs: verify
+    needs: [release-metadata, verify]
     runs-on: ubuntu-latest
     environment:
       name: npm-production
@@ -195,3 +222,27 @@ jobs:
         if: env.ALREADY_PUBLISHED != 'true'
         run: npm publish --access public --ignore-scripts
         working-directory: packages/opencode-chromium-mcp
+
+  github-release:
+    name: Create GitHub release
+    if: needs.release-metadata.outputs.should_release == 'true'
+    needs: [release-metadata, publish, webstore-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create tag and release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.release-metadata.outputs.version }}
+        run: gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "opencode-chromium $RELEASE_VERSION" --generate-notes
+
+  webstore-release:
+    name: Publish browser extension
+    if: needs.release-metadata.outputs.should_release == 'true'
+    needs: [release-metadata, publish]
+    uses: ./.github/workflows/webstore.yml
+    with:
+      dry_run: false
+    secrets: inherit

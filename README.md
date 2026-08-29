@@ -158,7 +158,7 @@ bun test
 bun run check
 ```
 
-The package is released as `1.6.3` under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility.
+The package is released under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility; the current release version is defined in `package.json`.
 
 ## MCP
 
@@ -318,7 +318,7 @@ bun run check:release
 
 The release check rejects stale V1 paths, personal state, duplicate legacy package surfaces, schema growth beyond budget, and tarballs missing the built adapters.
 
-GitHub Actions runs the same verification on pull requests and `master` pushes. A release is published only from a matching `v*` tag through the protected `npm-production` environment using npm Trusted Publishing; no npm token is stored in the repository or workflow.
+GitHub Actions runs the same verification on pull requests and `master` pushes. When `package.json` advances to a higher SemVer version on `master`, the protected release workflow validates the matching extension manifest, publishes npm through Trusted Publishing, submits the extension to the Chrome Web Store, and creates the matching GitHub tag and generated release notes. No npm token is stored in the repository or workflow, and maintainers do not create release tags manually.
 
 ## Security
 

@@ -97,6 +97,7 @@
     "check:release": "bun scripts/release-check.js",
     "check:release-hygiene": "bun scripts/release-check.js --hygiene-only",
     "check:tag": "bun scripts/check-tag-version.js",
+    "check:version-bump": "bun scripts/check-version-bump.js",
     "test": "bun test",
     "test:contracts": "bun test tests/contracts tests/adapters",
     "test:mcp": "bun scripts/check-mcp.js",
