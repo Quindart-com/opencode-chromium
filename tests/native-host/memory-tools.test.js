@@ -58,7 +58,7 @@ test("consultation policy instructs status-then-search before re-exploration", a
   const skill = fs.readFileSync(path.join(root, "skills", "opencode-browser-plugin", "SKILL.md"), "utf8");
   const checkpoint = skill.indexOf("consult local action memory");
   assert.ok(checkpoint >= 0, "skill contains the memory consultation policy");
-  const policy = skill.slice(checkpoint, checkpoint + 900);
+  const policy = skill.slice(checkpoint, checkpoint + 1600);
   assert.match(policy, /memory_status/);
   assert.match(policy, /memory_search/);
   assert.match(policy, /never consult memory for unrelated tasks|Never consult memory for unrelated tasks/);

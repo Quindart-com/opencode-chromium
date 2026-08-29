@@ -62,12 +62,33 @@ export type MemoryStatus = {
     failure_contexts: number;
     confirmed_total: number;
     failed_total: number;
+    actions_v2?: number;
+    chains_v2?: number;
+    usage_events?: number;
+    unindexed_actions?: number;
+    unindexed_chains?: number;
   };
   memory_hits: number;
+  embedding_attempts?: number;
+  embedding_failures?: number;
+  embedding_queue_drops?: number;
+  last_embedding_error?: string | null;
+  last_reindex_at?: string | null;
+  embedding_profile?: string | null;
   quota_bytes: number;
   bytes_used: number;
   power_user: boolean;
   purge_days: number;
+  usage?: {
+    search_queries: number;
+    matches_returned: number;
+    replay_attempts: number;
+    replay_successes: number;
+    replay_failures: number;
+    replay_fallbacks: number;
+    steps_reused: number;
+    replay_success_rate: number | null;
+  };
   recent_daily?: Array<{ confirmed: number; failed: number }>;
 };
 
