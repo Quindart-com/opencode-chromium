@@ -1,0 +1,7 @@
+#!/bin/sh
+# Best-effort secret scan before each commit. Skips silently when gitleaks
+# is not installed; CI (.github/workflows/security.yml) is the enforced gate.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  exit 0
+fi
+exec gitleaks protect --staged --redact -v
