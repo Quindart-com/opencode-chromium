@@ -77,7 +77,7 @@ const observationSchema = z.object({
   format: z.enum(["png", "jpeg", "webp"]).optional(),
   quality: z.number().int().min(0).max(100).optional(),
   diagnostic: diagnosticSchema.optional(),
-  searchStrategy: z.enum(["snowflake", "auto", "lexical", "deep"]).optional(),
+  searchStrategy: z.enum(["auto", "semantic", "lexical", "deep", "snowflake"]).optional(),
 }).optional();
 
 const stepSchema = z.object({
@@ -163,7 +163,7 @@ export function createCoreRegistry(runtime, { memory = false } = {}) {
         format: z.enum(["png", "jpeg", "webp"]).optional(),
         quality: z.number().int().min(0).max(100).optional(),
         delivery: z.enum(["artifact", "inline"]).optional(),
-        searchStrategy: z.enum(["snowflake", "auto", "lexical", "deep"]).optional(),
+        searchStrategy: z.enum(["auto", "semantic", "lexical", "deep", "snowflake"]).optional(),
         pack: z.string().max(64).optional(),
         uri: z.string().max(300).optional(),
         diagnostic: diagnosticSchema.optional(),

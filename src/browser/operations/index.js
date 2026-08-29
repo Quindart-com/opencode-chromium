@@ -519,18 +519,23 @@ function pageSearchLabel(result) {
 }
 
 function leanPageSearchResult(result) {
-  return {
-    node_id: result.node_id,
-    kind: result.kind,
+  const shaped = {
+    node_id: result.node_id ?? null,
+    kind: result.kind ?? null,
     label: pageSearchLabel(result),
+    role: result.role ?? null,
     interactive: result.interactive === true,
   };
+  if (shaped.node_id === null || shaped.node_id === undefined) shaped.selector = result.selector ?? null;
+  return shaped;
 }
 
 function compactPageSearchResult(result) {
   return {
     ...leanPageSearchResult(result),
+    selector: result.selector ?? null,
     text: compactConsoleValue(result.text).slice(0, 220) || null,
+    score: Number.isFinite(result.score) ? Number(result.score.toFixed(4)) : null,
   };
 }
 
@@ -2710,11 +2715,11 @@ async execute(args, context) {
       }),
 
       browser_page_search: tool({
-        description: "Search the current page with Snowflake retrieval by default and return only relevant actionable page units.",
+        description: "Search the current page with local semantic retrieval (auto by default) and return only relevant actionable page units.",
         args: {
           tabId: tool.schema.number().int().positive(),
           query: tool.schema.string().describe("What to find on the page, such as 'checkout button' or 'repository danger zone'."),
-          maxResults: tool.schema.number().int().positive().default(20),
+          maxResults: tool.schema.number().int().positive().default(5),
           maxUnits: tool.schema.number().int().positive().default(700).describe("Maximum page units to extract before ranking."),
           embeddingCandidates: tool.schema.number().int().positive().default(120).describe("Maximum extracted units to embed before reranking."),
           rerankCandidates: tool.schema.number().int().positive().default(8).describe("Top embedding candidates to rerank with the local reranker."),
@@ -2728,14 +2733,14 @@ async execute(args, context) {
             width: tool.schema.number(),
             height: tool.schema.number(),
           }).optional().describe("Restrict candidates to a viewport clip rectangle."),
-          mode: tool.schema.enum(["snowflake", "auto", "deep", "lexical", "hybrid", "semantic"]).default("snowflake"),
+          mode: tool.schema.enum(["auto", "semantic", "lexical", "deep", "snowflake", "hybrid"]).default("auto").describe("Retrieval strategy. Auto = lexical first, escalating to the active semantic model. Semantic = always the active adaptive embedding model (snowflake is a deprecated alias). Deep = Qwen embedding + reranker."),
           timeoutMs: tool.schema.number().int().positive().default(120000),
         },
         async execute(args, context) {
           const profileId = await resolveSessionProfileId(context);
           markProfileUsed(context, profileId);
-          const strategy = args.mode === "hybrid" || args.mode === "semantic" ? "deep" : args.mode;
-          const timeoutMs = Math.max(250, Math.min(args.timeoutMs, ["deep", "snowflake"].includes(strategy) ? 120000 : 10000));
+          const strategy = args.mode === "hybrid" ? "deep" : args.mode === "snowflake" ? "semantic" : args.mode;
+          const timeoutMs = Math.max(250, Math.min(args.timeoutMs, ["deep", "semantic"].includes(strategy) ? 120000 : 10000));
           const maxResults = Math.max(1, Math.min(args.maxResults, 100));
           const maxUnits = Math.max(1, Math.min(args.maxUnits, 1000));
           const embeddingCandidates = Math.max(1, Math.min(args.embeddingCandidates, strategy === "deep" ? 120 : 48));

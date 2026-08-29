@@ -76,6 +76,7 @@ test("lean page search output removes model and score internals", () => {
     node_id: "node-1",
     kind: "button",
     label: "Save settings",
+    role: null,
     interactive: true,
   });
 });

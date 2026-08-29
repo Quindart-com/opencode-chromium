@@ -27,7 +27,7 @@ export const SERVER_NAME = PLUGIN_NAME;
 export const SERVER_INSTRUCTIONS = [
   "Use the four browser tools for UI-only work, connector gaps, and visual verification; prefer structured connectors when available.",
   "Pass a user-named profile on the first useful call, batch find/action/settle/verification in browser_run, and reuse sessionId.",
-  "Page search uses Snowflake by default; request lexical or auto for lower-latency retrieval, and deep for genuinely semantic, multilingual, or code-heavy matching.",
+  "Page search uses the auto retrieval strategy by default (lexical first, escalating to the active local embedding model); request lexical for lowest latency, semantic to always embed, and deep for reranked multilingual or code-heavy matching.",
   "For a specific tab's deeper network debugging, request browser_observe mode capabilities with pack network, then execute network.inspect inside browser_run; bodies are opt-in and approval-gated.",
   "Approval-required results must be followed by browser_run with only the approvalToken. Call browser_finalize when finished: keep user-facing tabs as 'deliverable' so they move into the blue OpenCode Deliverables group; keep 'handoff' tabs only when work must continue in a later turn. Agent-owned tabs that are not kept are closed and user-claimed tabs that are not kept are released.",
 ].join(" ");
