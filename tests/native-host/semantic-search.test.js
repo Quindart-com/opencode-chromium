@@ -16,7 +16,7 @@ test("persists semantic settings in configured local directory", async () => {
     assert.equal(semanticDataDir(), dir);
     assert.equal(status.settings.enabled, true);
     assert.equal(status.settings.version, 4);
-    assert.equal(status.settings.strategy, "snowflake");
+    assert.equal(status.settings.strategy, "semantic");
     assert.equal(status.settings.modelId, "snowflake-arctic-embed-xs");
     assert.equal(status.settings.deepModelId, "qwen3-0.6b-retrieval");
     assert.equal(fs.existsSync(path.join(dir, "settings.json")), true);
@@ -53,7 +53,7 @@ test("lexical page-unit ranking works without loading a model", async () => {
   }
 });
 
-test("Snowflake is the default ranking strategy while lexical remains explicit", async () => {
+test("semantic is the default ranking strategy while lexical remains explicit", async () => {
   const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
   const previousDisabled = process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-semantic-default-test-"));
@@ -62,7 +62,7 @@ test("Snowflake is the default ranking strategy while lexical remains explicit",
 
   try {
     setSemanticSettings({ enabled: true });
-    const snowflake = await rankPageUnits({
+    const semantic = await rankPageUnits({
       query: "workspace members",
       units: [{ node_id: "node-1", text: "Workspace member permissions" }],
     });
@@ -72,10 +72,39 @@ test("Snowflake is the default ranking strategy while lexical remains explicit",
       units: [{ node_id: "node-1", text: "Workspace member permissions" }],
     });
 
-    assert.equal(snowflake.searchStrategy, "snowflake");
-    assert.equal(snowflake.degraded, true);
+    assert.equal(semantic.searchStrategy, "semantic");
+    assert.equal(semantic.deprecatedAlias, false);
+    assert.equal(semantic.degraded, true);
     assert.equal(lexical.searchStrategy, "lexical");
     assert.equal(lexical.model.used, false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+    else process.env.OPENCODE_BROWSER_SEMANTIC_DIR = previous;
+    if (previousDisabled === undefined) delete process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
+    else process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL = previousDisabled;
+  }
+});
+
+test("snowflake remains a deprecated alias for the semantic strategy", async () => {
+  const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
+  const previousDisabled = process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-semantic-alias-test-"));
+  process.env.OPENCODE_BROWSER_SEMANTIC_DIR = dir;
+  process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL = "1";
+
+  try {
+    setSemanticSettings({ enabled: true });
+    const aliased = await rankPageUnits({
+      query: "workspace members",
+      mode: "snowflake",
+      units: [{ node_id: "node-1", text: "Workspace member permissions" }],
+    });
+
+    assert.equal(aliased.searchStrategy, "semantic");
+    assert.equal(aliased.deprecatedAlias, true);
+    assert.equal(aliased.degraded, true);
+    assert.equal(aliased.degradationReason, "model-unavailable");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
@@ -138,7 +167,7 @@ test("legacy model settings migrate to Snowflake-default retrieval while retaini
 
     assert.equal(status.settings.modelId, "snowflake-arctic-embed-xs");
     assert.equal(status.settings.deepModelId, "qwen3-0.6b-retrieval");
-    assert.equal(status.settings.strategy, "snowflake");
+    assert.equal(status.settings.strategy, "semantic");
     assert.equal(status.settings.enabled, true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

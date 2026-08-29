@@ -8,13 +8,31 @@ import { AutoModelForCausalLM, AutoTokenizer, env, pipeline } from "@huggingface
 const SETTINGS_VERSION = 4;
 const DEFAULT_MODEL_ID = "snowflake-arctic-embed-xs";
 const DEEP_MODEL_ID = "qwen3-0.6b-retrieval";
-const DEFAULT_MAX_RESULTS = 20;
+const DEFAULT_MAX_RESULTS = 5;
 const DEFAULT_MAX_UNITS = 700;
 const DEFAULT_EMBEDDING_CANDIDATES = 48;
 const DEFAULT_RERANK_CANDIDATES = 8;
 const MODEL_CACHE_ENV = "OPENCODE_BROWSER_SEMANTIC_DIR";
 const DISABLE_MODEL_ENV = "AGENT_BROWSER_DISABLE_SEMANTIC_MODEL";
 const IS_SEMANTIC_WORKER = !isMainThread && workerData?.role === "semantic-search";
+
+// Retrieval strategies are decoupled from model identity: "semantic" always
+// means the active adaptive embedding model. "snowflake" is a deprecated
+// alias kept for one or two releases.
+export const SEARCH_STRATEGIES = ["lexical", "auto", "semantic", "deep"];
+const LONG_TIMEOUT_STRATEGIES = new Set(["deep", "semantic", "snowflake"]);
+function normalizeSearchStrategy(input) {
+  if (input === "snowflake") return { strategy: "semantic", deprecatedAlias: true };
+  if (input === "semantic") return { strategy: "semantic", deprecatedAlias: false };
+  if (input === "auto") return { strategy: "auto", deprecatedAlias: false };
+  if (input === "deep") return { strategy: "deep", deprecatedAlias: false };
+  if (input === "hybrid") return { strategy: "deep", deprecatedAlias: true };
+  if (input === "lexical") return { strategy: "lexical", deprecatedAlias: false };
+  return { strategy: "semantic", deprecatedAlias: false };
+}
+function usesLongTimeout(strategy) {
+  return LONG_TIMEOUT_STRATEGIES.has(strategy);
+}
 
 const LEGACY_MODEL_IDS = new Set([
   "Xenova/bge-small-en-v1.5",
@@ -229,10 +247,12 @@ function normalizeSettings(value = {}) {
   const modelId = requestedModelId && SEMANTIC_MODELS.some((model) => model.id === requestedModelId && model.role === "adaptive")
     ? requestedModelId
     : DEFAULT_MODEL_ID;
+  // Strategy is always derived, never persisted: enabled semantic search is
+  // "semantic" (previously reported as the deprecated "snowflake" alias).
   return {
     version: SETTINGS_VERSION,
     enabled,
-    strategy: enabled ? "snowflake" : "lexical",
+    strategy: enabled ? "semantic" : "lexical",
     modelId,
     deepModelId: DEEP_MODEL_ID,
   };
@@ -791,6 +811,7 @@ function formatRanking(base, options = {}) {
     enabled: options.enabled ?? getSemanticSettings().enabled,
     mode: options.mode ?? "lexical",
     searchStrategy: options.searchStrategy ?? options.mode ?? "lexical",
+    deprecatedAlias: options.deprecatedAlias === true,
     degraded: options.degraded === true,
     degradationReason: options.degradationReason ?? null,
     cache: options.cache ?? { queryHit: false, documentHits: 0 },
@@ -814,44 +835,45 @@ function formatRanking(base, options = {}) {
 
 async function rankPageUnitsLocal(input = {}) {
   const settings = getSemanticSettings();
-  const requestedMode = ["snowflake", "auto", "deep", "lexical"].includes(input.mode)
-    ? input.mode
-    : ["hybrid", "semantic"].includes(input.mode) ? "deep" : "snowflake";
+  const { strategy: requestedStrategy, deprecatedAlias } = normalizeSearchStrategy(input.mode);
   const base = baseRanking(input);
   const confident = lexicalIsConfident(base.query, base.documents, base.ranked);
-  if (requestedMode === "lexical" || !settings.enabled && requestedMode === "auto" || confident && requestedMode === "auto") {
-    return formatRanking(base, { enabled: settings.enabled, mode: "lexical", searchStrategy: requestedMode });
+  if (requestedStrategy === "lexical" || !settings.enabled && requestedStrategy === "auto" || confident && requestedStrategy === "auto") {
+    return formatRanking(base, { enabled: settings.enabled, mode: "lexical", searchStrategy: requestedStrategy, deprecatedAlias });
   }
 
-  const model = modelById(requestedMode === "deep" ? settings.deepModelId : settings.modelId);
-  if (requestedMode === "snowflake" && !settings.enabled) {
+  const model = modelById(requestedStrategy === "deep" ? settings.deepModelId : settings.modelId);
+  if (requestedStrategy === "semantic" && !settings.enabled) {
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
-      searchStrategy: requestedMode,
+      searchStrategy: requestedStrategy,
+      deprecatedAlias,
       degraded: true,
       degradationReason: "model-disabled",
       model,
-      modelError: "Snowflake retrieval is disabled; pass searchStrategy=\"lexical\" or enable semantic search",
+      modelError: "Semantic retrieval is disabled; pass searchStrategy=\"lexical\" or enable semantic search",
     });
   }
   if ((process.env[DISABLE_MODEL_ENV] ?? process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL) === "1") {
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
-      searchStrategy: requestedMode,
+      searchStrategy: requestedStrategy,
+      deprecatedAlias,
       degraded: true,
       degradationReason: "model-unavailable",
       model,
       modelError: "Semantic model loading is disabled",
     });
   }
-  if (requestedMode === "auto" && !embeddingPipelines.has(model.id)) {
+  if (requestedStrategy === "auto" && !embeddingPipelines.has(model.id)) {
     void prepareSemanticModelLocal(model.id).catch(() => {});
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
       searchStrategy: "auto",
+      deprecatedAlias,
       degraded: true,
       degradationReason: loadState.state === "error" ? "model-unavailable" : "model-preparing",
       model,
@@ -861,17 +883,18 @@ async function rankPageUnitsLocal(input = {}) {
 
   let embeddingResult;
   try {
-    if (["snowflake", "deep"].includes(requestedMode)) await prepareSemanticModelLocal(model.id);
+    if (["semantic", "deep"].includes(requestedStrategy)) await prepareSemanticModelLocal(model.id);
     const indexes = embeddingCandidateIndexes(base.units, base.lexical, {
       ...input,
-      embeddingCandidates: requestedMode === "deep" ? Math.min(input.embeddingCandidates ?? 120, 120) : Math.min(input.embeddingCandidates ?? 48, 48),
+      embeddingCandidates: requestedStrategy === "deep" ? Math.min(input.embeddingCandidates ?? 120, 120) : Math.min(input.embeddingCandidates ?? 48, 48),
     });
     embeddingResult = await semanticScores(model, base.query, base.documents, indexes, input.pageFingerprint ?? "");
   } catch (error) {
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
-      searchStrategy: requestedMode,
+      searchStrategy: requestedStrategy,
+      deprecatedAlias,
       degraded: true,
       degradationReason: "model-failure",
       model,
@@ -891,7 +914,7 @@ async function rankPageUnitsLocal(input = {}) {
   let rerankerError = null;
   let rerankerCount = 0;
   let rerankerDtype = null;
-  if (requestedMode === "deep" && model.reranker && preliminary.length > 0) {
+  if (requestedStrategy === "deep" && model.reranker && preliminary.length > 0) {
     try {
       const reranked = await rerankerScores(model, base.query, base.documents, preliminary, input);
       rerankerUsed = reranked.scores.size > 0;
@@ -906,12 +929,13 @@ async function rankPageUnitsLocal(input = {}) {
       rerankerError = error instanceof Error ? error.message : String(error);
     }
   }
-  if (requestedMode === "deep") scheduleDeepUnload();
+  if (requestedStrategy === "deep") scheduleDeepUnload();
 
   return formatRanking(base, {
     enabled: settings.enabled,
-    mode: requestedMode === "deep" ? "deep" : requestedMode === "snowflake" ? "snowflake" : "adaptive",
-    searchStrategy: requestedMode,
+    mode: requestedStrategy === "deep" ? "deep" : "adaptive",
+    searchStrategy: requestedStrategy,
+    deprecatedAlias,
     ranked,
     model,
     modelUsed: true,
@@ -960,19 +984,20 @@ export async function handleSemanticHostMethod(method, params = {}) {
   }
   if (method === "semantic.rankPageUnits") {
     if (IS_SEMANTIC_WORKER) return rankPageUnitsLocal(params);
+    const { strategy } = normalizeSearchStrategy(params.mode);
     try {
       const timeoutMs = Number.isFinite(params.timeoutMs)
-        ? Math.max(250, Math.min(params.timeoutMs, ["deep", "snowflake"].includes(params.mode) ? 120000 : 10000))
-        : ["deep", "snowflake"].includes(params.mode) ? 120000 : 10000;
+        ? Math.max(250, Math.min(params.timeoutMs, usesLongTimeout(strategy) ? 120000 : 10000))
+        : usesLongTimeout(strategy) ? 120000 : 10000;
       return await semanticWorkerRequest("semantic.rankPageUnits", params, timeoutMs);
     } catch (error) {
       return formatRanking(baseRanking(params), {
         enabled: getSemanticSettings().enabled,
         mode: "lexical",
-        searchStrategy: params.mode ?? "snowflake",
+        searchStrategy: strategy,
         degraded: true,
         degradationReason: /timed?\s*out/i.test(String(error)) ? "semantic-timeout" : "semantic-worker-failure",
-        model: modelById(params.mode === "deep" ? DEEP_MODEL_ID : getSemanticSettings().modelId),
+        model: modelById(strategy === "deep" ? DEEP_MODEL_ID : getSemanticSettings().modelId),
         modelError: error instanceof Error ? error.message : String(error),
       });
     }
