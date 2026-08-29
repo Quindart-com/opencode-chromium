@@ -264,11 +264,31 @@ async function profileMetadata() {
   const manifest = chrome.runtime.getManifest();
   return {
     profileId: profile.profileId,
+    profileIdMasked: maskIdentifier(profile.profileId),
     profileLabel: profile.profileLabel,
     browserName: browserNameFromUserAgent(),
     extensionId: chrome.runtime.id,
     extensionVersion: manifest.version,
   };
+}
+
+function maskIdentifier(value) {
+  if (typeof value !== "string" || value.length === 0) return "";
+  if (value.length <= 8) return `${value[0]}…`;
+  return `${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
+function publicProfile(profile) {
+  if (!profile || typeof profile !== "object") return profile;
+  const { profileId, profileIdMasked, ...rest } = profile;
+  const masked = profileId ? maskIdentifier(profileId) : (typeof profileIdMasked === "string" ? profileIdMasked : "");
+  return { ...rest, profileIdMasked: masked };
+}
+
+function sanitizeSemanticForPopup(semantic) {
+  if (!semantic || typeof semantic !== "object") return semantic;
+  const { cacheDir, ...rest } = semantic;
+  return rest;
 }
 
 async function announceProfile() {
@@ -1383,6 +1403,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "GET_PROFILE") {
     profileMetadata()
+      .then((profile) => sendResponse({ profile: publicProfile(profile) }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
+
+  if (message?.type === "GET_PROFILE_DETAILS") {
+    profileMetadata()
       .then((profile) => sendResponse({ profile }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
@@ -1390,14 +1417,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "SET_PROFILE_LABEL") {
     setProfileLabel(message.label)
-      .then((profile) => sendResponse({ profile }))
+      .then((profile) => sendResponse({ profile: publicProfile(profile) }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }
 
   if (message?.type === "GET_SEMANTIC_SETTINGS") {
     rpc.request("semantic.status", {})
-      .then((semantic) => sendResponse({ semantic }))
+      .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
+      .catch((error) => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
+
+  if (message?.type === "GET_SEMANTIC_DIAGNOSTICS") {
+    rpc.request("semantic.cacheDiagnostics", {})
+      .then((diagnostics) => sendResponse({ diagnostics }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }
@@ -1408,21 +1442,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       modelId: typeof message.modelId === "string" ? message.modelId : undefined,
       preload: message.preload === true,
     })
-      .then((semantic) => sendResponse({ semantic }))
+      .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }
 
   if (message?.type === "PREPARE_SEMANTIC_MODEL") {
     rpc.request("semantic.prepareModel", { modelId: typeof message.modelId === "string" ? message.modelId : undefined })
-      .then((semantic) => sendResponse({ semantic }))
+      .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }
 
   if (message?.type === "DELETE_SEMANTIC_MODEL") {
     rpc.request("semantic.deleteModel", { modelId: typeof message.modelId === "string" ? message.modelId : undefined })
-      .then((semantic) => sendResponse({ semantic }))
+      .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }

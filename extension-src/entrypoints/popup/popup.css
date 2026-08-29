@@ -1060,3 +1060,48 @@ button.switch.on:focus-visible {
   margin: 0;
   cursor: pointer;
 }
+
+.dev-details {
+  margin-top: 8px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 8px;
+}
+
+.dev-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  user-select: none;
+}
+
+.dev-details-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.dev-details-label {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+}
+
+.dev-details-value {
+  font-size: 11px;
+  font-family: var(--mono, monospace);
+}
+
+.button-mini {
+  font-size: 10px;
+  padding: 2px 8px;
+  margin: 0;
+  border-radius: 6px;
+}
+
+.profile-id-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}

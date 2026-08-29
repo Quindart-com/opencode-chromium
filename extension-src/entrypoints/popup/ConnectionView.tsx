@@ -8,6 +8,7 @@ import {
   type SemanticModel,
   type SemanticState,
 } from "./api";
+import { maskIdentifier } from "./privacy";
 
 type ConnectionViewProps = { status: NativeStatus };
 
@@ -19,14 +20,13 @@ function statusText(status: NativeStatus): string {
 function semanticStatusText(semantic: SemanticState): string {
   const load = semantic.load ?? {};
   const model = semantic.models?.find((item) => item.id === load.modelId);
-  const cacheDir = semantic.cacheDir ? ` Cache: ${semantic.cacheDir}` : "";
   if (load.state === "loading") {
     const progress = Number.isFinite(load.progress) ? ` ${load.progress}%` : "";
     const component = load.component ? ` ${load.component}` : "";
-    return `Downloading ${component ?? "model"} for ${model?.label ?? load.modelId ?? "model"}...${progress}${cacheDir}`;
+    return `Downloading ${component ?? "model"} for ${model?.label ?? load.modelId ?? "model"}...${progress}`;
   }
-  if (load.state === "ready") return `Ready: ${model?.label ?? load.modelId ?? "model"}.${cacheDir}`;
-  if (load.state === "error") return `Model error: ${load.error ?? "unknown error"}.${cacheDir}`;
+  if (load.state === "ready") return `Ready: ${model?.label ?? load.modelId ?? "model"}. Model cache: local.`;
+  if (load.state === "error") return `Model error: ${load.error ?? "unknown error"}.`;
   return "Retrieval runs locally with the active model and falls back to lexical ranking. Deep search loads Qwen on demand; download failures degrade safely.";
 }
 
@@ -38,6 +38,46 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
   const [semantic, setSemantic] = useState<SemanticState | null>(null);
   const [semanticHelp, setSemanticHelp] = useState("Loading model options...");
   const [semanticBusy, setSemanticBusy] = useState(false);
+  const [profileIdRevealed, setProfileIdRevealed] = useState<string | null>(null);
+  const [cacheCopyState, setCacheCopyState] = useState<"idle" | "copied" | "error">("idle");
+
+  const maskedProfileId = maskIdentifier(profile?.profileIdMasked ?? profile?.profileId ?? "");
+  const displayedProfileId = profileIdRevealed ?? maskedProfileId;
+
+  async function revealProfileId(): Promise<string | null> {
+    if (profileIdRevealed) return profileIdRevealed;
+    try {
+      const response = await sendMessage<{ profile?: Profile; error?: string }>({ type: "GET_PROFILE_DETAILS" });
+      const error = responseError(response);
+      if (error) throw new Error(error);
+      const id = response.profile?.profileId ?? null;
+      if (id) setProfileIdRevealed(id);
+      return id;
+    } catch {
+      return null;
+    }
+  }
+
+  async function copyProfileId() {
+    const id = await revealProfileId();
+    if (id) await navigator.clipboard.writeText(id).catch(() => {});
+  }
+
+  async function copyCachePath() {
+    try {
+      const response = await sendMessage<{ diagnostics?: { cacheDir?: string }; error?: string }>({ type: "GET_SEMANTIC_DIAGNOSTICS" });
+      const error = responseError(response);
+      if (error) throw new Error(error);
+      const cacheDir = response.diagnostics?.cacheDir ?? "";
+      if (!cacheDir) throw new Error("cache unavailable");
+      await navigator.clipboard.writeText(cacheDir);
+      setCacheCopyState("copied");
+    } catch {
+      setCacheCopyState("error");
+    } finally {
+      window.setTimeout(() => setCacheCopyState("idle"), 2000);
+    }
+  }
 
   const loadSemantic = useCallback(async () => {
     try {
@@ -229,7 +269,20 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
           </div>
           <div>
             <dt>Profile ID</dt>
-            <dd id="profile-id" className="mono">{profile?.profileId ?? "Checking..."}</dd>
+            <dd id="profile-id" className="mono profile-id-row">
+              <span className="mono-value">{displayedProfileId || "Checking..."}</span>
+              <button
+                type="button"
+                className="button-mini"
+                onClick={() => {
+                  if (profileIdRevealed) setProfileIdRevealed(null);
+                  else void revealProfileId();
+                }}
+              >
+                {profileIdRevealed ? "Hide" : "Reveal"}
+              </button>
+              <button type="button" className="button-mini" onClick={() => void copyProfileId()}>Copy</button>
+            </dd>
           </div>
         </dl>
       </div>
@@ -279,7 +332,16 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
           {deepModel ? renderModelCard(deepModel) : null}
         </div>
         <p id="semantic-help">{semanticHelp}</p>
-        {semantic?.cacheDir ? <p id="semantic-cache-path" className="mono cache-path">{semantic.cacheDir}</p> : null}
+        <details id="semantic-dev-details" className="dev-details">
+          <summary>Developer details</summary>
+          <div className="dev-details-row">
+            <span className="dev-details-label">Cache location</span>
+            <span className="dev-details-value">Local model cache</span>
+            <button type="button" className="button-mini" onClick={() => void copyCachePath()}>
+              {cacheCopyState === "copied" ? "Copied" : cacheCopyState === "error" ? "Failed" : "Copy path"}
+            </button>
+          </div>
+        </details>
       </div>
     </section>
   );
