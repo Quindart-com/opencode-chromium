@@ -26,10 +26,21 @@ export type SemanticModel = {
   reranker?: { id?: string };
   benchmark?: { label?: string; value?: string | number };
   cache?: { cached?: boolean };
+  supportedDimensions?: number[];
+  defaultDimensions?: number;
+  nativeDimensions?: number;
+  supportedDtypes?: string[];
 };
 
 export type SemanticState = {
-  settings?: { enabled?: boolean; modelId?: string };
+  settings?: {
+    enabled?: boolean;
+    modelId?: string;
+    embeddingDims?: number;
+    strategyPreference?: string;
+    agentResultCount?: number;
+    agentResultDetail?: string;
+  };
   models?: SemanticModel[];
   load?: {
     state?: string;
