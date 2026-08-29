@@ -3,18 +3,39 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
-import { AutoModelForCausalLM, AutoTokenizer, env, pipeline } from "@huggingface/transformers";
+import { AutoModel, AutoModelForCausalLM, AutoTokenizer, env, pipeline } from "@huggingface/transformers";
 
-const SETTINGS_VERSION = 4;
+const SETTINGS_VERSION = 5;
+const AGENT_RESULT_COUNTS = [3, 5, 8, 12, 20];
+const AGENT_RESULT_DETAILS = ["lean", "compact", "debug"];
+const STRATEGY_PREFERENCES = ["auto", "semantic", "lexical", "deep"];
 const DEFAULT_MODEL_ID = "snowflake-arctic-embed-xs";
 const DEEP_MODEL_ID = "qwen3-0.6b-retrieval";
-const DEFAULT_MAX_RESULTS = 20;
+const DEFAULT_MAX_RESULTS = 5;
 const DEFAULT_MAX_UNITS = 700;
 const DEFAULT_EMBEDDING_CANDIDATES = 48;
 const DEFAULT_RERANK_CANDIDATES = 8;
 const MODEL_CACHE_ENV = "OPENCODE_BROWSER_SEMANTIC_DIR";
 const DISABLE_MODEL_ENV = "AGENT_BROWSER_DISABLE_SEMANTIC_MODEL";
 const IS_SEMANTIC_WORKER = !isMainThread && workerData?.role === "semantic-search";
+
+// Retrieval strategies are decoupled from model identity: "semantic" always
+// means the active adaptive embedding model. "snowflake" is a deprecated
+// alias kept for one or two releases.
+export const SEARCH_STRATEGIES = ["lexical", "auto", "semantic", "deep"];
+const LONG_TIMEOUT_STRATEGIES = new Set(["deep", "semantic", "snowflake"]);
+function normalizeSearchStrategy(input) {
+  if (input === "snowflake") return { strategy: "semantic", deprecatedAlias: true };
+  if (input === "semantic") return { strategy: "semantic", deprecatedAlias: false };
+  if (input === "auto") return { strategy: "auto", deprecatedAlias: false };
+  if (input === "deep") return { strategy: "deep", deprecatedAlias: false };
+  if (input === "hybrid") return { strategy: "deep", deprecatedAlias: true };
+  if (input === "lexical") return { strategy: "lexical", deprecatedAlias: false };
+  return { strategy: "semantic", deprecatedAlias: false };
+}
+function usesLongTimeout(strategy) {
+  return LONG_TIMEOUT_STRATEGIES.has(strategy);
+}
 
 const LEGACY_MODEL_IDS = new Set([
   "Xenova/bge-small-en-v1.5",
@@ -67,6 +88,36 @@ export const SEMANTIC_MODELS = [
       label: "Model-card retrieval benchmark",
       value: "Stronger than XS at the same 512-token context",
       note: "Browser-specific latency and recall are verified by local fixtures.",
+    },
+  },
+  {
+    id: "embeddinggemma-300m",
+    label: "Google EmbeddingGemma 300M",
+    description: "Multilingual on-device embedding model with Matryoshka output dimensions (128/256/512/768). 256 dimensions is the recommended size-to-quality balance.",
+    parameters: "308M",
+    contextLength: "2048",
+    dimensions: 256,
+    role: "adaptive",
+    embedding: {
+      id: "onnx-community/embeddinggemma-300m-ONNX",
+      baseModel: "google/embeddinggemma-300m",
+      adapter: "embeddinggemma",
+      dtype: "q4",
+      supportedDtypes: ["q4", "q8"],
+      pooling: "none",
+      nativeDimensions: 768,
+      supportedDimensions: [128, 256, 512, 768],
+      defaultDimensions: 256,
+      dimensions: 256,
+      parameters: "308M",
+      queryPrefix: "task: search result | query: ",
+      documentPrefix: "title: none | text: ",
+      promptVersion: "prompt-v1",
+    },
+    benchmark: {
+      label: "Model-card retrieval benchmark",
+      value: "Strong compact multilingual retrieval (q4)",
+      note: "Browser-specific latency and recall are verified by local fixtures before this becomes the default.",
     },
   },
   {
@@ -223,17 +274,64 @@ function modelById(modelId) {
   return SEMANTIC_MODELS.find((model) => model.id === modelId) ?? SEMANTIC_MODELS[0];
 }
 
+export function truncateAndRenormalize(vector, dimensions) {
+  const source = Array.isArray(vector) ? vector : Array.from(vector ?? []);
+  if (!Number.isInteger(dimensions) || dimensions <= 0 || dimensions >= source.length) return source;
+  const truncated = source.slice(0, dimensions);
+  const norm = Math.sqrt(truncated.reduce((sum, value) => sum + value * value, 0));
+  if (!Number.isFinite(norm) || norm === 0) return truncated;
+  return truncated.map((value) => value / norm);
+}
+
+export function embeddingProfileFor(model) {
+  const dims = model.embedding.dimensions ?? model.dimensions;
+  const dtype = model.embedding.dtype ?? "q8";
+  const prompt = model.embedding.promptVersion ?? "prompt-v1";
+  return `${model.id}:${dtype}:d${dims}:${prompt}`;
+}
+
+function configuredDimensions(model, settings = getSemanticSettings()) {
+  if (!Array.isArray(model.embedding.supportedDimensions)) return model.embedding.dimensions;
+  const requested = Number.isInteger(settings.embeddingDims) && model.embedding.supportedDimensions.includes(settings.embeddingDims)
+    ? settings.embeddingDims
+    : model.embedding.defaultDimensions;
+  return requested;
+}
+
+function effectiveModel(model, settings = getSemanticSettings()) {
+  if (!Array.isArray(model.embedding.supportedDimensions)) return model;
+  const dimensions = configuredDimensions(model, settings);
+  return {
+    ...model,
+    dimensions,
+    embedding: { ...model.embedding, dimensions },
+  };
+}
+
+export function semanticModelFor(modelId, settings = getSemanticSettings()) {
+  return effectiveModel(modelById(modelId), settings);
+}
+
 function normalizeSettings(value = {}) {
   const enabled = value.enabled === undefined ? true : value.enabled === true;
   const requestedModelId = typeof value.modelId === "string" ? value.modelId : null;
   const modelId = requestedModelId && SEMANTIC_MODELS.some((model) => model.id === requestedModelId && model.role === "adaptive")
     ? requestedModelId
     : DEFAULT_MODEL_ID;
+  // Strategy is always derived, never persisted: enabled semantic search is
+  // "semantic" (previously reported as the deprecated "snowflake" alias).
+  const activeModel = modelById(modelId);
+  const supported = Array.isArray(activeModel.embedding.supportedDimensions) ? activeModel.embedding.supportedDimensions : null;
+  const embeddingDims = supported && supported.includes(value.embeddingDims) ? value.embeddingDims : undefined;
   return {
     version: SETTINGS_VERSION,
     enabled,
-    strategy: enabled ? "snowflake" : "lexical",
+    strategy: enabled ? "semantic" : "lexical",
     modelId,
+    embeddingDims,
+    strategyPreference: STRATEGY_PREFERENCES.includes(value.strategyPreference) ? value.strategyPreference : "auto",
+    agentResultCount: AGENT_RESULT_COUNTS.includes(value.agentResultCount) ? value.agentResultCount : 5,
+    agentResultDetail: AGENT_RESULT_DETAILS.includes(value.agentResultDetail) ? value.agentResultDetail : "lean",
     deepModelId: DEEP_MODEL_ID,
   };
 }
@@ -268,6 +366,13 @@ export function setSemanticSettings(input = {}) {
   const merge = { ...current, ...input };
   if (typeof input?.modelId === "string" && !SEMANTIC_MODELS.some((model) => model.id === input.modelId && model.role === "adaptive")) {
     merge.modelId = current.modelId;
+  }
+  if ("embeddingDims" in merge) {
+    const target = modelById(merge.modelId);
+    const supported = Array.isArray(target.embedding.supportedDimensions) ? target.embedding.supportedDimensions : null;
+    if (supported && !supported.includes(merge.embeddingDims)) {
+      merge.embeddingDims = supported.includes(current.embeddingDims) ? current.embeddingDims : undefined;
+    }
   }
   const next = normalizeSettings(merge);
   settingsCache = next;
@@ -361,11 +466,30 @@ async function loadEmbedding(model) {
   if (embeddingPipelines.has(model.id)) return embeddingPipelines.get(model.id);
   await unloadModelsExcept(model.id);
   configureTransformersCache();
-  const extractor = await pipeline("feature-extraction", model.embedding.id, {
-    dtype: model.embedding.dtype,
-    session_options: ONNX_SESSION_OPTIONS,
-    progress_callback: progressFor(model, "embedding"),
-  });
+  let extractor;
+  if (model.embedding.adapter === "embeddinggemma") {
+    const tokenizer = await AutoTokenizer.from_pretrained(model.embedding.id, {
+      progress_callback: progressFor(model, "embedding-tokenizer"),
+    });
+    const embeddingModel = await AutoModel.from_pretrained(model.embedding.id, {
+      dtype: model.embedding.dtype,
+      session_options: ONNX_SESSION_OPTIONS,
+      progress_callback: progressFor(model, "embedding"),
+    });
+    extractor = async (texts) => {
+      const inputs = tokenizer(texts, { padding: true, truncation: true });
+      const outputs = await embeddingModel(inputs);
+      if (!outputs?.sentence_embedding) throw new Error("EmbeddingGemma export did not return sentence_embedding");
+      return outputs.sentence_embedding;
+    };
+    extractor.dispose = async () => disposeMaybe(embeddingModel);
+  } else {
+    extractor = await pipeline("feature-extraction", model.embedding.id, {
+      dtype: model.embedding.dtype,
+      session_options: ONNX_SESSION_OPTIONS,
+      progress_callback: progressFor(model, "embedding"),
+    });
+  }
   await unloadModelsExcept(model.id);
   embeddingPipelines.set(model.id, extractor);
   return extractor;
@@ -475,10 +599,21 @@ function cacheInfoForModel(model) {
 }
 
 function semanticModelsStatus() {
-  return SEMANTIC_MODELS.map((model) => ({
-    ...model,
-    cache: cacheInfoForModel(model),
-  }));
+  return SEMANTIC_MODELS.map((model) => {
+    const effective = effectiveModel(model);
+    return {
+      ...effective,
+      cache: cacheInfoForModel(model),
+      ...(Array.isArray(model.embedding.supportedDimensions)
+        ? {
+            supportedDimensions: model.embedding.supportedDimensions,
+            defaultDimensions: model.embedding.defaultDimensions,
+            nativeDimensions: model.embedding.nativeDimensions,
+            supportedDtypes: model.embedding.supportedDtypes,
+          }
+        : {}),
+    };
+  });
 }
 
 export function semanticStatus() {
@@ -597,9 +732,22 @@ function modelQuery(model, query) {
   return `Instruct: ${model.embedding.task}\nQuery:${query}`;
 }
 
+function modelDocument(model, text) {
+  if (model.embedding.documentPrefix) return `${model.embedding.documentPrefix}${text}`;
+  return text;
+}
+
 async function embedTexts(extractor, texts, model) {
-  const tensor = await extractor(texts, { pooling: model.embedding.pooling, normalize: true });
-  return rowsFromTensor(tensor, Array.isArray(texts) ? texts.length : 1);
+  const list = Array.isArray(texts) ? texts : [texts];
+  if (model.embedding.adapter === "embeddinggemma") {
+    // The dedicated loader returns sentence_embedding directly; Matryoshka
+    // truncation must then be followed by re-normalization.
+    const tensor = await extractor(list);
+    const rows = rowsFromTensor(tensor, list.length);
+    return rows.map((row) => truncateAndRenormalize(row, model.embedding.dimensions));
+  }
+  const tensor = await extractor(list, { pooling: model.embedding.pooling, normalize: true });
+  return rowsFromTensor(tensor, list.length);
 }
 
 function embeddingCandidateIndexes(units, lexical, input = {}) {
@@ -625,7 +773,8 @@ function shortHash(value) {
 
 async function semanticScores(model, query, documents, indexes, pageFingerprint = "") {
   const extractor = await loadEmbedding(model);
-  const queryKey = `${model.id}:${shortHash(query)}`;
+  const profile = embeddingProfileFor(model);
+  const queryKey = `${profile}:${shortHash(query)}`;
   let queryEmbedding = lruGet(queryEmbeddingCache, queryKey);
   let queryCacheHit = true;
   if (!queryEmbedding) {
@@ -638,7 +787,7 @@ async function semanticScores(model, query, documents, indexes, pageFingerprint 
   const missing = [];
   let documentCacheHits = 0;
   for (const index of indexes) {
-    const key = `${model.id}:${shortHash(pageFingerprint)}:${shortHash(documents[index])}`;
+    const key = `${profile}:${shortHash(pageFingerprint)}:${shortHash(documents[index])}`;
     const cached = lruGet(documentEmbeddingCache, key);
     if (cached) {
       embeddings.set(index, cached);
@@ -650,7 +799,7 @@ async function semanticScores(model, query, documents, indexes, pageFingerprint 
   const batchSize = 16;
   for (let start = 0; start < missing.length; start += batchSize) {
     const batch = missing.slice(start, start + batchSize);
-    const vectors = await embedTexts(extractor, batch.map((item) => documents[item.index]), model);
+    const vectors = await embedTexts(extractor, batch.map((item) => modelDocument(model, documents[item.index])), model);
     vectors.forEach((embedding, offset) => {
       const item = batch[offset];
       embeddings.set(item.index, embedding);
@@ -791,6 +940,7 @@ function formatRanking(base, options = {}) {
     enabled: options.enabled ?? getSemanticSettings().enabled,
     mode: options.mode ?? "lexical",
     searchStrategy: options.searchStrategy ?? options.mode ?? "lexical",
+    deprecatedAlias: options.deprecatedAlias === true,
     degraded: options.degraded === true,
     degradationReason: options.degradationReason ?? null,
     cache: options.cache ?? { queryHit: false, documentHits: 0 },
@@ -814,44 +964,45 @@ function formatRanking(base, options = {}) {
 
 async function rankPageUnitsLocal(input = {}) {
   const settings = getSemanticSettings();
-  const requestedMode = ["snowflake", "auto", "deep", "lexical"].includes(input.mode)
-    ? input.mode
-    : ["hybrid", "semantic"].includes(input.mode) ? "deep" : "snowflake";
+  const { strategy: requestedStrategy, deprecatedAlias } = normalizeSearchStrategy(input.mode);
   const base = baseRanking(input);
   const confident = lexicalIsConfident(base.query, base.documents, base.ranked);
-  if (requestedMode === "lexical" || !settings.enabled && requestedMode === "auto" || confident && requestedMode === "auto") {
-    return formatRanking(base, { enabled: settings.enabled, mode: "lexical", searchStrategy: requestedMode });
+  if (requestedStrategy === "lexical" || !settings.enabled && requestedStrategy === "auto" || confident && requestedStrategy === "auto") {
+    return formatRanking(base, { enabled: settings.enabled, mode: "lexical", searchStrategy: requestedStrategy, deprecatedAlias });
   }
 
-  const model = modelById(requestedMode === "deep" ? settings.deepModelId : settings.modelId);
-  if (requestedMode === "snowflake" && !settings.enabled) {
+  const model = semanticModelFor(requestedStrategy === "deep" ? settings.deepModelId : settings.modelId, settings);
+  if (requestedStrategy === "semantic" && !settings.enabled) {
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
-      searchStrategy: requestedMode,
+      searchStrategy: requestedStrategy,
+      deprecatedAlias,
       degraded: true,
       degradationReason: "model-disabled",
       model,
-      modelError: "Snowflake retrieval is disabled; pass searchStrategy=\"lexical\" or enable semantic search",
+      modelError: "Semantic retrieval is disabled; pass searchStrategy=\"lexical\" or enable semantic search",
     });
   }
   if ((process.env[DISABLE_MODEL_ENV] ?? process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL) === "1") {
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
-      searchStrategy: requestedMode,
+      searchStrategy: requestedStrategy,
+      deprecatedAlias,
       degraded: true,
       degradationReason: "model-unavailable",
       model,
       modelError: "Semantic model loading is disabled",
     });
   }
-  if (requestedMode === "auto" && !embeddingPipelines.has(model.id)) {
+  if (requestedStrategy === "auto" && !embeddingPipelines.has(model.id)) {
     void prepareSemanticModelLocal(model.id).catch(() => {});
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
       searchStrategy: "auto",
+      deprecatedAlias,
       degraded: true,
       degradationReason: loadState.state === "error" ? "model-unavailable" : "model-preparing",
       model,
@@ -861,17 +1012,18 @@ async function rankPageUnitsLocal(input = {}) {
 
   let embeddingResult;
   try {
-    if (["snowflake", "deep"].includes(requestedMode)) await prepareSemanticModelLocal(model.id);
+    if (["semantic", "deep"].includes(requestedStrategy)) await prepareSemanticModelLocal(model.id);
     const indexes = embeddingCandidateIndexes(base.units, base.lexical, {
       ...input,
-      embeddingCandidates: requestedMode === "deep" ? Math.min(input.embeddingCandidates ?? 120, 120) : Math.min(input.embeddingCandidates ?? 48, 48),
+      embeddingCandidates: requestedStrategy === "deep" ? Math.min(input.embeddingCandidates ?? 120, 120) : Math.min(input.embeddingCandidates ?? 48, 48),
     });
     embeddingResult = await semanticScores(model, base.query, base.documents, indexes, input.pageFingerprint ?? "");
   } catch (error) {
     return formatRanking(base, {
       enabled: settings.enabled,
       mode: "lexical",
-      searchStrategy: requestedMode,
+      searchStrategy: requestedStrategy,
+      deprecatedAlias,
       degraded: true,
       degradationReason: "model-failure",
       model,
@@ -891,7 +1043,7 @@ async function rankPageUnitsLocal(input = {}) {
   let rerankerError = null;
   let rerankerCount = 0;
   let rerankerDtype = null;
-  if (requestedMode === "deep" && model.reranker && preliminary.length > 0) {
+  if (requestedStrategy === "deep" && model.reranker && preliminary.length > 0) {
     try {
       const reranked = await rerankerScores(model, base.query, base.documents, preliminary, input);
       rerankerUsed = reranked.scores.size > 0;
@@ -906,12 +1058,13 @@ async function rankPageUnitsLocal(input = {}) {
       rerankerError = error instanceof Error ? error.message : String(error);
     }
   }
-  if (requestedMode === "deep") scheduleDeepUnload();
+  if (requestedStrategy === "deep") scheduleDeepUnload();
 
   return formatRanking(base, {
     enabled: settings.enabled,
-    mode: requestedMode === "deep" ? "deep" : requestedMode === "snowflake" ? "snowflake" : "adaptive",
-    searchStrategy: requestedMode,
+    mode: requestedStrategy === "deep" ? "deep" : "adaptive",
+    searchStrategy: requestedStrategy,
+    deprecatedAlias,
     ranked,
     model,
     modelUsed: true,
@@ -960,19 +1113,20 @@ export async function handleSemanticHostMethod(method, params = {}) {
   }
   if (method === "semantic.rankPageUnits") {
     if (IS_SEMANTIC_WORKER) return rankPageUnitsLocal(params);
+    const { strategy } = normalizeSearchStrategy(params.mode);
     try {
       const timeoutMs = Number.isFinite(params.timeoutMs)
-        ? Math.max(250, Math.min(params.timeoutMs, ["deep", "snowflake"].includes(params.mode) ? 120000 : 10000))
-        : ["deep", "snowflake"].includes(params.mode) ? 120000 : 10000;
+        ? Math.max(250, Math.min(params.timeoutMs, usesLongTimeout(strategy) ? 120000 : 10000))
+        : usesLongTimeout(strategy) ? 120000 : 10000;
       return await semanticWorkerRequest("semantic.rankPageUnits", params, timeoutMs);
     } catch (error) {
       return formatRanking(baseRanking(params), {
         enabled: getSemanticSettings().enabled,
         mode: "lexical",
-        searchStrategy: params.mode ?? "snowflake",
+        searchStrategy: strategy,
         degraded: true,
         degradationReason: /timed?\s*out/i.test(String(error)) ? "semantic-timeout" : "semantic-worker-failure",
-        model: modelById(params.mode === "deep" ? DEEP_MODEL_ID : getSemanticSettings().modelId),
+        model: modelById(strategy === "deep" ? DEEP_MODEL_ID : getSemanticSettings().modelId),
         modelError: error instanceof Error ? error.message : String(error),
       });
     }
@@ -987,18 +1141,18 @@ export async function handleSemanticHostMethod(method, params = {}) {
 
 async function embedMemoryLocal({ texts = [], modelId = null } = {}) {
   const list = Array.isArray(texts) ? texts.filter((text) => typeof text === "string" && text.length > 0) : [];
-  if (list.length === 0) return { model: null, dims: null, vectors: [] };
+  if (list.length === 0) return { model: null, dims: null, embeddingProfile: null, vectors: [] };
   const selected = modelId ?? getSemanticSettings().modelId;
   await prepareSemanticModelLocal(selected);
-  const model = modelById(selected);
-  if (!model) return { model: null, dims: null, vectors: [] };
+  const model = semanticModelFor(selected);
+  if (!model) return { model: null, dims: null, embeddingProfile: null, vectors: [] };
   const extractor = await loadEmbedding(model);
   const vectors = [];
   for (const text of list) {
     const [vector] = await embedTexts(extractor, modelQuery(model, text), model);
     vectors.push(Array.isArray(vector) ? vector : Array.from(vector ?? []));
   }
-  return { model: model.id, dims: model.embedding.dimensions, vectors };
+  return { model: model.id, dims: model.embedding.dimensions, embeddingProfile: embeddingProfileFor(model), vectors };
 }
 
 if (IS_SEMANTIC_WORKER) {

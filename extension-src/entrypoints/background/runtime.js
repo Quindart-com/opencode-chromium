@@ -1441,6 +1441,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       enabled: message.enabled === true,
       modelId: typeof message.modelId === "string" ? message.modelId : undefined,
       preload: message.preload === true,
+      embeddingDims: Number.isInteger(message.embeddingDims) ? message.embeddingDims : undefined,
+      strategyPreference: typeof message.strategyPreference === "string" ? message.strategyPreference : undefined,
+      agentResultCount: Number.isInteger(message.agentResultCount) ? message.agentResultCount : undefined,
+      agentResultDetail: typeof message.agentResultDetail === "string" ? message.agentResultDetail : undefined,
     })
       .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));

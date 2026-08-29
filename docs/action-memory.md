@@ -60,22 +60,38 @@ full URLs or URL paths, and accessibility trees.
 
 ## Chains
 
-Consecutive steps of one `browser_run` (or any session slice) that carry a
-chain id are stored as a **chain recipe**: ordered steps with their own
-signatures, a composed embedding, source sessions, and merge lineage. A
-`memory_search` for a task can return a whole chain whose steps map 1:1 into
-`browser_run.steps`.
+Every high-level `browser_run` step produces exactly one memory record, no
+matter how many low-level RPCs the step expands to. `click` stays `click`;
+it never degrades into the CDP call that happened to implement it. Steps are
+stored as **parameterized recipes** in `memory_actions_v2` /
+`memory_chains_v2`: action name, hostname, semantic target (role + sanitized
+label, safe selector as fallback), and flags for steps that need a runtime
+value or URL at replay time. Typed values, passwords, clipboard contents,
+full URLs, and local paths are never stored, and labels pass a privacy
+normalizer (emails, UUIDs, long account-like numbers, query strings, tokens,
+and filesystem paths are stripped or redacted).
+
+A `memory_search` can return a whole recipe whose steps map 1:1 into
+`browser_run.steps` again: `browser_run` accepts `memoryMode: "auto"` with a
+transient `memoryIntent` and will replay a high-confidence remembered chain
+through the ordinary execution path (semantic target re-resolution, normal
+retry/settle logic), reporting only `{ memory: { used, stepsReused, fallback } }`.
+Stale targets fall back to normal exploration - never a hard failure - and the
+corrective run records a fresh chain generation (`replaced_by` lineage).
 
 Chains evolve like Lego blocks:
 
 - **append / overlap merge** — fragments from different sessions splice on
   shared step boundaries (`merged_of` records the parents);
 - **correction** — when a chain step fails, the agent inspects, acts, and the
-  confirmed corrective signature replaces the failed step in a new chain that
+  confirmed corrective recipe replaces the failed step in a new chain that
   **supersedes** the old one (`replaced_by` lineage, only the head is
   searchable, `supersedes`/`replaced_by` keep full history);
 - executing a merged chain is itself the test: success reinforces it, failure
   triggers the next correction generation.
+
+Legacy v1 low-level signatures/chains remain readable for provenance but are
+not served as replayable memory (`includeLegacy` opts back in explicitly).
 
 ## Maintenance
 
@@ -105,18 +121,22 @@ opencode-chromium memory search "checkout" --k 10 --kind chain
 opencode-chromium memory search "stripe" --hostname checkout.stripe.com --json
 ```
 
-The query is embedded locally (same model as page search: Snowflake Arctic
-Embed XS by default, Qwen3 deep when configured) and never stored. Results
-contain signatures, confidence, counts, hostname/capability/label, and chain
-steps when applicable — never raw content.
+The query is embedded locally (same model as page search; transient queries
+are never stored) and results pass a calibrated minimum-similarity threshold
+before they are returned, so unrelated queries return nothing rather than the
+"least bad" match. Results contain recipe summaries, confidence, counts,
+hostname/action/label, and chain steps when applicable — never raw content.
+Chain recall text is generated entirely from privacy-safe structured fields;
+the user's prompt is embedded for the lookup and then discarded.
 
 ## Agent access
 
 When enabled (or forced via `OPENCODE_BROWSER_MEMORY=1`), the MCP server and
 the OpenCode plugin register three read-only tools:
 
-- `memory_status` — state, model, quota, purge settings, counts, success rate,
-  and a `recent_daily` 14-day series for dashboards;
+- `memory_status` — state, model, embedding profile, quota, purge settings,
+  counts, replay metrics, embedding health, and a `recent_daily` 14-day
+  series built from timestamped usage events;
 - `memory_query` — a bounded provenance slice with optional capability,
   hostname, session, and id filters;
 - `memory_search` — top-k semantic retrieval of actions or chains.
@@ -132,10 +152,13 @@ The extension's popup links to the Action Memory options page in the browser
 tab (Chrome extension settings → "Action Memory"):
 
 - **Maintenance tab** — enable/pause/resume/disable, quota slider
-  (power-user-gated), purge period, prune now, JSON export/import;
-- **Dashboard tab** — the 14-day confirmed-versus-failed chart, success-rate
-  badge, action/chain/negative-lesson counters, memory hits (times a search
-  returned usable results), and quota usage.
+  (power-user-gated), purge period, prune now, rebuild memory index,
+  JSON export/import;
+- **Dashboard tab** — live-refreshing (while the popup is open) replay
+  metrics: replay success rate, unique actions, recipes, replays, steps
+  reused, plus total executions, negative lessons, and index readiness. The
+  14-day chart is built from timestamped `memory_usage_events`, so it shows
+  real daily activity rather than lifetime totals projected onto one day.
 
 ## Configuration and storage
 
@@ -159,6 +182,9 @@ tab (Chrome extension settings → "Action Memory"):
 | `paused` | Only capture pauses; existing memory remains searchable. |
 | `quota_reached` | New signatures are not captured until the quota is raised or memory is pruned/deleted. |
 | `events_dropped` | The non-blocking write path dropped events; treat results as possibly incomplete. |
+| `embedding_errors` | Embedding attempts failed recently; failed items retry with bounded backoff, or run `opencode-chromium memory reindex`. |
+| `index_stale` | More actions than expected lack embeddings (for example after a model/dimension switch); run `opencode-chromium memory reindex` or use the popup's "Rebuild memory index". |
+| `queue_backpressure` | The embedding queue is dropping items under load; health reports it instead of failing silently. |
 | Model unavailable | Signatures store without embeddings; search returns `memory_model_unavailable` until the model loads. |
 | No SQLite runtime | Status reports `storage_unavailable`; upgrade to Node ≥ 22.5 or Bun ≥ 1.1. |
 

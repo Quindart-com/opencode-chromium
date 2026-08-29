@@ -66,7 +66,11 @@ export default function MemoryView(): React.JSX.Element {
 
   useEffect(() => {
     void refreshMemory();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshMemory();
+    }, 2500);
     return () => {
+      window.clearInterval(timer);
       if (quotaTimer.current !== null) window.clearTimeout(quotaTimer.current);
     };
   }, [refreshMemory]);
@@ -107,26 +111,46 @@ export default function MemoryView(): React.JSX.Element {
   };
 
   const counts = status?.counts ?? EMPTY_COUNTS;
-  const total = counts.confirmed_total + counts.failed_total;
-  const successRate = total > 0 ? Math.round((counts.confirmed_total / total) * 100) : 100;
+  const usage = status?.usage;
+  const v2Actions = counts.actions_v2 ?? counts.signatures;
+  const v2Chains = counts.chains_v2 ?? counts.chains;
+  const unindexed = (counts.unindexed_actions ?? 0) + (counts.unindexed_chains ?? 0);
+  const indexed = Math.max(0, v2Actions + v2Chains - unindexed);
+  const replayRate = usage?.replay_success_rate ?? null;
+  const replayAttempts = usage?.replay_attempts ?? 0;
   const quotaBytes = status?.quota_bytes ?? 100 * MB;
   const bytesUsed = status?.bytes_used ?? 0;
   const quotaFill = Math.min(100, (bytesUsed / Math.max(1, quotaBytes)) * 100);
   const enabled = status?.enabled === true;
   const powerUser = status?.power_user === true;
+  const executions = counts.confirmed_total + counts.failed_total;
   const stateLine = status
     ? enabled
-      ? `${counts.signatures} actions, ${counts.chains} chains, ${counts.failure_contexts} negative lessons.`
+      ? `${v2Actions} unique actions, ${v2Chains} recipes.`
       : "Enable it to start building action memory."
     : "Checking memory state...";
 
   const stats = useMemo(() => [
-    ["memory-success", `${successRate}%`, "success rate"],
-    ["memory-actions", counts.signatures, "actions"],
-    ["memory-chains", counts.chains, "chains"],
-    ["memory-negatives", counts.failure_contexts, "lessons"],
-    ["memory-hits", status?.memory_hits ?? 0, "hits"],
-  ] as const, [counts, status?.memory_hits, successRate]);
+    ["memory-success", replayRate === null ? "—" : `${replayRate}%`, "replay success"],
+    ["memory-actions", v2Actions, "unique actions"],
+    ["memory-chains", v2Chains, "recipes"],
+    ["memory-replays", replayAttempts, "replays"],
+    ["memory-steps-reused", usage?.steps_reused ?? 0, "steps reused"],
+  ] as const, [v2Actions, v2Chains, replayRate, replayAttempts, usage?.steps_reused]);
+
+  const secondaryStats = useMemo(() => [
+    ["memory-executions", executions, "total executions"],
+    ["memory-negatives", counts.failure_contexts, "negative lessons"],
+    ["memory-indexed", indexed, "indexed"],
+    ["memory-awaiting", unindexed, unindexed === 1 ? "awaiting index" : "awaiting index"],
+  ] as const, [executions, counts.failure_contexts, indexed, unindexed]);
+
+  const healthLine = useMemo(() => {
+    if (!status) return "";
+    if (status.health === "embedding_errors") return `Embedding errors: ${status.last_embedding_error ?? "unknown"}`;
+    if (unindexed > 0) return `Memory index ${indexed} ready · ${unindexed} awaiting embeddings`;
+    return `Memory index ready (${indexed})`;
+  }, [status, indexed, unindexed]);
 
   return (
     <section id="view-memory" className="view">
@@ -203,6 +227,13 @@ export default function MemoryView(): React.JSX.Element {
         </div>
         <div className="memory-stats">
           {stats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id} className={id === "memory-success" ? "memory-success" : undefined}>{value}</span><span className="stat-label">{label}</span></div>)}
+        </div>
+        <div className="memory-stats memory-stats-secondary">
+          {secondaryStats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id}>{value}</span><span className="stat-label">{label}</span></div>)}
+        </div>
+        <p id="memory-health" className="help-note">{healthLine}</p>
+        <div className="memory-actions">
+          <button id="memory-reindex" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.reindex", "Memory index rebuilt.")}>Rebuild memory index</button>
         </div>
         <MemoryChart daily={status?.recent_daily} />
       </div>

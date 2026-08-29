@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "1.6.5",
+  "version": "1.7.0",
   "description": "Provider-neutral Chromium browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -80,7 +80,7 @@
     "opencode-browser-plugin-mcp": "./dist/adapters/mcp/server.js"
   },
   "scripts": {
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || exit 0",
+    "prepare": "node -e \"try{require('node:fs').accessSync('.git');require('node:child_process').execSync('git config core.hooksPath .githooks')}catch{}\"",
     "build": "bun scripts/build.js",
     "clean": "bun scripts/build.js --clean",
     "host": "bun native-host/src/host.js",
@@ -97,6 +97,7 @@
     "check:release": "bun scripts/release-check.js",
     "check:release-hygiene": "bun scripts/release-check.js --hygiene-only",
     "check:tag": "bun scripts/check-tag-version.js",
+    "check:version-bump": "bun scripts/check-version-bump.js",
     "test": "bun test",
     "test:contracts": "bun test tests/contracts tests/adapters",
     "test:mcp": "bun scripts/check-mcp.js",
