@@ -10,7 +10,7 @@ export const MEMORY_ENV_DIR = "OPENCODE_BROWSER_MEMORY_DIR";
 export const MEMORY_ENV_FORCE = "OPENCODE_BROWSER_MEMORY";
 export const MEMORY_ENV_EMBED = "OPENCODE_BROWSER_MEMORY_EMBED";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const DEFAULT_QUOTA_BYTES = 100 * 1024 * 1024;
 export const MIN_QUOTA_BYTES = 1 * 1024 * 1024;
 export const MAX_QUOTA_BYTES = 10 * 1024 * 1024 * 1024;
@@ -21,10 +21,26 @@ export const MAX_PURGE_DAYS = 365;
 export const MAX_QUERY_EVENTS = 200;
 export const DEFAULT_QUERY_EVENTS = 50;
 export const MAX_SEARCH_RESULTS = 20;
-export const DEFAULT_SEARCH_RESULTS = 8;
+export const DEFAULT_SEARCH_RESULTS = 3;
 export const MAX_LABEL_CHARS = 64;
 export const MAX_CHAIN_STEPS = 24;
 export const COMPOSER_CANDIDATES = 16;
+
+// Minimum embedding similarity for a memory candidate to be returned at all.
+// Calibrated per embedding profile by scripts/benchmark-memory-threshold.js;
+// values below the threshold are unrelated, not "least bad".
+export const DEFAULT_MEMORY_SIMILARITY_THRESHOLD = 0.42;
+export const MEMORY_SIMILARITY_THRESHOLDS = {
+  "snowflake-arctic-embed-xs:q8:d384:prompt-v1": 0.42,
+  "snowflake-arctic-embed-m:q8:d768:prompt-v1": 0.42,
+  "embeddinggemma-300m:q4:d128:prompt-v1": 0.38,
+  "embeddinggemma-300m:q4:d256:prompt-v1": 0.38,
+  "embeddinggemma-300m:q4:d512:prompt-v1": 0.38,
+  "embeddinggemma-300m:q4:d768:prompt-v1": 0.38,
+  "qwen3-0.6b-retrieval:q8:d1024:prompt-v1": 0.40,
+};
+export const MEMORY_REPLAY_MIN_CONFIDENCE = 0.6;
+export const MEMORY_EMBED_MAX_ATTEMPTS = 3;
 
 export const WRITER_QUEUE_CAPACITY = 1024;
 export const WRITER_FLUSH_MS = 500;
@@ -135,8 +151,15 @@ export function defaultConfig() {
     power_user: false,
     model_id: null,
     dims: null,
+    embedding_profile: null,
     schema_version: SCHEMA_VERSION,
+    legacy_v1_tagged: false,
     memory_hits: 0,
+    embedding_attempts: 0,
+    embedding_failures: 0,
+    embedding_queue_drops: 0,
+    last_embedding_error: null,
+    last_reindex_at: null,
     created_at: null,
     last_prune_at: null,
     last_evict_at: null,

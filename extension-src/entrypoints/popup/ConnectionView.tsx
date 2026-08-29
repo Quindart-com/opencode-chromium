@@ -172,6 +172,34 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
     );
   }
 
+  function setStrategyPreference(strategy: string) {
+    void updateSemantic(
+      { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: activeModelId, strategyPreference: strategy },
+      `Search mode set to ${strategy}...`,
+    );
+  }
+
+  function setAgentResultCount(count: number) {
+    void updateSemantic(
+      { type: "SET_SEMANTIC_SETTINGS", enabled, modelId: activeModelId, agentResultCount: count },
+      `Agent results set to ${count}...`,
+    );
+  }
+
+  function setAgentResultDetail(detail: string) {
+    void updateSemantic(
+      { type: "SET_SEMANTIC_SETTINGS", enabled, modelId: activeModelId, agentResultDetail: detail },
+      `Result detail set to ${detail}...`,
+    );
+  }
+
+  function setEmbeddingDims(model: SemanticModel, dims: number) {
+    void updateSemantic(
+      { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: model.id, embeddingDims: dims, preload: true },
+      `Embedding size set to ${dims} dimensions...`,
+    );
+  }
+
   function useModel(model: SemanticModel) {
     void updateSemantic(
       { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: model.id, preload: true },
@@ -194,6 +222,7 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
     const isActive = isAdaptive && model.id === activeModelId;
     const cached = model.cache?.cached === true;
     const busyForModel = semanticBusy || (loading && load?.modelId === model.id);
+    const dims = model.supportedDimensions ?? [];
     return (
       <div key={model.id} className={`model-card${isActive ? " active" : ""}`} data-model-id={model.id}>
         <div className="model-head">
@@ -207,6 +236,24 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
         </div>
         <div className="model-desc">{model.description ?? "Local retrieval model."}</div>
         {model.benchmark?.value ? <div className="model-bench">{model.benchmark.label}: {model.benchmark.value}</div> : null}
+        {dims.length > 0 ? (
+          <div className="dim-selector" role="radiogroup" aria-label={`${model.label} embedding size`}>
+            {dims.map((dim) => (
+              <button
+                key={dim}
+                type="button"
+                role="radio"
+                aria-checked={model.dimensions === dim}
+                className={`dim-option${model.dimensions === dim ? " selected" : ""}`}
+                disabled={busyForModel}
+                onClick={() => setEmbeddingDims(model, dim)}
+              >
+                {dim}
+              </button>
+            ))}
+            <span className="dim-note">{model.defaultDimensions}-dim — recommended balance</span>
+          </div>
+        ) : null}
         <div className="model-actions">
           {isAdaptive && isActive ? (
             <span className="model-active-note" aria-label="Active retrieval model">Active</span>
@@ -327,6 +374,61 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
             <span className="switch-knob" />
           </button>
         </div>
+        <div className="strategy-row" role="radiogroup" aria-label="Search mode">
+          <span className="strategy-label">Search mode</span>
+          {["auto", "semantic", "lexical", "deep"].map((strategy) => (
+            <button
+              key={strategy}
+              type="button"
+              role="radio"
+              aria-checked={(settings.strategyPreference ?? "auto") === strategy}
+              className={`strategy-option${(settings.strategyPreference ?? "auto") === strategy ? " selected" : ""}`}
+              disabled={semanticBusy || !enabled}
+              onClick={() => setStrategyPreference(strategy)}
+            >
+              {strategy}
+            </button>
+          ))}
+        </div>
+        <details className="advanced-details">
+          <summary>Advanced</summary>
+          <div className="advanced-row">
+            <span className="advanced-label">Agent result count</span>
+            <div role="radiogroup" aria-label="Agent result count">
+              {[3, 5, 8, 12, 20].map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  role="radio"
+                  aria-checked={(settings.agentResultCount ?? 5) === count}
+                  className={`strategy-option${(settings.agentResultCount ?? 5) === count ? " selected" : ""}`}
+                  disabled={semanticBusy}
+                  onClick={() => setAgentResultCount(count)}
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="advanced-row">
+            <span className="advanced-label">Result detail</span>
+            <div role="radiogroup" aria-label="Result detail">
+              {["lean", "compact", "debug"].map((detail) => (
+                <button
+                  key={detail}
+                  type="button"
+                  role="radio"
+                  aria-checked={(settings.agentResultDetail ?? "lean") === detail}
+                  className={`strategy-option${(settings.agentResultDetail ?? "lean") === detail ? " selected" : ""}`}
+                  disabled={semanticBusy}
+                  onClick={() => setAgentResultDetail(detail)}
+                >
+                  {detail}
+                </button>
+              ))}
+            </div>
+          </div>
+        </details>
         <div id="semantic-model-list" className="model-list" aria-label="Retrieval models">
           {adaptiveModels.map(renderModelCard)}
           {deepModel ? renderModelCard(deepModel) : null}

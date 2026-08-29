@@ -17,7 +17,8 @@ test("the baseline operation inventory is preserved behind the provider-neutral 
   const hooks = await createBrowserOperations();
   assert.equal(Object.keys(hooks.tool).length, GRANULAR_OPERATION_COUNT);
   assert.equal(GRANULAR_OPERATION_COUNT, 55);
-  assert.equal(hooks.tool.browser_page_search.args.mode.parse(undefined), "snowflake");
+  assert.equal(hooks.tool.browser_page_search.args.mode.parse(undefined), "auto");
+  assert.equal(hooks.tool.browser_page_search.args.maxResults.parse(undefined), 5);
   const baseline = JSON.parse(fs.readFileSync(path.join(process.cwd(), "tests", "fixtures", "baseline.json"), "utf8"));
   assert.deepEqual(Object.keys(hooks.tool), baseline.granularOperations);
 });

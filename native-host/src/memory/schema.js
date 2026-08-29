@@ -58,6 +58,63 @@ CREATE TABLE IF NOT EXISTS chains (
 
 CREATE INDEX IF NOT EXISTS idx_chains_head ON chains(replaced_by);
 CREATE INDEX IF NOT EXISTS idx_chains_model ON chains(model_id);
+
+-- Action Memory v2: one row per high-level browser action, with privacy-safe
+-- parameterized recipes instead of low-level RPC signatures. Legacy v1 tables
+-- above stay readable but are not served as replayable memory.
+
+CREATE TABLE IF NOT EXISTS memory_actions_v2 (
+  id               INTEGER PRIMARY KEY,
+  fingerprint      TEXT NOT NULL UNIQUE,
+  action           TEXT NOT NULL,
+  hostname         TEXT,
+  target_label     TEXT,
+  target_role      TEXT,
+  recipe_json      TEXT NOT NULL,
+  confirmed_count  INTEGER NOT NULL DEFAULT 0,
+  failed_count     INTEGER NOT NULL DEFAULT 0,
+  embedding        BLOB,
+  embedding_profile TEXT,
+  first_seen       TEXT NOT NULL,
+  last_seen        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_actions_v2_seen ON memory_actions_v2(last_seen);
+CREATE INDEX IF NOT EXISTS idx_actions_v2_host ON memory_actions_v2(hostname);
+
+CREATE TABLE IF NOT EXISTS memory_chains_v2 (
+  id               INTEGER PRIMARY KEY,
+  fingerprint      TEXT NOT NULL UNIQUE,
+  safe_summary     TEXT NOT NULL,
+  recipe_json      TEXT NOT NULL,
+  confirmed_count  INTEGER NOT NULL DEFAULT 0,
+  failed_count     INTEGER NOT NULL DEFAULT 0,
+  embedding        BLOB,
+  embedding_profile TEXT,
+  replaced_by      INTEGER,
+  supersedes       INTEGER,
+  merged_of        TEXT,
+  first_seen       TEXT NOT NULL,
+  last_seen        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chains_v2_head ON memory_chains_v2(replaced_by);
+CREATE INDEX IF NOT EXISTS idx_chains_v2_seen ON memory_chains_v2(last_seen);
+
+CREATE TABLE IF NOT EXISTS memory_usage_events (
+  id            INTEGER PRIMARY KEY,
+  occurred_at   TEXT NOT NULL,
+  event_type    TEXT NOT NULL,
+  action_id     INTEGER,
+  chain_id      INTEGER,
+  success       INTEGER,
+  duration_ms   INTEGER,
+  steps_reused  INTEGER,
+  reason        TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_events_time ON memory_usage_events(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_usage_events_type ON memory_usage_events(event_type);
 `;
 
 export function stepFingerprint(chainId, position) {
