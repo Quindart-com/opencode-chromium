@@ -1105,3 +1105,66 @@ button.switch.on:focus-visible {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+.strategy-row,
+.advanced-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.strategy-label,
+.advanced-label {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  min-width: 96px;
+}
+
+.strategy-option,
+.dim-option {
+  font-size: 10px;
+  padding: 3px 10px;
+  margin: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border, #374151);
+  background: transparent;
+  color: var(--muted, #9ca3af);
+}
+
+.strategy-option.selected,
+.dim-option.selected {
+  border-color: var(--accent, #2dd4bf);
+  color: var(--accent, #2dd4bf);
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.advanced-details {
+  margin-top: 10px;
+}
+
+.advanced-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  user-select: none;
+}
+
+.dim-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.dim-note {
+  font-size: 10px;
+  color: var(--muted, #6b7280);
+}
+
+.memory-stats-secondary {
+  margin-top: 8px;
+  opacity: 0.85;
+}

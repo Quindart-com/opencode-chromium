@@ -31,8 +31,10 @@ const contentChecks = [
 ];
 const forbiddenPackagePath = /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|reports\/|tests\/|node_modules\/|scripts\/extension-id\.json|.*\.tgz$)/i;
 // Legal documents intentionally carry the publisher's public contact address.
-// The hygiene scanner and the privacy contract test intentionally carry the detection patterns.
-const contentCheckAllowlist = new Set(["docs/PRIVACY.md", "docs/TERMS.md", "scripts/public-hygiene.js", "tests/contracts/release.test.js"]);
+// The hygiene scanner and the privacy contract test intentionally carry the
+// detection patterns. The memory-search test carries a fake email/path fixture
+// to prove the sanitizer strips them.
+const contentCheckAllowlist = new Set(["docs/PRIVACY.md", "docs/TERMS.md", "scripts/public-hygiene.js", "tests/contracts/release.test.js", "tests/native-host/memory-search.test.js"]);
 
 function readTrackedFiles() {
   return execFileSync("git", ["ls-files", "-z"], { cwd: root }).toString("utf8").split("\0").filter(Boolean);

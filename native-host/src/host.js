@@ -44,9 +44,9 @@ function registerProfile(profile) {
 let memoryStore = null;
 const memoryQueue = new EmbedQueue({
   embed: async (texts) => embedMemoryTexts(texts),
-  onResults: (rows, model, dims) => {
+  onResults: (rows, model, dims, embeddingProfile) => {
     if (!memoryStore) return;
-    memoryStore.applyEmbeddings(rows, model, dims);
+    memoryStore.applyEmbeddings(rows, model, dims, embeddingProfile);
     if (model) memoryStore.writeMeta("model_id", model);
     if (Number.isInteger(dims)) memoryStore.writeMeta("dims", dims);
   },
@@ -96,6 +96,10 @@ function handleMemoryHostMethod(method, params = {}) {
   if (method === "memory.resume") return memoryStore.resume();
   if (method === "memory.export") return memoryStore.exportJson();
   if (method === "memory.import") return memoryStore.importJson(params);
+  if (method === "memory.recordStep") return memoryStore.recordStep(params);
+  if (method === "memory.finalizeChain") return memoryStore.finalizeChain(params);
+  if (method === "memory.usageEvent") return memoryStore.usageEvent(params);
+  if (method === "memory.reindex") return memoryStore.reindex({ embed: (texts) => embedMemoryTexts(texts) });
   return undefined;
 }
 

@@ -1,0 +1,8 @@
+title = "opencode-chromium gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Historical vendored minified Sentry bundle (codex-plugin) - memoization helper, not a credential"
+paths = ['''codex-plugin/scripts/browser-client\.mjs''']

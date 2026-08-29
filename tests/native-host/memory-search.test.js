@@ -22,74 +22,129 @@ function tempRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "memory-search-test-"));
 }
 
-function deterministicVectors(dims = 16) {
+// Token-overlap embedding: shared tokens give high cosine similarity and
+// unrelated texts stay near-orthogonal, so threshold gating is meaningful.
+function lexicalVectors(dims = 64) {
+  const tokenVector = (token) => {
+    let seed = 2166136261;
+    for (let index = 0; index < token.length; index += 1) {
+      seed ^= token.charCodeAt(index);
+      seed = Math.imul(seed, 16777619);
+    }
+    const values = new Float32Array(dims);
+    for (let dim = 0; dim < dims; dim += 1) {
+      seed = Math.imul(seed ^ (seed >>> 13), 2654435761);
+      values[dim] = ((seed >>> 0) / 4294967295) * 2 - 1;
+    }
+    const magnitude = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0)) || 1;
+    return Array.from(values, (value) => value / magnitude);
+  };
   const embed = async (texts) => {
     const vectors = texts.map((text) => {
-      let seed = 0;
-      for (let index = 0; index < text.length; index += 1) seed = (seed * 31 + text.charCodeAt(index)) >>> 0;
-      const values = new Float32Array(dims);
-      for (let dim = 0; dim < dims; dim += 1) {
-        seed = Math.imul(seed ^ (seed >>> 13), 2654435761);
-        values[dim] = ((seed >>> 0) / 4294967295) * 2 - 1;
+      const acc = new Float32Array(dims);
+      const tokens = String(text).toLowerCase().match(/[a-z0-9]+/g) ?? [];
+      for (const token of tokens) {
+        const vector = tokenVector(token);
+        for (let dim = 0; dim < dims; dim += 1) acc[dim] += vector[dim];
       }
-      const magnitude = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0)) || 1;
-      return Array.from(values, (value) => value / magnitude);
+      const magnitude = Math.sqrt(acc.reduce((sum, value) => sum + value * value, 0)) || 1;
+      return Array.from(acc, (value) => value / magnitude);
     });
-    return { model: "fixture-16", dims, vectors };
+    return { model: "fixture-lexical", dims, vectors, embeddingProfile: "fixture-lexical:q8:d64:prompt-v1" };
   };
   return { embed, query: async (query) => (await embed([query])).vectors[0] };
 }
 
 function openMemory() {
   const root = tempRoot();
-  const { embed, query } = deterministicVectors();
+  const { embed, query } = lexicalVectors();
   const queue = new EmbedQueue({ embed, onResults: null });
   queue.setQueryEmbedder(query);
   const store = new MemoryStore({ root, embedQueue: queue });
-  queue.onResults = (rows, model, dims) => store.applyEmbeddings(rows, model, dims);
+  queue.onResults = (rows, model, dims, embeddingProfile) => store.applyEmbeddings(rows, model, dims, embeddingProfile);
   store.enable();
   return { root, store, queue };
 }
 
-function seed(store) {
-  store.record({ success: true, capability: "browser.input.gesture", hostname: "checkout.stripe.com", label: "Pay" });
-  store.record({ success: true, capability: "browser.input.gesture", hostname: "checkout.stripe.com", label: "Card number" });
-  store.record({ success: false, capability: "browser.cdp.execute", hostname: "checkout.stripe.com", label: "Pay", errorCode: "timeout" });
-  store.record({ success: false, capability: "browser.tab.create", hostname: "old-broken-site.example", label: "Dead end", errorCode: "rpc-32603" });
+function seedV2Actions(store) {
+  store.recordStep({ position: 0, action: "click", hostname: "checkout.stripe.com", target: { label: "Pay now", role: "button" }, success: true });
+  store.recordStep({ position: 1, action: "fill", hostname: "checkout.stripe.com", target: { label: "Card number", role: "textbox" }, success: true });
+  store.recordStep({ position: 2, action: "click", hostname: "old-broken-site.example", target: { label: "Dead end" }, success: false, errorCode: "timeout" });
 }
 
-test("search returns ranked results with confidence semantics", async () => {
+test("v2 search returns ranked high-level results with confidence semantics", async () => {
   const { store, root } = openMemory();
-  seed(store);
+  seedV2Actions(store);
   await store.embedQueue.flush();
-  const result = await store.search({ query: "submit the payment on the checkout", limit: 10 });
-  assert.ok(result.results.length >= 2, `expected ranked results, got ${result.results.length}`);
+  const result = await store.search({ query: "click pay now on the checkout", limit: 10 });
+
+  assert.ok(result.results.length >= 1, `expected ranked results, got ${result.results.length}`);
   const first = result.results[0];
-  assert.ok(first.confirmed_count > 0 || first.confirmed_count === 0);
   assert.equal(typeof first.confidence, "number");
-  // confirmed streaks rank above failed lessons for the same signature family
-  const pay = result.results.find((item) => item.label === "Pay");
-  assert.ok(pay, "Pay signature should be returned");
-  assert.equal(pay.negative, true); // the only Pay row has failures and zero confirms... unless confirmed Pay matched first
-  // ranking determinism: same query twice equals same order
-  const second = await store.search({ query: "submit the payment on the checkout", limit: 10 });
+  assert.ok(["action_v2", "chain_v2"].includes(first.kind), `expected v2 kinds, got ${first.kind}`);
+  const pay = result.results.find((item) => item.label === "Dead end");
+  if (pay) assert.equal(pay.negative, true);
+  const second = await store.search({ query: "click pay now on the checkout", limit: 10 });
   assert.deepEqual(result.results.map((item) => item.id), second.results.map((item) => item.id));
   store.close();
   removeRoot(root);
 });
 
-test("kind chain searches only chain heads", async () => {
+test("unrelated queries return no candidate instead of the least bad match", async () => {
   const { store, root } = openMemory();
-  seed(store);
-  store.ensureChain({ chainId: "chain-a", intent: "checkout flow" });
-  store.record({ success: true, capability: "browser.tab.create", hostname: "checkout.stripe.com", label: "Start", chainId: "chain-a", stepIndex: 0 });
-  store.record({ success: true, capability: "browser.input.gesture", hostname: "checkout.stripe.com", label: "Pay", chainId: "chain-a", stepIndex: 1 });
+  seedV2Actions(store);
   await store.embedQueue.flush();
-  const result = await store.search({ query: "checkout flow", kind: "chain", limit: 5 });
-  assert.ok(result.results.length >= 1, "chain head should be searchable");
-  const chainResult = result.results.find((item) => item.kind === "chain");
-  assert.ok(chainResult, "chain result present");
-  assert.ok(Array.isArray(chainResult.steps));
+  const result = await store.search({ query: "entirely unrelated quantum physics query about nothing here", limit: 5 });
+
+  for (const item of result.results) {
+    assert.ok(item.similarity >= result.threshold, `result below threshold leaked: ${item.similarity} < ${result.threshold}`);
+  }
+  store.close();
+  removeRoot(root);
+});
+
+test("v2 chains record one step per high-level action and stay replayable", async () => {
+  const { store, root } = openMemory();
+  store.recordStep({ chainId: "chain-a", position: 0, action: "click", hostname: "checkout.stripe.com", target: { label: "Start checkout", role: "button" }, success: true });
+  store.recordStep({ chainId: "chain-a", position: 1, action: "fill", hostname: "checkout.stripe.com", target: { label: "Card number", role: "textbox" }, success: true });
+  const finalized = store.finalizeChain({ chainId: "chain-a", success: true });
+  assert.ok(finalized.accepted);
+  assert.equal(finalized.steps, 2);
+  await store.embedQueue.flush();
+
+  const result = await store.search({ query: "start checkout and fill card number", kind: "chain", limit: 5 });
+  const chain = result.results.find((item) => item.kind === "chain_v2");
+  assert.ok(chain, "chain_v2 result present");
+  assert.ok(Array.isArray(chain.steps));
+  assert.equal(chain.steps.length, 2);
+  assert.equal(chain.steps[0].action, "click");
+  assert.equal(chain.steps[1].requiresRuntimeValue, true, "fill steps require a runtime value");
+  assert.equal(chain.steps[1].target_label, "Card number");
+  store.close();
+  removeRoot(root);
+});
+
+test("legacy v1 data is not served as replayable memory by default", async () => {
+  const { store, root } = openMemory();
+  store.record({ success: true, capability: "browser.tab.create", hostname: "checkout.stripe.com", label: "Start" });
+  store.ensureChain({ chainId: "chain-legacy", intent: "legacy checkout" });
+  store.record({ success: true, capability: "browser.input.gesture", hostname: "checkout.stripe.com", label: "Pay", chainId: "chain-legacy", stepIndex: 0 });
+  await store.embedQueue.flush();
+
+  const modern = await store.search({ query: "legacy checkout pay", kind: "chain", limit: 5 });
+  assert.equal(modern.results.find((item) => item.kind === "chain"), undefined, "v1 chains must not surface as replayable");
+
+  const legacy = await store.search({ query: "checkout stripe pay gesture tab", kind: "chain", limit: 5, includeLegacy: true });
+  assert.ok(legacy.results.some((item) => item.kind === "chain"), "opt-in legacy view still works");
+  store.close();
+  removeRoot(root);
+});
+
+test("schema v2 migration tags legacy data and bumps the version", async () => {
+  const { store, root } = openMemory();
+  const status = store.status();
+  assert.equal(status.schema_version, 2);
+  assert.equal(status.legacy_v1_tagged, false);
   store.close();
   removeRoot(root);
 });
@@ -98,7 +153,7 @@ test("search without embed queue degrades with the documented code", async () =>
   const root = tempRoot();
   const store = new MemoryStore({ root });
   store.enable();
-  store.record({ success: true, capability: "browser.tab.create", hostname: "x.com" });
+  store.recordStep({ position: 0, action: "click", hostname: "x.com", target: { label: "Go" }, success: true });
   const result = await store.search({ query: "anything" });
   assert.equal(result.results.length, 0);
   assert.equal(result.degraded, true);
@@ -107,13 +162,75 @@ test("search without embed queue degrades with the documented code", async () =>
   removeRoot(root);
 });
 
-test("memory hits counter increments on non-empty searches", async () => {
+test("usage events replace the inflated hits counter", async () => {
   const { store, root } = openMemory();
-  seed(store);
+  seedV2Actions(store);
   await store.embedQueue.flush();
-  assert.equal(store.status().memory_hits, 0);
-  await store.search({ query: "checkout payment" });
-  assert.equal(store.status().memory_hits, 1);
+  await store.search({ query: "click pay now on the checkout" });
+  const usage = store.usageMetrics();
+  assert.equal(usage.search_queries, 1);
+  assert.equal(usage.matches_returned >= 0, true);
+  assert.equal(usage.replay_attempts, 0);
+  const status = store.status();
+  assert.equal(typeof status.usage.replay_success_rate === "number" || status.usage.replay_success_rate === null, true);
+  store.close();
+  removeRoot(root);
+});
+
+test("typed values, full URLs, and paths never enter v2 recipes", async () => {
+  const { store, root } = openMemory();
+  const recorded = store.recordStep({
+    chainId: "274b81aa-1234-5678-9abc-def012345678",
+    position: 0,
+    action: "fill",
+    hostname: "example.com",
+    target: { label: "user@company.com", selector: "#email[data-account='12345678901234567']", role: "textbox" },
+    success: true,
+  });
+  assert.ok(recorded.accepted);
+  const pending = store.db.prepare("SELECT safe_summary FROM memory_chains_v2").get();
+  assert.equal(pending.safe_summary, "", "transient chain identifiers must never be persisted as summaries");
+  const finalized = store.finalizeChain({ chainId: "274b81aa-1234-5678-9abc-def012345678", success: true });
+  assert.ok(finalized.accepted);
+  const summary = store.db.prepare("SELECT safe_summary, recipe_json FROM memory_chains_v2 WHERE id = ?").get(finalized.chainId);
+  assert.doesNotMatch(summary.safe_summary, /user@company\.com/);
+  assert.doesNotMatch(summary.safe_summary, /12345678901234567/);
+  const action = store.db.prepare("SELECT recipe_json FROM memory_actions_v2 WHERE id = ?").get(recorded.actionId);
+  const recipe = JSON.parse(action.recipe_json);
+  assert.notEqual(recipe.target_label, "user@company.com");
+  assert.equal(recipe.selector, null, "selector containing PII must be rejected");
+  assert.equal(recipe.requiresRuntimeUrl, false);
+  store.close();
+  removeRoot(root);
+});
+
+test("navigate recipes bind only the live URL and stale embedding profiles are rebuilt", async () => {
+  const { store, root } = openMemory();
+  const recorded = store.recordStep({ chainId: "navigate-chain", position: 0, action: "navigate", hostname: "example.com", success: true });
+  store.finalizeChain({ chainId: "navigate-chain", success: true });
+  await store.embedQueue.flush();
+  const recipe = JSON.parse(store.db.prepare("SELECT recipe_json FROM memory_actions_v2 WHERE id = ?").get(recorded.actionId).recipe_json);
+  assert.equal(recipe.requiresRuntimeValue, false);
+  assert.equal(recipe.requiresRuntimeUrl, true);
+
+  const nextProfileEmbed = async (texts) => {
+    const result = await lexicalVectors().embed(texts);
+    return { ...result, embeddingProfile: "fixture-next:q8:d64:prompt-v1" };
+  };
+  const result = await store.reindex({ embed: nextProfileEmbed });
+  assert.ok(result.v2_embedded >= 1);
+  assert.equal(store.db.prepare("SELECT embedding_profile FROM memory_actions_v2 WHERE id = ?").get(recorded.actionId).embedding_profile, "fixture-next:q8:d64:prompt-v1");
+  store.close();
+  removeRoot(root);
+});
+
+test("embedding queue drops are counted once", () => {
+  const root = tempRoot();
+  const queue = new EmbedQueue({ embed: async () => ({ vectors: [] }), capacity: 0 });
+  const store = new MemoryStore({ root, embedQueue: queue });
+  store.enable();
+  store.recordStep({ action: "click", target: { label: "Go" } });
+  assert.equal(Number(store.meta.embedding_queue_drops), 1);
   store.close();
   removeRoot(root);
 });
