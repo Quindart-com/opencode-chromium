@@ -144,6 +144,8 @@ export function createCoreRegistry(runtime, { memory = false } = {}) {
         postObserve: observationSchema,
         returnMode: z.enum(["last", "all", "summary"]).optional(),
         maxChars: z.number().int().positive().optional(),
+        memoryMode: z.enum(["auto", "off"]).optional().describe("auto = try a remembered recipe first (Stage B); off = never consult memory."),
+        memoryIntent: z.string().min(1).max(512).optional().describe("Transient intent for memory recall. Never stored."),
       }),
       outputSchema: resultSchema,
       annotations: { destructiveHint: true, openWorldHint: true },

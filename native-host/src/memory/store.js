@@ -18,11 +18,22 @@ import {
   memoryRootDir,
   openDatabase,
 } from "./config.js";
-import { float32FromBuffer, embedBufferFromRows } from "./rank.js";
+import { float32FromBuffer, embedBufferFromRows, bufferFromFloat32 } from "./rank.js";
 import { SCHEMA_DDL } from "./schema.js";
 import { buildSignature, fingerprintFor } from "./signature.js";
 import { daysBetween, negativeValue, negligibleThreshold } from "./purge.js";
 import { composeChainEmbedding as composeChainEmbeddingFor } from "./compose.js";
+import { createHash } from "node:crypto";
+import {
+  DEFAULT_MEMORY_SIMILARITY_THRESHOLD,
+  MEMORY_SIMILARITY_THRESHOLDS,
+  MAX_CHAIN_STEPS,
+} from "./config.js";
+import { sanitizeTarget, sanitizeLabel, chainSearchText } from "./privacy.js";
+
+function shortFingerprint(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
+}
 
 function isoNow() {
   return new Date().toISOString();
@@ -36,6 +47,32 @@ export class MemoryStore {
     this.db.exec(SCHEMA_DDL);
     this.meta = this.#readMeta();
     this.open = true;
+    if (this.embedQueue && !this.embedQueue.store) this.embedQueue.store = this;
+    this.#migrate();
+  }
+
+  // Tag legacy v1 low-level chains as non-replayable and back up the database
+  // files exactly once when upgrading across schema versions.
+  #migrate() {
+    const current = Number(this.meta.schema_version ?? 0);
+    if (current >= SCHEMA_VERSION) {
+      if (this.meta.schema_version !== String(SCHEMA_VERSION)) this.writeMeta("schema_version", SCHEMA_VERSION);
+      return;
+    }
+    if (current >= 1) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      for (const suffix of ["", "-wal", "-shm"]) {
+        const source = `${databasePath(this.root)}${suffix}`;
+        try {
+          if (statSize(source) > 0) fs.copyFileSync(source, `${source}.backup-${stamp}`);
+        } catch {
+          // backup is best effort; the live database is untouched
+        }
+      }
+      this.writeMeta("legacy_v1_tagged", true);
+    }
+    this.writeMeta("schema_version", SCHEMA_VERSION);
+    this.meta = this.#readMeta();
   }
 
   #readMeta() {
@@ -136,6 +173,152 @@ export class MemoryStore {
     return { accepted: true, chainId };
   }
 
+  // ---- Action Memory v2: high-level capture -------------------------------
+
+  #v2Gate() {
+    const gate = this.#ensureEnabled();
+    if (!gate.accepted) return false;
+    return true;
+  }
+
+  #recordUsageEvent({ eventType, actionId = null, chainId = null, success = null, durationMs = null, stepsReused = null, reason = null }) {
+    try {
+      this.db.prepare(
+        "INSERT INTO memory_usage_events (occurred_at, event_type, action_id, chain_id, success, duration_ms, steps_reused, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run(isoNow(), eventType, actionId, chainId, success === null ? null : success ? 1 : 0, durationMs, stepsReused, reason);
+    } catch {
+      // usage events are append-only telemetry; never fail capture for them
+    }
+  }
+
+  recordStep({ chainId = null, position = null, action = null, hostname = null, target = null, success = true, durationMs = null, errorCode = null } = {}) {
+    if (!this.#v2Gate()) return { accepted: false, reason: "disabled" };
+    const safeAction = typeof action === "string" && action.length > 0 && action.length <= 64 ? action : null;
+    if (!safeAction) return { accepted: false, reason: "invalid_action" };
+    const safe = sanitizeTarget(target ?? {});
+    const safeHostname = typeof hostname === "string" ? hostname.toLowerCase() : null;
+    const now = isoNow();
+    const recipe = {
+      position: Number.isInteger(position) ? position : null,
+      action: safeAction,
+      hostname: safeHostname,
+      target_label: safe.label,
+      target_role: safe.role,
+      selector: safe.selector,
+      requiresRuntimeValue: safeAction === "fill" || safeAction === "replaceText" || safeAction === "select" || safeAction === "type" || safeAction === "navigate",
+      requiresRuntimeUrl: safeAction === "navigate",
+      success: success === true,
+    };
+    const fingerprint = shortFingerprint(JSON.stringify([safeAction, safeHostname, recipe.target_label, recipe.target_role, recipe.selector]));
+    this.db.prepare(
+      "INSERT INTO memory_actions_v2 (fingerprint, action, hostname, target_label, target_role, recipe_json, confirmed_count, failed_count, first_seen, last_seen) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT(fingerprint) DO UPDATE SET last_seen = excluded.last_seen, confirmed_count = confirmed_count + ?, failed_count = failed_count + ?",
+    ).run(fingerprint, safeAction, safeHostname, recipe.target_label, recipe.target_role, JSON.stringify(recipe), success ? 1 : 0, success ? 0 : 1, now, now, success ? 1 : 0, success ? 0 : 1);
+
+    const row = this.db.prepare("SELECT id FROM memory_actions_v2 WHERE fingerprint = ?").get(fingerprint);
+    const actionId = row?.id ?? null;
+    if (actionId) {
+      this.#recordUsageEvent({ eventType: "action_recorded", actionId, chainId, success, durationMs, reason: errorCode ?? null });
+      this.#queueEmbedV2("action", fingerprint, chainSearchText(safeHostname, [{ action: safeAction, target_role: recipe.target_role, target_label: recipe.target_label }]));
+    }
+    if (chainId != null && Number.isInteger(position)) this.#appendChainStepV2(String(chainId), position, recipe, now);
+    return { accepted: true, fingerprint, actionId };
+  }
+
+  #appendChainStepV2(chainId, position, recipe, now) {
+    const fingerprint = shortFingerprint(`chain:${chainId}`);
+    const existing = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
+    if (!existing) {
+      this.db.prepare(
+        "INSERT INTO memory_chains_v2 (fingerprint, safe_summary, recipe_json, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)",
+      ).run(fingerprint, chainId, JSON.stringify([recipe]), now, now);
+      return;
+    }
+    let steps = [];
+    try {
+      steps = JSON.parse(existing.recipe_json ?? "[]");
+    } catch {
+      steps = [];
+    }
+    if (steps.length >= MAX_CHAIN_STEPS) return;
+    const at = steps.findIndex((step) => step.position === position);
+    if (at === -1) steps.push(recipe);
+    else steps[at] = recipe;
+    steps.sort((first, second) => (first.position ?? 0) - (second.position ?? 0));
+    this.db.prepare("UPDATE memory_chains_v2 SET recipe_json = ?, last_seen = ? WHERE id = ?").run(JSON.stringify(steps), now, existing.id);
+  }
+
+  finalizeChain({ chainId = null, success = true, durationMs = null } = {}) {
+    if (!this.#v2Gate() || chainId == null) return { accepted: false };
+    const fingerprint = shortFingerprint(`chain:${chainId}`);
+    const chain = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
+    if (!chain) return { accepted: false };
+    let steps = [];
+    try {
+      steps = JSON.parse(chain.recipe_json ?? "[]");
+    } catch {
+      steps = [];
+    }
+    const hostname = steps.find((step) => step.hostname)?.hostname ?? null;
+    const summary = chainSearchText(hostname, steps).slice(0, 256);
+    const now = isoNow();
+    this.db.prepare("UPDATE memory_chains_v2 SET safe_summary = ?, confirmed_count = confirmed_count + ?, failed_count = failed_count + ?, last_seen = ? WHERE id = ?")
+      .run(summary, success ? 1 : 0, success ? 0 : 1, now, chain.id);
+    this.#queueEmbedV2("chain", fingerprint, summary);
+    this.#recordUsageEvent({ eventType: "chain_recorded", chainId: chain.id, success, durationMs, stepsReused: steps.length });
+    return { accepted: true, chainId: chain.id, steps: steps.length, summary };
+  }
+
+  markChainSuperseded({ chainId = null, supersededBy = null } = {}) {
+    if (chainId == null) return { accepted: false };
+    const fingerprint = shortFingerprint(`chain:${chainId}`);
+    const chain = this.db.prepare("SELECT id FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
+    if (!chain) return { accepted: false };
+    this.db.prepare("UPDATE memory_chains_v2 SET replaced_by = ? WHERE id = ?").run(supersededBy ?? chain.id, chain.id);
+    return { accepted: true };
+  }
+
+  #queueEmbedV2(kind, fingerprint, text) {
+    if (!this.embedQueue) return;
+    const queued = this.embedQueue.push({ fingerprint: `v2:${kind}:${fingerprint}`, kind: `v2_${kind}`, text });
+    if (!queued) this.writeMeta("embedding_queue_drops", Number(this.meta.embedding_queue_drops ?? 0) + 1);
+  }
+
+  applyEmbeddingV2({ fingerprint, values, modelId = null, dims = null, embeddingProfile = null }) {
+    if (!values || values.length === 0) return;
+    const buffer = embedBufferFromRows([values]);
+    const action = this.db.prepare("SELECT id FROM memory_actions_v2 WHERE fingerprint = ?").get(fingerprint);
+    if (action) {
+      this.db.prepare("UPDATE memory_actions_v2 SET embedding = ?, embedding_profile = ? WHERE fingerprint = ?").run(buffer, embeddingProfile, fingerprint);
+    }
+    const chain = this.db.prepare("SELECT id FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
+    if (chain) {
+      this.db.prepare("UPDATE memory_chains_v2 SET embedding = ?, embedding_profile = ? WHERE fingerprint = ?").run(buffer, embeddingProfile, fingerprint);
+    }
+    if (embeddingProfile) {
+      this.writeMeta("embedding_profile", embeddingProfile);
+      if (modelId) this.writeMeta("model_id", modelId);
+      if (Number.isInteger(dims)) this.writeMeta("dims", dims);
+    }
+  }
+
+  noteEmbeddingAttempt(count = 1) {
+    this.writeMeta("embedding_attempts", Number(this.meta.embedding_attempts ?? 0) + count);
+  }
+
+  noteEmbeddingFailure(error) {
+    this.writeMeta("embedding_failures", Number(this.meta.embedding_failures ?? 0) + 1);
+    const message = error instanceof Error ? error.message.slice(0, 160) : String(error ?? "unknown").slice(0, 160);
+    this.writeMeta("last_embedding_error", message);
+  }
+
+  unindexedCounts() {
+    const actions = this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL").get().n;
+    const chains = this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE embedding IS NULL").get().n;
+    return { unindexed_actions: actions, unindexed_chains: chains };
+  }
+
   #queueEmbed(fingerprint, text) {
     if (!this.embedQueue) return;
     this.embedQueue.push({ fingerprint, kind: "signature", text });
@@ -145,18 +328,26 @@ export class MemoryStore {
     // chain embeddings are composed lazily at search time by composeChainFor/mergeChains
   }
 
-  applyEmbeddings(rows, modelId, dims) {
+  applyEmbeddings(rows, modelId, dims, embeddingProfile = null) {
     if (!Array.isArray(rows) || rows.length === 0) return;
     if (modelId) this.writeMeta("model_id", modelId);
     if (Number.isInteger(dims)) this.writeMeta("dims", dims);
-    const statement = this.db.prepare("UPDATE signatures SET embedding = ?, model_id = ? WHERE fingerprint = ?");
+    if (embeddingProfile) this.writeMeta("embedding_profile", embeddingProfile);
+    const legacyStatement = this.db.prepare("UPDATE signatures SET embedding = ?, model_id = ? WHERE fingerprint = ?");
     const transaction = this.db.transaction((items) => {
       for (const item of items) {
-        if (item.values && item.values.length > 0) statement.run(embedBufferFromRows([item.values]), modelId ?? null, item.fingerprint);
+        if (!item.values || item.values.length === 0) continue;
+        if (typeof item.fingerprint === "string" && item.fingerprint.startsWith("v2:")) {
+          const stripped = item.fingerprint.replace(/^v2:(?:action|chain):/, "");
+          this.applyEmbeddingV2({ fingerprint: stripped, values: item.values, modelId, dims, embeddingProfile });
+          continue;
+        }
+        legacyStatement.run(embedBufferFromRows([item.values]), modelId ?? null, item.fingerprint);
       }
     });
     try {
       transaction(rows);
+      this.noteEmbeddingAttempt(rows.length);
     } catch {
       // embedding application is best effort; the signature stays searchable-degraded
     }
@@ -249,8 +440,12 @@ export class MemoryStore {
   status() {
     const counts = this.db.prepare(
       "SELECT (SELECT COUNT(*) FROM signatures) AS signatures, (SELECT COUNT(*) FROM chains) AS chains, (SELECT COUNT(*) FROM failure_contexts) AS failure_contexts, " +
-        "(SELECT COALESCE(SUM(confirmed_count), 0) FROM signatures) AS confirmed, (SELECT COALESCE(SUM(failed_count), 0) FROM signatures) AS failed",
+        "(SELECT COALESCE(SUM(confirmed_count), 0) FROM signatures) AS confirmed, (SELECT COALESCE(SUM(failed_count), 0) FROM signatures) AS failed, " +
+        "(SELECT COUNT(*) FROM memory_actions_v2) AS actions_v2, (SELECT COUNT(*) FROM memory_chains_v2 WHERE replaced_by IS NULL) AS chains_v2, " +
+        "(SELECT COUNT(*) FROM memory_usage_events) AS usage_events",
     ).get();
+    const usage = this.usageMetrics();
+    const unindexed = this.unindexedCounts();
     const modal = this.meta;
     return {
       supported: true,
@@ -265,20 +460,58 @@ export class MemoryStore {
       power_user: modal.power_user === "true",
       model_id: typeof modal.model_id === "string" ? modal.model_id : null,
       dims: Number(modal.dims ?? 0) || null,
+      embedding_profile: typeof modal.embedding_profile === "string" ? modal.embedding_profile : null,
       schema_version: Number(modal.schema_version ?? SCHEMA_VERSION),
+      legacy_v1_tagged: modal.legacy_v1_tagged === "true",
       memory_hits: Number(modal.memory_hits ?? 0),
       dropped_events: Number(modal.dropped ?? 0),
       last_prune_at: typeof modal.last_prune_at === "string" ? modal.last_prune_at : null,
       last_evict_at: typeof modal.last_evict_at === "string" ? modal.last_evict_at : null,
+      embedding_attempts: Number(modal.embedding_attempts ?? 0),
+      embedding_failures: Number(modal.embedding_failures ?? 0),
+      embedding_queue_drops: Number(modal.embedding_queue_drops ?? 0),
+      last_embedding_error: typeof modal.last_embedding_error === "string" ? modal.last_embedding_error : null,
+      last_reindex_at: typeof modal.last_reindex_at === "string" ? modal.last_reindex_at : null,
       counts: {
         signatures: counts.signatures,
         chains: counts.chains,
         failure_contexts: counts.failure_contexts,
         confirmed_total: counts.confirmed,
         failed_total: counts.failed,
+        actions_v2: counts.actions_v2,
+        chains_v2: counts.chains_v2,
+        usage_events: counts.usage_events,
+        ...unindexed,
       },
+      usage: usage,
       recent_daily: this.#dailySeries(),
       health: this.#health(),
+    };
+  }
+
+  usageMetrics() {
+    const totals = this.db.prepare(
+      "SELECT " +
+        "SUM(CASE WHEN event_type = 'memory_search' THEN 1 ELSE 0 END) AS search_queries, " +
+        "SUM(CASE WHEN event_type = 'matches_returned' THEN steps_reused ELSE 0 END) AS matches_returned, " +
+        "SUM(CASE WHEN event_type = 'replay_attempt' THEN 1 ELSE 0 END) AS replay_attempts, " +
+        "SUM(CASE WHEN event_type = 'replay_attempt' AND success = 1 THEN 1 ELSE 0 END) AS replay_successes, " +
+        "SUM(CASE WHEN event_type = 'replay_attempt' AND success = 0 THEN 1 ELSE 0 END) AS replay_failures, " +
+        "SUM(CASE WHEN event_type = 'replay_fallback' THEN 1 ELSE 0 END) AS replay_fallbacks, " +
+        "SUM(CASE WHEN event_type = 'replay_attempt' THEN COALESCE(steps_reused, 0) ELSE 0 END) AS steps_reused " +
+        "FROM memory_usage_events",
+    ).get();
+    const attempts = Number(totals.replay_attempts ?? 0);
+    const successes = Number(totals.replay_successes ?? 0);
+    return {
+      search_queries: Number(totals.search_queries ?? 0),
+      matches_returned: Number(totals.matches_returned ?? 0),
+      replay_attempts: attempts,
+      replay_successes: successes,
+      replay_failures: Number(totals.replay_failures ?? 0),
+      replay_fallbacks: Number(totals.replay_fallbacks ?? 0),
+      steps_reused: Number(totals.steps_reused ?? 0),
+      replay_success_rate: attempts > 0 ? Math.round((successes / attempts) * 100) : null,
     };
   }
 
@@ -292,15 +525,18 @@ export class MemoryStore {
       buckets.push({ day: day.toISOString().slice(0, 10), confirmed: 0, failed: 0, signatures: 0 });
     }
     const byDay = new Map(buckets.map((bucket) => [bucket.day, bucket]));
-    const signatures = this.db.prepare("SELECT confirmed_count, failed_count, last_seen FROM signatures").all();
-    for (const row of signatures) {
-      const day = row.last_seen?.slice(0, 10);
-      const bucket = day ? byDay.get(day) : null;
-      if (bucket) {
-        bucket.confirmed += row.confirmed_count;
-        bucket.failed += row.failed_count;
-        bucket.signatures += 1;
+    const events = this.db.prepare(
+      "SELECT occurred_at, event_type, success, COUNT(*) AS n FROM memory_usage_events WHERE occurred_at >= ? GROUP BY occurred_at, event_type, success",
+    ).all(buckets[0]?.day ?? "");
+    for (const row of events) {
+      const day = String(row.occurred_at).slice(0, 10);
+      const bucket = byDay.get(day);
+      if (!bucket) continue;
+      if (row.event_type === "chain_recorded" || row.event_type === "replay_attempt") {
+        if (row.success === 1) bucket.confirmed += row.n;
+        else if (row.success === 0) bucket.failed += row.n;
       }
+      bucket.signatures += row.n;
     }
     return buckets;
   }
@@ -309,48 +545,87 @@ export class MemoryStore {
     if (this.meta.enabled !== "true") return "disabled";
     if (this.meta.paused === "true") return "paused";
     if (this.meta.quota_reached_once === "true") return "quota_reached";
+    const unindexed = this.unindexedCounts();
+    const failures = Number(this.meta.embedding_failures ?? 0);
+    const drops = Number(this.meta.embedding_queue_drops ?? 0);
     if (Number(this.meta.dropped ?? 0) > 0) return "events_dropped";
+    if (failures > 0) return "embedding_errors";
+    if (drops > 0) return "queue_backpressure";
+    if (unindexed.unindexed_actions + unindexed.unindexed_chains > 24) return "index_stale";
     return "ready";
   }
 
-  async search({ query = null, limit = DEFAULT_SEARCH_RESULTS, kind = "all", hostname = null, modelId = null } = {}) {
+  async search({ query = null, limit = DEFAULT_SEARCH_RESULTS, kind = "all", hostname = null, modelId = null, includeLegacy = false } = {}) {
     const bound = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), MAX_SEARCH_RESULTS) : DEFAULT_SEARCH_RESULTS;
-    const signatureConditions = ["embedding IS NOT NULL"];
-    const signatureParams = [];
-    if (hostname) { signatureConditions.push("hostname = ?"); signatureParams.push(hostname); }
-    if (modelId) { signatureConditions.push("model_id = ?"); signatureParams.push(modelId); }
+    const activeProfile = typeof this.meta.embedding_profile === "string" ? this.meta.embedding_profile : null;
 
-    const signatureRows = this.db.prepare(
-      `SELECT id, fingerprint, signature, capability, hostname, verb, label, confirmed_count, failed_count, last_seen, source_session, embedding FROM signatures WHERE ${signatureConditions.join(" AND ")}`,
-    ).all(...signatureParams);
-    const chainConditions = ["1 = 1"];
+    const actionConditions = ["1 = 1"];
+    const actionParams = [];
+    if (hostname) { actionConditions.push("hostname = ?"); actionParams.push(hostname); }
+    if (activeProfile) { actionConditions.push("embedding_profile = ?"); actionParams.push(activeProfile); }
+    const actionRows = this.db.prepare(
+      `SELECT id, fingerprint, action, hostname, target_label, target_role, recipe_json, confirmed_count, failed_count, last_seen, embedding, embedding_profile FROM memory_actions_v2 WHERE ${actionConditions.join(" AND ")}`,
+    ).all(...actionParams);
+
+    const chainConditions = ["replaced_by IS NULL"];
     const chainParams = [];
-    if (hostname) { chainConditions.push("EXISTS (SELECT 1 FROM json_each(chains.steps_json) AS s WHERE json_extract(s.value, '$.hostname') = ?)"); chainParams.push(hostname); }
-    if (modelId) { chainConditions.push("model_id = ?"); chainParams.push(modelId); }
-    const chainRows = this.db.prepare(
-      `SELECT id, fingerprint, intent, embedding, confirmed_count, failed_count, last_seen, steps_json FROM chains WHERE replaced_by IS NULL AND ${chainConditions.join(" AND ")}`,
+    if (hostname) { chainConditions.push("EXISTS (SELECT 1 FROM json_each(memory_chains_v2.recipe_json) AS s WHERE json_extract(s.value, '$.hostname') = ?)"); chainParams.push(hostname); }
+    if (activeProfile) { chainConditions.push("embedding_profile = ?"); chainParams.push(activeProfile); }
+    const chainRowsV2 = this.db.prepare(
+      `SELECT id, fingerprint, safe_summary, recipe_json, confirmed_count, failed_count, last_seen, embedding, embedding_profile FROM memory_chains_v2 WHERE ${chainConditions.join(" AND ")}`,
     ).all(...chainParams);
-    for (const chain of chainRows) {
-      if (!chain.embedding) {
-        const composed = composeChainEmbeddingFor(this, chain.id);
-        if (composed) chain.embedding = composed;
+
+    let signatureRows = [];
+    let chainRows = [];
+    if (includeLegacy) {
+      const legacySignatureConditions = ["embedding IS NOT NULL"];
+      const legacyParams = [];
+      if (hostname) { legacySignatureConditions.push("hostname = ?"); legacyParams.push(hostname); }
+      if (modelId) { legacySignatureConditions.push("model_id = ?"); legacyParams.push(modelId); }
+      signatureRows = this.db.prepare(
+        `SELECT id, fingerprint, signature, capability, hostname, verb, label, confirmed_count, failed_count, last_seen, source_session, embedding FROM signatures WHERE ${legacySignatureConditions.join(" AND ")}`,
+      ).all(...legacyParams);
+      const legacyChainConditions = ["1 = 1"];
+      const legacyChainParams = [];
+      if (hostname) { legacyChainConditions.push("EXISTS (SELECT 1 FROM json_each(chains.steps_json) AS s WHERE json_extract(s.value, '$.hostname') = ?)"); legacyChainParams.push(hostname); }
+      if (modelId) { legacyChainConditions.push("model_id = ?"); legacyChainParams.push(modelId); }
+      chainRows = this.db.prepare(
+        `SELECT id, fingerprint, intent, embedding, confirmed_count, failed_count, last_seen, steps_json FROM chains WHERE replaced_by IS NULL AND ${legacyChainConditions.join(" AND ")}`,
+      ).all(...legacyChainParams);
+      for (const chain of chainRows) {
+        if (!chain.embedding) {
+          const composed = composeChainEmbeddingFor(this, chain.id);
+          if (composed) chain.embedding = composed;
+        }
       }
     }
 
-    if ((signatureRows.length === 0 && chainRows.length === 0) || !query) {
+    if ((signatureRows.length === 0 && chainRows.length === 0 && actionRows.length === 0 && chainRowsV2.length === 0) || !query) {
       return {
         results: [],
         model: this.meta.model_id ?? null,
         dims: Number(this.meta.dims ?? 0) || null,
+        embedding_profile: activeProfile,
         degraded: true,
         ...(this.embedQueue ? {} : { error: "memory_model_unavailable" }),
       };
     }
 
     const byKind = {
-      all: () => [...signatureRows.map((row) => ({ kind: "action", row })), ...chainRows.map((row) => ({ kind: "chain", row }))],
-      action: () => signatureRows.map((row) => ({ kind: "action", row })),
-      chain: () => chainRows.map((row) => ({ kind: "chain", row })),
+      all: () => [
+        ...chainRowsV2.map((row) => ({ kind: "chain_v2", row })),
+        ...actionRows.map((row) => ({ kind: "action_v2", row })),
+        ...signatureRows.map((row) => ({ kind: "action", row })),
+        ...chainRows.map((row) => ({ kind: "chain", row })),
+      ],
+      action: () => [
+        ...actionRows.map((row) => ({ kind: "action_v2", row })),
+        ...signatureRows.map((row) => ({ kind: "action", row })),
+      ],
+      chain: () => [
+        ...chainRowsV2.map((row) => ({ kind: "chain_v2", row })),
+        ...chainRows.map((row) => ({ kind: "chain", row })),
+      ],
     }[kind] ?? (() => []);
 
     const candidates = byKind();
@@ -360,12 +635,29 @@ export class MemoryStore {
     }
 
     if (!this.embedQueue || !this.embedQueue.embedQuery) {
-      return { results: [], model: this.meta.model_id ?? null, dims: Number(this.meta.dims ?? 0) || null, degraded: true, error: "memory_model_unavailable" };
+      return { results: [], model: this.meta.model_id ?? null, dims: Number(this.meta.dims ?? 0) || null, embedding_profile: activeProfile, degraded: true, error: "memory_model_unavailable" };
     }
-    return await this.embedQueue.embedQuery(this, { query, bound, candidates, vectors, modelId: this.meta.model_id ?? null, kind, hostname });
+    return await this.embedQueue.embedQuery(this, {
+      query,
+      bound,
+      candidates,
+      vectors,
+      modelId: this.meta.model_id ?? null,
+      kind,
+      hostname,
+      embeddingProfile: activeProfile,
+      threshold: this.similarityThreshold(activeProfile),
+    });
   }
 
-  async reindex({ embed = null, batchSize = 16 } = {}) {
+  similarityThreshold(embeddingProfile = null) {
+    if (embeddingProfile && MEMORY_SIMILARITY_THRESHOLDS[embeddingProfile] !== undefined) {
+      return MEMORY_SIMILARITY_THRESHOLDS[embeddingProfile];
+    }
+    return DEFAULT_MEMORY_SIMILARITY_THRESHOLD;
+  }
+
+  async reindex({ embed = null, batchSize = 16, rebuildV2 = true } = {}) {
     let embedded = 0;
     const missing = this.db.prepare("SELECT fingerprint, signature FROM signatures WHERE embedding IS NULL ORDER BY id DESC LIMIT 2000").all();
     for (let start = 0; start < missing.length; start += batchSize) {
@@ -373,16 +665,43 @@ export class MemoryStore {
       if (!embed) break;
       const result = await embed(batch.map((row) => row.signature)).catch(() => null);
       if (!result?.vectors?.length) break;
-      this.applyEmbeddings(batch.map((row, index) => ({ fingerprint: row.fingerprint, values: result.vectors[index] })), result.model, result.dims);
+      this.applyEmbeddings(batch.map((row, index) => ({ fingerprint: row.fingerprint, values: result.vectors[index] })), result.model, result.dims, result.embeddingProfile ?? null);
       embedded += batch.length;
     }
     const heads = this.db.prepare("SELECT id FROM chains WHERE replaced_by IS NULL").all();
     for (const chain of heads) composeChainEmbeddingFor(this, chain.id);
-    return { embedded, embedded_total: embedded, heads: heads.length, model: this.meta.model_id ?? null, dims: Number(this.meta.dims ?? 0) || null };
+
+    let v2Embedded = 0;
+    if (rebuildV2 && embed) {
+      const staleActions = this.db.prepare("SELECT fingerprint, action, hostname, target_label, target_role FROM memory_actions_v2 WHERE embedding IS NULL OR embedding_profile IS ?").all(this.meta.embedding_profile ?? "__none__");
+      const staleChains = this.db.prepare("SELECT fingerprint, safe_summary FROM memory_chains_v2 WHERE (embedding IS NULL OR embedding_profile IS ?) AND replaced_by IS NULL").all(this.meta.embedding_profile ?? "__none__");
+      const v2Batch = [
+        ...staleActions.map((row) => ({ fingerprint: row.fingerprint, text: chainSearchText(row.hostname, [{ action: row.action, target_role: row.target_role, target_label: row.target_label }]) })),
+        ...staleChains.map((row) => ({ fingerprint: row.fingerprint, text: row.safe_summary })),
+      ].filter((item) => item.text && item.text.length > 0);
+      for (let start = 0; start < v2Batch.length; start += batchSize) {
+        const batch = v2Batch.slice(start, start + batchSize);
+        const result = await embed(batch.map((row) => row.text)).catch(() => null);
+        if (!result?.vectors?.length) break;
+        for (const [index, item] of batch.entries()) {
+          this.applyEmbeddingV2({ fingerprint: item.fingerprint, values: result.vectors[index], modelId: result.model, dims: result.dims, embeddingProfile: result.embeddingProfile ?? null });
+          v2Embedded += 1;
+        }
+      }
+    }
+    this.writeMeta("last_reindex_at", isoNow());
+    return { embedded, embedded_total: embedded + v2Embedded, v2_embedded: v2Embedded, heads: heads.length, model: this.meta.model_id ?? null, dims: Number(this.meta.dims ?? 0) || null };
   }
 
   recordHit() {
+    // Deprecated: kept for API compatibility. Real usage flows through
+    // memory_usage_events (see usageEvent/usageMetrics).
     this.writeMeta("memory_hits", Number(this.meta.memory_hits ?? 0) + 1);
+  }
+
+  usageEvent(event) {
+    this.#recordUsageEvent(event);
+    return { accepted: true };
   }
 
   touchFailureHits(fingerprints) {

@@ -4,7 +4,7 @@ import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
 import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
-import { MemoryStore, EmbedQueue } from "../memory/index.js";
+import { MemoryStore, EmbedQueue, MEMORY_REPLAY_MIN_CONFIDENCE } from "../memory/index.js";
 import { embedMemoryTexts } from "../../native-host/src/semantic-search.js";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
@@ -296,8 +296,8 @@ export class AgentBrowserRuntime {
     if (!this._memoryReader) {
       const queue = new EmbedQueue({
         embed: async (texts) => embedMemoryTexts(texts),
-        onResults: (rows, model, dims) => {
-          this._memoryReader?.applyEmbeddings(rows, model, dims);
+        onResults: (rows, model, dims, embeddingProfile) => {
+          this._memoryReader?.applyEmbeddings(rows, model, dims, embeddingProfile);
         },
       });
       queue.setQueryEmbedder(async (query) => {
@@ -610,8 +610,7 @@ export class AgentBrowserRuntime {
     }
   }
 
-  memoryStepParams(step, params, chainId = null, stepIndex = null) {
-    const target = step?.target ?? {};
+  memoryStepParams(step, params, chainId = null, stepIndex = null) {    const target = step?.target ?? {};
     let label = target?.query ?? target?.selector ?? target?.label ?? null;
     if (!label && ["click", "doubleClick", "hover", "press"].includes(step?.action) && typeof step?.value === "string") {
       label = step.value;
@@ -623,6 +622,114 @@ export class AgentBrowserRuntime {
       ...(stepIndex != null ? { memory_step_index: stepIndex } : {}),
       ...(label ? { memory_label: label } : {}),
     };
+  }
+
+  memoryRecordingEnabled() {
+    try {
+      return this.memoryReader().meta.enabled === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  // Stage B: attempt a remembered recipe through the ordinary execution path.
+  // Remembered steps are parameterized; runtime values and URLs always come
+  // from the agent's own request, never from stored memory.
+  async tryMemoryReplay(request, session, tabId) {
+    let store;
+    try {
+      store = this.memoryReader();
+    } catch {
+      return null;
+    }
+    if (!store || store.meta?.enabled !== "true") return null;
+    let match = null;
+    try {
+      const search = await store.search({ query: request.memoryIntent, limit: 1, kind: "chain" });
+      match = search?.results?.find((item) => item.kind === "chain_v2") ?? null;
+    } catch {
+      return null;
+    }
+    const rememberedChainId = match?.id ?? null;
+    const steps = match?.steps ?? [];
+    if (!match || steps.length === 0) return null;
+    if (match.confidence < MEMORY_REPLAY_MIN_CONFIDENCE) {
+      store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: false, reason: "below_confidence" });
+      return null;
+    }
+    const bound = [];
+    for (const [index, remembered] of steps.entries()) {
+      const source = request.steps?.[index];
+      if (remembered.requiresRuntimeValue && (source?.value === undefined || source?.value === null)) {
+        store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "missing_runtime_value" });
+        return null;
+      }
+      if (remembered.requiresRuntimeUrl && typeof source?.url !== "string") {
+        store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "missing_runtime_url" });
+        return null;
+      }
+      bound.push({
+        action: remembered.action,
+        target: {
+          ...(remembered.target_label ? { query: remembered.target_label } : {}),
+          ...(remembered.target_role ? { role: remembered.target_role } : {}),
+          ...(remembered.selector ? { selector: remembered.selector } : {}),
+        },
+        ...(remembered.requiresRuntimeValue ? { value: source.value } : {}),
+        ...(remembered.requiresRuntimeUrl ? { url: source.url } : {}),
+        ...(source?.waitUntil ? { waitUntil: source.waitUntil } : {}),
+      });
+    }
+    store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: null, stepsReused: bound.length });
+    const replayChainId = `${session.sessionId}:replay:${this.memoryChainSequence++}`;
+    const prior = new Map();
+    const results = [];
+    let allOk = true;
+    for (const [index, step] of bound.entries()) {
+      try {
+        const value = await this.executeStep(step, tabId, prior, session, replayChainId, index);
+        if (step.target?.query) prior.set(`replay-${index}`, value);
+        results.push({ index, action: step.action, ok: true });
+        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: true, durationMs: 0, errorCode: null }, session.sessionId).catch(() => {});
+      } catch (error) {
+        allOk = false;
+        results.push({ index, action: step.action, ok: false, error: errorDetails(error) });
+        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: false, durationMs: 0, errorCode: errorDetails(error).code ?? "unknown" }, session.sessionId).catch(() => {});
+        break;
+      }
+    }
+    await this.invoke("memory.finalizeChain", { chainId: replayChainId, success: allOk }, session.sessionId).catch(() => {});
+    if (!allOk) {
+      store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "stale_step" });
+      store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: false, stepsReused: results.filter((item) => item.ok).length, reason: "stale_step" });
+      return null;
+    }
+    store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: true, stepsReused: results.length });
+    return { stepsReused: results.length, results };
+  }
+
+  // One high-level browser step produces exactly one memory record, whatever
+  // the step expands to at the RPC layer. Only privacy-safe fields persist.
+  async recordMemoryStep({ chainId, position, step, tabId, success, durationMs, errorCode }, sessionId) {
+    const target = step.target ?? {};
+    const summary = {
+      action: step.action,
+      target: {
+        label: target.query ?? target.label ?? null,
+        role: target.role ?? null,
+        selector: target.query ? null : target.selector ?? null,
+      },
+    };
+    await this.invoke("memory.recordStep", {
+      chainId,
+      position,
+      action: summary.action,
+      tabId,
+      target: summary.target,
+      success: success === true,
+      durationMs,
+      errorCode,
+    }, sessionId);
   }
 
   async editTarget(target, tabId, mode, value, sessionId, chainId = null, stepIndex = null) {
@@ -898,14 +1005,31 @@ export class AgentBrowserRuntime {
       const session = this.getSession(sessionId);
       await this.selectProfile(session, request.profile);
       const tabId = await this.ensureTab(session, request.tab);
+      if (request.memoryMode === "auto" && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0 && !approved) {
+        const replay = await this.tryMemoryReplay(request, session, tabId).catch(() => null);
+        if (replay) {
+          return this.compact({
+            ok: true,
+            status: "memory_replay",
+            sessionId,
+            profileId: session.profileId,
+            tabId: session.activeTabId,
+            memory: { used: true, stepsReused: replay.stepsReused, fallback: false },
+            summary: `Replayed ${replay.stepsReused} remembered steps`,
+            results: replay.results,
+          }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
+        }
+      }
       const prior = new Map();
       const results = [];
       let failed = false;
       const chainId = `${session.sessionId}:${this.memoryChainSequence++}`;
+      const memoryEnabled = request.memoryMode !== "off" && this.memoryRecordingEnabled();
       try {
         for (const [index, step] of request.steps.entries()) {
           let value;
           let lastError;
+          const stepStarted = Date.now();
           const attempts = READ_ACTIONS.has(step.action) ? (step.retry ?? 0) + 1 : 1;
           for (let attempt = 1; attempt <= attempts; attempt += 1) {
             try {
@@ -915,6 +1039,17 @@ export class AgentBrowserRuntime {
             } catch (error) {
               lastError = error;
             }
+          }
+          if (memoryEnabled) {
+            await this.recordMemoryStep({
+              chainId,
+              position: index,
+              step,
+              tabId,
+              success: lastError == null,
+              durationMs: Date.now() - stepStarted,
+              errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : null,
+            }, sessionId).catch(() => {});
           }
           if (lastError) {
             failed = true;
@@ -943,6 +1078,9 @@ export class AgentBrowserRuntime {
           if (!failed || results.at(-1)?.index !== index) results.push({ index, id: step.id ?? null, action: step.action, ok: true, result: value, ...(settled ? { settle: settled } : {}) });
         }
       } finally {
+        if (memoryEnabled) {
+          await this.invoke("memory.finalizeChain", { chainId, success: !failed }, sessionId).catch(() => {});
+        }
         await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
       }
       let postObservation;
