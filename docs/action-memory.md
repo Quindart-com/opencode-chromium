@@ -7,7 +7,7 @@ self-corrects over time. It is off by default.
 It records only structured signatures — never typed text, form values,
 keystrokes, clipboard contents, URLs, window titles, paths, screenshots, or
 accessibility trees — so the store contains **no personal content by
-construction** and can be exported as plain JSON and shared.
+construction**.
 
 ## Enable or disable
 
@@ -26,10 +26,9 @@ recording structured signatures.
 
 ## What is recorded
 
-One **signature** per action, built from fixed fields:
+One high-level v2 action record per executed browser step, built from fixed fields:
 
-- the capability enum (for example `browser.tab.create` or
-  `browser.cdp.execute`);
+- the high-level action enum (for example `click`, `fill`, or `navigate`);
 - the target **hostname** when the extension reported it (`github.com`);
 - the action verb derived from the capability;
 - an optional **bounded element label** (at most 64 characters of the
@@ -90,8 +89,9 @@ Chains evolve like Lego blocks:
 - executing a merged chain is itself the test: success reinforces it, failure
   triggers the next correction generation.
 
-Legacy v1 low-level signatures/chains remain readable for provenance but are
-not served as replayable memory (`includeLegacy` opts back in explicitly).
+Legacy v1 low-level signatures/chains remain readable for provenance but no
+new v1 records are captured and they are not served as replayable memory
+(`includeLegacy` opts back in explicitly).
 
 ## Maintenance
 
@@ -151,9 +151,8 @@ and to continue normally when memory is unavailable.
 The extension's popup links to the Action Memory options page in the browser
 tab (Chrome extension settings → "Action Memory"):
 
-- **Maintenance tab** — enable/pause/resume/disable, quota slider
-  (power-user-gated), purge period, prune now, rebuild memory index,
-  JSON export/import;
+- **Maintenance tab** — enable/disable, quota slider (power-user-gated),
+  purge period, prune now, and rebuild memory index;
 - **Dashboard tab** — live-refreshing (while the popup is open) replay
   metrics: replay success rate, unique actions, recipes, replays, steps
   reused, plus total executions, negative lessons, and index readiness. The
@@ -187,6 +186,3 @@ tab (Chrome extension settings → "Action Memory"):
 | `queue_backpressure` | The embedding queue is dropping items under load; health reports it instead of failing silently. |
 | Model unavailable | Signatures store without embeddings; search returns `memory_model_unavailable` until the model loads. |
 | No SQLite runtime | Status reports `storage_unavailable`; upgrade to Node ≥ 22.5 or Bun ≥ 1.1. |
-
-`memory export <file>` writes a shareable JSON snapshot (no embeddings, no
-personal content); `memory import <file>` merges it by signature fingerprint.

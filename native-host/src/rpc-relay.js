@@ -17,18 +17,15 @@ export class RpcRelay {
   #state;
   #onProfile;
   #localHandler;
-  #memory;
-
-  constructor({ extensionWriter, state, onProfile, localHandler, memory = null }) {
+  constructor({ extensionWriter, state, onProfile, localHandler }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
     this.#onProfile = onProfile;
     this.#localHandler = localHandler;
-    this.#memory = memory;
   }
 
   flushMemory() {
-    this.#memory?.flush?.();
+    // Native-host memory methods write directly to the store.
   }
 
   addClient(socket) {
@@ -102,11 +99,9 @@ export class RpcRelay {
       }
 
       const extensionId = this.#nextRequestId++;
-      const capture = this.#memory?.startAgentRequest(message) ?? null;
       const timeout = setTimeout(() => {
         const pending = this.#deletePending(extensionId);
         if (pending) {
-          this.#memory?.completeAgentRequest?.(pending.capture, false, "timeout");
           void this.#writeClientError(pending.socket, pending.clientId, -32000, `Timed out waiting for extension response to ${message.method}`);
         }
       }, requestTimeoutMs(message));
@@ -114,7 +109,6 @@ export class RpcRelay {
         clientId: message.id,
         socket,
         timeout,
-        capture,
       });
       try {
         await this.#extensionWriter({ ...message, id: extensionId });
@@ -190,15 +184,6 @@ export class RpcRelay {
   async #handleExtensionResponse(message) {
     const pending = this.#deletePending(message.id);
     if (!pending) return;
-    this.#memory?.noteResponse?.(message.result);
-    if (pending.capture) {
-      const error = message.error?.data && typeof message.error.data === "object" && typeof message.error.data.code === "string"
-        ? message.error.data.code
-        : typeof message.error?.code === "number"
-          ? `rpc-${message.error.code}`
-          : null;
-      this.#memory?.completeAgentRequest?.(pending.capture, !message.error, error);
-    }
     await writeFrame(pending.socket, { ...message, id: pending.clientId });
   }
 

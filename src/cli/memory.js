@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { EmbedQueue, MemoryStore, memoryRootDir, embeddingEnabled } from "../memory/index.js";
 import { embedMemoryTexts } from "../../native-host/src/semantic-search.js";
 
@@ -8,17 +7,17 @@ function openCliStore() {
   if (embeddingEnabled()) {
     queue = new EmbedQueue({
       embed: async (texts) => embedMemoryTexts(texts),
-      onResults: (rows, model, dims) => {
-        store?.applyEmbeddings(rows, model, dims);
+      onResults: (rows, model, dims, embeddingProfile) => {
+        store?.applyEmbeddings(rows, model, dims, embeddingProfile);
       },
     });
     queue.setQueryEmbedder(async (query) => {
       const result = await embedMemoryTexts([query]);
-      return result?.vectors?.[0] ?? null;
+      return { vector: result?.vectors?.[0] ?? null, model: result?.model ?? null, dims: result?.dims ?? null, embeddingProfile: result?.embeddingProfile ?? null };
     });
   }
   let store = new MemoryStore({ root, embedQueue: queue });
-  if (queue) queue.onResults = (rows, model, dims) => store.applyEmbeddings(rows, model, dims);
+  if (queue) queue.onResults = (rows, model, dims, embeddingProfile) => store.applyEmbeddings(rows, model, dims, embeddingProfile);
   return store;
 }
 
@@ -57,8 +56,6 @@ const USAGE = {
   reindex: "opencode-chromium memory reindex [--json]",
   config: "opencode-chromium memory config <get|set> <key> [value] [--json]",
   stats: "opencode-chromium memory stats [--json]",
-  export: "opencode-chromium memory export <file> [--json]",
-  import: "opencode-chromium memory import <file> [--json]",
   delete: "opencode-chromium memory delete --yes [--json]",
 };
 
@@ -173,21 +170,6 @@ export async function runMemoryCommand(argv) {
         }
         break;
       }
-      case "export": {
-        const file = rest.find((value) => !value.startsWith("--"));
-        if (!file) throw new Error("memory export requires a target file path.");
-        const payload = store.exportJson();
-        fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-        result = { exported_to: file, records: payload.signatures.length, chains: payload.chains.length };
-        break;
-      }
-      case "import": {
-        const file = rest.find((value) => !value.startsWith("--"));
-        if (!file) throw new Error("memory import requires a source file path.");
-        const payload = JSON.parse(fs.readFileSync(file, "utf8"));
-        result = store.importJson(payload);
-        break;
-      }
       case "delete": {
         if (!rest.includes("--yes")) throw new Error("memory delete requires --yes to confirm.");
         result = await store.hardDelete();
@@ -209,7 +191,7 @@ export async function runMemoryCommand(argv) {
     }
   }
 
-  console.log(json || ["delete", "import", "export"].includes(subcommand) ? JSON.stringify(result, null, 2) : prettyStatus(result, subcommand));
+  console.log(json || subcommand === "delete" ? JSON.stringify(result, null, 2) : prettyStatus(result, subcommand));
 }
 
 function prettyStatus(result, subcommand) {

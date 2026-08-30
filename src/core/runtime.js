@@ -4,8 +4,7 @@ import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
 import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
-import { MemoryStore, EmbedQueue, MEMORY_REPLAY_MIN_CONFIDENCE } from "../memory/index.js";
-import { embedMemoryTexts } from "../../native-host/src/semantic-search.js";
+import { MEMORY_REPLAY_MIN_CONFIDENCE } from "../memory/index.js";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
 import { contractMetadata } from "./versions.js";
@@ -103,6 +102,26 @@ function resultCandidates(value) {
 
 function usesLongSearchTimeout(strategy) {
   return ["deep", "semantic", "snowflake"].includes(strategy);
+}
+
+function normalizedTargetText(value) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim().toLocaleLowerCase() : null;
+}
+
+function rememberedStepCompatible(remembered, source, hostname) {
+  if (!source || remembered.action !== source.action) return false;
+  if (remembered.hostname && hostname && remembered.hostname !== hostname) return false;
+  const sourceTarget = source.target ?? {};
+  const sourceRole = normalizedTargetText(sourceTarget.role);
+  const rememberedRole = normalizedTargetText(remembered.target_role);
+  if (sourceRole && rememberedRole && sourceRole !== rememberedRole) return false;
+  const sourceLabel = normalizedTargetText(sourceTarget.query ?? sourceTarget.label);
+  const rememberedLabel = normalizedTargetText(remembered.target_label);
+  if (sourceLabel && rememberedLabel && sourceLabel !== rememberedLabel) return false;
+  const sourceSelector = normalizedTargetText(sourceTarget.selector);
+  const rememberedSelector = normalizedTargetText(remembered.selector);
+  if (sourceSelector && rememberedSelector && sourceSelector !== rememberedSelector) return false;
+  return true;
 }
 
 function publicProfiles(profiles) {
@@ -274,7 +293,7 @@ function validateSteps(steps) {
 }
 
 export class AgentBrowserRuntime {
-  constructor({ artifactStore = new ArtifactStore(), approvalTtlMs = APPROVAL_TTL_MS, operationFactory = createBrowserOperations, urlPolicy, urlPolicyConfig, filePolicy, filePolicyConfig, logger } = {}) {
+  constructor({ artifactStore = new ArtifactStore(), approvalTtlMs = APPROVAL_TTL_MS, operationFactory = createBrowserOperations, hostRequest = browserRequest, urlPolicy, urlPolicyConfig, filePolicy, filePolicyConfig, logger } = {}) {
     this.artifacts = artifactStore;
     this.approvalTtlMs = approvalTtlMs;
     this.logger = logger ?? createLogger();
@@ -291,26 +310,14 @@ export class AgentBrowserRuntime {
     this.approvals = new Map();
     this.profileCache = { expiresAt: 0, profiles: [] };
     this.legacyToolsPromise = operationFactory().then((hooks) => hooks.tool);
+    this.hostRequest = hostRequest;
     this.capabilityRegistry = null;
-    this._memoryReader = null;
+    this.searchPrefsCache = new Map();
     this.memoryChainSequence = 0;
   }
 
-  memoryReader() {
-    if (!this._memoryReader) {
-      const queue = new EmbedQueue({
-        embed: async (texts) => embedMemoryTexts(texts),
-        onResults: (rows, model, dims, embeddingProfile) => {
-          this._memoryReader?.applyEmbeddings(rows, model, dims, embeddingProfile);
-        },
-      });
-      queue.setQueryEmbedder(async (query) => {
-        const result = await embedMemoryTexts([query]);
-        return result?.vectors?.[0] ?? null;
-      });
-      this._memoryReader = new MemoryStore({ embedQueue: queue });
-    }
-    return this._memoryReader;
+  async requestHost(method, params = {}, session = null) {
+    return this.hostRequest(method, params, session?.profileId ? { profileId: session.profileId } : {});
   }
 
   getSession(sessionId) {
@@ -326,13 +333,9 @@ export class AgentBrowserRuntime {
     const tools = await this.legacyToolsPromise;
     const definition = tools[name];
     if (!definition) throw new Error(`Legacy operation is unavailable: ${name}`);
-    const { memory_chain_id, memory_step_index, memory_label, ...cleanArgs } = args ?? {};
-    const parsed = z.object(definition.args).parse(cleanArgs ?? {});
+    const parsed = z.object(definition.args).parse(args ?? {});
     const attempts = READ_LEGACY_TOOLS.has(name) ? 2 : 1;
     let lastError;
-    const memoryStep = memory_chain_id !== undefined
-      ? { chainId: String(memory_chain_id), stepIndex: memory_step_index ?? null, label: memory_label ?? null }
-      : null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         return parseLegacyResult(await definition.execute(parsed, {
@@ -340,7 +343,6 @@ export class AgentBrowserRuntime {
           agent: "agent-browser-core",
           urlPolicy: this.urlPolicy,
           filePolicy: this.filePolicy,
-          ...(memoryStep ? { memoryStep } : {}),
         }));
       } catch (error) {
         lastError = error;
@@ -426,6 +428,7 @@ export class AgentBrowserRuntime {
       await this.invoke("browser_select_profile", { profileId: profile.profileId }, session.sessionId);
       session.profileId = profile.profileId;
       session.activeTabId = null;
+      this.searchPrefsCache.clear();
     }
     return profile;
   }
@@ -499,12 +502,13 @@ export class AgentBrowserRuntime {
       target = { ...target, ...(candidates[target.index ?? 0] ?? source) };
     }
     if (target.query) {
+      const prefs = await this.searchPreferences(this.getSession(sessionId));
       const search = await this.invoke("browser_page_search", {
         tabId,
         query: target.query,
-        maxResults: Math.max(1, (target.index ?? 0) + 1),
-        detail: "lean",
-        mode: "semantic",
+        maxResults: Math.max(prefs.maxResults, (target.index ?? 0) + 1),
+        detail: prefs.detail,
+        mode: prefs.mode,
       }, sessionId);
       const candidate = resultCandidates(search)[target.index ?? 0];
       if (!candidate) throw new Error(`No page target matched: ${target.query}`);
@@ -515,25 +519,28 @@ export class AgentBrowserRuntime {
   }
 
   async searchPreferences(session = null) {
-    if (this.searchPrefsCache) return this.searchPrefsCache;
+    const key = session?.profileId ?? "default";
+    const cached = this.searchPrefsCache.get(key);
+    if (cached?.expiresAt > Date.now()) return cached.value;
     const defaults = { maxResults: 5, detail: "lean", mode: "auto" };
     try {
-      const status = await this.invoke("semantic.status", {}, session?.sessionId ?? null);
+      const status = await this.requestHost("semantic.status", {}, session);
       const settings = status?.settings ?? {};
-      this.searchPrefsCache = {
+      const value = {
         maxResults: Number.isInteger(settings.agentResultCount) ? settings.agentResultCount : defaults.maxResults,
         detail: ["lean", "compact", "debug"].includes(settings.agentResultDetail) ? settings.agentResultDetail : defaults.detail,
         mode: ["auto", "semantic", "lexical", "deep"].includes(settings.strategyPreference) ? settings.strategyPreference : defaults.mode,
       };
+      this.searchPrefsCache.set(key, { value, expiresAt: Date.now() + 5000 });
+      return value;
     } catch {
-      this.searchPrefsCache = defaults;
+      return defaults;
     }
-    return this.searchPrefsCache;
   }
 
   async executeStep(step, tabId, prior, session, chainId = null, stepIndex = null) {
     const timeoutMs = clamp(step.timeoutMs, 15000, 250, 60000);
-    const mem = (params) => this.memoryStepParams(step, params, chainId, stepIndex);
+    const mem = (params) => params;
     if (step.action === "find") {
       const query = step.target?.query ?? step.value ?? "";
       const prefs = await this.searchPreferences(session);
@@ -614,24 +621,10 @@ export class AgentBrowserRuntime {
     }
   }
 
-  memoryStepParams(step, params, chainId = null, stepIndex = null) {
-    const target = step?.target ?? {};
-    let label = target?.query ?? target?.selector ?? target?.label ?? null;
-    if (!label && ["click", "doubleClick", "hover", "press"].includes(step?.action) && typeof step?.value === "string") {
-      label = step.value;
-    }
-    if (typeof label === "string") label = label.replace(/\s+/g, " ").trim().slice(0, 64);
-    return {
-      ...params,
-      ...(chainId ? { memory_chain_id: chainId } : {}),
-      ...(stepIndex != null ? { memory_step_index: stepIndex } : {}),
-      ...(label ? { memory_label: label } : {}),
-    };
-  }
-
-  memoryRecordingEnabled() {
+  async memoryRecordingEnabled(session) {
     try {
-      return this.memoryReader().meta.enabled === "true";
+      const status = await this.requestHost("memory.stats", {}, session);
+      return status?.enabled === true && status?.paused !== true;
     } catch {
       return false;
     }
@@ -661,16 +654,17 @@ export class AgentBrowserRuntime {
   // Remembered steps are parameterized; runtime values and URLs always come
   // from the agent's own request, never from stored memory.
   async tryMemoryReplay(request, session, tabId) {
-    let store;
+    let status;
     try {
-      store = this.memoryReader();
+      status = await this.requestHost("memory.stats", {}, session);
     } catch {
       return null;
     }
-    if (!store || store.meta?.enabled !== "true") return null;
+    if (!status?.enabled || status?.paused) return null;
+    const hostname = await this.memoryHostname(request.steps?.[0], tabId, session);
     let match = null;
     try {
-      const search = await store.search({ query: request.memoryIntent, limit: 1, kind: "chain" });
+      const search = await this.requestHost("memory.search", { query: request.memoryIntent, limit: 1, kind: "chain", hostname }, session);
       match = search?.results?.find((item) => item.kind === "chain_v2") ?? null;
     } catch {
       return null;
@@ -679,29 +673,26 @@ export class AgentBrowserRuntime {
     const steps = match?.steps ?? [];
     if (!match || steps.length === 0) return null;
     if (match.confidence < MEMORY_REPLAY_MIN_CONFIDENCE) {
-      store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: false, reason: "below_confidence" });
-      return null;
+      await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "below_confidence" }, session).catch(() => {});
+      return { fallback: true };
     }
-    if (steps.length !== request.steps?.length || steps.some((step, index) => step.action !== request.steps[index]?.action)) {
-      store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "recipe_mismatch" });
-      return null;
-    }
-    if (requiresApproval(steps).length > 0) {
-      store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "approval_required" });
-      return null;
+    if (steps.length !== request.steps?.length || steps.some((step, index) => !rememberedStepCompatible(step, request.steps[index], hostname))) {
+      await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "recipe_mismatch" }, session).catch(() => {});
+      return { fallback: true };
     }
     const bound = [];
     for (const [index, remembered] of steps.entries()) {
       const source = request.steps?.[index];
       if (remembered.requiresRuntimeValue && (source?.value === undefined || source?.value === null)) {
-        store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "missing_runtime_value" });
-        return null;
+        await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "missing_runtime_value" }, session).catch(() => {});
+        return { fallback: true };
       }
       if (remembered.requiresRuntimeUrl && typeof source?.url !== "string") {
-        store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "missing_runtime_url" });
-        return null;
+        await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "missing_runtime_url" }, session).catch(() => {});
+        return { fallback: true };
       }
       bound.push({
+        ...(source.id ? { id: source.id } : {}),
         action: remembered.action,
         target: {
           ...(remembered.target_label ? { query: remembered.target_label } : {}),
@@ -711,9 +702,14 @@ export class AgentBrowserRuntime {
         ...(remembered.requiresRuntimeValue ? { value: source.value } : {}),
         ...(remembered.requiresRuntimeUrl ? { url: source.url } : {}),
         ...(source?.waitUntil ? { waitUntil: source.waitUntil } : {}),
+        ...(source?.settle ? { settle: source.settle } : {}),
       });
     }
-    store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: null, stepsReused: bound.length });
+    if (requiresApproval(bound).length > 0) {
+      await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "approval_required" }, session).catch(() => {});
+      return { fallback: true };
+    }
+    await this.requestHost("memory.usageEvent", { eventType: "replay_started", chainId: rememberedChainId, stepsReused: bound.length }, session).catch(() => {});
     const replayChainId = `${session.sessionId}:replay:${this.memoryChainSequence++}`;
     const prior = new Map();
     const results = [];
@@ -721,32 +717,28 @@ export class AgentBrowserRuntime {
     let completedMutation = false;
     let uncertainMutation = false;
     for (const [index, step] of bound.entries()) {
-      try {
-        const value = await this.executeStep(step, tabId, prior, session, replayChainId, index);
+      const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId: replayChainId, memoryEnabled: true });
+      if (outcome.ok) {
         if (!READ_ACTIONS.has(step.action)) completedMutation = true;
-        if (step.target?.query) prior.set(`replay-${index}`, value);
-        results.push({ index, action: step.action, ok: true });
-        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: true, durationMs: 0, errorCode: null }, session).catch(() => {});
-      } catch (error) {
+        results.push({ index, action: step.action, ok: true, ...(outcome.settled ? { settle: outcome.settled } : {}) });
+      } else {
         allOk = false;
-        const detail = errorDetails(error);
+        const detail = outcome.error;
         uncertainMutation = !READ_ACTIONS.has(step.action) && detail.uncertain === true;
         results.push({ index, action: step.action, ok: false, error: detail });
-        await this.recordMemoryStep({ chainId: replayChainId, position: index, step, tabId, success: false, durationMs: 0, errorCode: detail.code ?? "unknown" }, session).catch(() => {});
         break;
       }
     }
-    await this.invoke("memory.finalizeChain", { chainId: replayChainId, success: allOk }, session.sessionId).catch(() => {});
+    await this.requestHost("memory.finalizeChain", { chainId: replayChainId, success: allOk, supersedes: allOk ? rememberedChainId : null }, session).catch(() => {});
     if (!allOk) {
-      store.usageEvent({ eventType: "replay_fallback", chainId: rememberedChainId, reason: "stale_step" });
-      store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: false, stepsReused: results.filter((item) => item.ok).length, reason: "stale_step" });
+      await this.requestHost("memory.usageEvent", { eventType: "replay_failed", chainId: rememberedChainId, success: false, stepsReused: results.filter((item) => item.ok).length, reason: "stale_step" }, session).catch(() => {});
       if (completedMutation || uncertainMutation) {
-        return { stepsReused: results.filter((item) => item.ok).length, results, failed: true };
+        return { used: true, stepsReused: results.filter((item) => item.ok).length, results, failed: true };
       }
-      return null;
+      return { fallback: true, supersedes: rememberedChainId };
     }
-    store.usageEvent({ eventType: "replay_attempt", chainId: rememberedChainId, success: true, stepsReused: results.length });
-    return { stepsReused: results.length, results };
+    await this.requestHost("memory.usageEvent", { eventType: "replay_succeeded", chainId: rememberedChainId, success: true, stepsReused: results.length }, session).catch(() => {});
+    return { used: true, stepsReused: results.length, results };
   }
 
   // One high-level browser step produces exactly one memory record, whatever
@@ -762,7 +754,7 @@ export class AgentBrowserRuntime {
       },
     };
     const hostname = await this.memoryHostname(step, tabId, session);
-    await this.invoke("memory.recordStep", {
+    await this.requestHost("memory.recordStep", {
       chainId,
       position,
       action: summary.action,
@@ -772,18 +764,58 @@ export class AgentBrowserRuntime {
       success: success === true,
       durationMs,
       errorCode,
-    }, session.sessionId);
+    }, session);
+  }
+
+  async executeStepWithPolicy({ step, index, tabId, prior, session, chainId, memoryEnabled }) {
+    const startedAt = Date.now();
+    const attempts = READ_ACTIONS.has(step.action) ? (step.retry ?? 0) + 1 : 1;
+    let value;
+    let lastError = null;
+    let settled = null;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        value = await this.executeStep(step, tabId, prior, session, chainId, index);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!lastError) {
+      try {
+        settled = await this.settleStep(step, tabId, prior, session);
+      } catch (error) {
+        if (step.settle) lastError = error;
+        else settled = { settled: false, degraded: true, error: errorDetails(error) };
+      }
+    }
+    if (!lastError && step.id) prior.set(step.id, value);
+    if (memoryEnabled) {
+      await this.recordMemoryStep({
+        chainId,
+        position: index,
+        step,
+        tabId,
+        success: lastError == null,
+        durationMs: Date.now() - startedAt,
+        errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : null,
+      }, session).catch(() => {});
+    }
+    return lastError
+      ? { ok: false, error: errorDetails(lastError), rawError: lastError, value, settled }
+      : { ok: true, value, settled };
   }
 
   async editTarget(target, tabId, mode, value, sessionId, chainId = null, stepIndex = null) {
-    const mem = (params) => this.memoryStepParams({ target }, params, chainId, stepIndex);
+    const mem = (params) => params;
     if (target.nodeId) return this.invoke("browser_dom_type", mem({ tabId, nodeId: target.nodeId, text: value, mode }), sessionId);
     if (target.selector) return this.invoke("browser_locator_fill", mem({ tabId, selector: target.selector, value, mode }), sessionId);
     throw new Error("Editable target needs nodeId, selector, or query");
   }
 
   async clickTarget(toolName, target, tabId, step, sessionId, chainId = null, stepIndex = null) {
-    const mem = (params) => this.memoryStepParams(step, params, chainId, stepIndex);
+    const mem = (params) => params;
     if (target.nodeId) {
       if (toolName === "browser_double_click") throw new Error("doubleClick requires selector or coordinates");
       return this.invoke("browser_dom_click", mem({ tabId, nodeId: target.nodeId }), sessionId);
@@ -799,7 +831,7 @@ export class AgentBrowserRuntime {
   }
 
   async hoverTarget(target, tabId, sessionId, chainId = null, stepIndex = null) {
-    const mem = (params) => this.memoryStepParams({ target }, params, chainId, stepIndex);
+    const mem = (params) => params;
     if (target.nodeId) return this.invoke("browser_hover", mem({ tabId, nodeId: target.nodeId }), sessionId);
     if (target.selector) return this.invoke("browser_hover", mem({ tabId, selector: target.selector }), sessionId);
     if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
@@ -809,7 +841,7 @@ export class AgentBrowserRuntime {
   }
 
   async assertTarget(target, tabId, step, sessionId, chainId = null, stepIndex = null) {
-    const mem = (params) => this.memoryStepParams(step, params, chainId, stepIndex);
+    const mem = (params) => params;
     const condition = step.condition ?? "exists";
     if (!target.selector && target.nodeId && condition === "exists") {
       await this.invoke("browser_page_inspect", mem({ tabId, nodeId: target.nodeId }), sessionId);
@@ -985,13 +1017,13 @@ export class AgentBrowserRuntime {
   }
 
   async screenshot(tabId, options, sessionId, chainId = null, stepIndex = null) {
-    const shot = await this.invoke("browser_screenshot", this.memoryStepParams({ target: {} }, {
+    const shot = await this.invoke("browser_screenshot", {
       tabId,
       fullPage: options.fullPage ?? false,
       format: options.format ?? "png",
       ...(options.quality !== undefined ? { quality: options.quality } : {}),
       timeoutMs: options.timeoutMs ?? 30000,
-    }, chainId, stepIndex), sessionId);
+    }, sessionId);
     if (options.delivery === "inline") return shot;
     const artifact = this.artifacts.create({ sessionId, mimeType: shot.mimeType, data: Buffer.from(shot.base64, "base64"), label: "screenshot" });
     return { screenshot: artifact };
@@ -1048,9 +1080,10 @@ export class AgentBrowserRuntime {
       const session = this.getSession(sessionId);
       await this.selectProfile(session, request.profile);
       const tabId = await this.ensureTab(session, request.tab);
+      let correctiveCandidate = null;
       if (request.memoryMode === "auto" && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0 && !approved) {
         const replay = await this.tryMemoryReplay(request, session, tabId).catch(() => null);
-        if (replay) {
+        if (replay?.used) {
           return this.compact({
             ok: replay.failed !== true,
             status: replay.failed === true ? "partial" : "memory_replay",
@@ -1064,67 +1097,32 @@ export class AgentBrowserRuntime {
             results: replay.results,
           }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
         }
+        correctiveCandidate = replay?.supersedes ?? null;
       }
       const prior = new Map();
       const results = [];
       let failed = false;
       const chainId = `${session.sessionId}:${this.memoryChainSequence++}`;
-      const memoryEnabled = request.memoryMode !== "off" && this.memoryRecordingEnabled();
+      const memoryEnabled = request.memoryMode !== "off" && await this.memoryRecordingEnabled(session);
       try {
         for (const [index, step] of request.steps.entries()) {
-          let value;
-          let lastError;
-          const stepStarted = Date.now();
-          const attempts = READ_ACTIONS.has(step.action) ? (step.retry ?? 0) + 1 : 1;
-          for (let attempt = 1; attempt <= attempts; attempt += 1) {
-            try {
-              value = await this.executeStep(step, tabId, prior, session, chainId, index);
-              lastError = null;
-              break;
-            } catch (error) {
-              lastError = error;
-            }
-          }
-          if (memoryEnabled) {
-            await this.recordMemoryStep({
-              chainId,
-              position: index,
-              step,
-              tabId,
-              success: lastError == null,
-              durationMs: Date.now() - stepStarted,
-              errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : null,
-            }, session).catch(() => {});
-          }
-          if (lastError) {
+          const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId, memoryEnabled });
+          if (!outcome.ok) {
             failed = true;
-            const detail = errorDetails(lastError);
+            const detail = outcome.error;
             let observation;
             if (!READ_ACTIONS.has(step.action) && detail.uncertain && session.activeTabId) {
               observation = await this.observeValue({ mode: "inspect", target: step.target, detail: "lean", limit: 8 }, tabId, session).catch(() => undefined);
             }
-            results.push({ index, id: step.id ?? null, action: step.action, ok: false, error: detail, ...(observation ? { observation } : {}) });
+            results.push({ index, id: step.id ?? null, action: step.action, ok: false, ...(outcome.value !== undefined ? { result: outcome.value } : {}), error: detail, ...(observation ? { observation } : {}) });
             if (step.onError !== "continue") break;
             continue;
           }
-          let settled;
-          try {
-            settled = await this.settleStep(step, tabId, prior, session);
-          } catch (error) {
-            if (step.settle) {
-              failed = true;
-              results.push({ index, id: step.id ?? null, action: step.action, ok: false, result: value, error: errorDetails(error) });
-              if (step.onError !== "continue") break;
-            } else {
-              settled = { settled: false, degraded: true, error: errorDetails(error) };
-            }
-          }
-          if (step.id) prior.set(step.id, value);
-          if (!failed || results.at(-1)?.index !== index) results.push({ index, id: step.id ?? null, action: step.action, ok: true, result: value, ...(settled ? { settle: settled } : {}) });
+          results.push({ index, id: step.id ?? null, action: step.action, ok: true, result: outcome.value, ...(outcome.settled ? { settle: outcome.settled } : {}) });
         }
       } finally {
         if (memoryEnabled) {
-          await this.invoke("memory.finalizeChain", { chainId, success: !failed }, sessionId).catch(() => {});
+          await this.requestHost("memory.finalizeChain", { chainId, success: !failed, supersedes: !failed ? correctiveCandidate : null }, session).catch(() => {});
         }
         await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
       }
@@ -1256,9 +1254,10 @@ export class AgentBrowserRuntime {
 
   async memoryStatus(args = {}, context = {}) {
     try {
-      if (!this._memoryReader?.open) this.memoryReader();
-      const store = this.memoryReader();
-      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result: store.status() };
+      const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
+      await this.selectProfile(session, args.profile);
+      const result = await this.requestHost("memory.stats", {}, session);
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
     } catch (error) {
       return this.failure(args.sessionId ?? null, error);
     }
@@ -1266,15 +1265,16 @@ export class AgentBrowserRuntime {
 
   async memoryQuery(args = {}, context = {}) {
     try {
-      const store = this.memoryReader();
-      const result = store.query({
+      const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
+      await this.selectProfile(session, args.profile);
+      const result = await this.requestHost("memory.query", {
         limit: args.limit,
         capability: args.capability,
         hostname: args.hostname,
         sessionId: args.session_id ?? args.sessionId,
         sinceId: args.since_id,
         untilId: args.until_id,
-      });
+      }, session);
       return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
     } catch (error) {
       return this.failure(args.sessionId ?? null, error);
@@ -1283,13 +1283,14 @@ export class AgentBrowserRuntime {
 
   async memorySearch(args = {}, context = {}) {
     try {
-      const store = this.memoryReader();
-      const result = await store.search({
+      const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
+      await this.selectProfile(session, args.profile);
+      const result = await this.requestHost("memory.search", {
         query: args.query,
         limit: args.limit,
         kind: args.kind ?? "all",
         hostname: args.hostname,
-      });
+      }, session);
       return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
     } catch (error) {
       return this.failure(args.sessionId ?? null, error);
@@ -1301,8 +1302,7 @@ export class AgentBrowserRuntime {
     this.sessions.clear();
     this.approvals.clear();
     this.capabilityRegistry = null;
-    this._memoryReader?.close();
-    this._memoryReader = null;
+    this.searchPrefsCache.clear();
     closeBrowserClients();
   }
 }

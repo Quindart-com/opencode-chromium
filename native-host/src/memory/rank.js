@@ -1,5 +1,6 @@
 export function dot(first, second) {
-  const length = Math.min(first.length, second.length);
+  if (!first || !second || first.length !== second.length) return Number.NaN;
+  const length = first.length;
   let total = 0;
   for (let index = 0; index < length; index += 1) total += first[index] * second[index];
   return total;
