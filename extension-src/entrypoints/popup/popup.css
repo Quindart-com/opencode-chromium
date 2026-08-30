@@ -1054,13 +1054,6 @@ button.switch.on:focus-visible {
   vertical-align: middle;
 }
 
-.file-button {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  cursor: pointer;
-}
-
 .dev-details {
   margin-top: 8px;
   border-top: 1px solid var(--border, #e5e7eb);

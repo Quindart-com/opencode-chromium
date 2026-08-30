@@ -11,6 +11,7 @@ export class EmbedQueue {
     this.closed = false;
     this.timer = null;
     this.queryEmbed = null;
+    this.reindexPromise = null;
     this.capacity = capacity;
   }
 
@@ -71,21 +72,38 @@ export class EmbedQueue {
     if (!this.queryEmbed || typeof query !== "string") {
       return { results: [], model: modelId, dims: null, embedding_profile: embeddingProfile, degraded: true, error: "memory_model_unavailable" };
     }
-    let queryVector;
+    let queryResult;
     try {
-      queryVector = await this.queryEmbed(query);
+      queryResult = await this.queryEmbed(query);
     } catch (error) {
       store?.noteEmbeddingFailure?.(error);
       return { results: [], model: modelId, dims: null, embedding_profile: embeddingProfile, degraded: true, error: "memory_model_unavailable" };
     }
+    const queryVector = queryResult?.vector ?? null;
+    const queryModel = queryResult?.model ?? null;
+    const queryDims = Number(queryResult?.dims ?? queryVector?.length ?? 0) || null;
+    const queryProfile = queryResult?.embeddingProfile ?? null;
     if (!queryVector) return { results: [], model: modelId, dims: null, embedding_profile: embeddingProfile, degraded: true, error: "memory_model_unavailable" };
+    const storedDims = Number(store?.meta?.dims ?? 0) || null;
+    if (!embeddingProfile || queryProfile !== embeddingProfile || queryModel !== modelId || queryDims !== storedDims || queryVector.length !== storedDims) {
+      this.#scheduleReindex(store);
+      return { results: [], model: queryModel, dims: queryDims, embedding_profile: queryProfile, degraded: true, error: "index_stale" };
+    }
 
     store?.usageEvent?.({ eventType: "memory_search" });
     const scored = [];
     for (const [index, item] of candidates.entries()) {
       const values = vectors.get(index);
       if (!values) continue;
+      const profileMismatch = item.kind.endsWith("_v2")
+        ? item.row.embedding_profile !== queryProfile
+        : item.row.model_id !== queryModel;
+      if (values.length !== queryVector.length || profileMismatch) {
+        this.#scheduleReindex(store);
+        continue;
+      }
       const similarity = dot(queryVector, values);
+      if (!Number.isFinite(similarity)) continue;
       const row = item.row;
       const confirmed = Number(row.confirmed_count ?? 0);
       const failed = Number(row.failed_count ?? 0);
@@ -137,6 +155,13 @@ export class EmbedQueue {
       threshold,
       degraded: scored.length === 0,
     };
+  }
+
+  #scheduleReindex(store) {
+    if (this.reindexPromise || !store?.open || !this.embed) return;
+    this.reindexPromise = Promise.resolve(store.reindex({ embed: this.embed }))
+      .catch((error) => store?.noteEmbeddingFailure?.(error))
+      .finally(() => { this.reindexPromise = null; });
   }
 
   close() {
