@@ -6,10 +6,18 @@ import test from "node:test";
 import { z } from "zod";
 import { AgentBrowserRuntime } from "../../src/core/runtime.js";
 import { ArtifactStore } from "../../src/core/artifacts.js";
+import { MemoryStore } from "../../native-host/src/memory/store.js";
 
 function fakeRuntime() {
   const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-runtime-test-")) });
-  const runtime = new AgentBrowserRuntime({ artifactStore: store });
+  const runtime = new AgentBrowserRuntime({
+    artifactStore: store,
+    hostRequest: async (method) => {
+      if (method === "semantic.status") return { settings: {} };
+      if (method === "memory.stats") return { enabled: false };
+      return {};
+    },
+  });
   runtime.executed = [];
   runtime.selectProfile = async (session) => {
     session.profileId = "profile-1";
@@ -64,18 +72,20 @@ test("approval follow-up rejects retransmitted or changed action chains", async 
 test("memory replay refuses a recipe whose actions differ from the live request", async () => {
   const runtime = fakeRuntime();
   const events = [];
-  runtime.memoryReader = () => ({
-    meta: { enabled: "true" },
-    search: async () => ({ results: [{ kind: "chain_v2", id: 7, confidence: 0.9, steps: [{ action: "hover", target_label: "Submit" }] }] }),
-    usageEvent: (event) => events.push(event),
-  });
+  runtime.hostRequest = async (method, params) => {
+    if (method === "memory.stats") return { enabled: true };
+    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 7, confidence: 0.9, steps: [{ action: "hover", target_label: "Submit", hostname: "example.com" }] }] };
+    if (method === "memory.usageEvent") { events.push(params); return {}; }
+    return {};
+  };
+  runtime.memoryHostname = async () => "example.com";
   try {
     const replay = await runtime.tryMemoryReplay(
       { memoryIntent: "submit", steps: [{ action: "click", target: { query: "Submit" } }] },
       runtime.getSession("memory-mismatch"),
       42,
     );
-    assert.equal(replay, null);
+    assert.equal(replay.fallback, true);
     assert.deepEqual(runtime.executed, []);
     assert.equal(events.at(-1).reason, "recipe_mismatch");
   } finally {
@@ -88,6 +98,9 @@ test("high-level memory records use the live tab hostname", async () => {
   let recorded;
   runtime.invoke = async (name, args) => {
     if (name === "browser_get_tab") return { id: 42, url: "https://checkout.example.com/cart?token=secret" };
+    return {};
+  };
+  runtime.hostRequest = async (name, args) => {
     if (name === "memory.recordStep") recorded = args;
     return {};
   };
@@ -103,6 +116,136 @@ test("high-level memory records use the live tab hostname", async () => {
       errorCode: null,
     }, session);
     assert.equal(recorded.hostname, "checkout.example.com");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("one high-level action creates one v2 record and no legacy signature", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-v2-boundary-"));
+  const memory = new MemoryStore({ root });
+  memory.enable();
+  const runtime = fakeRuntime();
+  runtime.hostRequest = async (method, params) => {
+    if (method === "memory.stats") return memory.status();
+    if (method === "memory.recordStep") return memory.recordStep(params);
+    if (method === "memory.finalizeChain") return memory.finalizeChain(params);
+    if (method === "semantic.status") return { settings: {} };
+    return {};
+  };
+  runtime.invoke = async (name) => name === "browser_get_tab" ? { id: 42, url: "https://example.com/page" } : {};
+  try {
+    const result = await runtime.run({ sessionId: "one-v2", steps: [{ action: "click", target: { query: "Open menu" } }] });
+    assert.equal(result.ok, true);
+    const status = memory.status();
+    assert.equal(status.counts.actions_v2, 1);
+    assert.equal(status.counts.executions_v2, 1);
+    assert.equal(status.counts.signatures, 0);
+  } finally {
+    runtime.close();
+    memory.close();
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* Windows can release SQLite handles asynchronously. */ }
+  }
+});
+
+test("semantic preferences and memory writes use the native-host boundary", async () => {
+  const methods = [];
+  const runtime = fakeRuntime();
+  runtime.hostRequest = async (method) => {
+    methods.push(method);
+    if (method === "semantic.status") return { settings: { agentResultCount: 9, agentResultDetail: "compact", strategyPreference: "lexical" } };
+    return {};
+  };
+  runtime.memoryHostname = async () => "example.com";
+  try {
+    const session = runtime.getSession("host-boundary");
+    session.profileId = "profile-1";
+    assert.deepEqual(await runtime.searchPreferences(session), { maxResults: 9, detail: "compact", mode: "lexical" });
+    await runtime.recordMemoryStep({ chainId: "c", position: 0, step: { action: "click", target: { query: "Go" } }, tabId: 42, success: true, durationMs: 1 }, session);
+    await runtime.requestHost("memory.finalizeChain", { chainId: "c", success: true }, session);
+    await runtime.requestHost("memory.search", { query: "go" }, session);
+    await runtime.requestHost("memory.usageEvent", { eventType: "replay_started" }, session);
+    assert.deepEqual(methods, ["semantic.status", "memory.recordStep", "memory.finalizeChain", "memory.search", "memory.usageEvent"]);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("memory replay is hostname-scoped and uses normal settling", async () => {
+  const events = [];
+  const runtime = fakeRuntime();
+  let settled = 0;
+  runtime.memoryHostname = async () => "example.com";
+  runtime.settleStep = async () => { settled += 1; return { settled: true }; };
+  runtime.hostRequest = async (method, params) => {
+    if (method === "memory.stats") return { enabled: true };
+    if (method === "memory.search") {
+      assert.equal(params.hostname, "example.com");
+      return { results: [{ kind: "chain_v2", id: 12, confidence: 0.95, steps: [{ action: "click", hostname: "example.com", target_label: "Open menu" }] }] };
+    }
+    if (method === "memory.usageEvent") events.push(params.eventType);
+    return {};
+  };
+  try {
+    const result = await runtime.tryMemoryReplay({ memoryIntent: "open", steps: [{ action: "click", target: { query: "Open menu" } }] }, runtime.getSession("replay-settle"), 42);
+    assert.equal(result.used, true);
+    assert.equal(settled, 1);
+    assert.deepEqual(events, ["replay_started", "replay_succeeded"]);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("memory replay rejects cross-host and newly risky bound targets", async () => {
+  const runtime = fakeRuntime();
+  const events = [];
+  runtime.memoryHostname = async () => "safe.example";
+  let remembered = { action: "click", hostname: "other.example", target_label: "Open" };
+  runtime.hostRequest = async (method, params) => {
+    if (method === "memory.stats") return { enabled: true };
+    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 5, confidence: 0.99, steps: [remembered] }] };
+    if (method === "memory.usageEvent") events.push(params.reason);
+    return {};
+  };
+  try {
+    const crossHost = await runtime.tryMemoryReplay({ memoryIntent: "open", steps: [{ action: "click", target: { query: "Open" } }] }, runtime.getSession("cross-host"), 42);
+    assert.equal(crossHost.fallback, true);
+    assert.equal(events.at(-1), "recipe_mismatch");
+
+    remembered = { action: "click", hostname: "safe.example", target_label: "Submit payment" };
+    const risky = await runtime.tryMemoryReplay({ memoryIntent: "continue", steps: [{ action: "click", target: { selector: "#continue" } }] }, runtime.getSession("bound-risk"), 42);
+    assert.equal(risky.fallback, true);
+    assert.equal(events.at(-1), "approval_required");
+    assert.deepEqual(runtime.executed, []);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("memory replay stops after a completed mutation instead of falling through", async () => {
+  const runtime = fakeRuntime();
+  runtime.memoryHostname = async () => "example.com";
+  runtime.hostRequest = async (method) => {
+    if (method === "memory.stats") return { enabled: true };
+    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 8, confidence: 0.99, steps: [
+      { action: "click", hostname: "example.com", target_label: "Open" },
+      { action: "find", hostname: "example.com", target_label: "Missing" },
+    ] }] };
+    return {};
+  };
+  runtime.executeStep = async (step) => {
+    runtime.executed.push(step.action);
+    if (step.action === "find") throw new Error("target missing");
+    return {};
+  };
+  try {
+    const result = await runtime.tryMemoryReplay({ memoryIntent: "open then find", steps: [
+      { action: "click", target: { query: "Open" } },
+      { action: "find", target: { query: "Missing" } },
+    ] }, runtime.getSession("partial-replay"), 42);
+    assert.equal(result.used, true);
+    assert.equal(result.failed, true);
+    assert.deepEqual(runtime.executed, ["click", "find"]);
   } finally {
     runtime.close();
   }

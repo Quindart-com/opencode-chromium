@@ -64,8 +64,7 @@ agent request and is never persisted. Search queries are embedded for the
 lookup and never stored; searchable chain text is generated purely from the
 privacy-safe structured fields. There is no encryption because there is
 nothing personal to protect: the record is a what/where/result log, not a
-transcript. Export (`memory export`) produces a shareable JSON snapshot of the
-same bounded metadata; delete (`memory delete --yes`) permanently removes the
+transcript. Delete (`memory delete --yes`) permanently removes the
 database. Confirmed actions are never auto-purged; stale failed lessons are
 cleaned up automatically per the quota and purge settings shown in the Action
 Memory dashboard (extension popup → Action Memory).

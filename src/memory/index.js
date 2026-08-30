@@ -1,6 +1,5 @@
 export {
   MemoryStore,
-  MemoryCapture,
   EmbedQueue,
   openMemoryStore,
   buildSignature,

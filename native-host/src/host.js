@@ -10,7 +10,7 @@ import { RpcRelay } from "./rpc-relay.js";
 import { handleSemanticHostMethod, embedMemoryTexts } from "./semantic-search.js";
 import { handleVisualHostMethod } from "./visual-map.js";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.js";
-import { EmbedQueue, MemoryCapture, MemoryStore } from "./memory/index.js";
+import { EmbedQueue, MemoryStore } from "./memory/index.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
 const PROTOCOL_VERSION = "1";
@@ -53,20 +53,22 @@ const memoryQueue = new EmbedQueue({
 });
 memoryQueue.setQueryEmbedder(async (query) => {
   const result = await embedMemoryTexts([query]);
-  return result?.vectors?.[0] ?? null;
+  return {
+    vector: result?.vectors?.[0] ?? null,
+    model: result?.model ?? null,
+    dims: result?.dims ?? null,
+    embeddingProfile: result?.embeddingProfile ?? null,
+  };
 });
 try {
   memoryStore = new MemoryStore({ embedQueue: memoryQueue });
 } catch (error) {
   log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
-const memoryCapture = memoryStore ? new MemoryCapture({ store: memoryStore }) : null;
-
 const relay = new RpcRelay({
   state,
   extensionWriter: (message) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
-  memory: memoryCapture,
   localHandler: async (method, params) => {
     const semantic = await handleSemanticHostMethod(method, params);
     if (semantic !== undefined) return semantic;
@@ -87,6 +89,7 @@ function handleMemoryHostMethod(method, params = {}) {
     return { error: "memory_storage_unavailable" };
   }
   if (method === "memory.stats") return memoryStore.status();
+  if (method === "memory.query") return memoryStore.query(params);
   if (method === "memory.search") return memoryStore.search(params);
   if (method === "memory.configure") return memoryStore.configure(params);
   if (method === "memory.prune") return memoryStore.prune(params);
@@ -94,13 +97,11 @@ function handleMemoryHostMethod(method, params = {}) {
   if (method === "memory.disable") return memoryStore.disable();
   if (method === "memory.pause") return memoryStore.pause();
   if (method === "memory.resume") return memoryStore.resume();
-  if (method === "memory.export") return memoryStore.exportJson();
-  if (method === "memory.import") return memoryStore.importJson(params);
   if (method === "memory.recordStep") return memoryStore.recordStep(params);
   if (method === "memory.finalizeChain") return memoryStore.finalizeChain(params);
   if (method === "memory.usageEvent") return memoryStore.usageEvent(params);
   if (method === "memory.reindex") return memoryStore.reindex({ embed: (texts) => embedMemoryTexts(texts) });
-  return undefined;
+  throw new Error(`Unsupported memory method: ${method}`);
 }
 
 function log(message) {

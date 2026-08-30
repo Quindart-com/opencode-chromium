@@ -48,7 +48,6 @@ export default function MemoryView(): React.JSX.Element {
   const [status, setStatus] = useState<MemoryStatus | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryFeedback, setMemoryFeedback] = useState("");
-  const [shareFeedback, setShareFeedback] = useState("");
   const [quotaValue, setQuotaValue] = useState(100);
   const [purgeDays, setPurgeDays] = useState(7);
   const quotaTimer = useRef<number | null>(null);
@@ -123,7 +122,8 @@ export default function MemoryView(): React.JSX.Element {
   const quotaFill = Math.min(100, (bytesUsed / Math.max(1, quotaBytes)) * 100);
   const enabled = status?.enabled === true;
   const powerUser = status?.power_user === true;
-  const executions = counts.confirmed_total + counts.failed_total;
+  const executions = counts.executions_v2 ?? 0;
+  const negativeActions = counts.negative_actions_v2 ?? 0;
   const stateLine = status
     ? enabled
       ? `${v2Actions} unique actions, ${v2Chains} recipes.`
@@ -140,10 +140,10 @@ export default function MemoryView(): React.JSX.Element {
 
   const secondaryStats = useMemo(() => [
     ["memory-executions", executions, "total executions"],
-    ["memory-negatives", counts.failure_contexts, "negative lessons"],
+    ["memory-negatives", negativeActions, "negative lessons"],
     ["memory-indexed", indexed, "indexed"],
     ["memory-awaiting", unindexed, unindexed === 1 ? "awaiting index" : "awaiting index"],
-  ] as const, [executions, counts.failure_contexts, indexed, unindexed]);
+  ] as const, [executions, negativeActions, indexed, unindexed]);
 
   const healthLine = useMemo(() => {
     if (!status) return "";
@@ -238,45 +238,6 @@ export default function MemoryView(): React.JSX.Element {
         <MemoryChart daily={status?.recent_daily} />
       </div>
 
-      <div className="card memory-card">
-        <div className="memory-head">
-          <div>
-            <h2>Share memory</h2>
-            <span className="memory-state-line">Snapshots contain no personal page content.</span>
-          </div>
-        </div>
-        <div className="memory-actions">
-          <button id="export-json" className="button" type="button" disabled={!status || memoryBusy} onClick={async () => {
-            try {
-              const payload = await memoryCall<unknown>("memory.export");
-              const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-              const anchor = document.createElement("a");
-              anchor.href = url;
-              anchor.download = `action-memory-${new Date().toISOString().slice(0, 10)}.json`;
-              anchor.click();
-              URL.revokeObjectURL(url);
-              setShareFeedback("Exported your memory snapshot.");
-            } catch (error) {
-              setShareFeedback(errorMessage(error));
-            }
-          }}>Export JSON</button>
-          <label className="button file-button" htmlFor="import-json">Import JSON</label>
-          <input id="import-json" type="file" accept="application/json" hidden onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            try {
-              const result = await memoryCall<{ imported: number }>("memory.import", JSON.parse(await file.text()));
-              setShareFeedback(`Imported ${result.imported} signatures.`);
-              await refreshMemory();
-            } catch (error) {
-              setShareFeedback(`Import failed: ${errorMessage(error)}`);
-            } finally {
-              event.target.value = "";
-            }
-          }} />
-        </div>
-        <p id="share-feedback" className="feedback" role="status">{shareFeedback}</p>
-      </div>
     </section>
   );
 }

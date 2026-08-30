@@ -52,7 +52,10 @@ function lexicalVectors(dims = 64) {
     });
     return { model: "fixture-lexical", dims, vectors, embeddingProfile: "fixture-lexical:q8:d64:prompt-v1" };
   };
-  return { embed, query: async (query) => (await embed([query])).vectors[0] };
+  return { embed, query: async (query) => {
+    const result = await embed([query]);
+    return { vector: result.vectors[0], model: result.model, dims: result.dims, embeddingProfile: result.embeddingProfile };
+  } };
 }
 
 function openMemory() {
@@ -231,6 +234,92 @@ test("embedding queue drops are counted once", () => {
   store.enable();
   store.recordStep({ action: "click", target: { label: "Go" } });
   assert.equal(Number(store.meta.embedding_queue_drops), 1);
+  store.close();
+  removeRoot(root);
+});
+
+test("canonical v2 chains reinforce duplicates and preserve correction lineage", () => {
+  const { store, root } = openMemory();
+  for (const chainId of ["first-run", "second-run"]) {
+    store.recordStep({ chainId, position: 0, action: "click", hostname: "example.com", target: { label: "Start", role: "button" }, success: true });
+    store.recordStep({ chainId, position: 1, action: "fill", hostname: "example.com", target: { label: "Name", role: "textbox" }, success: true });
+  }
+  const first = store.finalizeChain({ chainId: "first-run", success: true });
+  const second = store.finalizeChain({ chainId: "second-run", success: true });
+  assert.equal(first.chainId, second.chainId);
+  assert.equal(store.status().counts.chains_v2, 1);
+  assert.equal(store.db.prepare("SELECT confirmed_count FROM memory_chains_v2 WHERE id = ?").get(first.chainId).confirmed_count, 2);
+
+  store.recordStep({ chainId: "corrected", position: 0, action: "click", hostname: "example.com", target: { label: "Start", role: "button" }, success: true });
+  store.recordStep({ chainId: "corrected", position: 1, action: "click", hostname: "example.com", target: { label: "Continue", role: "button" }, success: true });
+  const corrected = store.finalizeChain({ chainId: "corrected", success: true, supersedes: first.chainId });
+  assert.equal(store.db.prepare("SELECT replaced_by FROM memory_chains_v2 WHERE id = ?").get(first.chainId).replaced_by, corrected.chainId);
+  assert.equal(store.db.prepare("SELECT supersedes FROM memory_chains_v2 WHERE id = ?").get(corrected.chainId).supersedes, first.chainId);
+  store.close();
+  removeRoot(root);
+});
+
+test("replay lifecycle and v2 execution metrics exclude rejected candidates", () => {
+  const { store, root } = openMemory();
+  store.recordStep({ action: "click", hostname: "example.com", target: { label: "Go" }, success: true });
+  store.recordStep({ action: "fill", hostname: "example.com", target: { label: "Name" }, success: false });
+  store.usageEvent({ eventType: "replay_rejected", reason: "below_confidence" });
+  store.usageEvent({ eventType: "replay_started", chainId: 1 });
+  store.usageEvent({ eventType: "replay_succeeded", chainId: 1, success: true, stepsReused: 2 });
+  const status = store.status();
+  assert.equal(status.counts.executions_v2, 2);
+  assert.equal(status.counts.failed_executions_v2, 1);
+  assert.equal(status.counts.negative_actions_v2, 1);
+  assert.equal(status.usage.replay_attempts, 1);
+  assert.equal(status.usage.replay_fallbacks, 1);
+  assert.equal(status.usage.replay_success_rate, 100);
+  assert.equal(status.usage.steps_reused, 2);
+  store.close();
+  removeRoot(root);
+});
+
+test("same-host v2 fragments merge only across a two-step exact overlap", () => {
+  const { store, root } = openMemory();
+  const add = (chainId, labels) => {
+    labels.forEach((label, position) => store.recordStep({ chainId, position, action: "click", hostname: "example.com", target: { label, role: "button" }, success: true }));
+    return store.finalizeChain({ chainId, success: true });
+  };
+  const first = add("fragment-a", ["A", "B", "C"]);
+  const second = add("fragment-b", ["B", "C", "D"]);
+  const head = store.db.prepare("SELECT id, recipe_json, merged_of FROM memory_chains_v2 WHERE replaced_by IS NULL").get();
+  assert.ok(head.id !== first.chainId || head.id !== second.chainId);
+  assert.deepEqual(JSON.parse(head.recipe_json).map((step) => step.target_label), ["A", "B", "C", "D"]);
+  const parents = JSON.parse(head.merged_of);
+  assert.equal(parents.length, 2);
+  assert.equal(parents[0], first.chainId);
+  store.close();
+  removeRoot(root);
+});
+
+test("embedding identity mismatch returns index_stale and reindexes before search", async () => {
+  const root = tempRoot();
+  let profile = "fixture-old:q8:d64:prompt-v1";
+  let model = "fixture-old";
+  const base = lexicalVectors();
+  const embed = async (texts) => ({ ...(await base.embed(texts)), model, embeddingProfile: profile });
+  const queue = new EmbedQueue({ embed });
+  queue.setQueryEmbedder(async (query) => {
+    const result = await embed([query]);
+    return { vector: result.vectors[0], model: result.model, dims: result.dims, embeddingProfile: result.embeddingProfile };
+  });
+  const store = new MemoryStore({ root, embedQueue: queue });
+  queue.onResults = (rows, nextModel, dims, embeddingProfile) => store.applyEmbeddings(rows, nextModel, dims, embeddingProfile);
+  store.enable();
+  store.recordStep({ action: "click", hostname: "example.com", target: { label: "Go" }, success: true });
+  await queue.flush();
+  profile = "fixture-next:q8:d64:prompt-v1";
+  model = "fixture-next";
+  const stale = await store.search({ query: "click go" });
+  assert.equal(stale.error, "index_stale");
+  await queue.reindexPromise;
+  const recovered = await store.search({ query: "click go" });
+  assert.notEqual(recovered.error, "index_stale");
+  assert.equal(store.meta.embedding_profile, profile);
   store.close();
   removeRoot(root);
 });

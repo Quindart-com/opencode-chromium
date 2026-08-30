@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { MemoryCapture, MemoryStore, appendOverlap, composeChainFor, correctChainStep, mergeChains } from "../../native-host/src/memory/index.js";
+import { MemoryStore, appendOverlap, composeChainFor, correctChainStep, mergeChains } from "../../native-host/src/memory/index.js";
 
 function removeRoot(root) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -47,28 +47,6 @@ test("chain recording captures ordered steps and confirms counters", () => {
   const list = store.chainsList();
   assert.equal(list.chains.length, 1);
   assert.equal(list.chains[0].head, true);
-  store.close();
-  removeRoot(root);
-});
-
-test("capture derives labels and hostnames from relay messages", () => {
-  const { store, root } = openMemory();
-  const capture = new MemoryCapture({ store });
-  const captureRecord = capture.startAgentRequest({
-    id: 7,
-    method: "inputGesture",
-    params: { session_id: "s9", tabId: 5, memory_label: "Save", memory_chain_id: "chain-9", memory_step_index: 3 },
-  });
-  assert.ok(captureRecord);
-  capture.noteResponse({ result: { tabs: [{ id: 5, url: "https://docs.example.com/page?q=1", title: "Docs — Example" }] } });
-  capture.completeAgentRequest(captureRecord, true);
-  const events = store.query({ sessionId: "s9" });
-  assert.equal(events.events.length, 1);
-  assert.equal(events.events[0].hostname, "docs.example.com");
-  assert.equal(events.events[0].label, "Save");
-  const chain = store.chainShow("chain-9");
-  assert.equal(chain.chain.steps[0].position, 3);
-  capture.close();
   store.close();
   removeRoot(root);
 });

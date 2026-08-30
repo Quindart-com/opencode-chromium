@@ -39,6 +39,47 @@ function isoNow() {
   return new Date().toISOString();
 }
 
+function canonicalV2Steps(steps) {
+  return steps
+    .slice()
+    .sort((first, second) => (first.position ?? 0) - (second.position ?? 0))
+    .map((step, position) => ({
+      position,
+      action: step.action ?? null,
+      hostname: step.hostname ?? null,
+      target_label: step.target_label ?? null,
+      target_role: step.target_role ?? null,
+      selector: step.selector ?? null,
+      requiresRuntimeValue: step.requiresRuntimeValue === true,
+      requiresRuntimeUrl: step.requiresRuntimeUrl === true,
+      success: step.success === true,
+    }));
+}
+
+function recipeIdentity(step) {
+  return JSON.stringify([
+    step.action, step.hostname, step.target_label, step.target_role, step.selector,
+    step.requiresRuntimeValue === true, step.requiresRuntimeUrl === true,
+  ]);
+}
+
+function mergeV2Overlap(first, second) {
+  const maximum = Math.min(first.length, second.length);
+  for (let size = maximum; size >= 2; size -= 1) {
+    const firstSuffix = first.slice(-size).map(recipeIdentity);
+    const secondPrefix = second.slice(0, size).map(recipeIdentity);
+    if (firstSuffix.every((value, index) => value === secondPrefix[index])) {
+      return canonicalV2Steps([...first, ...second.slice(size)]);
+    }
+    const secondSuffix = second.slice(-size).map(recipeIdentity);
+    const firstPrefix = first.slice(0, size).map(recipeIdentity);
+    if (secondSuffix.every((value, index) => value === firstPrefix[index])) {
+      return canonicalV2Steps([...second, ...first.slice(size)]);
+    }
+  }
+  return null;
+}
+
 export class MemoryStore {
   constructor({ root = null, embedQueue = null } = {}) {
     this.root = root ?? path.resolve(memoryRootDir());
@@ -249,7 +290,7 @@ export class MemoryStore {
     this.db.prepare("UPDATE memory_chains_v2 SET recipe_json = ?, last_seen = ? WHERE id = ?").run(JSON.stringify(steps), now, existing.id);
   }
 
-  finalizeChain({ chainId = null, success = true, durationMs = null } = {}) {
+  finalizeChain({ chainId = null, success = true, durationMs = null, supersedes = null } = {}) {
     if (!this.#v2Gate() || chainId == null) return { accepted: false };
     const fingerprint = shortFingerprint(`chain:${chainId}`);
     const chain = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
@@ -260,23 +301,59 @@ export class MemoryStore {
     } catch {
       steps = [];
     }
+    steps = canonicalV2Steps(steps);
     const hostname = steps.find((step) => step.hostname)?.hostname ?? null;
     const summary = chainSearchText(hostname, steps).slice(0, 256);
     const now = isoNow();
-    this.db.prepare("UPDATE memory_chains_v2 SET safe_summary = ?, confirmed_count = confirmed_count + ?, failed_count = failed_count + ?, last_seen = ? WHERE id = ?")
-      .run(summary, success ? 1 : 0, success ? 0 : 1, now, chain.id);
-    this.#queueEmbedV2("chain", fingerprint, summary);
-    this.#recordUsageEvent({ eventType: "chain_recorded", chainId: chain.id, success, durationMs, stepsReused: steps.length });
-    return { accepted: true, chainId: chain.id, steps: steps.length, summary };
+    const canonicalFingerprint = shortFingerprint(`chain:v2:${JSON.stringify(steps.map((step) => ({ ...step, success: undefined })))}`);
+    const existing = this.db.prepare("SELECT id FROM memory_chains_v2 WHERE fingerprint = ?").get(canonicalFingerprint);
+    let finalizedId = chain.id;
+    if (existing && existing.id !== chain.id) {
+      this.db.prepare("UPDATE memory_chains_v2 SET confirmed_count = confirmed_count + ?, failed_count = failed_count + ?, last_seen = ? WHERE id = ?")
+        .run(success ? 1 : 0, success ? 0 : 1, now, existing.id);
+      this.db.prepare("DELETE FROM memory_chains_v2 WHERE id = ?").run(chain.id);
+      finalizedId = existing.id;
+    } else {
+      this.db.prepare("UPDATE memory_chains_v2 SET fingerprint = ?, safe_summary = ?, recipe_json = ?, confirmed_count = confirmed_count + ?, failed_count = failed_count + ?, last_seen = ? WHERE id = ?")
+        .run(canonicalFingerprint, summary, JSON.stringify(steps), success ? 1 : 0, success ? 0 : 1, now, chain.id);
+    }
+    if (success && Number.isInteger(supersedes) && supersedes !== finalizedId) {
+      this.db.prepare("UPDATE memory_chains_v2 SET replaced_by = ? WHERE id = ? AND replaced_by IS NULL").run(finalizedId, supersedes);
+      this.db.prepare("UPDATE memory_chains_v2 SET supersedes = COALESCE(supersedes, ?) WHERE id = ?").run(supersedes, finalizedId);
+    }
+    if (success) finalizedId = this.#mergeCompatibleV2Head(finalizedId, now);
+    const finalized = this.db.prepare("SELECT fingerprint, safe_summary, recipe_json FROM memory_chains_v2 WHERE id = ?").get(finalizedId);
+    this.#queueEmbedV2("chain", finalized?.fingerprint ?? canonicalFingerprint, finalized?.safe_summary ?? summary);
+    this.#recordUsageEvent({ eventType: "chain_recorded", chainId: finalizedId, success, durationMs, stepsReused: steps.length });
+    return { accepted: true, chainId: finalizedId, steps: steps.length, summary: finalized?.safe_summary ?? summary };
   }
 
-  markChainSuperseded({ chainId = null, supersededBy = null } = {}) {
-    if (chainId == null) return { accepted: false };
-    const fingerprint = shortFingerprint(`chain:${chainId}`);
-    const chain = this.db.prepare("SELECT id FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
-    if (!chain) return { accepted: false };
-    this.db.prepare("UPDATE memory_chains_v2 SET replaced_by = ? WHERE id = ?").run(supersededBy ?? chain.id, chain.id);
-    return { accepted: true };
+  #mergeCompatibleV2Head(chainId, now) {
+    const current = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE id = ? AND replaced_by IS NULL").get(chainId);
+    if (!current) return chainId;
+    const currentSteps = canonicalV2Steps(JSON.parse(current.recipe_json ?? "[]"));
+    const hostname = currentSteps[0]?.hostname ?? null;
+    if (!hostname) return chainId;
+    const candidates = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE id != ? AND replaced_by IS NULL").all(chainId);
+    for (const candidate of candidates) {
+      const candidateSteps = canonicalV2Steps(JSON.parse(candidate.recipe_json ?? "[]"));
+      if (candidateSteps[0]?.hostname !== hostname) continue;
+      const merged = mergeV2Overlap(candidateSteps, currentSteps);
+      if (!merged || merged.length > MAX_CHAIN_STEPS || merged.length <= Math.max(candidateSteps.length, currentSteps.length)) continue;
+      const mergedFingerprint = shortFingerprint(`chain:v2:${JSON.stringify(merged.map((step) => ({ ...step, success: undefined })))}`);
+      const summary = chainSearchText(hostname, merged).slice(0, 256);
+      let mergedRow = this.db.prepare("SELECT id, replaced_by FROM memory_chains_v2 WHERE fingerprint = ?").get(mergedFingerprint);
+      if (mergedRow?.replaced_by != null) continue;
+      if (!mergedRow) {
+        this.db.prepare("INSERT INTO memory_chains_v2 (fingerprint, safe_summary, recipe_json, confirmed_count, merged_of, first_seen, last_seen) VALUES (?, ?, ?, 1, ?, ?, ?)")
+          .run(mergedFingerprint, summary, JSON.stringify(merged), JSON.stringify([candidate.id, current.id]), now, now);
+        mergedRow = this.db.prepare("SELECT id FROM memory_chains_v2 WHERE fingerprint = ?").get(mergedFingerprint);
+      }
+      this.db.prepare("UPDATE memory_chains_v2 SET replaced_by = ? WHERE id IN (?, ?) AND id != ?").run(mergedRow.id, candidate.id, current.id, mergedRow.id);
+      this.db.prepare("UPDATE memory_chains_v2 SET supersedes = COALESCE(supersedes, ?) WHERE id = ?").run(current.id, mergedRow.id);
+      return mergedRow.id;
+    }
+    return chainId;
   }
 
   #queueEmbedV2(kind, fingerprint, text) {
@@ -318,8 +395,8 @@ export class MemoryStore {
       ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL OR embedding_profile IS NOT ?").get(activeProfile).n
       : this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL").get().n;
     const chains = activeProfile
-      ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE embedding IS NULL OR embedding_profile IS NOT ?").get(activeProfile).n
-      : this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE embedding IS NULL").get().n;
+      ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE safe_summary != '' AND (embedding IS NULL OR embedding_profile IS NOT ?)").get(activeProfile).n
+      : this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE safe_summary != '' AND embedding IS NULL").get().n;
     return { unindexed_actions: actions, unindexed_chains: chains };
   }
 
@@ -445,7 +522,10 @@ export class MemoryStore {
     const counts = this.db.prepare(
       "SELECT (SELECT COUNT(*) FROM signatures) AS signatures, (SELECT COUNT(*) FROM chains) AS chains, (SELECT COUNT(*) FROM failure_contexts) AS failure_contexts, " +
         "(SELECT COALESCE(SUM(confirmed_count), 0) FROM signatures) AS confirmed, (SELECT COALESCE(SUM(failed_count), 0) FROM signatures) AS failed, " +
-        "(SELECT COUNT(*) FROM memory_actions_v2) AS actions_v2, (SELECT COUNT(*) FROM memory_chains_v2 WHERE replaced_by IS NULL) AS chains_v2, " +
+        "(SELECT COUNT(*) FROM memory_actions_v2) AS actions_v2, (SELECT COUNT(*) FROM memory_chains_v2 WHERE replaced_by IS NULL AND safe_summary != '') AS chains_v2, " +
+        "(SELECT COUNT(*) FROM memory_usage_events WHERE event_type = 'action_recorded') AS executions_v2, " +
+        "(SELECT COUNT(*) FROM memory_usage_events WHERE event_type = 'action_recorded' AND success = 0) AS failed_executions_v2, " +
+        "(SELECT COUNT(*) FROM memory_actions_v2 WHERE failed_count > 0) AS negative_actions_v2, " +
         "(SELECT COUNT(*) FROM memory_usage_events) AS usage_events",
     ).get();
     const usage = this.usageMetrics();
@@ -484,6 +564,9 @@ export class MemoryStore {
         failed_total: counts.failed,
         actions_v2: counts.actions_v2,
         chains_v2: counts.chains_v2,
+        executions_v2: counts.executions_v2,
+        failed_executions_v2: counts.failed_executions_v2,
+        negative_actions_v2: counts.negative_actions_v2,
         usage_events: counts.usage_events,
         ...unindexed,
       },
@@ -498,15 +581,16 @@ export class MemoryStore {
       "SELECT " +
         "SUM(CASE WHEN event_type = 'memory_search' THEN 1 ELSE 0 END) AS search_queries, " +
         "SUM(CASE WHEN event_type = 'matches_returned' THEN steps_reused ELSE 0 END) AS matches_returned, " +
-        "SUM(CASE WHEN event_type = 'replay_attempt' THEN 1 ELSE 0 END) AS replay_attempts, " +
-        "SUM(CASE WHEN event_type = 'replay_attempt' AND success = 1 THEN 1 ELSE 0 END) AS replay_successes, " +
-        "SUM(CASE WHEN event_type = 'replay_attempt' AND success = 0 THEN 1 ELSE 0 END) AS replay_failures, " +
-        "SUM(CASE WHEN event_type = 'replay_fallback' THEN 1 ELSE 0 END) AS replay_fallbacks, " +
-        "SUM(CASE WHEN event_type = 'replay_attempt' THEN COALESCE(steps_reused, 0) ELSE 0 END) AS steps_reused " +
+        "SUM(CASE WHEN event_type = 'replay_started' THEN 1 ELSE 0 END) AS replay_attempts, " +
+        "SUM(CASE WHEN event_type = 'replay_succeeded' THEN 1 ELSE 0 END) AS replay_successes, " +
+        "SUM(CASE WHEN event_type = 'replay_failed' THEN 1 ELSE 0 END) AS replay_failures, " +
+        "SUM(CASE WHEN event_type = 'replay_rejected' THEN 1 ELSE 0 END) AS replay_fallbacks, " +
+        "SUM(CASE WHEN event_type IN ('replay_succeeded', 'replay_failed') THEN COALESCE(steps_reused, 0) ELSE 0 END) AS steps_reused " +
         "FROM memory_usage_events",
     ).get();
-    const attempts = Number(totals.replay_attempts ?? 0);
     const successes = Number(totals.replay_successes ?? 0);
+    const failures = Number(totals.replay_failures ?? 0);
+    const attempts = successes + failures;
     return {
       search_queries: Number(totals.search_queries ?? 0),
       matches_returned: Number(totals.matches_returned ?? 0),
@@ -536,7 +620,7 @@ export class MemoryStore {
       const day = String(row.occurred_at).slice(0, 10);
       const bucket = byDay.get(day);
       if (!bucket) continue;
-      if (row.event_type === "chain_recorded" || row.event_type === "replay_attempt") {
+      if (row.event_type === "action_recorded") {
         if (row.success === 1) bucket.confirmed += row.n;
         else if (row.success === 0) bucket.failed += row.n;
       }
@@ -571,7 +655,7 @@ export class MemoryStore {
       `SELECT id, fingerprint, action, hostname, target_label, target_role, recipe_json, confirmed_count, failed_count, last_seen, embedding, embedding_profile FROM memory_actions_v2 WHERE ${actionConditions.join(" AND ")}`,
     ).all(...actionParams);
 
-    const chainConditions = ["replaced_by IS NULL"];
+    const chainConditions = ["replaced_by IS NULL", "safe_summary != ''"];
     const chainParams = [];
     if (hostname) { chainConditions.push("EXISTS (SELECT 1 FROM json_each(memory_chains_v2.recipe_json) AS s WHERE json_extract(s.value, '$.hostname') = ?)"); chainParams.push(hostname); }
     if (activeProfile) { chainConditions.push("embedding_profile = ?"); chainParams.push(activeProfile); }
@@ -587,19 +671,22 @@ export class MemoryStore {
       if (hostname) { legacySignatureConditions.push("hostname = ?"); legacyParams.push(hostname); }
       if (modelId) { legacySignatureConditions.push("model_id = ?"); legacyParams.push(modelId); }
       signatureRows = this.db.prepare(
-        `SELECT id, fingerprint, signature, capability, hostname, verb, label, confirmed_count, failed_count, last_seen, source_session, embedding FROM signatures WHERE ${legacySignatureConditions.join(" AND ")}`,
+        `SELECT id, fingerprint, signature, capability, hostname, verb, label, confirmed_count, failed_count, last_seen, source_session, embedding, model_id FROM signatures WHERE ${legacySignatureConditions.join(" AND ")}`,
       ).all(...legacyParams);
       const legacyChainConditions = ["1 = 1"];
       const legacyChainParams = [];
       if (hostname) { legacyChainConditions.push("EXISTS (SELECT 1 FROM json_each(chains.steps_json) AS s WHERE json_extract(s.value, '$.hostname') = ?)"); legacyChainParams.push(hostname); }
       if (modelId) { legacyChainConditions.push("model_id = ?"); legacyChainParams.push(modelId); }
       chainRows = this.db.prepare(
-        `SELECT id, fingerprint, intent, embedding, confirmed_count, failed_count, last_seen, steps_json FROM chains WHERE replaced_by IS NULL AND ${legacyChainConditions.join(" AND ")}`,
+        `SELECT id, fingerprint, intent, embedding, confirmed_count, failed_count, last_seen, steps_json, model_id FROM chains WHERE replaced_by IS NULL AND ${legacyChainConditions.join(" AND ")}`,
       ).all(...legacyChainParams);
       for (const chain of chainRows) {
         if (!chain.embedding) {
           const composed = composeChainEmbeddingFor(this, chain.id);
-          if (composed) chain.embedding = composed;
+          if (composed) {
+            chain.embedding = composed;
+            chain.model_id = this.meta.model_id ?? null;
+          }
         }
       }
     }
@@ -681,7 +768,7 @@ export class MemoryStore {
       // target profile is only known after `embed` returns, so rebuild every
       // live v2 row instead of comparing against the previous profile.
       const staleActions = this.db.prepare("SELECT fingerprint, action, hostname, target_label, target_role FROM memory_actions_v2").all();
-      const staleChains = this.db.prepare("SELECT fingerprint, safe_summary FROM memory_chains_v2 WHERE replaced_by IS NULL").all();
+      const staleChains = this.db.prepare("SELECT fingerprint, safe_summary FROM memory_chains_v2 WHERE replaced_by IS NULL AND safe_summary != ''").all();
       const v2Batch = [
         ...staleActions.map((row) => ({ fingerprint: row.fingerprint, text: chainSearchText(row.hostname, [{ action: row.action, target_role: row.target_role, target_label: row.target_label }]) })),
         ...staleChains.map((row) => ({ fingerprint: row.fingerprint, text: row.safe_summary })),
@@ -846,86 +933,6 @@ export class MemoryStore {
   resume() {
     this.writeMeta("paused", false);
     return this.status();
-  }
-
-  exportJson() {
-    const signatures = this.db.prepare("SELECT signature, capability, hostname, verb, label, confirmed_count, failed_count, source_session, first_seen, last_seen FROM signatures ORDER BY id").all();
-    const chains = this.db.prepare("SELECT fingerprint, intent, steps_json, confirmed_count, failed_count, source_sessions, merged_of, first_seen, last_seen FROM chains ORDER BY id").all();
-    const failures = this.db.prepare(
-      "SELECT fc.error_code, fc.step_index, fc.count, fc.occurred_at, si.signature FROM failure_contexts fc JOIN signatures si ON si.id = fc.signature_id ORDER BY fc.id",
-    ).all();
-    return {
-      profile: STORAGE_PROFILE,
-      schema_version: SCHEMA_VERSION,
-      exported_at: isoNow(),
-      signatures,
-      chains,
-      failures,
-    };
-  }
-
-  importJson(payload) {
-    if (!payload || typeof payload !== "object") throw new Error("Invalid memory export payload.");
-    const now = isoNow();
-    let imported = 0;
-    try {
-      this.db.transaction(() => {
-        const upsert = this.db.prepare(
-          "INSERT INTO signatures (fingerprint, signature, capability, hostname, verb, label, confirmed_count, failed_count, source_session, first_seen, last_seen) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-            "ON CONFLICT(fingerprint) DO UPDATE SET confirmed_count = confirmed_count + excluded.confirmed_count, failed_count = failed_count + excluded.failed_count",
-        );
-        const idByFingerprint = new Map();
-        for (const record of Array.isArray(payload.signatures) ? payload.signatures : []) {
-          const parts = buildSignature({ capability: record.capability ?? record.signature ?? null, hostname: record.hostname ?? null, label: record.label ?? null });
-          const signatureText = typeof record.signature === "string" ? record.signature : parts.signature;
-          const fingerprint = typeof record.fingerprint === "string" ? record.fingerprint : fingerprintFor({ signature: signatureText });
-          upsert.run(
-            fingerprint,
-            signatureText,
-            record.capability ?? parts.capability ?? "unknown",
-            record.hostname ?? parts.hostname,
-            record.verb ?? parts.verb ?? "unknown",
-            record.label ?? parts.label,
-            Number(record.confirmed_count ?? 0),
-            Number(record.failed_count ?? 0),
-            record.source_session ?? null,
-            record.first_seen ?? now,
-            record.last_seen ?? now,
-          );
-          idByFingerprint.set(fingerprint, this.db.prepare("SELECT id FROM signatures WHERE fingerprint = ?").get(fingerprint).id);
-          imported += 1;
-        }
-        const insertFailure = this.db.prepare("INSERT OR IGNORE INTO failure_contexts (signature_id, error_code, step_index, count, occurred_at) VALUES (?, ?, ?, ?, ?)");
-        for (const failure of Array.isArray(payload.failures) ? payload.failures : []) {
-          const parts = buildSignature({ capability: failure.signature ?? null, hostname: null, label: null });
-          const fingerprint = typeof failure.fingerprint === "string" ? failure.fingerprint : fingerprintFor({ signature: parts.signature });
-          const signatureId = idByFingerprint.get(fingerprint);
-          if (!signatureId) continue;
-          insertFailure.run(signatureId, String(failure.error_code ?? "unknown"), failure.step_index ?? null, Number(failure.count ?? 1), failure.occurred_at ?? now);
-        }
-        const insertChain = this.db.prepare(
-          "INSERT INTO chains (fingerprint, intent, steps_json, confirmed_count, failed_count, source_sessions, merged_of, first_seen, last_seen) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET confirmed_count = confirmed_count + excluded.confirmed_count",
-        );
-        for (const chain of Array.isArray(payload.chains) ? payload.chains : []) {
-          insertChain.run(
-            String(chain.fingerprint ?? `imported-${Math.random().toString(36).slice(2)}`),
-            chain.intent ?? null,
-            JSON.stringify(Array.isArray(chain.steps) ? chain.steps : []),
-            Number(chain.confirmed_count ?? 0),
-            Number(chain.failed_count ?? 0),
-            chain.source_sessions ?? null,
-            chain.merged_of ?? null,
-            chain.first_seen ?? now,
-            chain.last_seen ?? now,
-          );
-        }
-      })();
-    } catch {
-      throw new Error("Invalid memory export payload.");
-    }
-    return { imported };
   }
 
   async hardDelete() {

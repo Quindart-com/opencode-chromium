@@ -1363,6 +1363,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 const statusPorts = new Set();
+const POPUP_MEMORY_METHODS = new Set([
+  "memory.stats",
+  "memory.configure",
+  "memory.enable",
+  "memory.disable",
+  "memory.prune",
+  "memory.reindex",
+]);
 
 function broadcastNativeStatus() {
   const payload = { type: "NATIVE_STATUS", status: { ...hostStatus } };
@@ -1389,6 +1397,10 @@ chrome.runtime.onConnect.addListener((port) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "MEMORY_CALL") {
+    if (!POPUP_MEMORY_METHODS.has(message.method)) {
+      sendResponse({ ok: false, error: "Unsupported memory operation" });
+      return false;
+    }
     rpc.connect();
     rpc.request(message.method, message.params ?? {}, { timeoutMs: 60000 })
       .then((result) => sendResponse({ ok: true, result }))

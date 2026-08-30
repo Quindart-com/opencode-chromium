@@ -52,6 +52,7 @@ test("CLI recognizes memory and history aliases", async () => {
   assert.match(cli, /case "prune"/);
   assert.match(cli, /case "chains"/);
   assert.match(cli, /case "delete"/);
+  assert.doesNotMatch(cli, /case "(?:export|import)"|memory (?:export|import)/);
 });
 
 test("consultation policy instructs status-then-search before re-exploration", async () => {
@@ -82,9 +83,12 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
   assert.match(popupSource, /memory\.stats/);
   assert.match(popupSource, /memory\.configure/);
   assert.match(popupSource, /memory\.prune/);
+  assert.doesNotMatch(popupSource, /memory\.(?:export|import)|Export JSON|Import JSON|Share memory/);
   const background = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "background", "runtime.js"), "utf8");
   assert.match(background, /"MEMORY_CALL"/);
+  assert.match(background, /POPUP_MEMORY_METHODS/);
   assert.match(background, /rpc\.request\(message\.method/);
+  assert.doesNotMatch(background, /memory\.(?:export|import)/);
   const backgroundEntrypoint = fs.readFileSync(
     path.join(root, "extension-src", "entrypoints", "background", "index.js"),
     "utf8",
@@ -108,22 +112,17 @@ test("host handles memory extension methods locally", async () => {
   assert.match(host, /memory\.configure/);
   assert.match(host, /memory\.enable/);
   assert.match(host, /memory\.prune/);
+  assert.match(host, /memory\.query/);
+  assert.doesNotMatch(host, /memory\.(?:export|import)/);
   const relay = fs.readFileSync(path.join(root, "native-host", "src", "rpc-relay.js"), "utf8");
-  assert.match(relay, /startAgentRequest/);
-  assert.match(relay, /noteResponse/);
-  assert.match(relay, /completeAgentRequest/);
+  assert.doesNotMatch(relay, /startAgentRequest|noteResponse|completeAgentRequest/);
 });
 
-test("runtime attaches chain metadata to executed steps", () => {
+test("runtime records only high-level steps through the host boundary", () => {
   const runtime = fs.readFileSync(path.join(root, "src", "core", "runtime.js"), "utf8");
-  assert.match(runtime, /memoryStepParams\(step, params, chainId, stepIndex\)/);
-  assert.match(runtime, /memory_chain_id: chainId/);
-  assert.match(runtime, /memory_step_index: stepIndex/);
-  assert.match(runtime, /memory_label: label/);
+  assert.match(runtime, /requestHost\("memory\.recordStep"/);
+  assert.doesNotMatch(runtime, /memory_chain_id|memory_step_index|memory_label/);
   assert.match(runtime, /memoryChainSequence\+\+/);
-  assert.match(runtime, /executeStep\(step, tabId, prior, session, chainId, index\)/);
-  // typed values never become labels: only click/hover/press element text may, and only via a guarded allowlist
-  const labelSource = runtime.slice(runtime.indexOf("memoryStepParams(step, params"), runtime.indexOf("async editTarget"));
-  assert.match(labelSource, /\["click", "doubleClick", "hover", "press"\]/);
-  assert.match(labelSource, /slice\(0, 64\)/);
+  assert.match(runtime, /executeStepWithPolicy/);
+  assert.match(runtime, /target\.query \? null : target\.selector/);
 });

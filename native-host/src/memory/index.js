@@ -1,5 +1,4 @@
 export { MemoryStore, openMemoryStore } from "./store.js";
-export { MemoryCapture } from "./capture.js";
 export { EmbedQueue } from "./embed.js";
 export { buildSignature, fingerprintFor, verbForCapability } from "./signature.js";
 export { sanitizeLabel, safeSelector, sanitizeTarget, chainSearchText } from "./privacy.js";

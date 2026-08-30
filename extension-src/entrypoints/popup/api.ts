@@ -64,6 +64,9 @@ export type MemoryStatus = {
     failed_total: number;
     actions_v2?: number;
     chains_v2?: number;
+    executions_v2?: number;
+    failed_executions_v2?: number;
+    negative_actions_v2?: number;
     usage_events?: number;
     unindexed_actions?: number;
     unindexed_chains?: number;

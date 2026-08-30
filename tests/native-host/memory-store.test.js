@@ -121,28 +121,12 @@ test("bug: labels never leak as signatures themselves", () => {
   removeRoot(root);
 });
 
-test("import and export roundtrip merge by fingerprint", () => {
+test("memory import and export are not exposed", () => {
   const { store, root } = openMemory();
-  store.record({ success: true, capability: "browser.tab.create", hostname: "x.com", label: "Home" });
-  const payload = store.exportJson();
-  assert.ok(payload.signatures.length === 1);
-
-  const importedRoot = tempRoot();
-  const imported = new MemoryStore({ root: importedRoot });
-  imported.enable();
-  const result = imported.importJson(payload);
-  assert.equal(result.imported, 1);
-  const after = imported.status();
-  assert.equal(after.counts.signatures, 1);
-  assert.equal(after.counts.confirmed_total, 1);
-  // merge increments rather than duplicating
-  imported.importJson(payload);
-  assert.equal(imported.status().counts.confirmed_total, 2);
-  assert.equal(imported.status().counts.signatures, 1);
-  imported.close();
+  assert.equal(store.exportJson, undefined);
+  assert.equal(store.importJson, undefined);
   store.close();
   removeRoot(root);
-  removeRoot(importedRoot);
 });
 
 test("configure validates quota, purge days, and power user bounds", () => {
