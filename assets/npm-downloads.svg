@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 220" role="img" aria-label="NPM downloads for opencode-chromium, daily">
   <rect width="680" height="220" rx="12" fill="#ffffff"/>
   <text x="46" y="18" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1f2328">NPM downloads · daily</text>
-  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">157 yesterday</text>
+  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">222 yesterday</text>
   <path d="M46,180.0H656" stroke="#d1d9e0" stroke-width="1.2" stroke-dasharray="none" fill="none"/>
   <text x="38" y="184.0" text-anchor="end" font-size="10.5" fill="#59636e">0</text>
   <path d="M46,102.0H656" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 5" fill="none"/>
@@ -14,11 +14,11 @@
       <stop offset="1" stop-color="rgba(9,105,218,0.02)"/>
     </linearGradient>
   </defs>
-  <path d="M46.0,142.2 L84.1,172.6 L122.3,24.4 L160.4,180.0 L198.5,176.5 L236.6,176.1 L274.8,121.5 L312.9,170.3 L351.0,172.6 L389.1,173.0 L427.3,177.7 L465.4,178.1 L503.5,176.5 L541.6,174.5 L579.8,175.7 L617.9,122.7 L656.0,118.8 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
-  <path d="M46.0,142.2 L84.1,172.6 L122.3,24.4 L160.4,180.0 L198.5,176.5 L236.6,176.1 L274.8,121.5 L312.9,170.3 L351.0,172.6 L389.1,173.0 L427.3,177.7 L465.4,178.1 L503.5,176.5 L541.6,174.5 L579.8,175.7 L617.9,122.7 L656.0,118.8" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="656.0" cy="118.8" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
-  <text x="648.0" y="108.8" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">157</text>
+  <path d="M46.0,142.2 L79.9,172.6 L113.8,24.4 L147.7,180.0 L181.6,176.5 L215.4,176.1 L249.3,121.5 L283.2,170.3 L317.1,172.6 L351.0,173.0 L384.9,177.7 L418.8,178.1 L452.7,176.5 L486.6,174.5 L520.4,175.7 L554.3,122.7 L588.2,118.8 L622.1,72.4 L656.0,93.4 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
+  <path d="M46.0,142.2 L79.9,172.6 L113.8,24.4 L147.7,180.0 L181.6,176.5 L215.4,176.1 L249.3,121.5 L283.2,170.3 L317.1,172.6 L351.0,173.0 L384.9,177.7 L418.8,178.1 L452.7,176.5 L486.6,174.5 L520.4,175.7 L554.3,122.7 L588.2,118.8 L622.1,72.4 L656.0,93.4" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="656.0" cy="93.4" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
+  <text x="648.0" y="83.4" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">222</text>
   <text x="46" y="210" font-size="10.5" fill="#59636e">Aug 11</text>
-  <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#59636e">Aug 19</text>
-  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Aug 27</text>
+  <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#59636e">Aug 20</text>
+  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Aug 29</text>
 </svg>
