@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { checkTagVersion } from "../../scripts/check-tag-version.js";
-import { checkVersionBump, compareVersions } from "../../scripts/check-version-bump.js";
+import { checkVersionBump, compareVersions, isManifestVersionSyncRetry } from "../../scripts/check-version-bump.js";
 import { maskIdentifier } from "../../extension-src/entrypoints/popup/privacy.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -41,6 +41,9 @@ describe("release metadata", () => {
       tag: "v1.7.0",
     });
     expect(checkVersionBump("1.7.0", "1.7.0").shouldRelease).toBe(false);
+    expect(isManifestVersionSyncRetry("1.7.1", "1.7.2", "1.7.2")).toBe(true);
+    expect(isManifestVersionSyncRetry("1.7.2", "1.7.2", "1.7.2")).toBe(false);
+    expect(isManifestVersionSyncRetry(null, "1.7.2", "1.7.2")).toBe(false);
     expect(() => checkVersionBump("1.7.0", "1.6.5")).toThrow(/must increase/);
     expect(compareVersions("2.0.0", "2.0.0-rc.1")).toBe(1);
     expect(compareVersions("2.0.0-rc.2", "2.0.0-rc.1")).toBe(1);

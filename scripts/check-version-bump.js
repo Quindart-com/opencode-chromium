@@ -45,13 +45,38 @@ function packageVersionAt(ref) {
   return JSON.parse(content).version;
 }
 
+function extensionManifestVersionAt(ref) {
+  try {
+    const content = execFileSync("git", ["show", `${ref}:extension/manifest.json`], { cwd: root, encoding: "utf8" });
+    return JSON.parse(content).version;
+  } catch {
+    return null;
+  }
+}
+
+export function isManifestVersionSyncRetry(previousManifestVersion, currentManifestVersion, packageVersion) {
+  return (
+    previousManifestVersion !== null &&
+    previousManifestVersion !== currentManifestVersion &&
+    currentManifestVersion === packageVersion
+  );
+}
+
 if (process.argv[1]?.endsWith("check-version-bump.js")) {
   try {
     const beforeIndex = process.argv.indexOf("--before");
     const outputIndex = process.argv.indexOf("--github-output");
     if (beforeIndex === -1 || !process.argv[beforeIndex + 1]) throw new Error("--before <git-ref> is required");
     const current = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
-    const result = checkVersionBump(packageVersionAt(process.argv[beforeIndex + 1]), current);
+    const before = process.argv[beforeIndex + 1];
+    const previous = packageVersionAt(before);
+    let result = checkVersionBump(previous, current);
+    if (!result.shouldRelease) {
+      const currentManifest = JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8")).version;
+      if (isManifestVersionSyncRetry(extensionManifestVersionAt(before), currentManifest, current)) {
+        result = { ...result, shouldRelease: true };
+      }
+    }
     if (outputIndex !== -1 && process.argv[outputIndex + 1]) {
       fs.appendFileSync(process.argv[outputIndex + 1], [
         `should_release=${result.shouldRelease}`,
