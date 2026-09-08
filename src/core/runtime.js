@@ -66,13 +66,13 @@ function clamp(value, fallback, minimum, maximum) {
 function errorDetails(error) {
   const message = errorMessage(error);
   const timeout = /timed?\s*out|timeout/i.test(message);
-  const disconnected = /disconnect|closed target|session.+closed|websocket/i.test(message);
+  const disconnected = /disconnect|closed target|(?:session|connection|socket|host).+(?:closed|ended)|websocket/i.test(message);
   const validation = error instanceof z.ZodError || /requires |invalid |unsupported |must |missing/i.test(message);
   return {
     code: String(error?.code ?? (timeout ? "TIMEOUT" : validation ? "INVALID_REQUEST" : "BROWSER_OPERATION_FAILED")),
     message,
-    retryable: Boolean(error?.retryable ?? timeout ?? disconnected),
-    uncertain: Boolean(error?.uncertain ?? timeout ?? disconnected),
+    retryable: Boolean(error?.retryable ?? (timeout || disconnected)),
+    uncertain: Boolean(error?.uncertain ?? (timeout || disconnected)),
   };
 }
 
@@ -510,7 +510,8 @@ export class AgentBrowserRuntime {
         detail: prefs.detail,
         mode: prefs.mode,
       }, sessionId);
-      const candidate = resultCandidates(search)[target.index ?? 0];
+      const candidates = resultCandidates(search).filter((candidate) => !target.role || candidate.role === target.role);
+      const candidate = candidates[target.index ?? 0];
       if (!candidate) throw new Error(`No page target matched: ${target.query}`);
       target = { ...target, ...candidate };
     }
@@ -615,7 +616,7 @@ export class AgentBrowserRuntime {
     try {
       return await dispatch();
     } catch (error) {
-      if (!isStaleTargetError(error) || (!step.target?.selector && !step.target?.query)) throw error;
+      if (errorDetails(error).uncertain || !isStaleTargetError(error) || (!step.target?.selector && !step.target?.query)) throw error;
       target = await this.resolveTarget({ ...step, target: { ...step.target, nodeId: undefined } }, tabId, prior, session.sessionId);
       return dispatch();
     }
@@ -623,7 +624,8 @@ export class AgentBrowserRuntime {
 
   async memoryRecordingEnabled(session) {
     try {
-      const status = await this.requestHost("memory.stats", {}, session);
+      let status = await this.requestHost("memory.captureState", {}, session).catch(() => null);
+      if (typeof status?.enabled !== "boolean") status = await this.requestHost("memory.stats", {}, session);
       return status?.enabled === true && status?.paused !== true;
     } catch {
       return false;
@@ -632,7 +634,6 @@ export class AgentBrowserRuntime {
 
   async memoryHostname(step, tabId, session) {
     let candidate = step?.action === "navigate" ? step.url : null;
-    if (!candidate && session.memoryHostname) return session.memoryHostname;
     if (!candidate) {
       try {
         const tab = await this.invoke("browser_get_tab", { tabId }, session.sessionId);
@@ -643,7 +644,6 @@ export class AgentBrowserRuntime {
     }
     try {
       const hostname = new URL(candidate).hostname.toLowerCase() || null;
-      session.memoryHostname = hostname;
       return hostname;
     } catch {
       return null;
@@ -692,9 +692,11 @@ export class AgentBrowserRuntime {
         return { fallback: true };
       }
       bound.push({
+        ...source,
         ...(source.id ? { id: source.id } : {}),
         action: remembered.action,
         target: {
+          ...(source.target ?? {}),
           ...(remembered.target_label ? { query: remembered.target_label } : {}),
           ...(remembered.target_role ? { role: remembered.target_role } : {}),
           ...(remembered.selector ? { selector: remembered.selector } : {}),
@@ -718,6 +720,7 @@ export class AgentBrowserRuntime {
     let uncertainMutation = false;
     for (const [index, step] of bound.entries()) {
       const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId: replayChainId, memoryEnabled: true });
+      if (!READ_ACTIONS.has(step.action) && outcome.executionState === "completed") completedMutation = true;
       if (outcome.ok) {
         if (!READ_ACTIONS.has(step.action)) completedMutation = true;
         results.push({ index, action: step.action, ok: true, ...(outcome.settled ? { settle: outcome.settled } : {}) });
@@ -773,13 +776,16 @@ export class AgentBrowserRuntime {
     let value;
     let lastError = null;
     let settled = null;
+    let executionState = "not_started";
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         value = await this.executeStep(step, tabId, prior, session, chainId, index);
+        executionState = "completed";
         lastError = null;
         break;
       } catch (error) {
         lastError = error;
+        executionState = READ_ACTIONS.has(step.action) || error?.executionState === "not_started" ? "not_started" : "unknown";
       }
     }
     if (!lastError) {
@@ -803,8 +809,8 @@ export class AgentBrowserRuntime {
       }, session).catch(() => {});
     }
     return lastError
-      ? { ok: false, error: errorDetails(lastError), rawError: lastError, value, settled }
-      : { ok: true, value, settled };
+      ? { ok: false, executionState, error: { ...errorDetails(lastError), uncertain: executionState === "unknown" || errorDetails(lastError).uncertain }, rawError: lastError, value, settled }
+      : { ok: true, executionState, value, settled };
   }
 
   async editTarget(target, tabId, mode, value, sessionId, chainId = null, stepIndex = null) {
@@ -1082,8 +1088,16 @@ export class AgentBrowserRuntime {
       const tabId = await this.ensureTab(session, request.tab);
       let correctiveCandidate = null;
       if (request.memoryMode === "auto" && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0 && !approved) {
-        const replay = await this.tryMemoryReplay(request, session, tabId).catch(() => null);
+        const replay = await this.tryMemoryReplay(request, session, tabId);
         if (replay?.used) {
+          await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
+          let postObservation;
+          if (request.postObserve && session.activeTabId) {
+            try { postObservation = await this.observeValue(request.postObserve, session.activeTabId, session); }
+            catch (error) { replay.failed = true; postObservation = { ok: false, error: errorDetails(error) }; }
+          }
+          const mode = request.returnMode ?? "last";
+          const selectedResults = mode === "all" ? replay.results : mode === "last" ? replay.results.slice(-1) : replay.results.map(({ result, ...item }) => ({ ...item, ...(result?.screenshot ? { artifact: result.screenshot } : result?.artifact ? { artifact: result.artifact } : {}) }));
           return this.compact({
             ok: replay.failed !== true,
             status: replay.failed === true ? "partial" : "memory_replay",
@@ -1094,7 +1108,8 @@ export class AgentBrowserRuntime {
             summary: replay.failed === true
               ? `Stopped after ${replay.stepsReused} remembered steps to avoid repeating a mutation with uncertain state`
               : `Replayed ${replay.stepsReused} remembered steps`,
-            results: replay.results,
+            results: selectedResults,
+            ...(postObservation ? { observation: postObservation } : {}),
           }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
         }
         correctiveCandidate = replay?.supersedes ?? null;
@@ -1256,7 +1271,7 @@ export class AgentBrowserRuntime {
     try {
       const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
       await this.selectProfile(session, args.profile);
-      const result = await this.requestHost("memory.stats", {}, session);
+      const result = await this.requestHost("memory.stats", { profileIds: args.profileIds, includeUnattributed: args.includeUnattributed }, session);
       return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
     } catch (error) {
       return this.failure(args.sessionId ?? null, error);

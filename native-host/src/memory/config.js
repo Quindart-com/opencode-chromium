@@ -10,7 +10,7 @@ export const MEMORY_ENV_DIR = "OPENCODE_BROWSER_MEMORY_DIR";
 export const MEMORY_ENV_FORCE = "OPENCODE_BROWSER_MEMORY";
 export const MEMORY_ENV_EMBED = "OPENCODE_BROWSER_MEMORY_EMBED";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const DEFAULT_QUOTA_BYTES = 100 * 1024 * 1024;
 export const MIN_QUOTA_BYTES = 1 * 1024 * 1024;
 export const MAX_QUOTA_BYTES = 10 * 1024 * 1024 * 1024;
@@ -126,12 +126,21 @@ export function openDatabase(root = memoryRootDir()) {
   if (!impl) throw new Error("No supported embedded SQLite runtime (bun:sqlite or node:sqlite)");
   ensureMemoryDirs(root);
   const db = new impl.Database(databasePath(root));
-  if (impl.kind === "bun") {
-    db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
-  } else {
-    db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
-  }
+  db.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
   return db;
+}
+
+// The native SQLite APIs share SQL transactions, not Bun's transaction helper.
+export function inTransaction(db, operation) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = operation();
+    db.exec("COMMIT");
+    return result;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function closeDatabase(db) {
