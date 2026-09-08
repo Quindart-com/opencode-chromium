@@ -143,10 +143,10 @@ test("legacy v1 data is not served as replayable memory by default", async () =>
   removeRoot(root);
 });
 
-test("schema v2 migration tags legacy data and bumps the version", async () => {
+test("memory database reports the current additive schema version", async () => {
   const { store, root } = openMemory();
   const status = store.status();
-  assert.equal(status.schema_version, 2);
+  assert.equal(status.schema_version, 3);
   assert.equal(status.legacy_v1_tagged, false);
   store.close();
   removeRoot(root);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorMessage, formatBytes, memoryCall, MB, type MemoryStatus } from "./api";
+import { errorMessage, formatBytes, memoryCall, MB, type MemoryStatus, type MemoryProfiles } from "./api";
 
 const EMPTY_COUNTS: MemoryStatus["counts"] = {
   signatures: 0,
@@ -44,35 +44,57 @@ function MemoryChart({ daily }: { daily: MemoryStatus["recent_daily"] }): React.
   );
 }
 
-export default function MemoryView(): React.JSX.Element {
+export default function MemoryView({ view = "overview" }: { view?: "overview" | "settings" }): React.JSX.Element {
   const [status, setStatus] = useState<MemoryStatus | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryFeedback, setMemoryFeedback] = useState("");
   const [quotaValue, setQuotaValue] = useState(100);
   const [purgeDays, setPurgeDays] = useState(7);
+  const [profiles, setProfiles] = useState<MemoryProfiles | null>(null);
+  const [scope, setScope] = useState("current");
+  const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState("");
+  const requestId = useRef(0);
+  const dirty = useRef({ quota: false, purge: false });
   const quotaTimer = useRef<number | null>(null);
 
   const refreshMemory = useCallback(async () => {
+    const id = ++requestId.current;
     try {
-      const next = await memoryCall<MemoryStatus>("memory.stats");
+      const known = await memoryCall<MemoryProfiles>("memory.profiles").catch(() => null);
+      if (id !== requestId.current) return;
+      setProfiles(known);
+      const profileIds = scope === "all" ? null : scope === "current" ? known?.currentProfileId ? [known.currentProfileId] : null : scope === "unknown" ? [] : selectedProfiles;
+      const next = await memoryCall<MemoryStatus>("memory.stats", { profileIds, includeUnattributed: scope === "unknown" });
+      if (id !== requestId.current) return;
+      if (next.supported === false) throw new Error("Action memory needs a native host with SQLite support.");
       setStatus(next);
-      setQuotaValue(Math.round(next.quota_bytes / MB));
-      setPurgeDays(next.purge_days);
+      setLoadError("");
+      if (!dirty.current.quota) setQuotaValue(Math.round(next.quota_bytes / MB));
+      if (!dirty.current.purge) setPurgeDays(next.purge_days);
     } catch (error) {
-      setMemoryFeedback(errorMessage(error));
+      if (id === requestId.current) setLoadError(errorMessage(error));
     }
-  }, []);
+  }, [scope, selectedProfiles]);
 
   useEffect(() => {
-    void refreshMemory();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refreshMemory();
-    }, 2500);
+    let disposed = false;
+    let timer: number;
+    const poll = async () => {
+      if (document.visibilityState === "visible") await refreshMemory();
+      if (!disposed) timer = window.setTimeout(() => void poll(), 2500);
+    };
+    void poll();
     return () => {
-      window.clearInterval(timer);
-      if (quotaTimer.current !== null) window.clearTimeout(quotaTimer.current);
+      disposed = true;
+      ++requestId.current;
+      window.clearTimeout(timer);
     };
   }, [refreshMemory]);
+
+  useEffect(() => () => {
+    if (quotaTimer.current !== null) window.clearTimeout(quotaTimer.current);
+  }, []);
 
   const runMemoryAction = useCallback(async (method: string, successText: string) => {
     if (memoryBusy) return;
@@ -92,6 +114,7 @@ export default function MemoryView(): React.JSX.Element {
     setMemoryBusy(true);
     try {
       await memoryCall("memory.configure", params);
+      dirty.current = { quota: false, purge: false };
       setMemoryFeedback(successText);
     } catch (error) {
       setMemoryFeedback(errorMessage(error));
@@ -102,6 +125,7 @@ export default function MemoryView(): React.JSX.Element {
   }, [refreshMemory]);
 
   const queueQuotaUpdate = (value: number) => {
+    dirty.current.quota = true;
     setQuotaValue(value);
     if (quotaTimer.current !== null) window.clearTimeout(quotaTimer.current);
     quotaTimer.current = window.setTimeout(() => {
@@ -154,6 +178,7 @@ export default function MemoryView(): React.JSX.Element {
 
   return (
     <section id="view-memory" className="view">
+      {view === "settings" ? <>
       <div className="card memory-card memory-control-card">
         <div className="memory-head">
           <div>
@@ -209,7 +234,7 @@ export default function MemoryView(): React.JSX.Element {
         </div>
         <div className="memory-actions">
           <label className="purge-label" htmlFor="purge-days">Remove after</label>
-          <input id="purge-days" className="purge-days" type="number" min="1" max="365" value={purgeDays} disabled={!status || memoryBusy} onChange={(event) => setPurgeDays(Number(event.target.value))} onBlur={() => {
+          <input id="purge-days" className="purge-days" type="number" min="1" max="365" value={purgeDays} disabled={!status || memoryBusy} onChange={(event) => { dirty.current.purge = true; setPurgeDays(Number(event.target.value)); }} onBlur={() => {
             if (Number.isInteger(purgeDays) && purgeDays >= 1 && purgeDays <= 365) void updateConfig({ purge_days: purgeDays }, `Negative lessons purge after ${purgeDays} days.`);
             else setMemoryFeedback("Purge period must be between 1 and 365 days.");
           }} />
@@ -218,26 +243,36 @@ export default function MemoryView(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="card memory-card">
+      </> : <div className="card memory-card">
         <div className="memory-head">
           <div>
             <h2>Overview</h2>
-            <span className="memory-state-line">A quick read on how your memory is growing.</span>
+            <span className="memory-state-line">Shared action memory · statistics by browser profile.</span>
           </div>
         </div>
+        <label className="field-label" htmlFor="statistics-scope">Show activity for</label>
+        <select id="statistics-scope" value={scope} disabled={!profiles || !status?.capabilities?.profileStatistics} onChange={(event) => { ++requestId.current; setStatus(null); setScope(event.target.value); }}>
+          <option value="current">This profile</option>
+          <option value="all">All profiles</option>
+          <option value="selected">Selected profiles</option>
+          <option value="unknown">Older, unassigned activity</option>
+        </select>
+        {scope === "selected" ? <fieldset className="profile-options"><legend>Profiles to include</legend>{profiles?.profiles.map((profile, index) => <label className="checkbox-row" key={profile.profileId}><input type="checkbox" checked={selectedProfiles.includes(profile.profileId)} onChange={(event) => { ++requestId.current; setStatus(null); setSelectedProfiles((previous) => event.target.checked ? [...previous, profile.profileId] : previous.filter((id) => id !== profile.profileId)); }} />{profile.profileLabel || profile.browserName || `Profile ${index + 1}`}{profile.profileId === profiles.currentProfileId ? " (this profile)" : ""}</label>)}</fieldset> : null}
+        <p className="help-note">{!status ? "Loading statistics…" : !status.capabilities?.profileStatistics || !profiles ? "This host provides totals for all profiles. Update the native host to filter them." : scope === "current" ? `This profile: ${profiles.profiles.find((item) => item.profileId === profiles.currentProfileId)?.profileLabel || "current browser profile"}` : scope === "selected" ? `${selectedProfiles.length} profiles selected. Shared actions count once.` : scope === "unknown" ? "History saved before profile tracking was added." : "All profiles, including older unassigned activity."}</p>
         <div className="memory-stats">
-          {stats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id} className={id === "memory-success" ? "memory-success" : undefined}>{value}</span><span className="stat-label">{label}</span></div>)}
+          {stats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id} className={id === "memory-success" ? "memory-success" : undefined}>{status ? value : "—"}</span><span className="stat-label">{label}</span></div>)}
         </div>
         <div className="memory-stats memory-stats-secondary">
-          {secondaryStats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id}>{value}</span><span className="stat-label">{label}</span></div>)}
+          {secondaryStats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id}>{status ? value : "—"}</span><span className="stat-label">{label}</span></div>)}
         </div>
         <p id="memory-health" className="help-note">{healthLine}</p>
         <div className="memory-actions">
           <button id="memory-reindex" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.reindex", "Memory index rebuilt.")}>Rebuild memory index</button>
         </div>
         <MemoryChart daily={status?.recent_daily} />
-      </div>
-
+        <p className="help-note">{status?.observedAt ? `Updated ${new Date(status.observedAt).toLocaleTimeString()} · chart days use UTC` : "Waiting for statistics…"}</p>
+      </div>}
+      {loadError ? <p className="feedback" role="alert">Statistics unavailable: {loadError}{status ? " Showing the last successful update." : ""}</p> : null}
     </section>
   );
 }
