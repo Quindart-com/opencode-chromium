@@ -53,6 +53,9 @@ export type SemanticState = {
 };
 
 export type MemoryStatus = {
+  supported?: boolean;
+  capabilities?: { profileStatistics?: boolean };
+  observedAt?: string;
   health: string;
   enabled: boolean;
   paused?: boolean;
@@ -95,6 +98,11 @@ export type MemoryStatus = {
   recent_daily?: Array<{ confirmed: number; failed: number }>;
 };
 
+export type MemoryProfiles = {
+  currentProfileId: string | null;
+  profiles: Array<{ profileId: string; profileLabel?: string | null; browserName?: string | null; connected: boolean }>;
+};
+
 export type MemoryResponse<T> =
   | { ok: true; result: T }
   | { ok: false; error?: string };
@@ -115,6 +123,7 @@ export function responseError(response: { error?: unknown } | null | undefined):
 export async function memoryCall<T>(method: string, params: object = {}): Promise<T> {
   const response = await sendMessage<MemoryResponse<T>>({ type: "MEMORY_CALL", method, params });
   if (!response?.ok) throw new Error(response?.error ?? `${method} failed`);
+  if (response.result && typeof response.result === "object" && "error" in response.result && response.result.error) throw new Error(String(response.result.error));
   return response.result;
 }
 
