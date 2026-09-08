@@ -173,6 +173,8 @@ Enable action memory in **Settings**. Page search works with the default setting
 
 The installed extension version appears in its header. Package and store versions can differ while a release is under review; a successful upload does not mean store approval.
 
+On connection, the extension compares its version with the local native host and connected CLI/MCP clients. A toolbar badge and compact notice flag differences or unreported versions. Expand **How to update** for instructions, or choose **Remind me in a week**; instructions remain in Settings, and a different version combination prompts again. Checks stay local and do not install updates automatically. If local tools are newer, the notice explains that the store extension may still be awaiting approval.
+
 ## Requirements
 
 - Node.js 20 or newer for the npm package and SDK.

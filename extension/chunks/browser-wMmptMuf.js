@@ -1,1 +1,0 @@
-function e(){}var t=globalThis.browser?.runtime?.id?globalThis.browser:globalThis.chrome;export{e as n,t};

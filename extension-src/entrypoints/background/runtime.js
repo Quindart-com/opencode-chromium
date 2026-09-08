@@ -1,4 +1,5 @@
 import { resolveTabActivation } from "./focus-policy.js";
+import { validVersion, versionNotice } from "../../version-status.ts";
 
 const HOST_NAME = "com.opencode.browser.plugin";
 const DEBUGGER_VERSION = "1.3";
@@ -16,6 +17,8 @@ const DEFAULT_NATIVE_REQUEST_TIMEOUT_MS = 15000;
 const HOST_STATUS_STORAGE_KEY = "OPENCODE_NATIVE_HOST_STATUS";
 const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
 const PROFILE_STORAGE_KEY = "OPENCODE_BROWSER_PROFILE";
+const VERSION_REMINDER_KEY = "OPENCODE_VERSION_REMINDER";
+let versionCheckGeneration = 0;
 
 const sessions = new Map();
 const attachedTabs = new Map();
@@ -37,6 +40,10 @@ const hostStatus = {
   lastChecked: null,
   reconnectAttempt: 0,
   nextRetryMs: null,
+  versionChecked: false,
+  nativeHostVersion: null,
+  clientVersions: [],
+  versionReminder: null,
 };
 
 class NativeRpc {
@@ -55,13 +62,15 @@ class NativeRpc {
 
     try {
       this.#port = chrome.runtime.connectNative(HOST_NAME);
-      this.#setStatus({ state: "connected", error: null, nextRetryMs: null });
+      ++versionCheckGeneration;
+      this.#setStatus({ state: "connected", error: null, nextRetryMs: null, versionChecked: false, nativeHostVersion: null, clientVersions: [], unknownClientVersion: false });
 
       this.#port.onMessage.addListener((message) => {
         void this.#handleMessage(message);
       });
 
       this.#port.onDisconnect.addListener(() => {
+        ++versionCheckGeneration;
         const error = chrome.runtime.lastError;
         this.#port = null;
         this.#rejectPending(error?.message ?? "Native host disconnected");
@@ -108,6 +117,7 @@ class NativeRpc {
   }
 
   heartbeat() {
+    void updateVersionBadge();
     if (!this.#port) {
       this.connect();
       return;
@@ -292,7 +302,29 @@ function sanitizeSemanticForPopup(semantic) {
 }
 
 async function announceProfile() {
-  await rpc.notify("profile.hello", await profileMetadata());
+  const generation = ++versionCheckGeneration;
+  const result = await rpc.request("profile.hello", await profileMetadata()).catch(() => null);
+  const reminder = (await storageGet(VERSION_REMINDER_KEY).catch(() => ({})))[VERSION_REMINDER_KEY] ?? null;
+  if (generation !== versionCheckGeneration || hostStatus.state !== "connected") return;
+  hostStatus.versionReminder = reminder;
+  applyHostVersions(result);
+}
+
+function applyHostVersions(result) {
+  hostStatus.versionChecked = true;
+  hostStatus.unknownClientVersion = result?.unknownClientVersion === true;
+  hostStatus.nativeHostVersion = validVersion(result?.nativeHostVersion);
+  hostStatus.clientVersions = Array.isArray(result?.clientVersions) ? result.clientVersions.map(validVersion).filter(Boolean) : [];
+  broadcastNativeStatus();
+}
+
+rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });
+
+async function updateVersionBadge() {
+  const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
+  if (!chrome.action?.setBadgeText) return;
+  await chrome.action.setBadgeText({ text: notice && !notice.snoozed ? (notice.kind === "unknown" ? "?" : "!") : "" }).catch(() => {});
+  await chrome.action.setBadgeBackgroundColor({ color: "#a86b00" }).catch(() => {});
 }
 
 function finiteNumber(value, label) {
@@ -1374,6 +1406,7 @@ const POPUP_MEMORY_METHODS = new Set([
 ]);
 
 function broadcastNativeStatus() {
+  void updateVersionBadge();
   const payload = { type: "NATIVE_STATUS", status: { ...hostStatus } };
   for (const port of statusPorts) {
     try {
@@ -1397,6 +1430,17 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "SNOOZE_VERSION_NOTICE") {
+    const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
+    if (!notice) { sendResponse({ ok: true }); return false; }
+    const reminder = { key: notice.key, until: Date.now() + 7 * 86400000 };
+    storageSet({ [VERSION_REMINDER_KEY]: reminder }).then(() => {
+      hostStatus.versionReminder = reminder;
+      broadcastNativeStatus();
+      sendResponse({ ok: true });
+    }).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message?.type === "MEMORY_CALL") {
     if (!POPUP_MEMORY_METHODS.has(message.method)) {
       sendResponse({ ok: false, error: "Unsupported memory operation" });

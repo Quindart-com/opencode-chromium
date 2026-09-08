@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
+import type { VersionStatus } from "../../version-status";
 
-export type NativeStatus = {
+export type NativeStatus = VersionStatus & {
   state?: string;
   hostName?: string;
   error?: string | null;
