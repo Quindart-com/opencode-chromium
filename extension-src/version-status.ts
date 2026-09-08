@@ -28,6 +28,8 @@ export function versionNotice(extension: string, status: VersionStatus) {
   if (!status.unknownClientVersion && host === extension && clients.every((version) => version === extension)) return null;
   const versions = [host, ...clients].filter((item): item is string => item !== null);
   const kind = !host || status.unknownClientVersion ? "unknown" : versions.some((version) => compare(version, extension) > 0) ? "extension" : "local";
-  const key = JSON.stringify([extension, host, clients, status.unknownClientVersion === true]);
+  // Reconnecting matching clients must not reset a snoozed host warning.
+  const otherMismatches = clients.filter((version) => version !== extension && version !== host);
+  const key = JSON.stringify([extension, host, otherMismatches, status.unknownClientVersion === true]);
   return { key, kind, host, clients, snoozed: status.versionReminder?.key === key && status.versionReminder.until > Date.now() };
 }
