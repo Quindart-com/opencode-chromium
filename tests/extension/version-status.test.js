@@ -22,6 +22,8 @@ test("snoozes expire and a different version pair immediately prompts again", ()
   const notice = versionNotice("1.7.1", status);
   const reminder = { key: notice.key, until: Date.now() + 60000 };
   assert.equal(versionNotice("1.7.1", { ...status, versionReminder: reminder }).snoozed, true);
+  assert.equal(versionNotice("1.7.1", { ...status, clientVersions: [], versionReminder: reminder }).snoozed, true);
+  assert.equal(versionNotice("1.7.1", { ...status, clientVersions: ["1.6.5"], versionReminder: reminder }).snoozed, true);
   assert.equal(versionNotice("1.7.2", { ...status, versionReminder: reminder }).snoozed, false);
   assert.equal(versionNotice("1.7.1", { ...status, versionReminder: { ...reminder, until: 0 } }).snoozed, false);
 });
