@@ -2,6 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { encodeFrame, FrameDecoder } from "../../native-host/src/framing.js";
 
+test("decodes a large message in single-byte fragments", () => {
+  const expected = { text: "x".repeat(20000) };
+  const messages = [];
+  const decoder = new FrameDecoder({ onMessage: (value) => messages.push(value) });
+  for (const byte of encodeFrame(expected)) decoder.push(Uint8Array.of(byte));
+  assert.deepEqual(messages, [expected]);
+});
+
+test("rejects oversized frames before allocating a payload", () => {
+  const decoder = new FrameDecoder({ maxFrameBytes: 64, onMessage() {} });
+  const header = Buffer.alloc(4);
+  header.writeUInt32LE(1024);
+  assert.throws(() => decoder.push(header), /Invalid frame length/);
+  assert.throws(() => encodeFrame(undefined), /JSON value/);
+});
+
 test("encodes and decodes a framed JSON message", () => {
   const messages = [];
   const decoder = new FrameDecoder({ onMessage: (message) => messages.push(message) });

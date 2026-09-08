@@ -354,7 +354,7 @@ function writeJsonAtomic(filePath, value) {
 
 export function getSemanticSettings() {
   const filePath = settingsPath();
-  if (!settingsCache || settingsCachePath !== filePath) {
+  { // Settings are shared across native-host processes. Read the atomic file on each request.
     settingsCache = normalizeSettings(readJsonIfPresent(filePath) ?? {});
     settingsCachePath = filePath;
   }

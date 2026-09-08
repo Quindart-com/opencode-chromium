@@ -1,9 +1,12 @@
 import { EMBED_BATCH_SIZE, WRITER_FLUSH_MS, WRITER_QUEUE_CAPACITY, MEMORY_EMBED_MAX_ATTEMPTS } from "./config.js";
+import { EmbeddingService } from "./embedding-service.ts";
 import { dot, scoreFor } from "./rank.js";
 
 export class EmbedQueue {
   constructor({ embed = null, onResults = null, capacity = WRITER_QUEUE_CAPACITY, store = null } = {}) {
-    this.embed = embed;
+    this.service = embed ? new EmbeddingService(embed) : null;
+    this.embed = this.service ? (texts) => this.service.run(texts) : null;
+    this.flushing = null;
     this.onResults = onResults;
     this.store = store;
     this.queue = [];
@@ -21,6 +24,8 @@ export class EmbedQueue {
 
   push(item) {
     if (this.closed || !this.embed) return false;
+    const existing = this.queue.find((pending) => pending.fingerprint === item.fingerprint);
+    if (existing) { existing.text = item.text; return true; }
     if (this.queue.length >= this.capacity) {
       this.pendingDrop += 1;
       this.store?.writeMeta?.("embedding_queue_drops", Number(this.store?.meta?.embedding_queue_drops ?? 0) + 1);
@@ -40,35 +45,44 @@ export class EmbedQueue {
   }
 
   async flush() {
+    if (this.flushing) return this.flushing;
+    this.flushing = this.drain().finally(() => { this.flushing = null; });
+    return this.flushing;
+  }
+
+  async drain() {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
     }
     if (this.closed || this.queue.length === 0) return;
-    const batch = this.queue;
-    this.queue = [];
-    try {
-      const texts = batch.map((item) => item.text);
-      const result = await this.embed(texts);
-      if (!result || !Array.isArray(result.vectors)) return;
-      const rows = batch.map((item, index) => ({ fingerprint: item.fingerprint, values: result.vectors[index] }));
-      this.onResults?.(rows, result.model, result.dims, result.embeddingProfile ?? null);
-    } catch (error) {
-      // Surface embedding failures in health instead of silently dropping.
-      this.store?.noteEmbeddingFailure?.(error);
-      for (const item of batch) {
-        const attempts = (item.attempts ?? 0) + 1;
-        if (attempts < MEMORY_EMBED_MAX_ATTEMPTS && !this.closed) {
-          const delayMs = 1000 * 2 ** (attempts - 1);
-          setTimeout(() => {
-            if (!this.closed) this.push({ ...item, attempts });
-          }, delayMs).unref?.();
+    while (!this.closed && this.queue.length) {
+      const batch = this.queue.splice(0, EMBED_BATCH_SIZE);
+      try {
+        const texts = batch.map((item) => item.text);
+        this.store?.noteEmbeddingAttempt?.(batch.length);
+        const result = await this.embed(texts);
+        if (this.closed) return;
+        const rows = batch.map((item, index) => ({ fingerprint: item.fingerprint, values: result.vectors[index] }));
+        this.onResults?.(rows, result.model, result.dims, result.embeddingProfile ?? null);
+      } catch (error) {
+        // Surface embedding failures in health instead of silently dropping.
+        if (this.closed) return;
+        this.store?.noteEmbeddingFailure?.(error);
+        for (const item of batch) {
+          const attempts = (item.attempts ?? 0) + 1;
+          if (attempts < MEMORY_EMBED_MAX_ATTEMPTS && !this.closed) {
+            const delayMs = 1000 * 2 ** (attempts - 1);
+            setTimeout(() => {
+              if (!this.closed) this.push({ ...item, attempts });
+            }, delayMs).unref?.();
+          }
         }
       }
     }
   }
 
-  async embedQuery(store, { query, bound, candidates, vectors, modelId, kind, embeddingProfile = null, threshold = 0.42 }) {
+  async embedQuery(store, { query, bound, candidates, vectors, modelId, kind, embeddingProfile = null, threshold = 0.42, profileId = null }) {
     if (!this.queryEmbed || typeof query !== "string") {
       return { results: [], model: modelId, dims: null, embedding_profile: embeddingProfile, degraded: true, error: "memory_model_unavailable" };
     }
@@ -90,7 +104,6 @@ export class EmbedQueue {
       return { results: [], model: queryModel, dims: queryDims, embedding_profile: queryProfile, degraded: true, error: "index_stale" };
     }
 
-    store?.usageEvent?.({ eventType: "memory_search" });
     const scored = [];
     for (const [index, item] of candidates.entries()) {
       const values = vectors.get(index);
@@ -143,7 +156,7 @@ export class EmbedQueue {
       deduped.push(item);
     }
     const results = deduped.slice(0, bound);
-    store?.usageEvent?.({ eventType: "matches_returned", stepsReused: results.length });
+    store?.usageEvent?.({ eventType: "matches_returned", stepsReused: results.length, profileId });
     if (results.some((item) => item.negative)) {
       store?.touchFailureHits?.(results.filter((item) => item.negative).map((item) => item.fingerprint));
     }
@@ -166,6 +179,7 @@ export class EmbedQueue {
 
   close() {
     this.closed = true;
+    this.service?.close();
     if (this.timer) clearTimeout(this.timer);
     this.queue = [];
   }

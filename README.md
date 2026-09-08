@@ -67,7 +67,7 @@ npx -y opencode-chromium-mcp
 | OpenCode V2             | Native plugin              | `"plugin": ["opencode-chromium"]` in `opencode.json`                  |
 | Codex                   | MCP server (stdio)         | `codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp` |
 | Any MCP client          | MCP server (stdio)         | `npx -y opencode-chromium-mcp` as a stdio server |
-| Direct JavaScript       | SDK (`opencode-chromium/sdk`) | `import { createAgentBrowserRuntime } from "opencode-chromium/sdk"` |
+| Direct JavaScript       | SDK (`opencode-chromium/sdk`) | `import { createBrowserAgent } from "opencode-chromium/sdk"` |
 
 ### 1. Install the package
 
@@ -98,7 +98,10 @@ node "$(npm root -g)/opencode-chromium/scripts/install-native-host.js" --extensi
 
 ### 4. Connect a client
 
-OpenCode V2 — add the package name to the global
+<details>
+<summary>OpenCode V2</summary>
+
+Add the package name to the global
 `~/.config/opencode/opencode.json`:
 
 ```json
@@ -108,13 +111,23 @@ OpenCode V2 — add the package name to the global
 }
 ```
 
-Codex — register the required MCP server:
+</details>
+
+<details>
+<summary>Codex</summary>
+
+Register the MCP server:
 
 ```powershell
 codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp
 ```
 
-Any MCP client — add the stdio server:
+</details>
+
+<details>
+<summary>Any MCP client</summary>
+
+Add the stdio server:
 
 ```json
 {
@@ -127,8 +140,16 @@ Any MCP client — add the stdio server:
 }
 ```
 
-Direct JavaScript — import the SDK runtime or the MCP server programmatically
-(see [docs/direct-sdk.md](docs/direct-sdk.md)).
+</details>
+
+<details>
+<summary>Direct JavaScript</summary>
+
+Use `createBrowserAgent` from `opencode-chromium/sdk`. See the [SDK example](docs/direct-sdk.md).
+
+</details>
+
+Choose only the setup for your client; you do not need all of them.
 
 ### 5. Verify
 
@@ -141,6 +162,18 @@ All four tools (`browser_run`, `browser_observe`, `browser_session`,
 `browser_finalize`) are then available in every connected client. Do not
 enable both the native OpenCode adapter and the MCP server in one client
 session unless duplicate tools are intentional.
+
+## Profiles and action memory
+
+Open the extension’s **Profiles** tab, choose a connected profile, and click **Copy agent selector**. Paste that selector into your first browser request. Renaming the current profile is optional.
+
+The **Overview** defaults to this profile. Choose all profiles, select several profiles, or view older unassigned history. Actions are shared locally across profiles; selecting two profiles counts a shared action once while keeping their execution totals separate. Storage controls apply to the shared database.
+
+Enable action memory in **Settings**. Page search works with the default settings; model downloads and search tuning are under **Advanced search settings**. A dash means no result yet, and an unavailable message means the host could not supply statistics.
+
+The installed extension version appears in its header. Package and store versions can differ while a release is under review; a successful upload does not mean store approval.
+
+On connection, the extension compares its version with the local native host and connected CLI/MCP clients. A toolbar badge and compact notice flag differences or unreported versions. Expand **How to update** for instructions, or choose **Remind me in a week**; instructions remain in Settings, and a different version combination prompts again. Checks stay local and do not install updates automatically. If local tools are newer, the notice explains that the store extension may still be awaiting approval.
 
 ## Requirements
 

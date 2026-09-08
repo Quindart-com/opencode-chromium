@@ -27,6 +27,8 @@ const required = [
   "dist/cli/index.js",
   "extension/manifest.json",
   "native-host/src/host.js",
+  "native-host/dist/runtime.js",
+  "native-host/dist/memory/profile-stats.js",
   "skills/opencode-browser-plugin/SKILL.md",
   "skills/opencode-browser-plugin/agents/openai.yaml",
 ];
