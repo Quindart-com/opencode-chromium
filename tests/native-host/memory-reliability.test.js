@@ -88,6 +88,18 @@ test("schema migration creates a consistent snapshot with committed WAL data", (
   } finally { snapshot.close(); }
 });
 
+test("rebuild failures are visible and a later successful rebuild repairs health", async (t) => {
+  const [store] = stores(t);
+  store.enable();
+  store.recordStep({ action: "click", hostname: "fixture.test" });
+  await assert.rejects(store.reindex({ embed: async () => { throw new Error("fixture model failure"); } }), /model failure/);
+  assert.equal(store.status().health, "embedding_errors");
+  assert.equal(store.status().last_reindex_at, null);
+  await store.reindex({ embed: async (texts) => ({ vectors: texts.map(() => [1, 0]), dims: 2, model: "fixture", embeddingProfile: "fixture:2" }) });
+  assert.equal(store.status().health, "ready");
+  assert.equal(store.status().counts.unindexed_actions, 0);
+});
+
 test("capture settings are shared by already-open database connections", (t) => {
   const [first, second] = stores(t, 2);
   first.enable();

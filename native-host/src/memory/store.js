@@ -799,14 +799,25 @@ export class MemoryStore {
     return DEFAULT_MEMORY_SIMILARITY_THRESHOLD;
   }
 
-  async reindex({ embed = null, batchSize = 16, rebuildV2 = true } = {}) {
+  reindex(options = {}) {
+    if (this.reindexPromise) return this.reindexPromise;
+    this.reindexPromise = this.#reindex(options)
+      .catch((error) => { if (this.open) this.noteEmbeddingFailure(error); throw error; })
+      .finally(() => { this.reindexPromise = null; });
+    return this.reindexPromise;
+  }
+
+  async #reindex({ embed = null, batchSize = 16, rebuildV2 = true } = {}) {
+    if (!embed) throw new Error("Memory embeddings are unavailable");
+    if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 128) throw new Error("Invalid embedding batch size");
     let embedded = 0;
     const missing = this.db.prepare("SELECT fingerprint, signature FROM signatures WHERE embedding IS NULL ORDER BY id DESC LIMIT 2000").all();
     for (let start = 0; start < missing.length; start += batchSize) {
       const batch = missing.slice(start, start + batchSize);
       if (!embed) break;
-      const result = await embed(batch.map((row) => row.signature)).catch(() => null);
-      if (!result?.vectors?.length) break;
+      const result = await embed(batch.map((row) => row.signature));
+      if (!this.open) throw new Error("Memory store closed during rebuild");
+      if (result?.vectors?.length !== batch.length) throw new Error("Incomplete embedding batch");
       this.applyEmbeddings(batch.map((row, index) => ({ fingerprint: row.fingerprint, values: result.vectors[index] })), result.model, result.dims, result.embeddingProfile ?? null);
       embedded += batch.length;
     }
@@ -821,17 +832,16 @@ export class MemoryStore {
       const staleActions = this.db.prepare("SELECT fingerprint, action, hostname, target_label, target_role FROM memory_actions_v2").all();
       const staleChains = this.db.prepare("SELECT fingerprint, safe_summary FROM memory_chains_v2 WHERE replaced_by IS NULL AND safe_summary != ''").all();
       const v2Batch = [
-        ...staleActions.map((row) => ({ fingerprint: row.fingerprint, text: chainSearchText(row.hostname, [{ action: row.action, target_role: row.target_role, target_label: row.target_label }]) })),
-        ...staleChains.map((row) => ({ fingerprint: row.fingerprint, text: row.safe_summary })),
+        ...staleActions.map((row) => ({ kind: "action", fingerprint: row.fingerprint, text: chainSearchText(row.hostname, [{ action: row.action, target_role: row.target_role, target_label: row.target_label }]) })),
+        ...staleChains.map((row) => ({ kind: "chain", fingerprint: row.fingerprint, text: row.safe_summary })),
       ].filter((item) => item.text && item.text.length > 0);
       for (let start = 0; start < v2Batch.length; start += batchSize) {
         const batch = v2Batch.slice(start, start + batchSize);
-        const result = await embed(batch.map((row) => row.text)).catch(() => null);
-        if (!result?.vectors?.length) break;
-        for (const [index, item] of batch.entries()) {
-          this.applyEmbeddingV2({ fingerprint: item.fingerprint, values: result.vectors[index], modelId: result.model, dims: result.dims, embeddingProfile: result.embeddingProfile ?? null });
-          v2Embedded += 1;
-        }
+        const result = await embed(batch.map((row) => row.text));
+        if (!this.open) throw new Error("Memory store closed during rebuild");
+        if (result?.vectors?.length !== batch.length) throw new Error("Incomplete embedding batch");
+        this.applyEmbeddings(batch.map((item, index) => ({ fingerprint: "v2:" + item.kind + ":" + item.fingerprint, values: result.vectors[index] })), result.model, result.dims, result.embeddingProfile ?? null);
+        v2Embedded += batch.length;
       }
     }
     this.writeMeta("last_reindex_at", isoNow());
