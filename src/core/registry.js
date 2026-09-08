@@ -39,6 +39,7 @@ const targetSchema = z.object({
   nodeId: z.string().optional(),
   selector: z.string().optional(),
   query: z.string().optional(),
+  role: z.string().max(64).optional(),
   fromStep: z.string().optional(),
   index: z.number().int().min(0).optional(),
   x: z.number().optional(),
