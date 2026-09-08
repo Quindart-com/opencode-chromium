@@ -16,7 +16,8 @@ const PLUGIN_NAME = "opencode-browser-plugin";
 const PROTOCOL_VERSION = "1";
 
 const ipcPath = instanceIpcPath();
-const state = { startedAt: new Date().toISOString(), ipcPath, profile: null };
+const nativeHostVersion = JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version;
+const state = { startedAt: new Date().toISOString(), ipcPath, profile: null, nativeHostVersion };
 let activeProfileId = null;
 
 function registerProfile(profile) {

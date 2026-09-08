@@ -3,6 +3,7 @@ import { browser } from "wxt/browser";
 import { sendMessage, type NativeStatus } from "./api";
 import ConnectionView from "./ConnectionView";
 import MemoryView from "./MemoryView";
+import VersionNotice from "./VersionNotice";
 
 type ViewName = "overview" | "profiles" | "settings";
 
@@ -115,6 +116,7 @@ export default function App(): React.JSX.Element {
   return (
     <main>
       <Header status={nativeStatus} />
+      <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
       <ViewTabs active={activeView} onChange={setActiveView} />
       {activeView === "overview" ? <MemoryView /> : activeView === "profiles" ? <ConnectionView status={nativeStatus} view="profiles" /> : <><ConnectionView status={nativeStatus} view="settings" /><MemoryView view="settings" /></>}
       <footer id="app-footer">
