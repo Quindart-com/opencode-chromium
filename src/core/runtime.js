@@ -624,7 +624,8 @@ export class AgentBrowserRuntime {
 
   async memoryRecordingEnabled(session) {
     try {
-      const status = await this.requestHost("memory.stats", {}, session);
+      let status = await this.requestHost("memory.captureState", {}, session).catch(() => null);
+      if (typeof status?.enabled !== "boolean") status = await this.requestHost("memory.stats", {}, session);
       return status?.enabled === true && status?.paused !== true;
     } catch {
       return false;
@@ -1087,8 +1088,16 @@ export class AgentBrowserRuntime {
       const tabId = await this.ensureTab(session, request.tab);
       let correctiveCandidate = null;
       if (request.memoryMode === "auto" && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0 && !approved) {
-        const replay = await this.tryMemoryReplay(request, session, tabId).catch(() => null);
+        const replay = await this.tryMemoryReplay(request, session, tabId);
         if (replay?.used) {
+          await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
+          let postObservation;
+          if (request.postObserve && session.activeTabId) {
+            try { postObservation = await this.observeValue(request.postObserve, session.activeTabId, session); }
+            catch (error) { replay.failed = true; postObservation = { ok: false, error: errorDetails(error) }; }
+          }
+          const mode = request.returnMode ?? "last";
+          const selectedResults = mode === "all" ? replay.results : mode === "last" ? replay.results.slice(-1) : replay.results.map(({ result, ...item }) => ({ ...item, ...(result?.screenshot ? { artifact: result.screenshot } : result?.artifact ? { artifact: result.artifact } : {}) }));
           return this.compact({
             ok: replay.failed !== true,
             status: replay.failed === true ? "partial" : "memory_replay",
@@ -1099,7 +1108,8 @@ export class AgentBrowserRuntime {
             summary: replay.failed === true
               ? `Stopped after ${replay.stepsReused} remembered steps to avoid repeating a mutation with uncertain state`
               : `Replayed ${replay.stepsReused} remembered steps`,
-            results: replay.results,
+            results: selectedResults,
+            ...(postObservation ? { observation: postObservation } : {}),
           }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
         }
         correctiveCandidate = replay?.supersedes ?? null;
@@ -1261,7 +1271,7 @@ export class AgentBrowserRuntime {
     try {
       const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
       await this.selectProfile(session, args.profile);
-      const result = await this.requestHost("memory.stats", {}, session);
+      const result = await this.requestHost("memory.stats", { profileIds: args.profileIds, includeUnattributed: args.includeUnattributed }, session);
       return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
     } catch (error) {
       return this.failure(args.sessionId ?? null, error);

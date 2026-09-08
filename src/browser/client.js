@@ -1,7 +1,7 @@
 import net from "node:net";
 import { FrameDecoder, writeFrame } from "../../native-host/src/framing.js";
 import { defaultIpcPath } from "../../native-host/src/ipc-path.js";
-import { profileRegistryDir, readProfileRegistrations, removeProfileRegistrationFile } from "../../native-host/src/profile-registry.js";
+import { profileRegistryDir, readProfileRegistrations } from "../../native-host/src/profile-registry.js";
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const PROFILE_STATUS_TIMEOUT_MS = 1000;
@@ -261,7 +261,7 @@ export async function listBrowserProfiles(options = {}) {
     for (let index = 0; index < settled.length; index += 1) {
       const result = settled[index];
       if (result.status === "fulfilled") profiles.push(result.value);
-      else removeProfileRegistrationFile(registrations[index].registrationPath);
+      // A busy live host can miss a probe; only the owner removes its registration.
     }
     profiles.sort((first, second) => String(first.profileLabel ?? first.profileId).localeCompare(String(second.profileLabel ?? second.profileId)));
     profileCache.set(cacheKey, { at: Date.now(), profiles });

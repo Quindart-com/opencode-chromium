@@ -58,3 +58,16 @@ test("hostname attribution follows the live tab", async (t) => {
 test("target role survives public schema validation", () => {
   assert.equal(targetSchema.parse({ query: "Open", role: "button" }).role, "button");
 });
+
+test("replay completes the turn and honors post-observation", async (t) => {
+  const runtime = fixture(t, [{ action: "press", hostname: "fixture.test" }]);
+  runtime.memoryHostname = async () => "fixture.test";
+  runtime.executeStep = async () => ({ done: true });
+  const invoked = [];
+  runtime.invoke = async (method) => { invoked.push(method); return {}; };
+  runtime.observeValue = async () => ({ title: "After replay" });
+  const result = await runtime.run({ sessionId: "fixture", memoryMode: "auto", memoryIntent: "dismiss", steps: [{ action: "press", key: "Escape" }], postObserve: { mode: "inspect" } });
+  assert.equal(result.ok, true);
+  assert.equal(result.observation.title, "After replay");
+  assert.equal(invoked.filter((method) => method === "browser_turn_end").length, 1);
+});

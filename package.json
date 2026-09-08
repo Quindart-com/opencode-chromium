@@ -31,6 +31,7 @@
     "dist",
     "extension",
     "native-host/src",
+    "native-host/dist",
     "native-host/README.md",
     "skills",
     "docs",
@@ -113,6 +114,7 @@
     "extension:dev": "wxt",
     "build:extension": "wxt build",
     "typecheck:extension": "wxt prepare && tsc --noEmit",
+    "typecheck:backend": "tsc -p tsconfig.backend.json",
     "zip:extension": "bun run build:extension && bun scripts/build-extension-zip.js",
     "check:webstore": "bun scripts/webstore-safety-check.js",
     "webstore:submit": "bun scripts/webstore-submit.js",
@@ -124,7 +126,8 @@
     "open:browser": "bun scripts/open-browser-window.js",
     "find:extension": "bun scripts/find-extension-id.js",
     "doctor": "bun src/cli/index.js doctor",
-    "verify": "bun src/cli/index.js verify"
+    "verify": "bun src/cli/index.js verify",
+    "verify:popup": "node scripts/verify-popup.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -132,6 +135,7 @@
     "@modelcontextprotocol/node": "2.0.0-beta.4",
     "@modelcontextprotocol/server": "2.0.0-beta.4",
     "@opencode-ai/plugin": "1.18.11",
+    "effect": "3.22.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.2.0"
@@ -140,6 +144,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@wxt-dev/module-react": "1.2.2",
+    "playwright": "1.61.1",
     "publish-browser-extension": "4.0.5",
     "typescript": "5.9.3",
     "wxt": "0.21.4",

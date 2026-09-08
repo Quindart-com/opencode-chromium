@@ -3,6 +3,8 @@ import {
   errorMessage,
   responseError,
   sendMessage,
+  memoryCall,
+  type MemoryProfiles,
   type NativeStatus,
   type Profile,
   type SemanticModel,
@@ -10,7 +12,7 @@ import {
 } from "./api";
 import { maskIdentifier } from "./privacy";
 
-type ConnectionViewProps = { status: NativeStatus };
+type ConnectionViewProps = { status: NativeStatus; view?: "profiles" | "settings" };
 
 function statusText(status: NativeStatus): string {
   const state = status.state ?? "unknown";
@@ -30,7 +32,9 @@ function semanticStatusText(semantic: SemanticState): string {
   return "Retrieval runs locally with the active model and falls back to lexical ranking. Deep search loads Qwen on demand; download failures degrade safely.";
 }
 
-export default function ConnectionView({ status }: ConnectionViewProps): React.JSX.Element {
+export default function ConnectionView({ status, view = "profiles" }: ConnectionViewProps): React.JSX.Element {
+  const [connectedProfiles, setConnectedProfiles] = useState<MemoryProfiles | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLabel, setProfileLabel] = useState("");
   const [profileHelp, setProfileHelp] = useState("Labels stay local and are used only to pick the right open browser profile.");
@@ -107,11 +111,12 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
       .catch((error) => {
         if (active) setProfileHelp(errorMessage(error));
       });
-    void loadSemantic();
+    void memoryCall<MemoryProfiles>("memory.profiles").then((result) => { if (active) { setConnectedProfiles(result); setSelectedProfile(result.currentProfileId ?? ""); } }).catch(() => {});
+    if (view === "settings") void loadSemantic();
     return () => {
       active = false;
     };
-  }, [loadSemantic]);
+  }, [loadSemantic, view]);
 
   useEffect(() => {
     if (semantic?.load?.state !== "loading") return undefined;
@@ -299,6 +304,7 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
 
   return (
     <section id="view-connection" className="view">
+      {view === "profiles" ? <>
       <div className="card" aria-labelledby="connection-title">
         <h2 id="connection-title">Connection</h2>
         <dl id="connection-list">
@@ -336,6 +342,13 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
 
       <div className="card" aria-labelledby="profile-title">
         <h2 id="profile-title">Profile</h2>
+        <label htmlFor="connected-profile">Connected browser profiles</label>
+        <select id="connected-profile" value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)}>
+          {connectedProfiles?.profiles.filter((item) => item.connected).map((item, index) => <option key={item.profileId} value={item.profileId}>{item.profileLabel || item.browserName || "Profile " + (index + 1)}{item.profileId === connectedProfiles.currentProfileId ? " (this profile)" : ""}</option>)}
+        </select>
+        <p className="help-note">Choose a profile and copy its selector for your agent. This does not switch the browser window.</p>
+        <button className="button" type="button" disabled={!selectedProfile} onClick={() => { void navigator.clipboard.writeText(JSON.stringify({ profile: selectedProfile })).then(() => setProfileHelp("Profile selector copied."), () => setProfileHelp("Clipboard unavailable.")); }}>Copy agent selector</button>
+        <details className="advanced-details"><summary>Rename this profile (optional)</summary>
         <form id="profile-form" onSubmit={saveProfile}>
           <label htmlFor="profile-label">Profile label</label>
           <div className="input-row">
@@ -352,14 +365,17 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
           </div>
           <p id="profile-help">{profileHelp}</p>
         </form>
+        </details>
+        <p role="status">{profileHelp}</p>
       </div>
+      </> : <>
 
       <div className="card" aria-labelledby="semantic-title">
-        <h2 id="semantic-title">Semantic page search</h2>
+        <h2 id="semantic-title">Page search</h2>
         <div className="semantic-toggle-row">
           <div className="semantic-toggle-copy">
-            <span className="semantic-toggle-title">Semantic retrieval</span>
-            <span className="semantic-toggle-sub">Local page ranking with lexical fallback</span>
+            <span className="semantic-toggle-title">Search by meaning</span>
+            <span className="semantic-toggle-sub">Find relevant page content locally. Keyword search stays available.</span>
           </div>
           <button
             id="semantic-enabled"
@@ -374,6 +390,8 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
             <span className="switch-knob" />
           </button>
         </div>
+        <p className="help-note">Automatic search balances relevance and speed. Most users can keep the defaults.</p>
+        <details className="advanced-details"><summary>Advanced search settings</summary>
         <div className="strategy-row" role="radiogroup" aria-label="Search mode">
           <span className="strategy-label">Search mode</span>
           {["auto", "semantic", "lexical", "deep"].map((strategy) => (
@@ -390,8 +408,7 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
             </button>
           ))}
         </div>
-        <details className="advanced-details">
-          <summary>Advanced</summary>
+        <div>
           <div className="advanced-row">
             <span className="advanced-label">Agent result count</span>
             <div role="radiogroup" aria-label="Agent result count">
@@ -428,11 +445,12 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
               ))}
             </div>
           </div>
-        </details>
+        </div>
         <div id="semantic-model-list" className="model-list" aria-label="Retrieval models">
           {adaptiveModels.map(renderModelCard)}
           {deepModel ? renderModelCard(deepModel) : null}
         </div>
+        </details>
         <p id="semantic-help">{semanticHelp}</p>
         <details id="semantic-dev-details" className="dev-details">
           <summary>Developer details</summary>
@@ -445,6 +463,7 @@ export default function ConnectionView({ status }: ConnectionViewProps): React.J
           </div>
         </details>
       </div>
+      </>}
     </section>
   );
 }

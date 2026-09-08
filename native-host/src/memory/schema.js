@@ -115,6 +115,29 @@ CREATE TABLE IF NOT EXISTS memory_usage_events (
 
 CREATE INDEX IF NOT EXISTS idx_usage_events_time ON memory_usage_events(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_usage_events_type ON memory_usage_events(event_type);
+
+CREATE TABLE IF NOT EXISTS memory_profiles (
+  profile_id TEXT PRIMARY KEY,
+  label TEXT,
+  browser_name TEXT
+);
+CREATE TABLE IF NOT EXISTS memory_action_profiles (
+  item_id INTEGER NOT NULL REFERENCES memory_actions_v2(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES memory_profiles(profile_id),
+  PRIMARY KEY (item_id, profile_id)
+);
+CREATE TABLE IF NOT EXISTS memory_chain_profiles (
+  item_id INTEGER NOT NULL REFERENCES memory_chains_v2(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES memory_profiles(profile_id),
+  PRIMARY KEY (item_id, profile_id)
+);
+CREATE TABLE IF NOT EXISTS memory_event_profiles (
+  item_id INTEGER PRIMARY KEY REFERENCES memory_usage_events(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES memory_profiles(profile_id)
+);
+CREATE INDEX IF NOT EXISTS idx_action_profiles_profile ON memory_action_profiles(profile_id, item_id);
+CREATE INDEX IF NOT EXISTS idx_chain_profiles_profile ON memory_chain_profiles(profile_id, item_id);
+CREATE INDEX IF NOT EXISTS idx_event_profiles_profile ON memory_event_profiles(profile_id, item_id);
 `;
 
 export function stepFingerprint(chainId, position) {

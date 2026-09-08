@@ -3,6 +3,7 @@ import { statSync } from "node:fs";
 import path from "node:path";
 import {
   DEFAULT_QUERY_EVENTS,
+  DEFAULT_QUOTA_BYTES,
   DEFAULT_SEARCH_RESULTS,
   MAX_PURGE_DAYS,
   MAX_QUERY_EVENTS,
@@ -31,6 +32,7 @@ import {
   MAX_CHAIN_STEPS,
 } from "./config.js";
 import { sanitizeTarget, sanitizeLabel, chainSearchText } from "./privacy.js";
+import { ProfileStatistics } from "./profile-stats.ts";
 
 function shortFingerprint(value) {
   return createHash("sha256").update(String(value)).digest("hex");
@@ -87,10 +89,12 @@ export class MemoryStore {
     this.embedQueue = embedQueue;
     this.db = openDatabase(this.root);
     this.db.exec(SCHEMA_DDL);
+    this.profiles = new ProfileStatistics(this.db);
     this.meta = this.#readMeta();
     this.open = true;
     if (this.embedQueue && !this.embedQueue.store) this.embedQueue.store = this;
-    this.#migrate();
+    try { this.#migrate(); } catch (error) { this.db.close(); throw error; }
+    this.recoverEmbeddings();
   }
 
   // Tag legacy v1 low-level chains as non-replayable and back up the database
@@ -103,15 +107,9 @@ export class MemoryStore {
     }
     if (current >= 1) {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      for (const suffix of ["", "-wal", "-shm"]) {
-        const source = `${databasePath(this.root)}${suffix}`;
-        try {
-          if (statSize(source) > 0) fs.copyFileSync(source, `${source}.backup-${stamp}`);
-        } catch {
-          // backup is best effort; the live database is untouched
-        }
-      }
-      this.writeMeta("legacy_v1_tagged", true);
+      // SQLite creates a consistent snapshot, including committed WAL data.
+      this.db.prepare("VACUUM INTO ?").run(`${databasePath(this.root)}.backup-${stamp}`);
+      if (current < 2) this.writeMeta("legacy_v1_tagged", true);
     }
     this.writeMeta("schema_version", SCHEMA_VERSION);
     this.meta = this.#readMeta();
@@ -227,17 +225,20 @@ export class MemoryStore {
     return true;
   }
 
-  #recordUsageEvent({ eventType, actionId = null, chainId = null, success = null, durationMs = null, stepsReused = null, reason = null }) {
+  #recordUsageEvent({ eventType, actionId = null, chainId = null, success = null, durationMs = null, stepsReused = null, reason = null, profileId = null }) {
     try {
-      this.db.prepare(
+      const written = this.db.prepare(
         "INSERT INTO memory_usage_events (occurred_at, event_type, action_id, chain_id, success, duration_ms, steps_reused, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(isoNow(), eventType, actionId, chainId, success === null ? null : success ? 1 : 0, durationMs, stepsReused, reason);
-    } catch {
-      // usage events are append-only telemetry; never fail capture for them
+      this.profiles.attribute("event", written.lastInsertRowid, profileId);
+    } catch (error) {
+      throw new Error("Could not persist action usage", { cause: error });
     }
   }
 
-  recordStep({ chainId = null, position = null, action = null, hostname = null, target = null, success = true, durationMs = null, errorCode = null } = {}) {
+  recordStep(params = {}) { return inTransaction(this.db, () => this.#recordStep(params)); }
+
+  #recordStep({ chainId = null, position = null, action = null, hostname = null, target = null, success = true, durationMs = null, errorCode = null, profileId = null } = {}) {
     if (!this.#v2Gate()) return { accepted: false, reason: "disabled" };
     const safeAction = typeof action === "string" && action.length > 0 && action.length <= 64 ? action : null;
     if (!safeAction) return { accepted: false, reason: "invalid_action" };
@@ -265,7 +266,8 @@ export class MemoryStore {
     const row = this.db.prepare("SELECT id FROM memory_actions_v2 WHERE fingerprint = ?").get(fingerprint);
     const actionId = row?.id ?? null;
     if (actionId) {
-      this.#recordUsageEvent({ eventType: "action_recorded", actionId, chainId, success, durationMs, reason: errorCode ?? null });
+      this.profiles.attribute("action", actionId, profileId);
+      this.#recordUsageEvent({ eventType: "action_recorded", actionId, chainId, success, durationMs, reason: errorCode ?? null, profileId });
       this.#queueEmbedV2("action", fingerprint, chainSearchText(safeHostname, [{ action: safeAction, target_role: recipe.target_role, target_label: recipe.target_label }]));
     }
     if (chainId != null && Number.isInteger(position)) this.#appendChainStepV2(String(chainId), position, recipe, now);
@@ -295,7 +297,9 @@ export class MemoryStore {
     this.db.prepare("UPDATE memory_chains_v2 SET recipe_json = ?, last_seen = ? WHERE id = ?").run(JSON.stringify(steps), now, existing.id);
   }
 
-  finalizeChain({ chainId = null, success = true, durationMs = null, supersedes = null } = {}) {
+  finalizeChain(params = {}) { return inTransaction(this.db, () => this.#finalizeChain(params)); }
+
+  #finalizeChain({ chainId = null, success = true, durationMs = null, supersedes = null, profileId = null } = {}) {
     if (!this.#v2Gate() || chainId == null) return { accepted: false };
     const fingerprint = shortFingerprint(`chain:${chainId}`);
     const chain = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
@@ -316,6 +320,7 @@ export class MemoryStore {
     if (existing && existing.id !== chain.id) {
       this.db.prepare("UPDATE memory_chains_v2 SET confirmed_count = confirmed_count + ?, failed_count = failed_count + ?, last_seen = ? WHERE id = ?")
         .run(success ? 1 : 0, success ? 0 : 1, now, existing.id);
+      this.profiles.inheritChain(existing.id, [chain.id]);
       this.db.prepare("DELETE FROM memory_chains_v2 WHERE id = ?").run(chain.id);
       finalizedId = existing.id;
     } else {
@@ -326,10 +331,12 @@ export class MemoryStore {
       this.db.prepare("UPDATE memory_chains_v2 SET replaced_by = ? WHERE id = ? AND replaced_by IS NULL").run(finalizedId, supersedes);
       this.db.prepare("UPDATE memory_chains_v2 SET supersedes = COALESCE(supersedes, ?) WHERE id = ?").run(supersedes, finalizedId);
     }
+    this.profiles.attribute("chain", finalizedId, profileId);
     if (success) finalizedId = this.#mergeCompatibleV2Head(finalizedId, now);
     const finalized = this.db.prepare("SELECT fingerprint, safe_summary, recipe_json FROM memory_chains_v2 WHERE id = ?").get(finalizedId);
     this.#queueEmbedV2("chain", finalized?.fingerprint ?? canonicalFingerprint, finalized?.safe_summary ?? summary);
-    this.#recordUsageEvent({ eventType: "chain_recorded", chainId: finalizedId, success, durationMs, stepsReused: steps.length });
+    this.profiles.attribute("chain", finalizedId, profileId);
+    this.#recordUsageEvent({ eventType: "chain_recorded", chainId: finalizedId, success, durationMs, stepsReused: steps.length, profileId });
     return { accepted: true, chainId: finalizedId, steps: steps.length, summary: finalized?.safe_summary ?? summary };
   }
 
@@ -356,9 +363,18 @@ export class MemoryStore {
       }
       this.db.prepare("UPDATE memory_chains_v2 SET replaced_by = ? WHERE id IN (?, ?) AND id != ?").run(mergedRow.id, candidate.id, current.id, mergedRow.id);
       this.db.prepare("UPDATE memory_chains_v2 SET supersedes = COALESCE(supersedes, ?) WHERE id = ?").run(current.id, mergedRow.id);
+      this.profiles.inheritChain(mergedRow.id, [candidate.id, current.id]);
       return mergedRow.id;
     }
     return chainId;
+  }
+
+  recoverEmbeddings() {
+    if (!this.embedQueue?.embed) return;
+    const actions = this.db.prepare("SELECT fingerprint, action, hostname, target_label, target_role FROM memory_actions_v2 WHERE embedding IS NULL LIMIT ?").all(this.embedQueue.capacity);
+    for (const row of actions) this.#queueEmbedV2("action", row.fingerprint, chainSearchText(row.hostname, [row]));
+    const chains = this.db.prepare("SELECT fingerprint, safe_summary FROM memory_chains_v2 WHERE embedding IS NULL AND replaced_by IS NULL AND safe_summary != '' LIMIT ?").all(Math.max(0, this.embedQueue.capacity - actions.length));
+    for (const row of chains) this.#queueEmbedV2("chain", row.fingerprint, row.safe_summary);
   }
 
   #queueEmbedV2(kind, fingerprint, text) {
@@ -400,8 +416,8 @@ export class MemoryStore {
       ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL OR embedding_profile IS NOT ?").get(activeProfile).n
       : this.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2 WHERE embedding IS NULL").get().n;
     const chains = activeProfile
-      ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE safe_summary != '' AND (embedding IS NULL OR embedding_profile IS NOT ?)").get(activeProfile).n
-      : this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE safe_summary != '' AND embedding IS NULL").get().n;
+      ? this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE replaced_by IS NULL AND safe_summary != '' AND (embedding IS NULL OR embedding_profile IS NOT ?)").get(activeProfile).n
+      : this.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2 WHERE replaced_by IS NULL AND safe_summary != '' AND embedding IS NULL").get().n;
     return { unindexed_actions: actions, unindexed_chains: chains };
   }
 
@@ -419,20 +435,19 @@ export class MemoryStore {
     const legacyStatement = this.db.prepare("UPDATE signatures SET embedding = ?, model_id = ? WHERE fingerprint = ?");
     try {
       inTransaction(this.db, () => {
-      if (modelId) this.writeMeta("model_id", modelId);
-      if (Number.isInteger(dims)) this.writeMeta("dims", dims);
-      if (embeddingProfile) this.writeMeta("embedding_profile", embeddingProfile);
-      for (const item of rows) {
-        if (!item.values || item.values.length === 0) continue;
-        if (typeof item.fingerprint === "string" && item.fingerprint.startsWith("v2:")) {
-          const stripped = item.fingerprint.replace(/^v2:(?:action|chain):/, "");
-          this.applyEmbeddingV2({ fingerprint: stripped, values: item.values, modelId, dims, embeddingProfile });
-          continue;
+        if (modelId) this.writeMeta("model_id", modelId);
+        if (Number.isInteger(dims)) this.writeMeta("dims", dims);
+        if (embeddingProfile) this.writeMeta("embedding_profile", embeddingProfile);
+        for (const item of rows) {
+          if (!item.values || item.values.length === 0) continue;
+          if (typeof item.fingerprint === "string" && item.fingerprint.startsWith("v2:")) {
+            const stripped = item.fingerprint.replace(/^v2:(?:action|chain):/, "");
+            this.applyEmbeddingV2({ fingerprint: stripped, values: item.values, modelId, dims, embeddingProfile });
+            continue;
+          }
+          legacyStatement.run(embedBufferFromRows([item.values]), modelId ?? null, item.fingerprint);
         }
-        legacyStatement.run(embedBufferFromRows([item.values]), modelId ?? null, item.fingerprint);
-      }
-      this.noteEmbeddingAttempt(rows.length);
-      this.writeMeta("last_embedding_error", null);
+        this.writeMeta("last_embedding_error", null);
       });
     } catch (error) {
       this.meta = this.#readMeta();
@@ -524,7 +539,12 @@ export class MemoryStore {
     };
   }
 
-  status() {
+  captureState() {
+    this.meta = this.#readMeta();
+    return { enabled: this.meta.enabled === "true", paused: this.meta.paused === "true" };
+  }
+
+  status(scope = {}) {
     this.meta = this.#readMeta();
     const counts = this.db.prepare(
       "SELECT (SELECT COUNT(*) FROM signatures) AS signatures, (SELECT COUNT(*) FROM chains) AS chains, (SELECT COUNT(*) FROM failure_contexts) AS failure_contexts, " +
@@ -535,11 +555,30 @@ export class MemoryStore {
         "(SELECT COUNT(*) FROM memory_actions_v2 WHERE failed_count > 0) AS negative_actions_v2, " +
         "(SELECT COUNT(*) FROM memory_usage_events) AS usage_events",
     ).get();
-    const usage = this.usageMetrics();
+    if (scope.profileIds != null) {
+      counts.actions_v2 = this.profiles.count("action", scope);
+      counts.chains_v2 = this.profiles.count("chain", scope, "replaced_by IS NULL AND safe_summary != ''");
+      counts.executions_v2 = this.profiles.count("event", scope, "event_type = 'action_recorded'");
+      counts.failed_executions_v2 = this.profiles.count("event", scope, "event_type = 'action_recorded' AND success = 0");
+      counts.negative_actions_v2 = this.profiles.negativeActions(scope);
+      counts.usage_events = this.profiles.count("event", scope);
+      if (!scope.includeUnattributed) for (const key of ["signatures", "chains", "failure_contexts", "confirmed", "failed"]) counts[key] = 0;
+    }
+    const usage = this.usageMetrics(scope);
     const unindexed = this.unindexedCounts();
+    if (scope.profileIds != null) {
+      const profile = this.meta.embedding_profile;
+      const stale = typeof profile === "string" ? "embedding IS NULL OR embedding_profile IS NOT ?" : "embedding IS NULL";
+      const params = typeof profile === "string" ? [profile] : [];
+      unindexed.unindexed_actions = this.profiles.count("action", scope, stale, params);
+      unindexed.unindexed_chains = this.profiles.count("chain", scope, `replaced_by IS NULL AND safe_summary != '' AND (${stale})`, params);
+    }
     const modal = this.meta;
     return {
       supported: true,
+      capabilities: { profileStatistics: true },
+      scope: { profileIds: scope.profileIds == null ? null : [...new Set(scope.profileIds)], includeUnattributed: scope.profileIds == null || scope.includeUnattributed === true },
+      observedAt: isoNow(),
       enabled: modal.enabled === "true",
       paused: modal.paused === "true",
       admitted: true,
@@ -578,12 +617,13 @@ export class MemoryStore {
         ...unindexed,
       },
       usage: usage,
-      recent_daily: this.#dailySeries(),
+      recent_daily: this.#dailySeries(14, scope),
       health: this.#health(),
     };
   }
 
-  usageMetrics() {
+  usageMetrics(scope = {}) {
+    const filter = this.profiles.filter("event", scope, "memory_usage_events.id");
     const totals = this.db.prepare(
       "SELECT " +
         "SUM(CASE WHEN event_type = 'memory_search' THEN 1 ELSE 0 END) AS search_queries, " +
@@ -593,15 +633,15 @@ export class MemoryStore {
         "SUM(CASE WHEN event_type = 'replay_failed' THEN 1 ELSE 0 END) AS replay_failures, " +
         "SUM(CASE WHEN event_type = 'replay_rejected' THEN 1 ELSE 0 END) AS replay_fallbacks, " +
         "SUM(CASE WHEN event_type IN ('replay_succeeded', 'replay_failed') THEN COALESCE(steps_reused, 0) ELSE 0 END) AS steps_reused " +
-        "FROM memory_usage_events",
-    ).get();
+        `FROM memory_usage_events WHERE ${filter.sql}`,
+    ).get(...filter.params);
     const successes = Number(totals.replay_successes ?? 0);
     const failures = Number(totals.replay_failures ?? 0);
     const attempts = successes + failures;
     return {
       search_queries: Number(totals.search_queries ?? 0),
       matches_returned: Number(totals.matches_returned ?? 0),
-      replay_attempts: attempts,
+      replay_attempts: Number(totals.replay_attempts ?? 0),
       replay_successes: successes,
       replay_failures: Number(totals.replay_failures ?? 0),
       replay_fallbacks: Number(totals.replay_fallbacks ?? 0),
@@ -610,19 +650,20 @@ export class MemoryStore {
     };
   }
 
-  #dailySeries(days = 14) {
+  #dailySeries(days = 14, scope = {}) {
     const buckets = [];
     const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    now.setUTCHours(0, 0, 0, 0);
     for (let offset = days - 1; offset >= 0; offset -= 1) {
       const day = new Date(now);
-      day.setDate(day.getDate() - offset);
+      day.setUTCDate(day.getUTCDate() - offset);
       buckets.push({ day: day.toISOString().slice(0, 10), confirmed: 0, failed: 0, signatures: 0 });
     }
     const byDay = new Map(buckets.map((bucket) => [bucket.day, bucket]));
+    const filter = this.profiles.filter("event", scope, "memory_usage_events.id");
     const events = this.db.prepare(
-      "SELECT occurred_at, event_type, success, COUNT(*) AS n FROM memory_usage_events WHERE occurred_at >= ? GROUP BY occurred_at, event_type, success",
-    ).all(buckets[0]?.day ?? "");
+      `SELECT SUBSTR(occurred_at, 1, 10) AS occurred_at, event_type, success, COUNT(*) AS n FROM memory_usage_events WHERE occurred_at >= ? AND ${filter.sql} GROUP BY SUBSTR(occurred_at, 1, 10), event_type, success`,
+    ).all(buckets[0]?.day ?? "", ...filter.params);
     for (const row of events) {
       const day = String(row.occurred_at).slice(0, 10);
       const bucket = byDay.get(day);
@@ -650,7 +691,9 @@ export class MemoryStore {
     return "ready";
   }
 
-  async search({ query = null, limit = DEFAULT_SEARCH_RESULTS, kind = "all", hostname = null, modelId = null, includeLegacy = false } = {}) {
+  async search({ query = null, limit = DEFAULT_SEARCH_RESULTS, kind = "all", hostname = null, modelId = null, includeLegacy = false, profileId = null } = {}) {
+    this.meta = this.#readMeta();
+    this.#recordUsageEvent({ eventType: "memory_search", profileId });
     const bound = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), MAX_SEARCH_RESULTS) : DEFAULT_SEARCH_RESULTS;
     const activeProfile = typeof this.meta.embedding_profile === "string" ? this.meta.embedding_profile : null;
 
@@ -745,6 +788,7 @@ export class MemoryStore {
       hostname,
       embeddingProfile: activeProfile,
       threshold: this.similarityThreshold(activeProfile),
+      profileId,
     });
   }
 
@@ -801,7 +845,7 @@ export class MemoryStore {
   }
 
   usageEvent(event) {
-    this.#recordUsageEvent(event);
+    inTransaction(this.db, () => this.#recordUsageEvent(event));
     return { accepted: true };
   }
 
@@ -905,21 +949,16 @@ export class MemoryStore {
     if (quota_bytes != null && (!Number.isInteger(Number(quota_bytes)) || Number(quota_bytes) < MIN_QUOTA_BYTES || Number(quota_bytes) > MAX_QUOTA_BYTES)) throw new Error(`Quota must be between ${MIN_QUOTA_BYTES} and ${MAX_QUOTA_BYTES} bytes.`);
     if (purge_days != null && (!Number.isInteger(Number(purge_days)) || Number(purge_days) < MIN_PURGE_DAYS || Number(purge_days) > MAX_PURGE_DAYS)) throw new Error(`Purge days must be between ${MIN_PURGE_DAYS} and ${MAX_PURGE_DAYS}.`);
     if (power_user != null && typeof power_user !== "boolean") throw new Error("power_user must be a boolean.");
-    if (quota_bytes != null) {
-      const quota = Number(quota_bytes);
-      if (!Number.isInteger(quota) || quota < MIN_QUOTA_BYTES || quota > MAX_QUOTA_BYTES) throw new Error(`Quota must be between ${MIN_QUOTA_BYTES} and ${MAX_QUOTA_BYTES} bytes.`);
-      this.writeMeta("quota_bytes", quota);
-      this.#evictForQuota();
-    }
-    if (purge_days != null) {
-      const days = Number(purge_days);
-      if (!Number.isInteger(days) || days < MIN_PURGE_DAYS || days > MAX_PURGE_DAYS) throw new Error(`Purge days must be between ${MIN_PURGE_DAYS} and ${MAX_PURGE_DAYS}.`);
-      this.writeMeta("purge_days", days);
-    }
-    if (power_user != null) {
-      if (typeof power_user !== "boolean") throw new Error("power_user must be a boolean.");
-      this.writeMeta("power_user", power_user);
-    }
+    this.meta = this.#readMeta();
+    const expanded = power_user ?? this.meta.power_user === "true";
+    if (quota_bytes != null && !expanded && Number(quota_bytes) > DEFAULT_QUOTA_BYTES) throw new Error("Enable expanded storage before raising the standard quota.");
+    inTransaction(this.db, () => {
+      if (quota_bytes != null) this.writeMeta("quota_bytes", Number(quota_bytes));
+      if (purge_days != null) this.writeMeta("purge_days", Number(purge_days));
+      if (power_user != null) this.writeMeta("power_user", power_user);
+      if (power_user === false && Number(this.meta.quota_bytes) > DEFAULT_QUOTA_BYTES) this.writeMeta("quota_bytes", DEFAULT_QUOTA_BYTES);
+    });
+    if (quota_bytes != null || power_user === false) this.#evictForQuota();
     return this.status();
   }
 

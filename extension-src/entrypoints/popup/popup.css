@@ -213,7 +213,7 @@ h1 {
 
 .view-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--surface-border);
@@ -1161,3 +1161,9 @@ button.switch.on:focus-visible {
   margin-top: 8px;
   opacity: 0.85;
 }
+
+.field-label { display: block; margin: 14px 0 6px; font-weight: 600; }
+select { width: 100%; padding: 10px 12px; margin: 8px 0; border-radius: 10px; border: 1px solid var(--surface-border); background: var(--surface); color: var(--text); font: inherit; }
+.profile-options { margin-top: 10px; padding: 12px; border: 1px solid var(--surface-border); border-radius: 10px; }
+.profile-options .checkbox-row { margin: 8px 0; }
+select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { MemoryStore } from "../../native-host/src/memory/store.js";
 import { safeSelector } from "../../native-host/src/memory/privacy.js";
+import { sqliteImplementation } from "../../native-host/src/memory/config.js";
 
 function stores(t, count = 1) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "memory-reliability-"));
@@ -19,6 +20,73 @@ function stores(t, count = 1) {
   });
   return opened;
 }
+
+test("profile statistics isolate executions and deduplicate shared recipes", async (t) => {
+  const [first, second] = stores(t, 2);
+  first.enable();
+  first.profiles.register({ profileId: "alpha", profileLabel: "Primary" });
+  first.recordStep({ action: "click", hostname: "fixture.test", profileId: "alpha" });
+  second.recordStep({ action: "click", hostname: "fixture.test", profileId: "beta", success: false });
+  first.recordStep({ action: "navigate", hostname: "history.test" });
+  const alpha = first.status({ profileIds: ["alpha"] });
+  const beta = first.status({ profileIds: ["beta"] });
+  const both = second.status({ profileIds: ["alpha", "beta", "alpha"] });
+  assert.equal(alpha.counts.executions_v2, 1);
+  assert.equal(alpha.counts.negative_actions_v2, 0);
+  assert.equal(beta.counts.negative_actions_v2, 1);
+  assert.equal(both.counts.executions_v2, 2);
+  assert.equal(both.counts.actions_v2, 1);
+  assert.equal(first.status({ profileIds: [], includeUnattributed: true }).counts.actions_v2, 1);
+  assert.equal(first.status().counts.executions_v2, 3);
+  second.profiles.register({ profileId: "alpha", profileLabel: "Renamed" });
+  assert.equal(first.profiles.list().find((item) => item.profileId === "alpha").profileLabel, "Renamed");
+  assert.equal(first.status({ profileIds: ["alpha"] }).counts.executions_v2, 1);
+  await first.search({ query: "missing", profileId: "alpha" });
+  assert.equal(second.status({ profileIds: ["alpha"] }).usage.search_queries, 1);
+  assert.equal(second.status({ profileIds: ["beta"] }).usage.search_queries, 0);
+});
+
+test("an in-progress replay counts as an attempt without inventing a success rate", (t) => {
+  const [store] = stores(t);
+  store.usageEvent({ eventType: "replay_started", profileId: "alpha" });
+  const usage = store.status({ profileIds: ["alpha"] }).usage;
+  assert.equal(usage.replay_attempts, 1);
+  assert.equal(usage.replay_success_rate, null);
+});
+
+test("action attribution failures roll back counters and recipes together", (t) => {
+  const [store] = stores(t);
+  store.enable();
+  store.profiles.attribute = () => { throw new Error("fixture attribution failure"); };
+  assert.throws(() => store.recordStep({ action: "click", profileId: "fixture" }), /attribution failure/);
+  assert.equal(store.status().counts.actions_v2, 0);
+  assert.equal(store.status().counts.executions_v2, 0);
+});
+
+test("turning off expanded storage restores the standard quota", (t) => {
+  const [store] = stores(t);
+  store.configure({ power_user: true, quota_bytes: 200 * 1024 * 1024 });
+  store.configure({ power_user: false });
+  assert.equal(store.status().quota_bytes, 100 * 1024 * 1024);
+  assert.throws(() => store.configure({ quota_bytes: 200 * 1024 * 1024 }), /expanded storage/);
+});
+
+test("schema migration creates a consistent snapshot with committed WAL data", (t) => {
+  const opened = stores(t);
+  const first = opened[0];
+  first.enable();
+  first.recordStep({ action: "click", hostname: "fixture.test" });
+  first.writeMeta("schema_version", 2);
+  opened.push(new MemoryStore({ root: first.root }));
+  assert.equal(opened[1].status().schema_version, 3);
+  const backup = fs.readdirSync(first.root).find((name) => name.startsWith("memory.db.backup-"));
+  assert.ok(backup);
+  const snapshot = new (sqliteImplementation().Database)(path.join(first.root, backup));
+  try {
+    assert.equal(snapshot.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2").get().n, 1);
+    assert.equal(snapshot.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
+  } finally { snapshot.close(); }
+});
 
 test("capture settings are shared by already-open database connections", (t) => {
   const [first, second] = stores(t, 2);

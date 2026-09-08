@@ -72,7 +72,7 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
   const popupSource = ["App.tsx", "ConnectionView.tsx", "MemoryView.tsx", "api.ts"]
     .map((file) => fs.readFileSync(path.join(root, "extension-src", "entrypoints", "popup", file), "utf8"))
     .join("\n");
-  assert.match(popupSource, /tab-memory|Action Memory/);
+  assert.match(popupSource, /Overview/);
   assert.match(popupSource, /id=\"view-memory\"|id=\"memory-state-line\"/);
   assert.match(popupSource, /quota-slider/);
   assert.match(popupSource, /power-user/);
@@ -107,7 +107,7 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
 });
 
 test("host handles memory extension methods locally", async () => {
-  const host = fs.readFileSync(path.join(root, "native-host", "src", "host.js"), "utf8");
+    const host = fs.readFileSync(path.join(root, "native-host", "src", "runtime.js"), "utf8");
   assert.match(host, /memory\.stats/);
   assert.match(host, /memory\.configure/);
   assert.match(host, /memory\.enable/);

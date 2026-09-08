@@ -1364,6 +1364,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 const statusPorts = new Set();
 const POPUP_MEMORY_METHODS = new Set([
+  "memory.profiles",
   "memory.stats",
   "memory.configure",
   "memory.enable",
