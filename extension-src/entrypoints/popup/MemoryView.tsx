@@ -191,7 +191,6 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
           <button id="memory-enable" className="button button-success" type="button" disabled={!status || memoryBusy || enabled} onClick={() => void runMemoryAction("memory.enable", "Action memory enabled.")}>Enable</button>
           <button id="memory-disable" className="button button-danger" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.disable", "Action memory disabled.")}>Disable</button>
         </div>
-        <p id="memory-feedback" className="feedback" role="status">{memoryFeedback}</p>
       </div>
 
       <div className="card memory-card">
@@ -272,6 +271,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         <MemoryChart daily={status?.recent_daily} />
         <p className="help-note">{status?.observedAt ? `Updated ${new Date(status.observedAt).toLocaleTimeString()} · chart days use UTC` : "Waiting for statistics…"}</p>
       </div>}
+      <p id="memory-feedback" className="feedback" role="status">{memoryFeedback}</p>
       {loadError ? <p className="feedback" role="alert">Statistics unavailable: {loadError}{status ? " Showing the last successful update." : ""}</p> : null}
     </section>
   );

@@ -42,7 +42,7 @@ const server = http.createServer(async (req, res) => {
     const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(file)];
     res.setHeader("Content-Type", type ?? "application/octet-stream");
     res.end(fs.readFileSync(file));
-  } catch { res.writeHead(500).end("Fixture request failed"); }
+  } catch { res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "Fixture request failed" })); }
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let browser;
@@ -67,6 +67,8 @@ try {
   await page.selectOption("#statistics-scope", "selected");
   await page.getByLabel("Secondary", { exact: true }).check();
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "2");
+  await page.locator("#memory-reindex").click();
+  await page.waitForFunction(() => document.querySelector("#memory-feedback")?.textContent === "Fixture request failed");
   fs.mkdirSync(path.join(root, "reports"), { recursive: true });
   await page.screenshot({ path: path.join(root, "reports", "popup-overview.png"), fullPage: true });
   await page.getByRole("tab", { name: "Profiles", exact: true }).click();
