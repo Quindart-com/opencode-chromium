@@ -1,4 +1,5 @@
 import net from "node:net";
+import { PLUGIN_VERSION } from "../core/versions.js";
 import { FrameDecoder, writeFrame } from "../../native-host/src/framing.js";
 import { defaultIpcPath } from "../../native-host/src/ipc-path.js";
 import { profileRegistryDir, readProfileRegistrations } from "../../native-host/src/profile-registry.js";
@@ -140,7 +141,7 @@ export class BrowserHostClient {
         this.#settle(id, () => reject(new Error(`Timed out waiting for browser host response to ${method}`)));
       }, timeoutMs);
       this.#pending.set(id, { method, resolve, reject, timeout });
-      writeFrame(socket, { jsonrpc: "2.0", method, params, id }).catch((error) => {
+      writeFrame(socket, { jsonrpc: "2.0", method, params, id, clientVersion: PLUGIN_VERSION }).catch((error) => {
         this.#settle(id, () => reject(error));
         this.#disconnect(error);
       });

@@ -11,6 +11,7 @@ function requestTimeoutMs(message) {
 export class RpcRelay {
   #extensionWriter;
   #clients = new Set();
+  #clientVersions = new Map();
   #pendingRequests = new Map();
   #pendingBySocket = new Map();
   #nextRequestId = 1;
@@ -37,6 +38,7 @@ export class RpcRelay {
 
   #removeClient(socket) {
     this.#clients.delete(socket);
+    if (this.#clientVersions.delete(socket)) this.#broadcastVersions();
     const pendingIds = this.#pendingBySocket.get(socket) ?? new Set();
     for (const extensionId of pendingIds) this.#deletePending(extensionId);
     this.#pendingBySocket.delete(socket);
@@ -72,6 +74,13 @@ export class RpcRelay {
   }
 
   async handleClientMessage(socket, message) {
+    if (typeof message?.clientVersion === "string" && /^\d{1,5}\.\d{1,5}\.\d{1,5}(?:\.\d{1,5})?(?:-[a-zA-Z0-9.-]{1,40})?$/.test(message.clientVersion) && this.#clientVersions.get(socket) !== message.clientVersion) {
+      this.#clientVersions.set(socket, message.clientVersion);
+      this.#broadcastVersions();
+    } else if (!this.#clientVersions.has(socket)) {
+      this.#clientVersions.set(socket, null);
+      this.#broadcastVersions();
+    }
     if (message?.method === "host.status") {
       if (message.id !== undefined) {
         await writeFrame(socket, {
@@ -152,14 +161,28 @@ export class RpcRelay {
     }
   }
 
+  #versions() {
+    return {
+      nativeHostVersion: this.#state.nativeHostVersion ?? null,
+      clientVersions: [...new Set(this.#clientVersions.values())].filter(Boolean).sort(),
+      unknownClientVersion: [...this.#clientVersions.values()].includes(null),
+    };
+  }
+
   #status() {
     return {
+      ...this.#versions(),
       connected: true,
       ipcClients: this.#clients.size,
       lastExtensionMessageAt: this.#state.lastExtensionMessageAt ?? null,
       startedAt: this.#state.startedAt,
       profile: this.#state.profile ?? null,
     };
+  }
+
+  async #broadcastVersions() {
+    try { await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, method: "host.versions", params: this.#versions() }); }
+    catch { /* A version notice must never interrupt browser work. */ }
   }
 
   async #handleProfileHello(message) {
@@ -177,7 +200,7 @@ export class RpcRelay {
 
     this.#onProfile?.(profile);
     if (message.id !== undefined) {
-      await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, result: { registered: true } });
+      await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, result: { registered: true, ...this.#versions() } });
     }
   }
 
