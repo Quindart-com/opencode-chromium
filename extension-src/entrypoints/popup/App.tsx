@@ -3,8 +3,9 @@ import { browser } from "wxt/browser";
 import { sendMessage, type NativeStatus } from "./api";
 import ConnectionView from "./ConnectionView";
 import MemoryView from "./MemoryView";
+import VersionNotice from "./VersionNotice";
 
-type ViewName = "connection" | "memory";
+type ViewName = "overview" | "profiles" | "settings";
 
 function statusClass(state: string): string {
   if (state === "connected") return "pill-ok";
@@ -88,7 +89,7 @@ function Header({ status }: { status: NativeStatus }): React.JSX.Element {
 function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: ViewName) => void }): React.JSX.Element {
   return (
     <nav className="view-tabs" role="tablist" aria-label="Extension views">
-      {(["connection", "memory"] as const).map((view) => {
+      {(["overview", "profiles", "settings"] as const).map((view) => {
         const isActive = view === active;
         return (
           <button
@@ -100,7 +101,7 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
             type="button"
             onClick={() => onChange(view)}
           >
-            {view === "connection" ? "Connection" : "Action Memory"}
+            {view === "overview" ? "Overview" : view === "profiles" ? "Profiles" : "Settings"}
           </button>
         );
       })}
@@ -109,14 +110,15 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
 }
 
 export default function App(): React.JSX.Element {
-  const [activeView, setActiveView] = useState<ViewName>("connection");
+  const [activeView, setActiveView] = useState<ViewName>("overview");
   const nativeStatus = useNativeStatus();
 
   return (
     <main>
       <Header status={nativeStatus} />
+      <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
       <ViewTabs active={activeView} onChange={setActiveView} />
-      {activeView === "connection" ? <ConnectionView status={nativeStatus} /> : <MemoryView />}
+      {activeView === "overview" ? <MemoryView /> : activeView === "profiles" ? <ConnectionView status={nativeStatus} view="profiles" /> : <><ConnectionView status={nativeStatus} view="settings" /><MemoryView view="settings" /></>}
       <footer id="app-footer">
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
           Source on GitHub

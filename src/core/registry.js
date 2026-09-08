@@ -39,6 +39,7 @@ const targetSchema = z.object({
   nodeId: z.string().optional(),
   selector: z.string().optional(),
   query: z.string().optional(),
+  role: z.string().max(64).optional(),
   fromStep: z.string().optional(),
   index: z.number().int().min(0).optional(),
   x: z.number().optional(),
@@ -210,7 +211,7 @@ export function createMemoryRegistry(runtime) {
   return {
     memory_status: {
       description: "Report local action-memory availability: capture state, model, quota, purge settings, and success-rate statistics. Read-only; reveals no memory content.",
-      inputSchema: z.object({ ...sessionFields }),
+      inputSchema: z.object({ ...sessionFields, profileIds: z.array(z.string().min(1).max(160)).max(50).optional(), includeUnattributed: z.boolean().optional() }),
       outputSchema: resultSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
       execute: (args, context) => runtime.memoryStatus(args, context),
