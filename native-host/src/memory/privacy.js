@@ -38,6 +38,12 @@ export function safeSelector(selector) {
   if (/\beyJ[A-Za-z0-9_-]{8,}\b/.test(selector)) return null;
   if (/\b[A-Za-z0-9_-]{40,}\b/.test(selector)) return null;
   if (/\d[\d_-]{11,}/.test(selector)) return null;
+  // Only structural attribute filters may persist; arbitrary attributes can
+  // contain form values, tokens, or account-specific content.
+  if (/\\/.test(selector)) return null;
+  for (const match of selector.matchAll(/\[\s*([^\s~|^$*!=\]]+)/g)) {
+    if (!["role", "type", "disabled", "checked", "selected"].includes(match[1].toLowerCase())) return null;
+  }
   const cleaned = collapseSpaces(selector);
   if (cleaned.length === 0 || cleaned.length > 300) return null;
   return cleaned;

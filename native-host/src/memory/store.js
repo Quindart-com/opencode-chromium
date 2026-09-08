@@ -17,6 +17,7 @@ import {
   defaultConfig,
   memoryRootDir,
   openDatabase,
+  inTransaction,
 } from "./config.js";
 import { float32FromBuffer, embedBufferFromRows, bufferFromFloat32 } from "./rank.js";
 import { SCHEMA_DDL } from "./schema.js";
@@ -139,9 +140,13 @@ export class MemoryStore {
   }
 
   #ensureEnabled() {
+    this.meta = this.#readMeta();
     if (this.meta.enabled !== "true") return { accepted: false, reason: "disabled" };
     if (this.meta.paused === "true") return { accepted: false, reason: "paused" };
-    if (this.meta.quota_reached_once === "true") return { accepted: false, reason: "quota_reached" };
+    if (this.bytesUsed() > Number(this.meta.quota_bytes)) {
+      this.writeMeta("quota_reached_once", true);
+      return { accepted: false, reason: "quota_reached" };
+    }
     return { accepted: true };
   }
 
@@ -411,12 +416,13 @@ export class MemoryStore {
 
   applyEmbeddings(rows, modelId, dims, embeddingProfile = null) {
     if (!Array.isArray(rows) || rows.length === 0) return;
-    if (modelId) this.writeMeta("model_id", modelId);
-    if (Number.isInteger(dims)) this.writeMeta("dims", dims);
-    if (embeddingProfile) this.writeMeta("embedding_profile", embeddingProfile);
     const legacyStatement = this.db.prepare("UPDATE signatures SET embedding = ?, model_id = ? WHERE fingerprint = ?");
-    const transaction = this.db.transaction((items) => {
-      for (const item of items) {
+    try {
+      inTransaction(this.db, () => {
+      if (modelId) this.writeMeta("model_id", modelId);
+      if (Number.isInteger(dims)) this.writeMeta("dims", dims);
+      if (embeddingProfile) this.writeMeta("embedding_profile", embeddingProfile);
+      for (const item of rows) {
         if (!item.values || item.values.length === 0) continue;
         if (typeof item.fingerprint === "string" && item.fingerprint.startsWith("v2:")) {
           const stripped = item.fingerprint.replace(/^v2:(?:action|chain):/, "");
@@ -425,12 +431,12 @@ export class MemoryStore {
         }
         legacyStatement.run(embedBufferFromRows([item.values]), modelId ?? null, item.fingerprint);
       }
-    });
-    try {
-      transaction(rows);
       this.noteEmbeddingAttempt(rows.length);
-    } catch {
-      // embedding application is best effort; the signature stays searchable-degraded
+      this.writeMeta("last_embedding_error", null);
+      });
+    } catch (error) {
+      this.meta = this.#readMeta();
+      throw error;
     }
   }
 
@@ -519,6 +525,7 @@ export class MemoryStore {
   }
 
   status() {
+    this.meta = this.#readMeta();
     const counts = this.db.prepare(
       "SELECT (SELECT COUNT(*) FROM signatures) AS signatures, (SELECT COUNT(*) FROM chains) AS chains, (SELECT COUNT(*) FROM failure_contexts) AS failure_contexts, " +
         "(SELECT COALESCE(SUM(confirmed_count), 0) FROM signatures) AS confirmed, (SELECT COALESCE(SUM(failed_count), 0) FROM signatures) AS failed, " +
@@ -637,7 +644,7 @@ export class MemoryStore {
     const failures = Number(this.meta.embedding_failures ?? 0);
     const drops = Number(this.meta.embedding_queue_drops ?? 0);
     if (Number(this.meta.dropped ?? 0) > 0) return "events_dropped";
-    if (failures > 0) return "embedding_errors";
+    if (failures > 0 && this.meta.last_embedding_error && this.meta.last_embedding_error !== "null") return "embedding_errors";
     if (drops > 0) return "queue_backpressure";
     if (unindexed.unindexed_actions + unindexed.unindexed_chains > 24) return "index_stale";
     return "ready";
@@ -815,6 +822,9 @@ export class MemoryStore {
 
   #pruneAged(purgeDays, now) {
     let removed = 0;
+    const cutoff = new Date(now - purgeDays * 86400000).toISOString();
+    removed += Number(this.db.prepare("DELETE FROM memory_actions_v2 WHERE confirmed_count = 0 AND last_seen < ?").run(cutoff).changes);
+    removed += Number(this.db.prepare("DELETE FROM memory_chains_v2 WHERE confirmed_count = 0 AND last_seen < ?").run(cutoff).changes);
     const contexts = this.db.prepare("SELECT id, signature_id, occurred_at, last_hit_at, count FROM failure_contexts").all();
     const cutoffs = new Set();
     const survivors = new Set();
@@ -891,6 +901,10 @@ export class MemoryStore {
   }
 
   configure({ quota_bytes = null, purge_days = null, power_user = null } = {}) {
+    // Validate the entire update before persisting any part of it.
+    if (quota_bytes != null && (!Number.isInteger(Number(quota_bytes)) || Number(quota_bytes) < MIN_QUOTA_BYTES || Number(quota_bytes) > MAX_QUOTA_BYTES)) throw new Error(`Quota must be between ${MIN_QUOTA_BYTES} and ${MAX_QUOTA_BYTES} bytes.`);
+    if (purge_days != null && (!Number.isInteger(Number(purge_days)) || Number(purge_days) < MIN_PURGE_DAYS || Number(purge_days) > MAX_PURGE_DAYS)) throw new Error(`Purge days must be between ${MIN_PURGE_DAYS} and ${MAX_PURGE_DAYS}.`);
+    if (power_user != null && typeof power_user !== "boolean") throw new Error("power_user must be a boolean.");
     if (quota_bytes != null) {
       const quota = Number(quota_bytes);
       if (!Number.isInteger(quota) || quota < MIN_QUOTA_BYTES || quota > MAX_QUOTA_BYTES) throw new Error(`Quota must be between ${MIN_QUOTA_BYTES} and ${MAX_QUOTA_BYTES} bytes.`);
