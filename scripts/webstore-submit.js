@@ -99,8 +99,8 @@ if (!dryRun) {
 const results = await submit(config).catch((error) => {
   const detail = errorMessage(error);
   if (detail.includes("ITEM_NOT_UPDATABLE")) {
-    console.log("Chrome Web Store item is under review, so an upload is refused by the store platform right now. This is expected: the update will apply on the next release run once the review concludes.");
-    process.exit(0);
+    console.error("Chrome Web Store refused the upload. This release has not been submitted. Check the item status and rerun this release after the item becomes updatable.");
+    process.exit(1);
   }
   console.error(`Chrome Web Store submission failed: ${detail}`);
   process.exit(1);
