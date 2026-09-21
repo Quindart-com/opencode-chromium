@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 220" role="img" aria-label="NPM downloads for opencode-chromium, daily">
   <rect width="680" height="220" rx="12" fill="#ffffff"/>
   <text x="46" y="18" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1f2328">NPM downloads · daily</text>
-  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">18 yesterday</text>
+  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">12 yesterday</text>
   <path d="M46,180.0H656" stroke="#d1d9e0" stroke-width="1.2" stroke-dasharray="none" fill="none"/>
   <text x="38" y="184.0" text-anchor="end" font-size="10.5" fill="#59636e">0</text>
   <path d="M46,102.0H656" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 5" fill="none"/>
@@ -14,11 +14,11 @@
       <stop offset="1" stop-color="rgba(9,105,218,0.02)"/>
     </linearGradient>
   </defs>
-  <path d="M46.0,142.2 L65.7,172.6 L85.4,24.4 L105.0,180.0 L124.7,176.5 L144.4,176.1 L164.1,121.5 L183.7,170.3 L203.4,172.6 L223.1,173.0 L242.8,177.7 L262.5,178.1 L282.1,176.5 L301.8,174.5 L321.5,175.7 L341.2,122.7 L360.8,118.8 L380.5,72.4 L400.2,93.4 L419.9,99.3 L439.5,180.0 L459.2,170.6 L478.9,180.0 L498.6,180.0 L518.3,162.8 L537.9,172.2 L557.6,169.9 L577.3,180.0 L597.0,180.0 L616.6,170.6 L636.3,173.4 L656.0,173.0 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
-  <path d="M46.0,142.2 L65.7,172.6 L85.4,24.4 L105.0,180.0 L124.7,176.5 L144.4,176.1 L164.1,121.5 L183.7,170.3 L203.4,172.6 L223.1,173.0 L242.8,177.7 L262.5,178.1 L282.1,176.5 L301.8,174.5 L321.5,175.7 L341.2,122.7 L360.8,118.8 L380.5,72.4 L400.2,93.4 L419.9,99.3 L439.5,180.0 L459.2,170.6 L478.9,180.0 L498.6,180.0 L518.3,162.8 L537.9,172.2 L557.6,169.9 L577.3,180.0 L597.0,180.0 L616.6,170.6 L636.3,173.4 L656.0,173.0" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="656.0" cy="173.0" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
-  <text x="648.0" y="163.0" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">18</text>
+  <path d="M46.0,142.2 L61.3,172.6 L76.5,24.4 L91.8,180.0 L107.0,176.5 L122.3,176.1 L137.5,121.5 L152.8,170.3 L168.0,172.6 L183.3,173.0 L198.5,177.7 L213.8,178.1 L229.0,176.5 L244.3,174.5 L259.5,175.7 L274.8,122.7 L290.0,118.8 L305.3,72.4 L320.5,93.4 L335.8,99.3 L351.0,180.0 L366.3,170.6 L381.5,180.0 L396.8,180.0 L412.0,162.8 L427.3,172.2 L442.5,169.9 L457.8,180.0 L473.0,180.0 L488.3,170.6 L503.5,173.4 L518.8,173.0 L534.0,173.4 L549.3,167.5 L564.5,176.1 L579.8,180.0 L595.0,174.2 L610.3,180.0 L625.5,172.6 L640.8,171.8 L656.0,175.3 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
+  <path d="M46.0,142.2 L61.3,172.6 L76.5,24.4 L91.8,180.0 L107.0,176.5 L122.3,176.1 L137.5,121.5 L152.8,170.3 L168.0,172.6 L183.3,173.0 L198.5,177.7 L213.8,178.1 L229.0,176.5 L244.3,174.5 L259.5,175.7 L274.8,122.7 L290.0,118.8 L305.3,72.4 L320.5,93.4 L335.8,99.3 L351.0,180.0 L366.3,170.6 L381.5,180.0 L396.8,180.0 L412.0,162.8 L427.3,172.2 L442.5,169.9 L457.8,180.0 L473.0,180.0 L488.3,170.6 L503.5,173.4 L518.8,173.0 L534.0,173.4 L549.3,167.5 L564.5,176.1 L579.8,180.0 L595.0,174.2 L610.3,180.0 L625.5,172.6 L640.8,171.8 L656.0,175.3" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="656.0" cy="175.3" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
+  <text x="648.0" y="165.3" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">12</text>
   <text x="46" y="210" font-size="10.5" fill="#59636e">Aug 11</text>
-  <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#59636e">Aug 26</text>
-  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Sep 11</text>
+  <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#59636e">Aug 31</text>
+  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Sep 20</text>
 </svg>
