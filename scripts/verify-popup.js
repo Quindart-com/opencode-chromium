@@ -19,6 +19,10 @@ store.profiles.register({ profileId: "secondary", profileLabel: "Secondary" });
 store.recordStep({ action: "click", hostname: "fixture.test", profileId: "primary" });
 other.recordStep({ action: "click", hostname: "fixture.test", profileId: "secondary" });
 other.recordStep({ action: "press", hostname: "fixture.test", profileId: "secondary" });
+// Skipped replays must be explained rather than shown as a bare placeholder.
+store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", profileId: "primary" });
+store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", profileId: "primary" });
+store.usageEvent({ eventType: "replay_rejected", reason: "step_count_mismatch", profileId: "primary" });
 const versionStatus = { state: "connected", versionChecked: true, nativeHostVersion: "1.6.5", clientVersions: ["1.6.5"] };
 const server = http.createServer(async (req, res) => {
   try {
@@ -68,6 +72,13 @@ try {
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1");
+  assert.equal(await page.locator("#memory-replays").textContent(), "0");
+  assert.equal(await page.locator("#memory-success").textContent(), "—");
+  assert.equal(
+    await page.locator("#memory-replay-note").textContent(),
+    "Skipped 3 remembered recipes. Most often: no close enough match (2).",
+  );
+  await page.screenshot({ path: path.join(root, "reports", "popup-replay-note.png"), fullPage: true });
   await page.getByRole("heading", { name: "Update your local browser tools" }).waitFor();
   assert.match(await page.locator(".update-command").textContent(), /opencode-chromium@1.7.1/);
   await page.screenshot({ path: path.join(root, "reports", "popup-version-notice.png"), fullPage: true });
