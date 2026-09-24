@@ -93,8 +93,17 @@ export function updateClientConfig({ client, filePath, action = "install", serve
   const before = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : "";
   let after = before;
   if (client === "codex") {
-    after = removeTomlSection(before, CANONICAL_SERVER);
-    if (action !== "uninstall") after = `${after.trimEnd()}${after.trim() ? "\n\n" : ""}${codexServerToml(serverPath)}\n`;
+    // The skills installer also appends to this file. Removing and re-appending
+    // a section that is already correct made the two swap places on every run,
+    // rewriting the user's config and piling up backups, so a correct section is
+    // left exactly where it is.
+    const block = codexServerToml(serverPath);
+    if (action !== "uninstall" && before.includes(block)) {
+      after = before;
+    } else {
+      after = removeTomlSection(before, CANONICAL_SERVER);
+      if (action !== "uninstall") after = `${after.trimEnd()}${after.trim() ? "\n\n" : ""}${block}\n`;
+    }
   } else {
     const config = readJson(target);
     const resolvedServerPath = serverPath ? path.resolve(serverPath) : "";

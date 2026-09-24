@@ -26,7 +26,7 @@ function collect(root, relative, files) {
   }
 }
 
-export function sourceFileList(root) {
+function sourceFileList(root) {
   const files = [];
   for (const source of SOURCE_ROOTS) collect(root, source, files);
   return files.sort();
@@ -47,7 +47,7 @@ export function sourceFingerprint(root = process.cwd()) {
   return hash.digest("hex");
 }
 
-export function readBuildManifest(root = process.cwd()) {
+function readBuildManifest(root = process.cwd()) {
   try {
     return JSON.parse(fs.readFileSync(path.join(root, "dist", "build-manifest.json"), "utf8"));
   } catch {
