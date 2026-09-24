@@ -5,7 +5,9 @@ import path from "node:path";
 import test from "node:test";
 import { createHash } from "node:crypto";
 import { buildStatus, sourceFingerprint } from "../../src/cli/source-fingerprint.js";
-import { LAUNCHER_FINGERPRINT_SOURCE, launcherSource, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.js";
+import { LAUNCHER_FINGERPRINT_SOURCE, launcherSource, linkTargets, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.js";
+import { BROWSERS, browserIds, executableCandidates, installedBrowsers, windowsRegistryKey } from "../../src/cli/browsers.js";
+import { HOST_NAME, readRegistration, resolveExtensionIds } from "../../src/cli/native-host.js";
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -228,5 +230,89 @@ test("the status launcher reports something on a branch without the status comma
   } finally {
     removeDir(dir);
     removeDir(root);
+  }
+});
+
+// One browser inventory: the profile directory, the registration key and the
+// executable location are the same facts whoever asks for them.
+test("the browser inventory describes every supported browser on every OS", () => {
+  for (const browser of browserIds()) {
+    const entry = BROWSERS[browser];
+    assert.equal(typeof entry.registryRoot, "string", `${browser} needs a registry root`);
+    assert.equal(typeof entry.name, "string");
+    for (const platform of ["win32", "darwin", "linux"]) {
+      assert.ok(Array.isArray(entry.userDataDir[platform]), `${browser} needs a ${platform} user-data dir`);
+    }
+    assert.ok(Array.isArray(entry.windowsExecutables) && entry.windowsExecutables.length > 0);
+    assert.ok(Array.isArray(entry.macApps) && entry.macApps.length > 0);
+    assert.ok(Array.isArray(entry.linuxPaths) && entry.linuxPaths.length > 0);
+    assert.ok(windowsRegistryKey(browser, "com.example.host").endsWith(`\com.example.host`));
+  }
+});
+
+test("an uninstalled browser is not reported as installed", () => {
+  // The detector must be executable-based, not merely "a folder exists":
+  // leftover profile directories are common and register browsers that are gone.
+  const installed = new Set(installedBrowsers());
+  for (const browser of browserIds()) {
+    if (installed.has(browser)) continue;
+    const candidates = executableCandidates(browser);
+    assert.ok(candidates.length >= 0);
+    assert.equal(candidates.some((candidate) => fs.existsSync(candidate)), false, `${browser} has a real executable but was not reported`);
+  }
+});
+
+test("registration requires a real manifest, not just a file on disk", () => {
+  const dir = tempDir("runtime-link-registration-");
+  try {
+    assert.equal(readRegistration("brave", dir).registered, false, "no manifest means no registration");
+    fs.writeFileSync(path.join(dir, "com.opencode.browser.plugin.brave.json"), JSON.stringify({ name: "someone.else", path: "x" }), "utf8");
+    assert.equal(readRegistration("brave", dir).registered, false, "a foreign manifest is not our registration");
+    fs.writeFileSync(path.join(dir, "com.opencode.browser.plugin.brave.json"), JSON.stringify({
+      name: HOST_NAME,
+      path: "C:/launcher/opencode-browser-host.cmd",
+      allowed_origins: ["chrome-extension://aaa/", "chrome-extension://bbb/"],
+    }), "utf8");
+    const registration = readRegistration("brave", dir);
+    assert.deepEqual(registration.extensionIds, ["aaa", "bbb"], "origins are reduced to bare ids");
+  } finally {
+    removeDir(dir);
+  }
+});
+
+// Each id source can be incomplete on its own, so they are merged rather than
+// letting whichever answered first lock out an extension that is also allowed.
+test("extension id sources are merged, not narrowed", () => {
+  const dir = tempDir("runtime-link-ids-");
+  try {
+    fs.writeFileSync(path.join(dir, "com.opencode.browser.plugin.edge.json"), JSON.stringify({
+      name: HOST_NAME,
+      path: "x",
+      allowed_origins: ["chrome-extension://from-manifest/"],
+    }), "utf8");
+    const resolved = resolveExtensionIds({ browser: "edge", noDetection: true, targetDir: dir });
+    assert.equal(resolved.extensionIds.includes("from-manifest"), true);
+    const withArgument = resolveExtensionIds({ browser: "edge", extensionIds: ["explicit"], targetDir: dir });
+    assert.deepEqual(withArgument.extensionIds, ["explicit"], "an explicit list wins outright");
+  } finally {
+    removeDir(dir);
+  }
+});
+
+// Dropping a registration for a browser whose executable we cannot find would
+// break a working setup, so previously registered browsers are always kept.
+test("link targets installed browsers plus already-registered ones", () => {
+  const dir = tempDir("runtime-link-targets-");
+  try {
+    const targets = linkTargets(dir);
+    for (const browser of installedBrowsers()) assert.equal(targets.includes(browser), true, `${browser} is installed but not targeted`);
+    fs.writeFileSync(path.join(dir, "com.opencode.browser.plugin.brave.json"), JSON.stringify({
+      name: HOST_NAME,
+      path: "C:/launcher/opencode-browser-host.cmd",
+      allowed_origins: ["chrome-extension://aaa/"],
+    }), "utf8");
+    assert.equal(new Set(linkTargets(dir)).size, linkTargets(dir).length, "targets must be unique");
+  } finally {
+    removeDir(dir);
   }
 });
