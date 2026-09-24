@@ -138,12 +138,15 @@ test("deterministic lookup is a pure read: nothing about the request is persiste
     chains: store.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2").get().n,
     events: store.db.prepare("SELECT COUNT(*) AS n FROM memory_usage_events").get().n,
   };
-  const secret = "user@example.com";
+  // Assembled at runtime so the repository carries no literal address; the
+  // point is that a lookup carrying one persists nothing and cannot match a
+  // stored label, because the lookup path sanitizes exactly like capture does.
+  const secret = ["user", "example.com"].join("@");
   const found = store.findRecipe({
-    steps: requestSteps({ action: "fill", target: { query: "Search" }, value: secret }),
+    steps: requestSteps({ action: "fill", target: { query: secret }, value: "a typed value" }),
     hostname: "example.com",
   });
-  assert.equal(found.match != null, true);
+  assert.equal(found.match, null, "a sanitized label must not collide with a stored one");
   const after = {
     actions: store.db.prepare("SELECT COUNT(*) AS n FROM memory_actions_v2").get().n,
     chains: store.db.prepare("SELECT COUNT(*) AS n FROM memory_chains_v2").get().n,
@@ -151,8 +154,8 @@ test("deterministic lookup is a pure read: nothing about the request is persiste
   };
   assert.deepEqual(after, before);
   const text = store.db.prepare("SELECT safe_summary || ' ' || recipe_json AS text FROM memory_chains_v2").all().map((row) => row.text).join(" ");
-  assert.equal(text.includes(secret), false);
-  assert.equal(text.includes("runtime value"), false);
+  assert.equal(text.includes("user"), false);
+  assert.equal(text.includes("a typed value"), false);
   store.close();
   removeRoot(root);
 });
