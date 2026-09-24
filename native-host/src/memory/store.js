@@ -25,38 +25,27 @@ import { SCHEMA_DDL } from "./schema.js";
 import { buildSignature, fingerprintFor } from "./signature.js";
 import { daysBetween, negativeValue, negligibleThreshold } from "./purge.js";
 import { composeChainEmbedding as composeChainEmbeddingFor } from "./compose.js";
-import { createHash } from "node:crypto";
 import {
-  DEFAULT_MEMORY_SIMILARITY_THRESHOLD,
-  MEMORY_SIMILARITY_THRESHOLDS,
+  canonicalRecipeSteps,
+  chainV2Fingerprint,
+  parseRecipeJson,
+  recipeRecord,
+  requestRecipeFingerprint,
+  shortFingerprint,
+} from "./recipe.js";
+import {
   MAX_CHAIN_STEPS,
+  similarityThreshold as similarityThresholdFor,
 } from "./config.js";
-import { sanitizeTarget, sanitizeLabel, chainSearchText } from "./privacy.js";
+import { chainSearchText } from "./privacy.js";
 import { ProfileStatistics } from "./profile-stats.ts";
-
-function shortFingerprint(value) {
-  return createHash("sha256").update(String(value)).digest("hex");
-}
 
 function isoNow() {
   return new Date().toISOString();
 }
 
 function canonicalV2Steps(steps) {
-  return steps
-    .slice()
-    .sort((first, second) => (first.position ?? 0) - (second.position ?? 0))
-    .map((step, position) => ({
-      position,
-      action: step.action ?? null,
-      hostname: step.hostname ?? null,
-      target_label: step.target_label ?? null,
-      target_role: step.target_role ?? null,
-      selector: step.selector ?? null,
-      requiresRuntimeValue: step.requiresRuntimeValue === true,
-      requiresRuntimeUrl: step.requiresRuntimeUrl === true,
-      success: step.success === true,
-    }));
+  return canonicalRecipeSteps(steps).map((step) => ({ ...step, success: step.success === true }));
 }
 
 function recipeIdentity(step) {
@@ -240,22 +229,11 @@ export class MemoryStore {
 
   #recordStep({ chainId = null, position = null, action = null, hostname = null, target = null, success = true, durationMs = null, errorCode = null, profileId = null } = {}) {
     if (!this.#v2Gate()) return { accepted: false, reason: "disabled" };
-    const safeAction = typeof action === "string" && action.length > 0 && action.length <= 64 ? action : null;
-    if (!safeAction) return { accepted: false, reason: "invalid_action" };
-    const safe = sanitizeTarget(target ?? {});
-    const safeHostname = typeof hostname === "string" ? hostname.toLowerCase() : null;
+    const recipe = recipeRecord({ position, action, hostname, target, success });
+    if (!recipe) return { accepted: false, reason: "invalid_action" };
+    const safeAction = recipe.action;
+    const safeHostname = recipe.hostname;
     const now = isoNow();
-    const recipe = {
-      position: Number.isInteger(position) ? position : null,
-      action: safeAction,
-      hostname: safeHostname,
-      target_label: safe.label,
-      target_role: safe.role,
-      selector: safe.selector,
-      requiresRuntimeValue: safeAction === "fill" || safeAction === "replaceText" || safeAction === "select" || safeAction === "type",
-      requiresRuntimeUrl: safeAction === "navigate",
-      success: success === true,
-    };
     const fingerprint = shortFingerprint(JSON.stringify([safeAction, safeHostname, recipe.target_label, recipe.target_role, recipe.selector]));
     this.db.prepare(
       "INSERT INTO memory_actions_v2 (fingerprint, action, hostname, target_label, target_role, recipe_json, confirmed_count, failed_count, first_seen, last_seen) " +
@@ -304,17 +282,11 @@ export class MemoryStore {
     const fingerprint = shortFingerprint(`chain:${chainId}`);
     const chain = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE fingerprint = ?").get(fingerprint);
     if (!chain) return { accepted: false };
-    let steps = [];
-    try {
-      steps = JSON.parse(chain.recipe_json ?? "[]");
-    } catch {
-      steps = [];
-    }
-    steps = canonicalV2Steps(steps);
+    const steps = canonicalV2Steps(parseRecipeJson(chain.recipe_json));
     const hostname = steps.find((step) => step.hostname)?.hostname ?? null;
     const summary = chainSearchText(hostname, steps).slice(0, 256);
     const now = isoNow();
-    const canonicalFingerprint = shortFingerprint(`chain:v2:${JSON.stringify(steps.map((step) => ({ ...step, success: undefined })))}`);
+    const canonicalFingerprint = chainV2Fingerprint(steps);
     const existing = this.db.prepare("SELECT id FROM memory_chains_v2 WHERE fingerprint = ?").get(canonicalFingerprint);
     let finalizedId = chain.id;
     if (existing && existing.id !== chain.id) {
@@ -343,16 +315,16 @@ export class MemoryStore {
   #mergeCompatibleV2Head(chainId, now) {
     const current = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE id = ? AND replaced_by IS NULL").get(chainId);
     if (!current) return chainId;
-    const currentSteps = canonicalV2Steps(JSON.parse(current.recipe_json ?? "[]"));
+    const currentSteps = canonicalV2Steps(parseRecipeJson(current.recipe_json));
     const hostname = currentSteps[0]?.hostname ?? null;
     if (!hostname) return chainId;
     const candidates = this.db.prepare("SELECT id, recipe_json FROM memory_chains_v2 WHERE id != ? AND replaced_by IS NULL").all(chainId);
     for (const candidate of candidates) {
-      const candidateSteps = canonicalV2Steps(JSON.parse(candidate.recipe_json ?? "[]"));
+      const candidateSteps = canonicalV2Steps(parseRecipeJson(candidate.recipe_json));
       if (candidateSteps[0]?.hostname !== hostname) continue;
       const merged = mergeV2Overlap(candidateSteps, currentSteps);
       if (!merged || merged.length > MAX_CHAIN_STEPS || merged.length <= Math.max(candidateSteps.length, currentSteps.length)) continue;
-      const mergedFingerprint = shortFingerprint(`chain:v2:${JSON.stringify(merged.map((step) => ({ ...step, success: undefined })))}`);
+      const mergedFingerprint = chainV2Fingerprint(merged);
       const summary = chainSearchText(hostname, merged).slice(0, 256);
       let mergedRow = this.db.prepare("SELECT id, replaced_by FROM memory_chains_v2 WHERE fingerprint = ?").get(mergedFingerprint);
       if (mergedRow?.replaced_by != null) continue;
@@ -541,7 +513,11 @@ export class MemoryStore {
 
   captureState() {
     this.meta = this.#readMeta();
-    return { enabled: this.meta.enabled === "true", paused: this.meta.paused === "true" };
+    return {
+      enabled: this.meta.enabled === "true",
+      paused: this.meta.paused === "true",
+      embedding_profile: typeof this.meta.embedding_profile === "string" ? this.meta.embedding_profile : null,
+    };
   }
 
   status(scope = {}) {
@@ -631,20 +607,27 @@ export class MemoryStore {
         "SUM(CASE WHEN event_type = 'replay_started' THEN 1 ELSE 0 END) AS replay_attempts, " +
         "SUM(CASE WHEN event_type = 'replay_succeeded' THEN 1 ELSE 0 END) AS replay_successes, " +
         "SUM(CASE WHEN event_type = 'replay_failed' THEN 1 ELSE 0 END) AS replay_failures, " +
-        "SUM(CASE WHEN event_type = 'replay_rejected' THEN 1 ELSE 0 END) AS replay_fallbacks, " +
+        "SUM(CASE WHEN event_type = 'replay_rejected' THEN 1 ELSE 0 END) AS replay_rejections, " +
         "SUM(CASE WHEN event_type IN ('replay_succeeded', 'replay_failed') THEN COALESCE(steps_reused, 0) ELSE 0 END) AS steps_reused " +
         `FROM memory_usage_events WHERE ${filter.sql}`,
     ).get(...filter.params);
     const successes = Number(totals.replay_successes ?? 0);
     const failures = Number(totals.replay_failures ?? 0);
     const attempts = successes + failures;
+    const rejections = Number(totals.replay_rejections ?? 0);
+    const rejectionReasons = this.db.prepare(
+      `SELECT COALESCE(reason, 'unknown') AS reason, COUNT(*) AS n FROM memory_usage_events WHERE event_type = 'replay_rejected' AND ${filter.sql} GROUP BY reason ORDER BY n DESC, reason ASC LIMIT 8`,
+    ).all(...filter.params);
     return {
       search_queries: Number(totals.search_queries ?? 0),
       matches_returned: Number(totals.matches_returned ?? 0),
       replay_attempts: Number(totals.replay_attempts ?? 0),
       replay_successes: successes,
       replay_failures: Number(totals.replay_failures ?? 0),
-      replay_fallbacks: Number(totals.replay_fallbacks ?? 0),
+      // Legacy name for the rejection count, kept for already-shipped consumers.
+      replay_fallbacks: rejections,
+      replay_rejections: rejections,
+      replay_rejections_by_reason: Object.fromEntries(rejectionReasons.map((row) => [row.reason, Number(row.n)])),
       steps_reused: Number(totals.steps_reused ?? 0),
       replay_success_rate: attempts > 0 ? Math.round((successes / attempts) * 100) : null,
     };
@@ -793,10 +776,45 @@ export class MemoryStore {
   }
 
   similarityThreshold(embeddingProfile = null) {
-    if (embeddingProfile && MEMORY_SIMILARITY_THRESHOLDS[embeddingProfile] !== undefined) {
-      return MEMORY_SIMILARITY_THRESHOLDS[embeddingProfile];
-    }
-    return DEFAULT_MEMORY_SIMILARITY_THRESHOLD;
+    return similarityThresholdFor(embeddingProfile);
+  }
+
+  // Deterministic recall for a repeated action chain. This is a pure read: the
+  // caller's steps are canonicalized, compared against stored recipe
+  // fingerprints, and discarded. Nothing about the request is persisted, and no
+  // embedding query is needed, so a repeated workflow costs no model call.
+  //
+  // Only live heads (not superseded) with no recorded failure are eligible. The
+  // request carries a single hostname, so recipes whose first step ran on
+  // another host never match here and fall through to semantic recall.
+  findRecipe({ steps = [], hostname = null } = {}) {
+    const fingerprint = requestRecipeFingerprint(steps, hostname);
+    if (!fingerprint) return { match: null };
+    const row = this.db.prepare(
+      "SELECT id, fingerprint, safe_summary, recipe_json, confirmed_count, failed_count, last_seen " +
+        "FROM memory_chains_v2 WHERE fingerprint = ? AND replaced_by IS NULL AND safe_summary != '' AND failed_count = 0",
+    ).get(fingerprint);
+    if (!row) return { match: null };
+    const recipe = canonicalV2Steps(parseRecipeJson(row.recipe_json));
+    if (recipe.length === 0) return { match: null };
+    // Defence in depth: the hostname is already part of the fingerprint, so this
+    // only fires if that key derivation ever changes.
+    if (hostname && recipe[0]?.hostname !== hostname) return { match: null };
+    return {
+      match: {
+        kind: "chain_v2",
+        id: row.id,
+        fingerprint: row.fingerprint,
+        signature: row.safe_summary,
+        confidence: 1,
+        similarity: 1,
+        deterministic: true,
+        confirmed_count: Number(row.confirmed_count ?? 0),
+        failed_count: Number(row.failed_count ?? 0),
+        last_seen: row.last_seen,
+        steps: recipe,
+      },
+    };
   }
 
   reindex(options = {}) {

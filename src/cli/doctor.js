@@ -41,10 +41,17 @@ export async function runDoctor({ json = false } = {}) {
   const skillSource = skillSourceDirectory();
   const canonicalHash = fs.existsSync(path.join(skillSource, "SKILL.md")) ? directoryHash(skillSource) : null;
   const skillTargetsList = skillTargets();
+  const skillInstallCommand = "opencode-chromium install --client=skills";
+  // A stale installed skill is silent: the agent keeps following older guidance,
+  // which is how action-memory replay stayed disabled for a released version.
+  const staleSkillTargets = skillTargetsList.filter((target) => {
+    if (!fs.existsSync(path.join(target, "SKILL.md"))) return true;
+    return Boolean(canonicalHash) && directoryHash(target).sha256 !== canonicalHash.sha256;
+  });
   checks.push(
     check("skill-source", Boolean(canonicalHash), { path: "skills/opencode-browser-plugin" }),
-    check("skill-installed", Boolean(canonicalHash) && skillTargetsList.every((target) => fs.existsSync(path.join(target, "SKILL.md"))), { locations: skillTargetsList }),
-    check("skill-parity", Boolean(canonicalHash) && skillTargetsList.every((target) => fs.existsSync(path.join(target, "SKILL.md")) && directoryHash(target).sha256 === canonicalHash.sha256), {}),
+    check("skill-installed", Boolean(canonicalHash) && skillTargetsList.every((target) => fs.existsSync(path.join(target, "SKILL.md"))), { locations: skillTargetsList, installCommand: skillInstallCommand }),
+    check("skill-parity", staleSkillTargets.length === 0, { stale: staleSkillTargets, installCommand: skillInstallCommand }),
     check("skill-codex-config", (() => {
       const config = codexConfigPath();
       if (!fs.existsSync(config)) return false;

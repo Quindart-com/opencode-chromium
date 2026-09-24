@@ -4,7 +4,7 @@ import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
 import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
-import { MEMORY_REPLAY_MIN_CONFIDENCE } from "../memory/index.js";
+import { memoryReplayThreshold } from "../memory/index.js";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
 import { contractMetadata } from "./versions.js";
@@ -108,20 +108,33 @@ function normalizedTargetText(value) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().toLocaleLowerCase() : null;
 }
 
-function rememberedStepCompatible(remembered, source, hostname) {
-  if (!source || remembered.action !== source.action) return false;
-  if (remembered.hostname && hostname && remembered.hostname !== hostname) return false;
+function rememberedStepMismatch(remembered, source, hostname) {
+  if (!source) return "target_mismatch";
+  if (remembered.action !== source.action) return "action_mismatch";
+  if (remembered.hostname && hostname && remembered.hostname !== hostname) return "hostname_mismatch";
   const sourceTarget = source.target ?? {};
   const sourceRole = normalizedTargetText(sourceTarget.role);
   const rememberedRole = normalizedTargetText(remembered.target_role);
-  if (sourceRole && rememberedRole && sourceRole !== rememberedRole) return false;
+  if (sourceRole && rememberedRole && sourceRole !== rememberedRole) return "target_mismatch";
   const sourceLabel = normalizedTargetText(sourceTarget.query ?? sourceTarget.label);
   const rememberedLabel = normalizedTargetText(remembered.target_label);
-  if (sourceLabel && rememberedLabel && sourceLabel !== rememberedLabel) return false;
+  if (sourceLabel && rememberedLabel && sourceLabel !== rememberedLabel) return "target_mismatch";
   const sourceSelector = normalizedTargetText(sourceTarget.selector);
   const rememberedSelector = normalizedTargetText(remembered.selector);
-  if (sourceSelector && rememberedSelector && sourceSelector !== rememberedSelector) return false;
-  return true;
+  if (sourceSelector && rememberedSelector && sourceSelector !== rememberedSelector) return "target_mismatch";
+  return null;
+}
+
+// A deterministic hit already equals the caller's own steps, so it needs no
+// similarity floor. A semantic hit is only executed when it is a strong,
+// failure-free candidate: the floor is derived from the calibrated retrieval
+// threshold, so it can never sit below it.
+function replayGateRejection(match, memoryState) {
+  if (match.deterministic === true) return null;
+  if (Number(match.failed_count ?? 0) > 0) return "negative_lesson";
+  const similarity = Number(match.similarity);
+  if (!Number.isFinite(similarity) || similarity < memoryReplayThreshold(memoryState?.embedding_profile ?? null)) return "below_similarity";
+  return null;
 }
 
 function publicProfiles(profiles) {
@@ -622,14 +635,22 @@ export class AgentBrowserRuntime {
     }
   }
 
-  async memoryRecordingEnabled(session) {
+  // One cheap probe per run feeds both the replay attempt and the recording
+  // gate, so enabling memory costs a single round trip instead of two.
+  async memoryCaptureState(session) {
     try {
-      let status = await this.requestHost("memory.captureState", {}, session).catch(() => null);
-      if (typeof status?.enabled !== "boolean") status = await this.requestHost("memory.stats", {}, session);
-      return status?.enabled === true && status?.paused !== true;
+      const state = await this.requestHost("memory.captureState", {}, session).catch(() => null);
+      if (typeof state?.enabled === "boolean") return state;
+      const status = await this.requestHost("memory.stats", {}, session).catch(() => null);
+      if (!status) return null;
+      return { enabled: status.enabled === true, paused: status.paused === true, embedding_profile: status.embedding_profile ?? null };
     } catch {
-      return false;
+      return null;
     }
+  }
+
+  memoryRecordingEnabled(memoryState) {
+    return memoryState?.enabled === true && memoryState?.paused !== true;
   }
 
   async memoryHostname(step, tabId, session) {
@@ -653,43 +674,49 @@ export class AgentBrowserRuntime {
   // Stage B: attempt a remembered recipe through the ordinary execution path.
   // Remembered steps are parameterized; runtime values and URLs always come
   // from the agent's own request, never from stored memory.
-  async tryMemoryReplay(request, session, tabId) {
-    let status;
-    try {
-      status = await this.requestHost("memory.stats", {}, session);
-    } catch {
-      return null;
-    }
-    if (!status?.enabled || status?.paused) return null;
+  async tryMemoryReplay(request, session, tabId, memoryState = null) {
+    const state = memoryState ?? await this.memoryCaptureState(session);
+    if (!this.memoryRecordingEnabled(state)) return null;
     const hostname = await this.memoryHostname(request.steps?.[0], tabId, session);
+    // Deterministic recall first: repeating a chain on the same host is an exact
+    // recipe match and needs no embedding call. The semantic path stays an
+    // explicit, bounded fallback for a caller-supplied transient intent.
     let match = null;
     try {
-      const search = await this.requestHost("memory.search", { query: request.memoryIntent, limit: 1, kind: "chain", hostname }, session);
-      match = search?.results?.find((item) => item.kind === "chain_v2") ?? null;
+      const found = await this.requestHost("memory.recipe", { steps: request.steps, hostname }, session);
+      match = found?.match ?? null;
     } catch {
-      return null;
+      match = null;
     }
-    const rememberedChainId = match?.id ?? null;
-    const steps = match?.steps ?? [];
-    if (!match || steps.length === 0) return null;
-    if (match.confidence < MEMORY_REPLAY_MIN_CONFIDENCE) {
-      await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "below_confidence" }, session).catch(() => {});
-      return { fallback: true };
+    if (!match && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0) {
+      try {
+        const search = await this.requestHost("memory.search", { query: request.memoryIntent, limit: 1, kind: "chain", hostname }, session);
+        match = search?.results?.find((item) => item.kind === "chain_v2") ?? null;
+      } catch {
+        match = null;
+      }
     }
-    if (steps.length !== request.steps?.length || steps.some((step, index) => !rememberedStepCompatible(step, request.steps[index], hostname))) {
-      await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "recipe_mismatch" }, session).catch(() => {});
-      return { fallback: true };
+    if (!match) return null;
+    const rememberedChainId = match.id ?? null;
+    const steps = match.steps ?? [];
+    if (steps.length === 0) return null;
+    const gate = replayGateRejection(match, state);
+    if (gate) return this.rejectReplay(gate, rememberedChainId, session);
+    if (steps.length !== request.steps?.length) {
+      return this.rejectReplay("step_count_mismatch", rememberedChainId, session);
+    }
+    for (const [index, remembered] of steps.entries()) {
+      const mismatch = rememberedStepMismatch(remembered, request.steps?.[index], hostname);
+      if (mismatch) return this.rejectReplay(mismatch, rememberedChainId, session);
     }
     const bound = [];
     for (const [index, remembered] of steps.entries()) {
       const source = request.steps?.[index];
       if (remembered.requiresRuntimeValue && (source?.value === undefined || source?.value === null)) {
-        await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "missing_runtime_value" }, session).catch(() => {});
-        return { fallback: true };
+        return this.rejectReplay("missing_runtime_value", rememberedChainId, session);
       }
       if (remembered.requiresRuntimeUrl && typeof source?.url !== "string") {
-        await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "missing_runtime_url" }, session).catch(() => {});
-        return { fallback: true };
+        return this.rejectReplay("missing_runtime_url", rememberedChainId, session);
       }
       bound.push({
         ...source,
@@ -707,9 +734,10 @@ export class AgentBrowserRuntime {
         ...(source?.settle ? { settle: source.settle } : {}),
       });
     }
+    // Approval is re-evaluated on the bound steps: a remembered recipe can never
+    // turn a gated request into an ungated one.
     if (requiresApproval(bound).length > 0) {
-      await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId: rememberedChainId, reason: "approval_required" }, session).catch(() => {});
-      return { fallback: true };
+      return this.rejectReplay("approval_required", rememberedChainId, session);
     }
     await this.requestHost("memory.usageEvent", { eventType: "replay_started", chainId: rememberedChainId, stepsReused: bound.length }, session).catch(() => {});
     const replayChainId = `${session.sessionId}:replay:${this.memoryChainSequence++}`;
@@ -720,7 +748,6 @@ export class AgentBrowserRuntime {
     let uncertainMutation = false;
     for (const [index, step] of bound.entries()) {
       const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId: replayChainId, memoryEnabled: true });
-      if (!READ_ACTIONS.has(step.action) && outcome.executionState === "completed") completedMutation = true;
       if (outcome.ok) {
         if (!READ_ACTIONS.has(step.action)) completedMutation = true;
         results.push({ index, action: step.action, ok: true, ...(outcome.settled ? { settle: outcome.settled } : {}) });
@@ -742,6 +769,14 @@ export class AgentBrowserRuntime {
     }
     await this.requestHost("memory.usageEvent", { eventType: "replay_succeeded", chainId: rememberedChainId, success: true, stepsReused: results.length }, session).catch(() => {});
     return { used: true, stepsReused: results.length, results };
+  }
+
+  // Report a skipped replay with a reason precise enough to diagnose, and fall
+  // back to normal exploration. Rejections are best-effort telemetry: they can
+  // never fail the caller's action chain.
+  async rejectReplay(reason, chainId, session) {
+    await this.requestHost("memory.usageEvent", { eventType: "replay_rejected", chainId, reason }, session).catch(() => {});
+    return { fallback: true };
   }
 
   // One high-level browser step produces exactly one memory record, whatever
@@ -1087,8 +1122,10 @@ export class AgentBrowserRuntime {
       await this.selectProfile(session, request.profile);
       const tabId = await this.ensureTab(session, request.tab);
       let correctiveCandidate = null;
-      if (request.memoryMode === "auto" && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0 && !approved) {
-        const replay = await this.tryMemoryReplay(request, session, tabId);
+      const memoryRequested = request.memoryMode !== "off";
+      const memoryState = memoryRequested ? await this.memoryCaptureState(session) : null;
+      if (memoryRequested && request.steps?.length > 0 && !approved) {
+        const replay = await this.tryMemoryReplay(request, session, tabId, memoryState);
         if (replay?.used) {
           await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
           let postObservation;
@@ -1118,7 +1155,7 @@ export class AgentBrowserRuntime {
       const results = [];
       let failed = false;
       const chainId = `${session.sessionId}:${this.memoryChainSequence++}`;
-      const memoryEnabled = request.memoryMode !== "off" && await this.memoryRecordingEnabled(session);
+      const memoryEnabled = memoryRequested && this.memoryRecordingEnabled(memoryState);
       try {
         for (const [index, step] of request.steps.entries()) {
           const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId, memoryEnabled });
@@ -1267,20 +1304,26 @@ export class AgentBrowserRuntime {
     }
   }
 
+  // The memory tools must echo the resolved session id, not the raw argument:
+  // their output schema requires a string, so returning null when the caller
+  // omitted sessionId failed output validation and made every memory tool
+  // unusable without an explicit id.
   async memoryStatus(args = {}, context = {}) {
+    const sessionId = args.sessionId ?? contextSessionId(args, context);
     try {
-      const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
+      const session = this.getSession(sessionId);
       await this.selectProfile(session, args.profile);
       const result = await this.requestHost("memory.stats", { profileIds: args.profileIds, includeUnattributed: args.includeUnattributed }, session);
-      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId, result };
     } catch (error) {
-      return this.failure(args.sessionId ?? null, error);
+      return this.failure(sessionId, error);
     }
   }
 
   async memoryQuery(args = {}, context = {}) {
+    const sessionId = args.sessionId ?? contextSessionId(args, context);
     try {
-      const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
+      const session = this.getSession(sessionId);
       await this.selectProfile(session, args.profile);
       const result = await this.requestHost("memory.query", {
         limit: args.limit,
@@ -1290,15 +1333,16 @@ export class AgentBrowserRuntime {
         sinceId: args.since_id,
         untilId: args.until_id,
       }, session);
-      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId, result };
     } catch (error) {
-      return this.failure(args.sessionId ?? null, error);
+      return this.failure(sessionId, error);
     }
   }
 
   async memorySearch(args = {}, context = {}) {
+    const sessionId = args.sessionId ?? contextSessionId(args, context);
     try {
-      const session = this.getSession(args.sessionId ?? contextSessionId(args, context));
+      const session = this.getSession(sessionId);
       await this.selectProfile(session, args.profile);
       const result = await this.requestHost("memory.search", {
         query: args.query,
@@ -1306,9 +1350,9 @@ export class AgentBrowserRuntime {
         kind: args.kind ?? "all",
         hostname: args.hostname,
       }, session);
-      return { ...contractMetadata(), ok: true, status: "ready", sessionId: args.sessionId ?? null, result };
+      return { ...contractMetadata(), ok: true, status: "ready", sessionId, result };
     } catch (error) {
-      return this.failure(args.sessionId ?? null, error);
+      return this.failure(sessionId, error);
     }
   }
 

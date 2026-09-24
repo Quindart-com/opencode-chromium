@@ -103,6 +103,7 @@ function handleMemoryHostMethod(method, params = {}) {
   if (method === "memory.stats") return memoryStore.status(params);
   if (method === "memory.query") return memoryStore.query(params);
   if (method === "memory.search") return memoryStore.search({ ...params, profileId: activeProfileId });
+  if (method === "memory.recipe") return memoryStore.findRecipe(params);
   if (method === "memory.configure") return memoryStore.configure(params);
   if (method === "memory.prune") return memoryStore.prune(params);
   if (method === "memory.enable") return memoryStore.enable();
