@@ -212,3 +212,21 @@ test("an absent DSH profile is reported, not created", () => {
     removeDir(dir);
   }
 });
+
+// The CLI is versioned with the branch, so a branch that predates the status
+// command must still be able to answer "which version is live?".
+test("the status launcher reports something on a branch without the status command", () => {
+  const dir = tempDir("runtime-link-status-");
+  const root = fakeTree();
+  try {
+    const written = writeLaunchers(root, dir);
+    assert.equal(fs.existsSync(written.status), true);
+    const source = fs.readFileSync(written.status, "utf8");
+    assert.match(source, /runtime-link\.js/, "it delegates to the active root when that root can answer");
+    assert.match(source, /this branch predates the status command/, "and degrades to a minimal report when it cannot");
+    assert.doesNotMatch(source, /\brequire\(/);
+  } finally {
+    removeDir(dir);
+    removeDir(root);
+  }
+});
