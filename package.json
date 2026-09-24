@@ -126,6 +126,9 @@
     "open:browser": "bun scripts/open-browser-window.js",
     "find:extension": "bun scripts/find-extension-id.js",
     "doctor": "bun src/cli/index.js doctor",
+    "link": "bun src/cli/index.js link",
+    "status": "bun src/cli/index.js status",
+    "sync": "bun src/cli/index.js sync",
     "verify": "bun src/cli/index.js verify",
     "verify:popup": "node scripts/verify-popup.js"
   },

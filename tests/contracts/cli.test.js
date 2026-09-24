@@ -56,3 +56,28 @@ test("CLI configuration updates are isolated, backed up, and idempotent", () => 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Older releases registered the package root itself as the plugin entry, which
+// does not contain the canonical server name, so matching on that name alone
+// left the stale entry in place and OpenCode loaded the plugin twice.
+test("a stale package-root plugin entry is replaced, not duplicated", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-cli-root-entry-"));
+  try {
+    const installedRoot = path.join(root, "checkout");
+    fs.mkdirSync(installedRoot, { recursive: true });
+    fs.writeFileSync(path.join(installedRoot, "package.json"), JSON.stringify({ name: "opencode-chromium", version: "1.7.2" }), "utf8");
+
+    const pluginPath = path.join(root, "opencode.json");
+    fs.writeFileSync(pluginPath, JSON.stringify({ plugin: [installedRoot.replaceAll("\\", "/"), "unrelated-plugin"] }), "utf8");
+
+    const launcher = path.join(root, "launcher", "plugin.mjs");
+    const canonical = pathToFileURL(path.resolve(launcher)).href;
+    updateClientConfig({ client: "opencode", filePath: pluginPath, serverPath: launcher });
+    assert.deepEqual(JSON.parse(fs.readFileSync(pluginPath, "utf8")).plugin, ["unrelated-plugin", canonical]);
+
+    updateClientConfig({ client: "opencode", filePath: pluginPath, serverPath: launcher });
+    assert.deepEqual(JSON.parse(fs.readFileSync(pluginPath, "utf8")).plugin, ["unrelated-plugin", canonical], "re-installing stays idempotent");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

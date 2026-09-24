@@ -5,6 +5,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { sourceFingerprint } from "../src/cli/source-fingerprint.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
@@ -65,6 +66,8 @@ const manifest = {
   version: packageJson.version,
   generatedAt: new Date().toISOString(),
   source: "src",
+  // Lets a launcher prove the bundle still matches the checked-out tree.
+  sourceSha256: sourceFingerprint(root),
   files: files.length,
   sha256: hash.digest("hex"),
 };
