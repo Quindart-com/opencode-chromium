@@ -39,7 +39,26 @@ export const MEMORY_SIMILARITY_THRESHOLDS = {
   "embeddinggemma-300m:q4:d768:prompt-v1": 0.38,
   "qwen3-0.6b-retrieval:q8:d1024:prompt-v1": 0.40,
 };
-export const MEMORY_REPLAY_MIN_CONFIDENCE = 0.6;
+export const MEMORY_REPLAY_SIMILARITY_MARGIN = 0.2;
+
+// The retrieval gate decides whether a candidate is worth *returning*; the
+// replay floor decides whether it is safe to *execute* without further agent
+// input. Deriving the floor from the retrieval threshold guarantees the two can
+// never cross, which is what silently disabled replay in 1.7.2 (a fixed 0.6
+// gate sat above the 0.42 retrieval threshold).
+export function similarityThreshold(embeddingProfile = null) {
+  if (embeddingProfile && MEMORY_SIMILARITY_THRESHOLDS[embeddingProfile] !== undefined) {
+    return MEMORY_SIMILARITY_THRESHOLDS[embeddingProfile];
+  }
+  return DEFAULT_MEMORY_SIMILARITY_THRESHOLD;
+}
+
+export function memoryReplayThreshold(embeddingProfile = null) {
+  // Rounded so the derived floor is an exact, assertable number rather than a
+  // binary-floating-point artifact of the addition.
+  return Math.min(0.9, Math.round((similarityThreshold(embeddingProfile) + MEMORY_REPLAY_SIMILARITY_MARGIN) * 1000) / 1000);
+}
+
 export const MEMORY_EMBED_MAX_ATTEMPTS = 3;
 
 export const WRITER_QUEUE_CAPACITY = 1024;
