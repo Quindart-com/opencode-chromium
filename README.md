@@ -273,6 +273,23 @@ bun run check:native-host -- --json
 
 The extension source lives in `extension-src/`: WXT owns the entrypoints, `entrypoints/popup/App.tsx` is the shared UI root, and static files live under `public/`. Use `bun run extension:dev` for development, `bun run typecheck:extension` for TypeScript checks, and `bun run build:extension` for the Chrome Web Store-ready package.
 
+### Developing against a local checkout
+
+Working on the plugin itself and on a released version at the same time is easier
+when every surface points at one stable install directory instead of at a
+checkout, and the checked-out branch selects the version:
+
+```powershell
+bun run link      # once per machine: launchers, browser registration, clients, skills
+bun run status    # what is live, and what has drifted
+bun run sync      # rebuild a stale bundle and restart the native host
+```
+
+After `link`, the browser registration and every client config are written once
+and never change again; `git checkout dev` and `git checkout master` are all it
+takes to move between work in progress and the stable line. See
+[docs/runtime-linking.md](docs/runtime-linking.md).
+
 Use `AGENT_BROWSER_*` environment variables for new configuration. The older `OPENCODE_BROWSER_*` names remain lower-priority aliases through the 1.x compatibility window.
 
 ## CLI
