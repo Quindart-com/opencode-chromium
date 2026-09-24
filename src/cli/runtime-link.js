@@ -50,6 +50,7 @@ function launcherHeader() {
     "// time, so this path never changes when the checkout or branch does.",
     "import fs from \"node:fs\";",
     "import path from \"node:path\";",
+    "import { createHash } from \"node:crypto\";",
     "import { fileURLToPath, pathToFileURL } from \"node:url\";",
     "",
     "const dir = path.dirname(fileURLToPath(import.meta.url));",
@@ -57,21 +58,70 @@ function launcherHeader() {
   ];
 }
 
+// A launcher must keep working on a branch that predates this module, so it
+// cannot import the fingerprint helper from the checkout it resolves. This is a
+// self-contained copy; tests/contracts/runtime-link.test.js fails if it ever
+// disagrees with sourceFingerprint().
+export const LAUNCHER_FINGERPRINT_SOURCE = [
+  "function fingerprint(root) {",
+  "  const hash = createHash(\"sha256\");",
+  "  try { hash.update(\"package.json\").update(JSON.parse(fs.readFileSync(path.join(root, \"package.json\"), \"utf8\")).version ?? \"\"); } catch { /* no package.json */ }",
+  "  const files = [];",
+  "  const walk = (relative) => {",
+  "    let entries;",
+  "    try { entries = fs.readdirSync(path.join(root, relative), { withFileTypes: true }); } catch { return; }",
+  "    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {",
+  "      if (entry.name === \"node_modules\" || entry.name === \".git\") continue;",
+  "      const child = `${relative}/${entry.name}`;",
+  "      if (entry.isDirectory()) walk(child); else files.push(child);",
+  "    }",
+  "  };",
+  "  walk(\"src\");",
+  "  walk(\"native-host/src\");",
+  "  for (const relative of files.sort()) hash.update(relative).update(fs.readFileSync(path.join(root, relative)));",
+  "  return hash.digest(\"hex\");",
+  "}",
+  "function newestSourceMtime(root) {",
+  "  let newest = 0;",
+  "  const walk = (relative) => {",
+  "    let entries;",
+  "    try { entries = fs.readdirSync(path.join(root, relative), { withFileTypes: true }); } catch { return; }",
+  "    for (const entry of entries) {",
+  "      const child = `${relative}/${entry.name}`;",
+  "      if (entry.isDirectory()) walk(child);",
+  "      else { try { newest = Math.max(newest, fs.statSync(path.join(root, child)).mtimeMs); } catch { /* raced */ } }",
+  "    }",
+  "  };",
+  "  walk(\"src\");",
+  "  walk(\"native-host/src\");",
+  "  return newest;",
+  "}",
+].join("\n");
+
 // An agent must never be served a bundle that no longer matches the tree, so
-// the launcher rebuilds when stale. If the tree itself is broken the rebuild
-// fails and the last good bundle still starts, loudly, instead of taking the
-// browser tools down with it.
+// the launcher rebuilds when stale. A bundle whose manifest predates the source
+// hash (an older branch) is judged by time instead, and a broken tree still
+// starts the last good bundle, loudly, rather than taking the tools down.
 function launcherBuildGuard() {
   return [
     "",
+    LAUNCHER_FINGERPRINT_SOURCE,
+    "",
     "const manifestPath = path.join(root, \"dist\", \"build-manifest.json\");",
-    "const { sourceFingerprint } = await import(pathToFileURL(path.join(root, \"src\", \"cli\", \"source-fingerprint.js\")).href);",
+    "const entry = path.join(root, DIST_ENTRY);",
     "let built = null;",
     "try { built = JSON.parse(fs.readFileSync(manifestPath, \"utf8\")); } catch { /* never built */ }",
-    "if (!built || built.sourceSha256 !== sourceFingerprint(root)) {",
+    "const stale = !built || (typeof built.sourceSha256 === \"string\"",
+    "  ? built.sourceSha256 !== fingerprint(root)",
+    "  : Date.parse(built.generatedAt ?? 0) < newestSourceMtime(root));",
+    "if (stale) {",
     "  const { spawnSync } = await import(\"node:child_process\");",
     "  const build = spawnSync(process.execPath, [path.join(root, \"scripts\", \"build.js\")], { stdio: [\"ignore\", \"ignore\", \"inherit\"] });",
     "  if (build.status !== 0) process.stderr.write(\"[opencode-browser-plugin] build failed; starting the last successful bundle\\n\");",
+    "}",
+    "if (!fs.existsSync(entry)) {",
+    "  process.stderr.write(`[opencode-browser-plugin] no bundle at ${entry}; run: bun run build\\n`);",
+    "  process.exit(1);",
     "}",
   ];
 }
@@ -84,12 +134,12 @@ export function launcherSource(kind) {
     lines.push("", "await import(pathToFileURL(path.join(root, \"native-host\", \"src\", \"host.js\")).href);");
     return lines.join("\n") + "\n";
   }
-  lines.push(...launcherBuildGuard(), "");
+  const entry = kind === "plugin" ? "dist/adapters/opencode/index.js" : "dist/adapters/mcp/server.js";
+  lines.push(`const DIST_ENTRY = ${JSON.stringify(entry)};`, ...launcherBuildGuard(), "");
   if (kind === "plugin") {
     // OpenCode imports this module and reads the plugin exports, so they are
     // re-exported from whichever root is active.
     lines.push(
-      "const entry = path.join(root, \"dist\", \"adapters\", \"opencode\", \"index.js\");",
       "const mod = await import(pathToFileURL(entry).href);",
       "export default mod.default;",
       "export const opencodeBrowserPlugin = mod.opencodeBrowserPlugin;",
@@ -100,7 +150,6 @@ export function launcherSource(kind) {
     return lines.join("\n") + "\n";
   }
   lines.push(
-    "const entry = path.join(root, \"dist\", \"adapters\", \"mcp\", \"server.js\");",
     "process.argv = [process.argv[0], entry, ...process.argv.slice(2)];",
     "await import(pathToFileURL(entry).href);",
   );
