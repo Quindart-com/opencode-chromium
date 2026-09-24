@@ -80,6 +80,13 @@ node "$env:LOCALAPPDATA\OpenCode\browser\status.mjs"
 
 ## Notes
 
+- `link` registers the browsers that are **installed**, plus any already
+  registered, so it never creates registrations for browsers that are not there
+  and never drops a working one. `check:native-host` checks the same set and
+  reports the rest as skipped; `--all` checks every browser anyway.
+- Extension ids from every available source are merged rather than replaced:
+  profile scanning cannot read preferences while a browser is running, so the
+  existing manifest and `scripts/extension-id.json` fill the gaps.
 - The native host runs from `native-host/src`, so a branch switch takes effect
   on the next host start with no build step; only `dist/` (the MCP server and
   plugin) needs rebuilding.

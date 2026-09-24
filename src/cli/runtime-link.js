@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { installDir, installManifest, HOST_NAME } from "../../scripts/install-native-host.js";
+import { browserIds, installedBrowsers } from "./browsers.js";
+import { installManifest, readRegistration, runtimeDir, HOST_NAME } from "./native-host.js";
 import { directoryHash, installSkills, skillSourceDirectory, skillTargets } from "./skills.js";
 import { backup, packageRoot } from "./config.js";
 import { installClient } from "./install.js";
@@ -14,20 +15,13 @@ import { buildStatus } from "./source-fingerprint.js";
 // remembering which installer ran last. Nothing here is version-specific: the
 // launchers resolve the runtime root at launch time, so the browser
 // registration and every client config are written once and never again.
-export const RUNTIME_MANIFEST = "runtime.json";
-export const RUNTIME_DIR_ENV = "OPENCODE_BROWSER_RUNTIME_DIR";
+const RUNTIME_MANIFEST = "runtime.json";
 
-export function canonicalRuntimeDir() {
-  const configured = process.env[RUNTIME_DIR_ENV];
-  if (configured) return path.resolve(configured);
-  return installDir();
-}
-
-export function manifestPath(dir = canonicalRuntimeDir()) {
+export function manifestPath(dir = runtimeDir()) {
   return path.join(dir, RUNTIME_MANIFEST);
 }
 
-export function readRuntimeManifest(dir = canonicalRuntimeDir()) {
+export function readRuntimeManifest(dir = runtimeDir()) {
   try {
     const parsed = JSON.parse(fs.readFileSync(manifestPath(dir), "utf8"));
     return typeof parsed?.root === "string" && parsed.root.length > 0 ? parsed : null;
@@ -36,7 +30,7 @@ export function readRuntimeManifest(dir = canonicalRuntimeDir()) {
   }
 }
 
-export function writeRuntimeManifest(root, dir = canonicalRuntimeDir()) {
+export function writeRuntimeManifest(root, dir = runtimeDir()) {
   const manifest = { root: path.resolve(root), version: packageInfo().version ?? null, linkedAt: new Date().toISOString() };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(manifestPath(dir), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
@@ -196,7 +190,7 @@ function writeExecutable(filePath, contents) {
   return filePath;
 }
 
-export function writeLaunchers(root, dir = canonicalRuntimeDir()) {
+export function writeLaunchers(root, dir = runtimeDir()) {
   fs.mkdirSync(dir, { recursive: true });
   const launchers = {
     host: writeExecutable(path.join(dir, "host.mjs"), launcherSource("host")),
@@ -215,7 +209,7 @@ export function writeLaunchers(root, dir = canonicalRuntimeDir()) {
 
 // Point every agent-facing surface at the launchers. Each config is rewritten
 // in place from a backup, so re-linking is idempotent and reversible.
-export function linkClientSurfaces({ dir = canonicalRuntimeDir(), clients = ["codex", "opencode", "dsh"], dryRun = false } = {}) {
+export function linkClientSurfaces({ dir = runtimeDir(), clients = ["codex", "opencode", "dsh"], dryRun = false } = {}) {
   const mcp = path.join(dir, "mcp.mjs");
   const plugin = path.join(dir, "plugin.mjs");
   const results = [];
@@ -258,28 +252,38 @@ function samePath(first, second) {
   return first.replaceAll("\\", "/").toLowerCase() === second.replaceAll("\\", "/").toLowerCase();
 }
 
-export function linkRuntime({ root = packageRoot(), dir = canonicalRuntimeDir(), dryRun = false, browsers = null } = {}) {
+// Browsers to register: the ones present, plus any already registered. Keeping
+// an existing registration matters because a browser's executable can live
+// somewhere we do not look, and never removing one keeps this from breaking a
+// working setup.
+export function linkTargets(dir = runtimeDir()) {
+  const registered = browserIds().filter((browser) => readRegistration(browser, dir).registered);
+  return [...new Set([...installedBrowsers(), ...registered])];
+}
+
+export function linkRuntime({ root = packageRoot(), dir = runtimeDir(), dryRun = false, browsers = null } = {}) {
   const resolvedRoot = path.resolve(root);
-  if (dryRun) return { dryRun: true, root: resolvedRoot, dir, manifest: manifestPath(dir), skills: skillTargets() };
+  const targets = browsers ?? linkTargets(dir);
+  if (dryRun) return { dryRun: true, root: resolvedRoot, dir, browsers: targets, manifest: manifestPath(dir), skills: skillTargets() };
   const launchers = writeLaunchers(resolvedRoot, dir);
   const manifest = writeRuntimeManifest(resolvedRoot, dir);
-  const windows = process.platform === "win32";
   const nativeHost = installManifest({
     auto: true,
-    browsers: browsers ?? ["chrome", "edge"],
+    browsers: targets,
     extensionIds: [],
-    hostPath: windows ? launchers.wrapper : launchers.host,
+    hostPath: process.platform === "win32" ? launchers.wrapper : launchers.host,
   });
   const skills = installSkills({});
   return { root: resolvedRoot, dir, manifest, launchers, nativeHost, skills };
 }
 
 export function runtimeStatus({ root = packageRoot() } = {}) {
-  const dir = canonicalRuntimeDir();
+  const dir = runtimeDir();
   const manifest = readRuntimeManifest(dir);
   const resolvedRoot = path.resolve(root);
   const canonicalSkill = directoryHash(skillSourceDirectory()).sha256;
-  const wrapper = process.platform === "win32" ? path.join(dir, "opencode-browser-host.cmd") : path.join(dir, "opencode-browser-host");
+  const wrapper = path.join(dir, process.platform === "win32" ? "opencode-browser-host.cmd" : "opencode-browser-host");
+  const installed = installedBrowsers();
   return {
     hostName: HOST_NAME,
     runtimeDir: dir,
@@ -290,8 +294,10 @@ export function runtimeStatus({ root = packageRoot() } = {}) {
     branch: git(["rev-parse", "--abbrev-ref", "HEAD"], resolvedRoot),
     revision: git(["rev-parse", "--short", "HEAD"], resolvedRoot),
     dirty: (git(["status", "--porcelain"], resolvedRoot) ?? "") !== "",
-    behind: git(["rev-list", "--count", "master..HEAD"], resolvedRoot),
+    // Whether the browser will actually load us, not merely that a file exists.
     browserHost: { path: wrapper, installed: fs.existsSync(wrapper) },
+    installedBrowsers: installed,
+    registration: browserIds().map((browser) => ({ ...readRegistration(browser, dir), installed: installed.includes(browser) })),
     build: buildStatus(resolvedRoot),
     skills: skillTargets().map((target) => ({
       path: target,
@@ -313,10 +319,10 @@ function git(args, cwd) {
 // and the extension's own reconnect still picks up the new code. A host is
 // short-lived by design -- the extension starts one on demand -- so finding
 // none is normal rather than a fault.
-export function runningHosts(root = packageRoot()) {
+function runningHosts(root = packageRoot()) {
   const needles = [
     path.join(root, "native-host", "src", "host.js"),
-    path.join(canonicalRuntimeDir(), "host.mjs"),
+    path.join(runtimeDir(), "host.mjs"),
   ].map((candidate) => candidate.replaceAll("\\", "/").toLowerCase());
   try {
     const rows = process.platform === "win32"
@@ -335,7 +341,7 @@ export function runningHosts(root = packageRoot()) {
   }
 }
 
-export function stopHosts({ root = packageRoot(), dryRun = false } = {}) {
+function stopHosts({ root = packageRoot(), dryRun = false } = {}) {
   const hosts = runningHosts(root);
   if (hosts === null) return { supported: false, stopped: [] };
   const stopped = [];
@@ -370,6 +376,4 @@ export function syncRuntime({ root = packageRoot(), quiet = false, ifLinked = fa
   return { root: resolvedRoot, rebuilt, fresh: !buildStatus(resolvedRoot).stale, stoppedHosts: hosts.stopped, hostsSupported: hosts.supported };
 }
 
-export function launcherEntryPaths(dir = canonicalRuntimeDir()) {
-  return { host: path.join(dir, "host.mjs"), mcp: path.join(dir, "mcp.mjs"), plugin: path.join(dir, "plugin.mjs") };
-}
+export { runtimeDir };
