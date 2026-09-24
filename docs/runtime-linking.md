@@ -45,16 +45,20 @@ git checkout dev      # work here
 git checkout master   # stable, no reinstall, no commands to remember
 ```
 
-Two hooks keep that honest, and both are inert unless the checkout was linked:
+**The launchers are what guarantee this, not the hooks.** Before starting,
+`mcp.mjs` and `plugin.mjs` compare the bundle against the checked-out sources and
+rebuild when they disagree, so a branch switch can never leave a stale bundle
+serving an agent. That check is self-contained — it carries its own copy of the
+fingerprint function, because a checkout predating that helper is exactly when it
+still has to work. If the tree itself is broken the rebuild fails and the last
+good bundle starts with a warning, rather than taking the browser tools down.
 
-- `.githooks/post-checkout` and `.githooks/post-merge` run
-  `sync --if-linked`, which rebuilds `dist/` when the source no longer matches
-  the bundle and restarts the native host so the browser picks up the new code.
-  The extension respawns the host on demand, so the restart costs nothing.
-- The MCP and plugin launchers also verify the bundle themselves before
-  starting: a stale bundle is rebuilt on the spot, and if the tree itself is
-  broken the last successful bundle still starts, with a warning, rather than
-  taking the browser tools down.
+`.githooks/post-checkout` and `.githooks/post-merge` are a convenience on top:
+they run `sync --if-linked`, which rebuilds immediately and restarts the native
+host so the browser picks up the new code without waiting for its next
+reconnect. They are inert on a checkout that was never linked, and because they
+belong to the branch, an older branch simply does not have them — correctness
+does not depend on them.
 
 Because the bundle records a `sourceSha256` of everything that feeds it,
 "is my build current?" is an exact answer rather than a guess.
@@ -66,6 +70,13 @@ branch and revision, bundle freshness, the browser registration, any running
 hosts, skill parity, and each agent surface with the path it points at. A
 non-zero `doctor` exit or a `DRIFT` marker means exactly one surface needs
 attention.
+
+The status launcher lives outside the branch, so the question is answerable even
+on a checkout that predates these commands:
+
+```powershell
+node "$env:LOCALAPPDATA\OpenCode\browser\status.mjs"
+```
 
 ## Notes
 
