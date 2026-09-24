@@ -3,8 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { buildStatus, sourceFingerprint } from "../../src/cli/source-fingerprint.js";
-import { launcherSource, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.js";
+import { LAUNCHER_FINGERPRINT_SOURCE, launcherSource, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.js";
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -90,7 +91,7 @@ test("launchers resolve the runtime root instead of pinning a checkout", () => {
       assert.equal(/C:\/some\/checkout|Opencode-Plugins/.test(source), false, "no launcher may pin an absolute checkout");
     }
     assert.match(host, /native-host", "src", "host\.js"/, "the host runs from source, so a branch switch needs no build");
-    assert.match(mcp, /adapters", "mcp", "server\.js"/);
+    assert.match(mcp, /DIST_ENTRY = "dist\/adapters\/mcp\/server\.js"/);
     assert.match(plugin, /export default mod\.default/, "OpenCode reads the plugin exports from the active root");
     assert.match(plugin, /opencodeBrowserPlugin/);
   } finally {
@@ -98,9 +99,49 @@ test("launchers resolve the runtime root instead of pinning a checkout", () => {
   }
 });
 
+// The launcher has to work on a branch that predates source-fingerprint.js, so
+// it carries its own copy. This is what stops the two from drifting apart.
+test("the launcher's inline fingerprint matches the canonical implementation", () => {
+  const root = fakeTree();
+  try {
+    // Evaluated the way the generated launcher runs it: ESM top-level scope,
+    // where the node:crypto import is already bound.
+    const inline = new Function("fs", "path", "createHash", `${LAUNCHER_FINGERPRINT_SOURCE}\nreturn fingerprint;`)(fs, path, createHash);
+    assert.equal(inline(root), sourceFingerprint(root));
+
+    fs.writeFileSync(path.join(root, "src", "cli", "index.js"), "export const value = 3;\n", "utf8");
+    assert.equal(inline(root), sourceFingerprint(root), "both must react to an edit the same way");
+  } finally {
+    removeDir(root);
+  }
+});
+
+test("the launcher never uses require, which an ESM module does not have", () => {
+  for (const kind of ["mcp", "plugin"]) {
+    const source = launcherSource(kind);
+    assert.doesNotMatch(source, /\brequire\(/, "a generated launcher is an ES module");
+    assert.match(source, /import \{ createHash \} from "node:crypto"/);
+  }
+});
+
+test("the launcher never imports from the checkout before it can start", () => {
+  for (const kind of ["mcp", "plugin"]) {
+    const source = launcherSource(kind);
+    assert.doesNotMatch(source, /await import\(pathToFileURL\(path\.join\(root, "src"/, "a branch that predates this module would break the launcher");
+    assert.match(source, /function fingerprint\(root\)/, "the check must be self-contained");
+    assert.match(source, /no bundle at/, "a missing bundle must fail with an actionable message");
+  }
+});
+
+test("an older bundle without a source hash is judged by time, not rebuilt forever", () => {
+  const source = launcherSource("mcp");
+  assert.match(source, /typeof built\.sourceSha256 === "string"/);
+  assert.match(source, /newestSourceMtime\(root\)/, "legacy manifests fall back to a timestamp comparison");
+});
+
 test("the launcher rebuilds a stale bundle but still starts the last good one", () => {
   const source = launcherSource("mcp");
-  assert.match(source, /sourceFingerprint/);
+  assert.match(source, /function fingerprint\(root\)/);
   assert.match(source, /spawnSync/);
   assert.match(source, /build failed; starting the last successful bundle/);
   // Command-line flags must reach the server, not the launcher.
