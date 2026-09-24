@@ -2,7 +2,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-
 export const CANONICAL_SERVER = "opencode-browser-plugin";
 export const CORE_TOOLS = ["browser_run", "browser_observe", "browser_session", "browser_finalize"];
 
@@ -43,6 +42,31 @@ function writeJson(filePath, value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+// Plugin entries written by earlier releases pointed at the package root
+// itself, which does not contain CANONICAL_SERVER, so matching on the name
+// alone left them behind and OpenCode loaded the plugin twice.
+function ownPluginEntry(entry, serverPath) {
+  const raw = String(entry);
+  let resolved = raw;
+  if (raw.startsWith("file:")) {
+    try {
+      resolved = fileURLToPath(raw);
+    } catch {
+      return false;
+    }
+  }
+  if (resolved.includes(CANONICAL_SERVER)) return true;
+  if (serverPath && path.resolve(resolved).toLowerCase() === path.resolve(serverPath).toLowerCase()) return true;
+  try {
+    if (!fs.statSync(resolved).isDirectory()) return false;
+    const manifest = path.join(resolved, "package.json");
+    if (!fs.existsSync(manifest)) return false;
+    return JSON.parse(fs.readFileSync(manifest, "utf8")).name === "opencode-chromium";
+  } catch {
+    return false;
+  }
+}
+
 function tomlSection(name, body) {
   return `[mcp_servers.${name}]\n${body.map((line) => `${line}\n`).join("")}`;
 }
@@ -80,7 +104,7 @@ export function updateClientConfig({ client, filePath, action = "install", serve
     const configuredPlugins = [
       ...(Array.isArray(config.plugin) ? config.plugin : []),
       ...(Array.isArray(config.plugins) ? config.plugins : []),
-    ].filter((entry) => !localEntries.has(String(entry)) && !String(entry).includes(CANONICAL_SERVER));
+    ].filter((entry) => !localEntries.has(String(entry)) && !ownPluginEntry(entry, resolvedServerPath));
     config.plugin = configuredPlugins;
     // `plugin` is OpenCode's official schema key. Remove the plural alias if
     // an earlier installer version left it behind, otherwise OpenCode rejects

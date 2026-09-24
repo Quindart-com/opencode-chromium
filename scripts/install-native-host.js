@@ -8,6 +8,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const HOST_NAME = "com.opencode.browser.plugin";
+export { HOST_NAME };
 const SUPPORTED_BROWSERS = {
   chrome: {
     windowsRegistryKey: `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${HOST_NAME}`,
@@ -66,10 +67,11 @@ const USER_DATA_DIRS = {
 };
 
 function usage() {
-  console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id> ...] [--browsers chrome,edge,brave,chromium|all]");
+  console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id> ...] [--browsers chrome,edge,brave,chromium|all] [--host-path <executable>]");
   console.error("");
   console.error("The extension ID is visible on chrome://extensions after loading extension/ as unpacked.");
   console.error("When no ID is given, scripts/extension-id.json is used (repeat --extension-id to allow more than one).");
+  console.error("--host-path registers an existing launcher instead of a wrapper pinned to this checkout.");
 }
 
 function parseArgs(argv) {
@@ -87,6 +89,19 @@ function parseArgs(argv) {
     if (arg === "--auto") {
       args.auto = true;
       args.browsers = Object.keys(SUPPORTED_BROWSERS);
+      continue;
+    }
+    // Register an already-installed launcher instead of writing a wrapper that
+    // pins this checkout. `opencode-chromium link` uses this so the browser
+    // registration survives every future branch switch and version change.
+    if (arg === "--host-path") {
+      args.hostPath = path.resolve(argv[++i]);
+      continue;
+    }
+    // Extension ids are only needed when they cannot be detected; a caller that
+    // already resolved them may pass an empty list on purpose.
+    if (arg === "--no-extension-detection") {
+      args.noDetection = true;
       continue;
     }
     if (arg === "--browsers") {
@@ -231,12 +246,12 @@ function installManifest(args) {
   const root = repoRoot();
   const targetDir = installDir();
   fs.mkdirSync(targetDir, { recursive: true });
-  const hostPath = process.platform === "win32" ? writeWindowsWrapper(root, targetDir) : writeUnixWrapper(root, targetDir);
+  const hostPath = args.hostPath ?? (process.platform === "win32" ? writeWindowsWrapper(root, targetDir) : writeUnixWrapper(root, targetDir));
 
   const installed = [];
   const allExtensionIds = [];
   for (const browser of args.browsers) {
-    const extensionIds = args.auto ? detectExtensionIds(browser) : args.extensionIds;
+    const extensionIds = args.extensionIds.length > 0 ? args.extensionIds : args.noDetection ? [] : detectExtensionIds(browser);
     if (extensionIds.length === 0) {
       installed.push({ browser, skipped: true, reason: "opencode-browser-plugin extension was not detected" });
       continue;
@@ -258,11 +273,15 @@ function installManifest(args) {
   return { hostName: HOST_NAME, hostPath, extensionIdConfigPath, installed };
 }
 
-try {
-  const result = installManifest(parseArgs(process.argv.slice(2)));
-  console.log(JSON.stringify(result, null, 2));
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  usage();
-  process.exit(1);
+export { installDir, installManifest, parseArgs, detectExtensionIds };
+
+if (process.argv[1]?.replaceAll("\\", "/").endsWith("scripts/install-native-host.js")) {
+  try {
+    const result = installManifest(parseArgs(process.argv.slice(2)));
+    console.log(JSON.stringify(result, null, 2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    usage();
+    process.exit(1);
+  }
 }
