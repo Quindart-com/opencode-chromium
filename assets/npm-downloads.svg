@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 220" role="img" aria-label="NPM downloads for opencode-chromium, daily">
   <rect width="680" height="220" rx="12" fill="#ffffff"/>
   <text x="46" y="18" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1f2328">NPM downloads · daily</text>
-  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">26 yesterday</text>
+  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">12 yesterday</text>
   <path d="M46,180.0H656" stroke="#d1d9e0" stroke-width="1.2" stroke-dasharray="none" fill="none"/>
   <text x="38" y="184.0" text-anchor="end" font-size="10.5" fill="#59636e">0</text>
   <path d="M46,102.0H656" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 5" fill="none"/>
@@ -14,11 +14,11 @@
       <stop offset="1" stop-color="rgba(9,105,218,0.02)"/>
     </linearGradient>
   </defs>
-  <path d="M46.0,142.2 L69.5,172.6 L92.9,24.4 L116.4,180.0 L139.8,176.5 L163.3,176.1 L186.8,121.5 L210.2,170.3 L233.7,172.6 L257.2,173.0 L280.6,177.7 L304.1,178.1 L327.5,176.5 L351.0,174.5 L374.5,175.7 L397.9,122.7 L421.4,118.8 L444.8,72.4 L468.3,93.4 L491.8,99.3 L515.2,180.0 L538.7,170.6 L562.2,180.0 L585.6,180.0 L609.1,162.8 L632.5,172.2 L656.0,169.9 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
-  <path d="M46.0,142.2 L69.5,172.6 L92.9,24.4 L116.4,180.0 L139.8,176.5 L163.3,176.1 L186.8,121.5 L210.2,170.3 L233.7,172.6 L257.2,173.0 L280.6,177.7 L304.1,178.1 L327.5,176.5 L351.0,174.5 L374.5,175.7 L397.9,122.7 L421.4,118.8 L444.8,72.4 L468.3,93.4 L491.8,99.3 L515.2,180.0 L538.7,170.6 L562.2,180.0 L585.6,180.0 L609.1,162.8 L632.5,172.2 L656.0,169.9" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="656.0" cy="169.9" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
-  <text x="648.0" y="159.9" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">26</text>
+  <path d="M46.0,142.2 L59.3,172.6 L72.5,24.4 L85.8,180.0 L99.0,176.5 L112.3,176.1 L125.6,121.5 L138.8,170.3 L152.1,172.6 L165.3,173.0 L178.6,177.7 L191.9,178.1 L205.1,176.5 L218.4,174.5 L231.7,175.7 L244.9,122.7 L258.2,118.8 L271.4,72.4 L284.7,93.4 L298.0,99.3 L311.2,180.0 L324.5,170.6 L337.7,180.0 L351.0,180.0 L364.3,162.8 L377.5,172.2 L390.8,169.9 L404.0,180.0 L417.3,180.0 L430.6,170.6 L443.8,173.4 L457.1,173.0 L470.3,173.4 L483.6,167.5 L496.9,176.1 L510.1,180.0 L523.4,174.2 L536.7,180.0 L549.9,172.6 L563.2,171.8 L576.4,175.3 L589.7,176.1 L603.0,174.9 L616.2,173.0 L629.5,173.0 L642.7,176.9 L656.0,175.3 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
+  <path d="M46.0,142.2 L59.3,172.6 L72.5,24.4 L85.8,180.0 L99.0,176.5 L112.3,176.1 L125.6,121.5 L138.8,170.3 L152.1,172.6 L165.3,173.0 L178.6,177.7 L191.9,178.1 L205.1,176.5 L218.4,174.5 L231.7,175.7 L244.9,122.7 L258.2,118.8 L271.4,72.4 L284.7,93.4 L298.0,99.3 L311.2,180.0 L324.5,170.6 L337.7,180.0 L351.0,180.0 L364.3,162.8 L377.5,172.2 L390.8,169.9 L404.0,180.0 L417.3,180.0 L430.6,170.6 L443.8,173.4 L457.1,173.0 L470.3,173.4 L483.6,167.5 L496.9,176.1 L510.1,180.0 L523.4,174.2 L536.7,180.0 L549.9,172.6 L563.2,171.8 L576.4,175.3 L589.7,176.1 L603.0,174.9 L616.2,173.0 L629.5,173.0 L642.7,176.9 L656.0,175.3" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="656.0" cy="175.3" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
+  <text x="648.0" y="165.3" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">12</text>
   <text x="46" y="210" font-size="10.5" fill="#59636e">Aug 11</text>
-  <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#59636e">Aug 24</text>
-  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Sep 6</text>
+  <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#59636e">Sep 3</text>
+  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Sep 26</text>
 </svg>
