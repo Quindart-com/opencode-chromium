@@ -105,8 +105,9 @@ export function cleanCodexSkillConfig(text) {
 }
 
 function copySkills(source, target, dryRun) {
+  if (dryRun) return;
   if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
-  if (!dryRun) fs.cpSync(source, target, { recursive: true });
+  fs.cpSync(source, target, { recursive: true });
 }
 
 export function installSkills({ dryRun = false, homedir } = {}) {

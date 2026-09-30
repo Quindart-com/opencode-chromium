@@ -12,8 +12,8 @@ const errors = [];
 if (packageJson.name !== "opencode-chromium") errors.push(`Unexpected package name: ${packageJson.name}`);
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) errors.push(`Invalid package version: ${packageJson.version}`);
 if (packageJson.packageManager?.startsWith("bun@") !== true) errors.push("packageManager must pin Bun");
-if (packageJson.exports?.["."] !== "./dist/adapters/opencode/index.js") errors.push("Package root must export the native OpenCode adapter");
-if (packageJson.exports?.["./server"] !== "./dist/adapters/opencode/index.js") errors.push("Package must expose the ./server entry that opencode npm plugins load");
+if ((packageJson.exports?.["."]?.import ?? packageJson.exports?.["."]) !== "./dist/adapters/opencode/index.js") errors.push("Package root must export the native OpenCode adapter");
+if ((packageJson.exports?.["./server"]?.import ?? packageJson.exports?.["./server"]) !== "./dist/adapters/opencode/index.js") errors.push("Package must expose the ./server entry that opencode npm plugins load");
 if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium.git") errors.push("Repository metadata must point to the canonical GitHub repository");
 if (packageJson.publishConfig?.access !== "public") errors.push("Package must be configured for public npm access");
 if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") errors.push("Package must publish to the public npm registry");
@@ -55,7 +55,7 @@ const packOutput = execFileSync(process.execPath, ["pm", "pack", "--dry-run", "-
 for (const needle of [["opencode", "plugin"].join("-") + "/", ["browser", "core"].join("-") + "/", ["codex", "adapter"].join("-") + "/", ".opencode/", "package-lock.json", "scripts/extension-id.json", "native-host/test/"]) {
   if (packOutput.includes(needle)) errors.push(`Packed artifact contains forbidden path: ${needle}`);
 }
-for (const required of ["dist/core/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "dist/cli/index.js", "extension/manifest.json", "native-host/src/host.js", "skills/opencode-browser-plugin/SKILL.md", "skills/opencode-browser-plugin/agents/openai.yaml"]) {
+for (const required of ["dist/core/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "dist/cli/index.js", "extension/manifest.json", "native-host/dist/runtime.js", "skills/opencode-browser-plugin/SKILL.md", "skills/opencode-browser-plugin/agents/openai.yaml"]) {
   if (!packOutput.includes(required)) errors.push(`Packed artifact is missing: ${required}`);
 }
 

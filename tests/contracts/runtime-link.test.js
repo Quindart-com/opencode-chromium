@@ -92,7 +92,7 @@ test("launchers resolve the runtime root instead of pinning a checkout", () => {
       assert.match(source, /runtime\.json/, "every launcher resolves the manifest at launch time");
       assert.equal(/C:\/some\/checkout|Opencode-Plugins/.test(source), false, "no launcher may pin an absolute checkout");
     }
-    assert.match(host, /native-host", "src", "host\.js"/, "the host runs from source, so a branch switch needs no build");
+    assert.match(host, /native-host", "dist", "runtime\.js"/, "the native host launches the compiled runtime");
     assert.match(mcp, /DIST_ENTRY = "dist\/adapters\/mcp\/server\.js"/);
     assert.match(plugin, /export default mod\.default/, "OpenCode reads the plugin exports from the active root");
     assert.match(plugin, /opencodeBrowserPlugin/);
@@ -312,6 +312,26 @@ test("link targets installed browsers plus already-registered ones", () => {
       allowed_origins: ["chrome-extension://aaa/"],
     }), "utf8");
     assert.equal(new Set(linkTargets(dir)).size, linkTargets(dir).length, "targets must be unique");
+  } finally {
+    removeDir(dir);
+  }
+});
+
+// Chromium resolves a native messaging host through several registry roots and
+// stops at the first valid manifest. Brave can look in the shared Chrome root
+// rather than its own, so omitting `chrome` from the targets because its
+// executable is absent leaves the host invisible and every connectNative fails
+// with "Specified native messaging host not found".
+test("link targets always include the shared Chromium root", () => {
+  const dir = tempDir("runtime-link-shared-root-");
+  try {
+    // A browser is only a target here when its executable is absent, which is
+    // exactly the condition that used to drop `chrome`.
+    const absent = browserIds().filter((browser) => !installedBrowsers().includes(browser));
+    for (const browser of ["chrome", ...absent.filter((id) => id !== "chrome")]) {
+      assert.equal(linkTargets(dir).includes("chrome"), true, `${browser} must not remove the shared Chrome root`);
+    }
+    assert.equal(linkTargets(dir).includes("chrome"), true, "chrome is always targeted");
   } finally {
     removeDir(dir);
   }

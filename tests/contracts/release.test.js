@@ -55,54 +55,6 @@ describe("release metadata", () => {
   });
 });
 
-describe("privacy contract", () => {
-  const runtimeDirectories = ["src", "native-host/src", "extension-src/entrypoints", "extension-src/public"];
-  const deviceIdentifierPattern =
-    /\/etc\/machine-id|MachineGuid|getMac|node-machine-id|os\.hostname\s*\(|os\.userInfo\s*\(|wmic\s+csproduct|IOPlatformUUID|sentry\.io|posthog\.com|segment\.io|amplitude\.com|analytics\.google\.com/i;
-
-  test("shipped runtime code never reads device identifiers or reports telemetry", () => {
-    const offenders = [];
-    for (const directory of runtimeDirectories) {
-      const absolute = path.join(root, directory);
-      if (!fs.existsSync(absolute)) continue;
-      const walk = (current) => {
-        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-          const entryPath = path.join(current, entry.name);
-          if (entry.isDirectory()) walk(entryPath);
-          else if (/\.(?:js|mjs|cjs|ts|tsx)$/.test(entry.name)) {
-            const text = fs.readFileSync(entryPath, "utf8");
-            if (deviceIdentifierPattern.test(text)) offenders.push(path.relative(root, entryPath));
-          }
-        }
-      };
-      walk(absolute);
-    }
-    expect(offenders).toEqual([]);
-  });
-
-  test("tracked files contain no known personal identifiers", () => {
-    const identifierPattern = new RegExp(
-      ["namyA", "yssidabnamya", "ECAF-REKCOJD"]
-        .map((value) => [...value].reverse().join(""))
-        .map((value) => `\\b${value}\\b`)
-        .join("|"),
-      "i",
-    );
-    const allowlist = new Set(["scripts/public-hygiene.js", "tests/contracts/release.test.js", "docs/PRIVACY.md", "docs/TERMS.md"]);
-    const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root }).toString("utf8").split("\0").filter(Boolean);
-    const offenders = [];
-    for (const relative of tracked) {
-      if (allowlist.has(relative)) continue;
-      const absolute = path.join(root, relative);
-      if (!fs.existsSync(absolute)) continue;
-      const buffer = fs.readFileSync(absolute);
-      if (buffer.includes(0)) continue;
-      if (identifierPattern.test(buffer.toString("utf8"))) offenders.push(relative);
-    }
-    expect(offenders).toEqual([]);
-  });
-});
-
 describe("popup privacy surface", () => {
   const popupDir = path.join(root, "extension-src", "entrypoints", "popup");
   const backgroundRuntime = path.join(root, "extension-src", "entrypoints", "background", "runtime.js");

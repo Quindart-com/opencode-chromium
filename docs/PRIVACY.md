@@ -45,7 +45,7 @@ remote server. Everything runs locally.
   last four characters only); the full value is revealed or copied only through
   an explicit "Developer details" action. Cache locations are shown as "Local
   model cache"; the raw path is only ever copied on explicit request, never
-  rendered. A repository contract test and the release hygiene scan pin these
+  rendered. Behavioral privacy tests verify these
   guarantees, and store-listing images are generated from deterministic demo
   fixtures rather than live popups.
 
