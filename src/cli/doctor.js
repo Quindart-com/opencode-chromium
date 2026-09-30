@@ -26,7 +26,7 @@ export async function runDoctor({ json = false } = {}) {
   }
   const checks = [
     check("node", Number.parseInt(process.versions.node, 10) >= 20, { version: process.versions.node }),
-    check("bun", Boolean(process.versions.bun), { version: process.versions.bun ?? null }),
+    check("runtime", Boolean(process.versions.bun) || Number.parseInt(process.versions.node, 10) >= 20, { bun: process.versions.bun ?? null, node: process.versions.node }),
     check("package", info.name === "opencode-chromium" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(info.version ?? ""), { name: info.name, version: info.version }),
     check("build", fs.existsSync(path.join(dist, "build-manifest.json")), { path: "dist" }),
     check("four-tools", tools.length === 4, { tools: tools.map((tool) => tool.name) }),
