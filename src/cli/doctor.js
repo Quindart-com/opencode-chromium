@@ -32,7 +32,7 @@ export async function runDoctor({ json = false } = {}) {
     check("four-tools", tools.length === 4, { tools: tools.map((tool) => tool.name) }),
     check("artifact-directory", (() => { try { fs.mkdirSync(artifactDir, { recursive: true }); return fs.statSync(artifactDir).isDirectory(); } catch { return false; } })(), { configured: Boolean(process.env.AGENT_BROWSER_ARTIFACT_DIR ?? process.env.OPENCODE_BROWSER_ARTIFACT_DIR) }),
     check("extension", fs.existsSync(path.join(info.root, "extension", "manifest.json")), { installed: false, message: "Use check:extension for browser-profile discovery." }),
-    check("native-host", fs.existsSync(path.join(info.root, "native-host", "src", "host.js")), { installed: false, message: "Use install:native-host to register the host." }),
+    check("native-host", fs.existsSync(path.join(info.root, "native-host", "dist", "runtime.js")), { installed: false, message: "Use install:native-host to register the host." }),
     check("semantic-cache", true, { configured: Boolean(process.env.AGENT_BROWSER_SEMANTIC_DIR ?? process.env.OPENCODE_BROWSER_SEMANTIC_DIR) }),
     check("qwen-cache", true, { configured: Boolean(process.env.AGENT_BROWSER_SEMANTIC_DIR ?? process.env.OPENCODE_BROWSER_SEMANTIC_DIR) }),
     check("schema-budget", Buffer.byteLength(JSON.stringify(tools)) < MAX_SCHEMA_BYTES, { bytes: Buffer.byteLength(JSON.stringify(tools)), maxBytes: MAX_SCHEMA_BYTES }),

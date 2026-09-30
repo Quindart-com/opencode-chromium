@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -24,12 +24,14 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck:backend
       - run: bun run typecheck:extension
+      - run: bun run lint
+      - run: bun run check:unused
+      - run: bun run check:architecture
       - run: bun run build
       - run: bun run build:extension
       - run: bun test
       - run: node --test tests/native-host/memory-reliability.test.js tests/native-host/memory-search.test.js tests/native-host/embedding-service.test.js tests/native-host/framing.test.js tests/core/reliability.test.js
       - run: bun run check:package
       - run: bun run check:schemas
-      - run: bun run check:public-hygiene
       - run: bunx playwright install --with-deps chromium
       - run: node scripts/verify-popup.js

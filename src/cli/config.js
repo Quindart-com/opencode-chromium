@@ -1,3 +1,5 @@
+import { planConfiguration } from "../management/configuration.ts";
+import { applyTransaction } from "../management/transaction.ts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,6 +17,8 @@ export function packageRoot() {
 
 export function configPath(client, explicit) {
   if (explicit) return path.resolve(explicit);
+  if (client === "claude-code") return path.join(process.env.CLAUDE_CONFIG_DIR ?? home(), ".claude.json");
+  if (client === "claude-desktop") return path.join(process.platform === "win32" ? process.env.APPDATA ?? path.join(home(), "AppData", "Roaming") : path.join(home(), "Library", "Application Support"), "Claude", "claude_desktop_config.json");
   if (client === "codex") return path.join(process.env.CODEX_HOME ?? path.join(home(), ".codex"), "config.toml");
   // OpenCode's Windows global config follows its XDG-style location, not the
   // generic %APPDATA% application-data location.
@@ -31,40 +35,6 @@ export function backup(filePath, { now = new Date() } = {}) {
   while (fs.existsSync(target)) target = `${base}-${++suffix}`;
   fs.copyFileSync(filePath, target, fs.constants.COPYFILE_EXCL);
   return target;
-}
-
-function readJson(filePath) {
-  if (!fs.existsSync(filePath)) return {};
-  return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
-}
-
-function writeJson(filePath, value) {
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
-
-// Plugin entries written by earlier releases pointed at the package root
-// itself, which does not contain CANONICAL_SERVER, so matching on the name
-// alone left them behind and OpenCode loaded the plugin twice.
-function ownPluginEntry(entry, serverPath) {
-  const raw = String(entry);
-  let resolved = raw;
-  if (raw.startsWith("file:")) {
-    try {
-      resolved = fileURLToPath(raw);
-    } catch {
-      return false;
-    }
-  }
-  if (resolved.includes(CANONICAL_SERVER)) return true;
-  if (serverPath && path.resolve(resolved).toLowerCase() === path.resolve(serverPath).toLowerCase()) return true;
-  try {
-    if (!fs.statSync(resolved).isDirectory()) return false;
-    const manifest = path.join(resolved, "package.json");
-    if (!fs.existsSync(manifest)) return false;
-    return JSON.parse(fs.readFileSync(manifest, "utf8")).name === "opencode-chromium";
-  } catch {
-    return false;
-  }
 }
 
 function tomlSection(name, body) {
@@ -88,57 +58,11 @@ export function codexServerToml(serverPath) {
   ]);
 }
 
-export function updateClientConfig({ client, filePath, action = "install", serverPath, dryRun = false } = {}) {
+export function updateClientConfig({ client, filePath, action = "install", serverPath = "", dryRun = false, version, interpreter } = {}) {
   const target = configPath(client, filePath);
-  const before = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : "";
-  let after = before;
-  if (client === "codex") {
-    // The skills installer also appends to this file. Removing and re-appending
-    // a section that is already correct made the two swap places on every run,
-    // rewriting the user's config and piling up backups, so a correct section is
-    // left exactly where it is.
-    const block = codexServerToml(serverPath);
-    if (action !== "uninstall" && before.includes(block)) {
-      after = before;
-    } else {
-      after = removeTomlSection(before, CANONICAL_SERVER);
-      if (action !== "uninstall") after = `${after.trimEnd()}${after.trim() ? "\n\n" : ""}${block}\n`;
-    }
-  } else {
-    const config = readJson(target);
-    const resolvedServerPath = serverPath ? path.resolve(serverPath) : "";
-    const pluginEntry = resolvedServerPath ? pathToFileURL(resolvedServerPath).href : "";
-    const legacyPluginEntry = resolvedServerPath ? `file://${resolvedServerPath.replaceAll("\\", "/")}` : "";
-    const localEntries = new Set([pluginEntry, legacyPluginEntry].filter(Boolean));
-    const configuredPlugins = [
-      ...(Array.isArray(config.plugin) ? config.plugin : []),
-      ...(Array.isArray(config.plugins) ? config.plugins : []),
-    ].filter((entry) => !localEntries.has(String(entry)) && !ownPluginEntry(entry, resolvedServerPath));
-    config.plugin = configuredPlugins;
-    // `plugin` is OpenCode's official schema key. Remove the plural alias if
-    // an earlier installer version left it behind, otherwise OpenCode rejects
-    // the whole configuration as invalid.
-    delete config.plugins;
-    if (action !== "uninstall" && client !== "opencode-mcp") config.plugin.push(pluginEntry);
-    if (client === "opencode-mcp") {
-      config.mcp ??= {};
-      config.mcp.servers ??= {};
-      delete config.mcp.servers[CANONICAL_SERVER];
-      if (action !== "uninstall") config.mcp.servers[CANONICAL_SERVER] = { type: "local", command: ["bun", serverPath], codemode: false, timeout: 120000 };
-    } else if (config.mcp?.servers && typeof config.mcp.servers === "object" && !Array.isArray(config.mcp.servers)) {
-      // Clean up the empty legacy container created by older releases. Native
-      // OpenCode MCP entries live directly under `mcp`, not under `mcp.servers`.
-      delete config.mcp.servers[CANONICAL_SERVER];
-      if (Object.keys(config.mcp.servers).length === 0) delete config.mcp.servers;
-    }
-    after = writeJson(target, config);
-  }
-  const changed = before !== after;
-  let backupPath = null;
-  if (changed && !dryRun) {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    backupPath = backup(target);
-    fs.writeFileSync(target, after, "utf8");
-  }
-  return { client, action, filePath: target, changed, dryRun, backup: backupPath, before, after };
+  const existed = fs.existsSync(target);
+  const before = existed ? fs.readFileSync(target, "utf8") : "";
+  const after = planConfiguration(before, { client, serverPath, action, version, interpreter });
+  const result = applyTransaction([{ filePath: target, before: existed ? before : null, after }], dryRun);
+  return { client, action, filePath: target, changed: before !== after, dryRun, backup: result.backups[0] ?? null, before, after };
 }

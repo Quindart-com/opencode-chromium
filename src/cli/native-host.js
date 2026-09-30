@@ -118,7 +118,7 @@ function detectExtensionIds(browser) {
       for (const [id, extension] of Object.entries(settings)) {
         const name = extension?.manifest?.name ?? "";
         const extensionPath = extension?.path ?? "";
-        if (/opencode-browser-plugin/i.test(name) || /opencode-browser-plugin/i.test(extensionPath) || /Opencode-Plugins/i.test(extensionPath)) {
+        if (/opencode-browser-plugin|opencode-chromium/i.test(name) || /opencode-browser-plugin|opencode-chromium/i.test(extensionPath) || /Opencode-Plugins/i.test(extensionPath)) {
           ids.add(id);
         }
       }
@@ -170,10 +170,11 @@ export function originIds(manifest) {
 // the registry entry is the registration; elsewhere the manifest's presence in
 // the browser's own directory is.
 export function readRegistration(browser, targetDir = runtimeDir()) {
-  const manifestPath = path.join(targetDir, `${HOST_NAME}.${browser}.json`);
+  const browserDir = nativeMessagingDir(browser);
+  const manifestPath = process.platform !== "win32" && browserDir ? path.join(browserDir, `${HOST_NAME}.json`) : path.join(targetDir, `${HOST_NAME}.${browser}.json`);
   const manifest = readJsonIfPresent(manifestPath);
   const valid = Boolean(manifest) && manifest.name === HOST_NAME && typeof manifest.path === "string" && originIds(manifest).length > 0;
-  const registered = valid && (process.platform === "win32" ? registryManifestPath(browser) === manifestPath : manifestPathForBrowserIsBrowserDir(browser));
+  const registered = valid && (process.platform === "win32" ? samePath(registryManifestPath(browser), manifestPath) : Boolean(browserDir));
   return {
     browser,
     registered,
@@ -192,9 +193,9 @@ function registryManifestPath(browser) {
   }
 }
 
-function writeExtensionIdConfig(root, extensionIds) {
+function writeExtensionIdConfig(targetDir, extensionIds) {
   if (extensionIds.length === 0) return null;
-  const configPath = path.join(root, "scripts", "extension-id.json");
+  const configPath = path.join(targetDir, "extension-ids.json");
   const uniqueIds = [...new Set(extensionIds)];
   const config = {
     extensionHostName: HOST_NAME,
@@ -221,7 +222,7 @@ export function resolveExtensionIds({ browser, extensionIds = [], noDetection = 
   if (extensionIds.length > 0) return { extensionIds, source: "argument" };
   const ids = new Set();
   const sources = [];
-  const existing = originIds(readJsonIfPresent(path.join(targetDir, `${HOST_NAME}.${browser}.json`)));
+  const existing = readRegistration(browser, targetDir).extensionIds;
   if (existing.length > 0) {
     existing.forEach((id) => ids.add(id));
     sources.push("existing manifest");
@@ -233,7 +234,7 @@ export function resolveExtensionIds({ browser, extensionIds = [], noDetection = 
       sources.push("detected");
     }
   }
-  const recorded = readJsonIfPresent(path.join(repoRoot(), "scripts", "extension-id.json"));
+  const recorded = readJsonIfPresent(path.join(targetDir, "extension-ids.json")) ?? readJsonIfPresent(path.join(repoRoot(), "scripts", "extension-id.json"));
   const configured = [].concat(recorded?.extensionIds ?? [], recorded?.extensionId ?? []).filter((id) => typeof id === "string" && id.length > 0);
   if (configured.length > 0) {
     configured.forEach((id) => ids.add(id));
@@ -244,9 +245,12 @@ export function resolveExtensionIds({ browser, extensionIds = [], noDetection = 
 
 export function installManifest(args) {
   const root = repoRoot();
-  const targetDir = runtimeDir();
+  // Honour a caller's directory instead of always writing to the live runtime
+  // dir: a dry run or an isolated check must not overwrite the registration the
+  // browser is currently using.
+  const targetDir = args.targetDir ?? runtimeDir();
   fs.mkdirSync(targetDir, { recursive: true });
-  const hostPath = args.hostPath ?? writeWrapper(targetDir, path.join(root, "native-host", "src", "host.js"));
+  const hostPath = args.hostPath ?? writeWrapper(targetDir, path.join(root, "native-host", "dist", "runtime.js"));
 
   const installed = [];
   const skipped = [];
@@ -263,7 +267,7 @@ export function installManifest(args) {
     allExtensionIds.push(...resolved.extensionIds);
   }
 
-  const extensionIdConfigPath = writeExtensionIdConfig(root, allExtensionIds);
+  const extensionIdConfigPath = writeExtensionIdConfig(targetDir, allExtensionIds);
   return { hostName: HOST_NAME, hostPath, extensionIdConfigPath, installed, skipped };
 }
 

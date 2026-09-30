@@ -24,6 +24,7 @@ store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", pro
 store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", profileId: "primary" });
 store.usageEvent({ eventType: "replay_rejected", reason: "step_count_mismatch", profileId: "primary" });
 const versionStatus = { state: "connected", versionChecked: true, nativeHostVersion: "1.6.5", clientVersions: ["1.6.5"] };
+let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUTER_API_KEY", shareText: true, shareImages: false, ready: true };
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url === "/rpc") {
@@ -38,6 +39,11 @@ const server = http.createServer(async (req, res) => {
         else throw new Error("Unexpected fixture method");
         result = { ok: true, result };
       } else if (message.type === "GET_PROFILE" || message.type === "GET_PROFILE_DETAILS") result = { profile: { profileId: "primary", profileLabel: "Primary" } };
+      else if (message.type === "GET_DECISION_SETTINGS") result = { result: decisionSettings };
+      else if (message.type === "SET_DECISION_SETTINGS") {
+        decisionSettings = { ...message.settings, ready: message.settings.shareText };
+        result = { result: decisionSettings };
+      }
       else if (message.type === "GET_SEMANTIC_SETTINGS") result = { semantic: { settings: { enabled: true, strategyPreference: "auto" }, models: [] } };
       else if (message.type === "SNOOZE_VERSION_NOTICE") {
         versionStatus.versionReminder = { key: versionNotice("1.7.1", versionStatus).key, until: Date.now() + 7 * 86400000 };
@@ -63,7 +69,7 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { globalThis.fixtureCopiedText = text; } } });
-    globalThis.chrome = { runtime: {
+    globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
       id: "fixture",
       getManifest: () => ({ version: "1.7.1" }),
       connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }),
@@ -111,8 +117,27 @@ try {
   await page.waitForTimeout(2800);
   assert.equal(await page.locator("#purge-days").inputValue(), "21", "polling must preserve an unsaved edit");
   assert.equal(await page.locator("#semantic-model-list").isVisible(), false);
+  await page.locator("#decision-provider:not(:disabled)").waitFor();
+  assert.equal(await page.locator("#decision-provider").inputValue(), "jev-openrouter");
+  assert.equal(await page.locator("#decision-key-env").isVisible(), false, "connection details start collapsed");
+  assert.equal(await page.getByText("Embedded models are deprecated", { exact: false }).isVisible(), false, "migration details start collapsed");
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.locator(".provider-settings").screenshot({ path: path.join(root, "reports", "popup-provider-light.png"), animations: "disabled" });
   await page.emulateMedia({ colorScheme: "dark" });
+  await page.locator(".provider-settings").screenshot({ path: path.join(root, "reports", "popup-provider-dark.png"), animations: "disabled" });
   await page.screenshot({ path: path.join(root, "reports", "popup-settings-dark.png"), fullPage: true });
+  await page.getByRole("switch", { name: "Share page text" }).uncheck();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.getByText("Changes saved.", { exact: true }).waitFor();
+  assert.equal(decisionSettings.shareText, false, "sharing consent persists through the existing host API");
+  await page.selectOption("#decision-provider", "jev-typesafe");
+  await page.getByText("Connection settings", { exact: true }).click();
+  assert.equal(await page.locator("#decision-key-env").inputValue(), "TYPESAFE_API_KEY");
+  await page.selectOption("#decision-provider", "off");
+  assert.equal(await page.getByRole("switch", { name: "Share page text" }).count(), 0);
+  await page.selectOption("#decision-provider", "jev-openrouter");
+  await page.getByText("Connection settings", { exact: true }).click();
+  assert.equal(await page.locator("#decision-key-env").inputValue(), "OPENROUTER_API_KEY");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "popup must fit the viewport");
   versionStatus.nativeHostVersion = "1.8.0";
   versionStatus.clientVersions = ["1.8.0"];
