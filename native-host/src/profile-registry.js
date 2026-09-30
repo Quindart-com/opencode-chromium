@@ -81,8 +81,7 @@ function readJsonIfPresent(filePath) {
   }
 }
 
-export function readProfileRegistrations() {
-  const dir = profileRegistryDir();
+export function readProfileRegistrations(dir = profileRegistryDir()) {
   if (!fs.existsSync(dir)) return [];
 
   const registrations = [];

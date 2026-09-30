@@ -1,382 +1,109 @@
-<p align="center"><img src="assets/logo.svg" alt="OpenCode Browser Plugin Logo" width="200"/></p>
+# opencode-chromium
 
-<h1 align="center">opencode-chromium</h1>
+Chromium automation for Codex, Claude, OpenCode, other MCP clients, and JavaScript agents. Four tools share one browser engine: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. The SDK exports and 55 granular compatibility operations remain available.
 
-<p align="center"><strong>Provider-neutral Chromium automation for MCP clients, OpenCode V2, Codex, and direct JavaScript agents.</strong></p>
+## Setup
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/opencode-chromium"><img src="https://img.shields.io/npm/dw/opencode-chromium?style=flat&logo=npm&label=weekly%20downloads" alt="NPM weekly downloads"/></a>
-  <a href="https://github.com/Quindart-com/opencode-chromium/discussions"><img src="https://img.shields.io/badge/roadmap-Discussions-3fb950" alt="Roadmap discussions"/></a>
-  <a href="https://chromewebstore.google.com/detail/opencode-chromium/hdljmmpfnhojebplbbgdgejoobmjcbml?authuser=0&amp;hl=en"><img src="https://img.shields.io/badge/Install_in_Chrome_Web_Store-Download-4285F4?style=flat&amp;logo=googlechrome&amp;logoColor=white" alt="Install opencode-chromium from the Chrome Web Store"/></a>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/npm-downloads-dark.svg">
-    <img src="assets/npm-downloads.svg" alt="NPM weekly download history" width="680"/>
-  </picture>
-</p>
-
-## Community and roadmap
-
-The roadmap is shaped by users — open a proposal, upvote with reactions, and
-follow announcements on
-[GitHub Discussions](https://github.com/Quindart-com/opencode-chromium/discussions):
-
-- **Feature requests** — start a proposal (the template keeps it structured):
-  describe the problem and the workflow it should unlock; others vote with
-  👍/❤️ reactions. The maintainers triage voted proposals into upcoming work
-  and tag them with their status (`planned`, `in progress`, `released`).
-  [Open a proposal →](https://github.com/Quindart-com/opencode-chromium/discussions/categories/feature-requests)
-- **Announcements** — releases, roadmap status, and maintainer notes.
-  [Follow announcements →](https://github.com/Quindart-com/opencode-chromium/discussions/categories/announcements)
-- **Protocol** — feature requests concern what this repository publishes
-  (runtime, extension, native host, skills); bug reports and security findings
-  belong in GitHub Issues instead.
-
-## What it provides
-
-- Four compact default tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`.
-- The complete multi-operation browser engine behind explicit compatibility and capability modes.
-- Context-lean evidence: observation summaries omit empty fields, duplicate text, and verbose `html`/`styles` (available only through `detail: "debug"`), and inline responses stay within the 4,096-character budget with oversized output spilled to artifact resources.
-- Native hover, JavaScript dialog handling with approval gating, and png/jpeg/webp screenshots with quality control. Screenshot captures reach OpenCode and MCP clients as real images for direct visual inspection: `fullPage: false` grabs the visible viewport, `fullPage: true` captures the entire scrollable page (dimension-capped, with automatic jpeg compression for oversized captures).
-- Non-intrusive background automation: clicks, typing, and navigation never activate the tab or bring its window forward, so you can keep working while the tool drives a background tab.
-- Server-level origin policy (allowed/blocked origin globs) and file-root restrictions for uploads.
-- Persistent session emulation (viewport, network, CPU, geolocation, color scheme, user agent, headers, init scripts) with automatic reset on finalize.
-- Network request drill-down by requestId with artifact-backed body spillover, and source-mapped console stack traces.
-- Performance diagnostics: `browser_observe` mode `diagnostic` records CDP traces and computes LCP, CLS, long tasks, TBT, and more in the native host; raw traces are artifact-first and CrUX/field data stays off.
-- Action Memory (opt-in): a local, vector-searchable record of what worked and what failed, so later sessions reuse confirmed routes — searched by meaning, self-correcting via chain lineage, with maintenance controls and a dashboard in the extension. See [docs/action-memory.md](docs/action-memory.md).
-- Snowflake-default page search with explicit lexical/auto alternatives and Qwen deep retrieval without loading models in the extension.
-- Profile-aware sessions, tab ownership, stale-target recovery, bounded read retries, conditional settling, approvals, and artifact resources.
-- MCP stdio and loopback/ authenticated HTTP transports with protocol-clean stdout.
-- A native OpenCode V2 adapter and shared OpenAI, Anthropic, Gemini, and MCP schema adapters.
-
-## Quick start (npm)
-
-Install the published package once, then connect any supported client. The
-package ships the CLI (`opencode-chromium`), the MCP server bin
-(`opencode-chromium-mcp`), the browser extension, and the native host
-installer:
-
-```powershell
-npx -y opencode-chromium-mcp
-```
-
-| Client                  | Surface                    | Setup                                                                 |
-| ----------------------- | -------------------------- | --------------------------------------------------------------------- |
-| OpenCode V2             | Native plugin              | `"plugin": ["opencode-chromium"]` in `opencode.json`                  |
-| Codex                   | MCP server (stdio)         | `codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp` |
-| Any MCP client          | MCP server (stdio)         | `npx -y opencode-chromium-mcp` as a stdio server |
-| Direct JavaScript       | SDK (`opencode-chromium/sdk`) | `import { createBrowserAgent } from "opencode-chromium/sdk"` |
-
-### 1. Install the package
-
-```powershell
+```sh
 npm install -g opencode-chromium
+opencode-chromium setup
 ```
 
-### 2. Load the browser extension
+Setup inspects known executable, application, and configuration locations. Use arrow keys to move, Space to select, and Enter to apply. Previously managed targets start selected. Each row shows the detected version and current registration. One shared runtime directory holds stable launchers; harnesses start their own client processes against it.
 
-> **[Install opencode-chromium from the Chrome Web Store](https://chromewebstore.google.com/detail/opencode-chromium/hdljmmpfnhojebplbbgdgejoobmjcbml?authuser=0&hl=en).** The unpacked flow below remains available for development and local testing.
+Install the [browser extension](https://chromewebstore.google.com/detail/opencode-chromium/hdljmmpfnhojebplbbgdgejoobmjcbml), or load the installed package's `extension/` directory unpacked. Then run `opencode-chromium link` to register native messaging. The existing `link` command also connects its legacy default clients; use explicit client commands when you need narrower registration. Automatic browser registration inside the new setup transaction is still being integrated.
 
-Open `chrome://extensions`, enable Developer mode, and load the unpacked
-`extension/` folder from the installed package:
-
-```powershell
-npm root -g
-# load "<that path>\opencode-chromium\extension" as an unpacked extension
-```
-
-The extension ID is derived from the load path, so keep the folder where it
-is. Note the ID shown in `chrome://extensions`.
-
-### 3. Install the native messaging host
-
-```powershell
-node "$(npm root -g)/opencode-chromium/scripts/install-native-host.js" --extension-id <extension-id> --browsers chrome
-```
-
-### 4. Connect a client
-
-<details>
-<summary>OpenCode V2</summary>
-
-Add the package name to the global
-`~/.config/opencode/opencode.json`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-chromium"]
-}
-```
-
-</details>
-
-<details>
-<summary>Codex</summary>
-
-Register the MCP server:
-
-```powershell
-codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp
-```
-
-</details>
-
-<details>
-<summary>Any MCP client</summary>
-
-Add the stdio server:
-
-```json
-{
-  "mcpServers": {
-    "opencode-browser-plugin": {
-      "command": "npx",
-      "args": ["-y", "opencode-chromium-mcp"]
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary>Direct JavaScript</summary>
-
-Use `createBrowserAgent` from `opencode-chromium/sdk`. See the [SDK example](docs/direct-sdk.md).
-
-</details>
-
-Choose only the setup for your client; you do not need all of them.
-
-### 5. Verify
-
-```powershell
+```sh
 opencode-chromium doctor --json
-opencode-chromium verify
+opencode-chromium status --json
 ```
 
-All four tools (`browser_run`, `browser_observe`, `browser_session`,
-`browser_finalize`) are then available in every connected client. Do not
-enable both the native OpenCode adapter and the MCP server in one client
-session unless duplicate tools are intentional.
+| Harness | Connection | Platforms |
+| --- | --- | --- |
+| Codex CLI / Desktop | One shared MCP registration | Windows, macOS, Linux CLI |
+| Claude Code | MCP | Windows, macOS, Linux |
+| Claude Desktop | MCP | Windows, macOS |
+| OpenCode | Native adapter by default; version-aware configuration | Windows, macOS, Linux |
+| Other MCP clients | Standard stdio server | Client-dependent |
 
-## Profiles and action memory
+These are configuration targets, not a claim that every installed client version has passed live testing. OpenCode uses `plugin` for the detected 1.x contract and `plugins` for 2.x. Native and MCP browser registrations are mutually exclusive in the managed OpenCode configuration. Missing clients remain visible; unsupported platform combinations show their limitation.
 
-Open the extension’s **Profiles** tab, choose a connected profile, and click **Copy agent selector**. Paste that selector into your first browser request. Renaming the current profile is optional.
+## Manage registrations
 
-The **Overview** defaults to this profile. Choose all profiles, select several profiles, or view older unassigned history. Actions are shared locally across profiles; selecting two profiles counts a shared action once while keeping their execution totals separate. Storage controls apply to the shared database.
+```sh
+opencode-chromium manage
+opencode-chromium setup --targets codex,opencode --dry-run --json
+opencode-chromium setup --targets claude-code --config claude-code=/absolute/config/path --json
+opencode-chromium update --targets codex,opencode --json
+opencode-chromium uninstall --targets codex --json
+```
 
-Enable action memory in **Settings**. Page search works with the default settings; model downloads and search tuning are under **Advanced search settings**. A dash means no result yet, and an unavailable message means the host could not supply statistics.
+`setup`, `manage`, and `update` reconcile registrations with the installed runtime. Upgrade the npm package before `update`; it does not independently download a release. With `--json` and no targets, these commands only report discovery. Noninteractive changes require `--targets`. Configuration overrides are repeatable `--config harness-id=/path` values. Discovery respects `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, and `XDG_CONFIG_HOME`.
 
-The installed extension version appears in its header. Package and store versions can differ while a release is under review; a successful upload does not mean store approval.
+Configuration changes and selected-client skills are planned before writing, backed up, written atomically, and rolled back if a later file change fails. Dry runs leave configuration and skills untouched. JSONC edits preserve unrelated comments. Existing simple Codex TOML settings retain custom timeouts; complex owned sections currently require manual migration.
 
-On connection, the extension compares its version with the local native host and connected CLI/MCP clients. A toolbar badge and compact notice flag differences or unreported versions. Expand **How to update** for instructions, or choose **Remind me in a week**; instructions remain in Settings, and a different version combination prompts again. Checks stay local and do not install updates automatically. If local tools are newer, the notice explains that the store extension may still be awaiting approval.
+Recognized native plugin duplicates and managed native/MCP overlaps are repaired. Custom entries under other names remain untouched; inspect them before removing duplicate browser tools. General duplicate MCP-name repair is still being expanded.
 
-## Requirements
+After setup, the CLI offers graceful restart for supported running desktop applications. Use `--restart` for an explicit noninteractive request. Declining leaves a pending reload. Terminal sessions receive reconnect/relaunch instructions. Setup never force-kills applications. Uninstall removes selected client registrations and known skill files; shared runtime data and caches are retained.
 
-- Node.js 20 or newer for the npm package and SDK.
-- Bun 1.1 or newer when building from source or running the repository scripts.
-- A Chromium-family browser with the unpacked `extension/` loaded.
-- The native messaging host installed for the extension ID.
+Compatible commands remain: `install`, `configure`, and `uninstall --client opencode|opencode-mcp|codex|claude-code|claude-desktop|skills`. Other MCP clients can run `opencode-chromium-mcp` as a stdio server. HTTP transport is documented in [the MCP guide](docs/mcp.md).
 
-## Install and build
+## Providers and offline use
 
-```powershell
-bun install --frozen-lockfile
+Cloud decision assistance is disabled by default. Jev can assist finite page-target ranking through TypeSafe directly or OpenRouter. Keys stay in the native host's environment; preferences contain only credential references. The extension settings expose provider selection and explicit text-sharing consent.
+
+```sh
+# Set OPENROUTER_API_KEY securely in the native host environment first.
+opencode-chromium providers configure --provider jev --route openrouter --share-text
+opencode-chromium providers status
+opencode-chromium providers configure --provider off
+```
+
+Jev does not receive screenshots. Timeouts, invalid candidates, and abstentions fall back to deterministic results. No automatic provider fallback occurs. OpenAI Decisions API / Luna is shown as unavailable preview support until its official request contract and account access are verified.
+
+The [provider guide and initial live measurements](docs/DECISION-PROVIDERS.md) report better synthetic synonym matching at higher latency than lexical search. Complete browser-flow speedups are not yet established.
+
+Without a cloud provider, explicit browser actions and lexical retrieval need no cloud inference. Existing local semantic models remain available during migration and may require an initial model download. The first compatible migration release will announce deprecation; an optional legacy package and removal in a subsequent major must precede retirement by at least 90 days. Existing memory databases and model caches remain intact. The optional package and core dependency removal are not yet complete.
+
+## Developer channels
+
+```sh
+bun install
 bun run build
 bun run build:extension
-bun test
+bun src/cli/index.js link --follow-branch
+bun src/cli/index.js sync
+```
+
+Branch following maps clean `master` to production and other branches to development. Detached HEAD retains the active channel. Each full-stack snapshot includes compiled runtime, native host, skills, and extension. The fingerprint includes source, package metadata, lockfile, and build configuration. Builds are serialized; a failed build retains the previous active snapshot. Active client work defers activation.
+
+Load the returned stable developer-extension path once. Successful activation publishes the selected extension there and reports pending reload: reload it through the browser's extensions page and reconnect tools. Automatic developer-control reload and protocol-handshake checks are still being completed. Store-installed extensions use the browser's normal update mechanism.
+
+Channel launchers isolate memory, provider settings, model caches, artifacts, and profile registries. Git hooks never terminate native hosts or silently restart desktop applications. Existing direct links retain their compatible behavior; run branch following explicitly to opt into full-stack snapshots.
+
+## Browser behavior and documentation
+
+Browser actions operate in background tabs. Sessions support explicit profile selection, tab ownership, approvals, bounded read retries, mutation uncertainty, screenshot delivery, and artifact-backed evidence. The harness supplies the action sequence. Providers cannot supply executable code or bypass approvals.
+
+- [Action memory](docs/action-memory.md)
+- [Privacy](docs/PRIVACY.md)
+- [Security policy](SECURITY.md)
+- [Contributor guidance](CONTRIBUTING.md)
+- [Architecture and migration status](docs/architecture.md)
+
+## Development checks
+
+```sh
+bun run build
+bun run build:extension
+bun run typecheck:extension
 bun run check
-```
-
-The package is released under the npm name `opencode-chromium`. The stable runtime and MCP server identity remains `opencode-browser-plugin` for client compatibility; the current release version is defined in `package.json`.
-
-## MCP
-
-Run the four-tool server over stdio:
-
-```powershell
-bun run mcp
-```
-
-Or use the packaged binary:
-
-```powershell
-opencode-chromium-mcp
-```
-
-Loopback Streamable HTTP is available with:
-
-```powershell
-bun run mcp:http
-```
-
-Non-loopback HTTP requires a bearer token in `AGENT_BROWSER_AUTH_TOKEN` (or the variable selected with `--auth-token-env`). The default server name is `opencode-browser-plugin`. Origin and file-root safety configuration is server-level: pass `--allowed-origin` / `--blocked-origin` globs, or set `AGENT_BROWSER_ALLOWED_ORIGINS`, `AGENT_BROWSER_BLOCKED_ORIGINS`, and `AGENT_BROWSER_ALLOWED_FILE_ROOTS` (see [docs/mcp.md](docs/mcp.md)).
-
-## OpenCode V2
-
-The package root exports the native adapter using OpenCode 1.18.x's official `{ id, server() }` path-plugin module shape, alongside the V2 setup contract:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-chromium"]
-}
-```
-
-For a local build, point the client at `dist/adapters/opencode/index.js` or
-use the `opencode-chromium install --client opencode` command. The adapter
-registers exactly four tools, sets `codemode: false`, and returns a cleanup
-function for reloads.
-
-The same browser runtime is available through MCP compatibility mode; do not enable both surfaces in one client session unless duplicate tools are intentional.
-
-## Codex
-
-Register the MCP server from the npm package:
-
-```powershell
-codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp
-codex mcp list
-```
-
-From a local checkout, register `dist/adapters/mcp/server.js` with Bun:
-
-```powershell
-codex mcp add opencode-browser-plugin -- bun C:\absolute\path\to\dist\adapters\mcp\server.js
-```
-
-The bundled skill is [skills/opencode-browser-plugin/SKILL.md](skills/opencode-browser-plugin/SKILL.md). It follows the open [Agent Skills](https://agentskills.io) standard and covers connector-first routing, profile selection, action batching, Snowflake-default search, approval tokens, artifacts, and finalization. It ships with [agents/openai.yaml](skills/opencode-browser-plugin/agents/openai.yaml) for the ChatGPT/Codex desktop Skills picker and MCP dependency metadata.
-
-Install it for every skills-compatible client at once:
-
-```powershell
-opencode-chromium install --client skills
-opencode-chromium install --client skills --dry-run
-opencode-chromium uninstall --client skills
-```
-
-This copies the skill to `~/.codex/skills/`, `~/.claude/skills/`, and `~/.agents/skills/` (under `opencode-browser-plugin/`), and registers an enabled `[[skills.config]]` entry in `~/.codex/config.toml` while removing any stale `opencode-browser-adapter` entry.
-
-## Native host and extension
-
-Load `extension/` as an unpacked extension, then install the host:
-
-```powershell
-bun run build:extension
-bun run install:native-host -- --extension-id <extension-id> --browsers chrome
-bun run check:native-host -- --json
-```
-
-The extension source lives in `extension-src/`: WXT owns the entrypoints, `entrypoints/popup/App.tsx` is the shared UI root, and static files live under `public/`. Use `bun run extension:dev` for development, `bun run typecheck:extension` for TypeScript checks, and `bun run build:extension` for the Chrome Web Store-ready package.
-
-### Developing against a local checkout
-
-Working on the plugin itself and on a released version at the same time is easier
-when every surface points at one stable install directory instead of at a
-checkout, and the checked-out branch selects the version:
-
-```powershell
-bun run link      # once per machine: launchers, browser registration, clients, skills
-bun run status    # what is live, and what has drifted
-bun run sync      # rebuild a stale bundle and restart the native host
-```
-
-After `link`, the browser registration and every client config are written once
-and never change again; `git checkout dev` and `git checkout master` are all it
-takes to move between work in progress and the stable line. See
-[docs/runtime-linking.md](docs/runtime-linking.md).
-
-Use `AGENT_BROWSER_*` environment variables for new configuration. The older `OPENCODE_BROWSER_*` names remain lower-priority aliases through the 1.x compatibility window.
-
-## CLI
-
-```powershell
-opencode-chromium doctor --json
-opencode-chromium verify
-opencode-chromium install --client opencode --dry-run
-opencode-chromium install --client opencode-mcp --dry-run
-opencode-chromium install --client codex --dry-run
-opencode-chromium install --client skills --dry-run
-opencode-chromium uninstall --client codex --dry-run
-opencode-chromium uninstall --client skills --dry-run
-```
-
-Install and uninstall back up the named configuration before changing it, touch only the canonical entry, support dry runs, and report changed files.
-
-## Context and capabilities
-
-The default tool schemas stay small. Request advanced descriptions through:
-
-```json
-{"mode":"capabilities","pack":"downloads"}
-```
-
-Execute advanced work through `browser_run` without adding top-level tools:
-
-```json
-{
-  "steps": [{
-    "action": "capability",
-    "capability": "downloads.events",
-    "input": {}
-  }]
-}
-```
-
-For deep request/response debugging, request the lazy network pack only when needed:
-
-```json
-{"mode":"capabilities","pack":"network"}
-```
-
-Then execute `network.inspect` in `browser_run` with the target `tabId`. It follows the tab's CDP request/response lifecycle, supports URL/method/type/status/requestId filters, and returns redacted headers only when `includeHeaders` is requested. Bodies remain disabled unless explicitly requested and approved; `bodyDelivery: "artifact"` spills opted-in bodies to the artifact store instead of inline previews. `browser_observe` mode `inspect` with `target.requestId` returns a single request's lifecycle detail.
-
-Large results and screenshots are artifact-first. Screenshot captures are additionally delivered inline as images to OpenCode (tool attachments) and MCP clients (image content), so the model sees the page; MCP clients can also retrieve the original bytes through `browser://sessions/<session-id>/artifacts/<artifact-id>`, and OpenCode can request the same URI with `browser_observe` mode `artifact`.
-
-## Repository layout
-
-```text
-src/core/                 shared runtime, schemas, safety, artifacts, versions
-src/browser/              profile-aware IPC client, policies, and operation engine
-src/adapters/mcp/         universal MCP server and transports
-src/adapters/opencode/    native OpenCode V2 adapter
-src/adapters/sdk/         provider schema adapters and direct agent API
-src/cli/                  install, configure, uninstall, doctor, verify
-extension/                Manifest V3 browser integration
-native-host/              native messaging host and semantic workers
-skills/                   provider-neutral browser skill
-tests/                    unit, contract, browser, and adapter regression tests
-docs/                     architecture, compatibility, security, and migration guides
-```
-
-## Verification and release
-
-```powershell
-bun run build
-bun run check:schemas
-bun run check:package
-bun run check:mcp
-bun run test:contracts
-bun run test:opencode
 bun run pack
 bun run test:tarball
-bun run check:release
 ```
 
-The release check rejects stale V1 paths, personal state, duplicate legacy package surfaces, schema growth beyond budget, and tarballs missing the built adapters.
+New production modules have a 500-line ceiling. Existing larger modules have documented, bounded migration exceptions. Strict TypeScript checks cover migrated modules; remaining JavaScript is undergoing conversion. Generated extension bundles and local reports are ignored. The npm package includes compiled runtime, extension assets, skills, metadata, and user documentation.
 
-Contributors run the verification suite locally before review. GitHub Actions reserves the complete release gate for a forward SemVer change to `package.json` on `master`; that workflow validates the matching extension manifest, publishes npm through Trusted Publishing, submits the extension to the Chrome Web Store, and creates the matching GitHub tag and generated release notes. GitHub's native secret scanning and push protection guard remote pushes without consuming Actions minutes. No npm token is stored in the repository or workflow, and maintainers do not create release tags manually.
+## Community and license
 
-## Security
-
-Browser content is untrusted. Consequential actions require short-lived immutable approval tokens; writes are never automatically repeated after uncertain execution. Artifacts are session scoped, expire, reject traversal, and are not written to logs. MCP protocol data stays on stdout and diagnostics stay on stderr.
-
-See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md), and [docs/migration-1.0.md](docs/migration-1.0.md).
-
-## License
-
-MIT
+Propose features through [GitHub Discussions](https://github.com/Quindart-com/opencode-chromium/discussions). Report defects through repository issues and follow SECURITY.md for vulnerabilities. MIT licensed.

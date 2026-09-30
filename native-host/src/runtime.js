@@ -7,9 +7,11 @@ import { FrameDecoder, writeFrame } from "./framing.js";
 import { instanceIpcPath, isUnixSocketPath } from "./ipc-path.js";
 import { readProfileRegistrations, removeProfileRegistration, writeProfileRegistration } from "./profile-registry.js";
 import { RpcRelay } from "./rpc-relay.js";
-import { handleSemanticHostMethod, embedMemoryTexts } from "./semantic-search.js";
+import { handleSemanticHostMethod, embedMemoryTexts, rankPageUnits } from "./semantic-search.js";
 import { handleVisualHostMethod } from "./visual-map.js";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.js";
+import { handleDecisionHostMethod } from "./decisions/index.ts";
+import { decisionSearch } from "./decisions/search.ts";
 import { EmbedQueue, MemoryStore, embeddingEnabled } from "./memory/index.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
@@ -72,6 +74,13 @@ const relay = new RpcRelay({
   extensionWriter: (message) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
   localHandler: async (method, params) => {
+    if (method === "runtime.activity") return relay.activity();
+    const decision = await handleDecisionHostMethod(method, params);
+    if (decision !== undefined) return decision;
+    if (method === "semantic.rankPageUnits") {
+      const ranked = await decisionSearch(params, rankPageUnits);
+      if (ranked !== undefined) return ranked;
+    }
     const semantic = await handleSemanticHostMethod(method, params);
     if (semantic !== undefined) return semantic;
     const visual = await handleVisualHostMethod(method, params);

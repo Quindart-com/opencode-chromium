@@ -29,50 +29,51 @@
   ],
   "files": [
     "dist",
-    "extension",
-    "native-host/src",
     "native-host/dist",
-    "native-host/README.md",
+    "extension",
     "skills",
     "docs",
-    "scripts/README.md",
-    "scripts/analyze-browser-sessions.js",
-    "scripts/benchmark-search.js",
-    "scripts/build.js",
-    "scripts/check-extension-installed.js",
-    "scripts/check-mcp.js",
-    "scripts/check-native-host.js",
-    "scripts/check-opencode.js",
-    "scripts/check-schema-budget.js",
-    "scripts/schema-budget.js",
-    "scripts/chrome-is-running.js",
-    "scripts/find-extension-id.js",
-    "scripts/install-native-host.js",
-    "scripts/installed-browsers.js",
-    "scripts/open-browser-window.js",
-    "scripts/pack.js",
-    "scripts/package-check.js",
-    "scripts/public-hygiene.js",
-    "scripts/release-check.js",
-    "scripts/schema-report.js",
-    "scripts/local-client-report.js",
-    "scripts/parity-report.js",
-    "scripts/test-tarball.js",
-    "scripts/check-tag-version.js",
-    "assets",
     "LICENSE",
     "README.md",
     "SECURITY.md",
     "CONTRIBUTING.md"
   ],
   "exports": {
-    ".": "./dist/adapters/opencode/index.js",
-    "./server": "./dist/adapters/opencode/index.js",
-    "./core": "./dist/core/index.js",
-    "./mcp": "./dist/adapters/mcp/server.js",
-    "./sdk": "./dist/adapters/sdk/index.js",
-    "./browser": "./dist/browser/operations/index.js",
-    "./versions": "./dist/core/versions.js"
+    ".": {
+      "types": "./dist/adapters/opencode/index.d.ts",
+      "import": "./dist/adapters/opencode/index.js",
+      "default": "./dist/adapters/opencode/index.js"
+    },
+    "./server": {
+      "types": "./dist/adapters/opencode/index.d.ts",
+      "import": "./dist/adapters/opencode/index.js",
+      "default": "./dist/adapters/opencode/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js",
+      "default": "./dist/core/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/adapters/mcp/server.d.ts",
+      "import": "./dist/adapters/mcp/server.js",
+      "default": "./dist/adapters/mcp/server.js"
+    },
+    "./sdk": {
+      "types": "./dist/adapters/sdk/index.d.ts",
+      "import": "./dist/adapters/sdk/index.js",
+      "default": "./dist/adapters/sdk/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/operations/index.d.ts",
+      "import": "./dist/browser/operations/index.js",
+      "default": "./dist/browser/operations/index.js"
+    },
+    "./versions": {
+      "types": "./dist/core/versions.d.ts",
+      "import": "./dist/core/versions.js",
+      "default": "./dist/core/versions.js"
+    }
   },
   "bin": {
     "opencode-chromium": "./dist/cli/index.js",
@@ -90,13 +91,12 @@
     "agent:server": "bun src/adapters/mcp/server.js",
     "agent:http": "bun src/adapters/mcp/server.js --transport=http",
     "codex:server": "bun src/adapters/mcp/server.js",
-    "check": "bun run check:schemas && bun run check:package && bun run check:mcp && bun run check:public-hygiene && bun run adapter:report && bun test",
+    "check": "bun run typecheck:backend && bun run lint && bun run check:unused && bun run check:architecture && bun run check:schemas && bun run check:package && bun run check:mcp && bun run adapter:report && bun test",
+    "check:architecture": "bun scripts/check-architecture.js",
     "check:mcp": "bun scripts/check-mcp.js",
     "check:schemas": "bun scripts/check-schema-budget.js",
     "check:package": "bun scripts/package-check.js",
-    "check:public-hygiene": "bun scripts/public-hygiene.js",
     "check:release": "bun scripts/release-check.js",
-    "check:release-hygiene": "bun scripts/release-check.js --hygiene-only",
     "check:tag": "bun scripts/check-tag-version.js",
     "check:version-bump": "bun scripts/check-version-bump.js",
     "test": "bun test",
@@ -130,7 +130,9 @@
     "status": "bun src/cli/index.js status",
     "sync": "bun src/cli/index.js sync",
     "verify": "bun src/cli/index.js verify",
-    "verify:popup": "node scripts/verify-popup.js"
+    "verify:popup": "node scripts/verify-popup.js",
+    "lint": "eslint src/management src/cli/providers.ts native-host/src/decisions extension-src/entrypoints/popup/ProviderSettings.tsx",
+    "check:unused": "knip --no-progress --include files,dependencies"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -139,17 +141,24 @@
     "@modelcontextprotocol/server": "2.0.0-beta.4",
     "@opencode-ai/plugin": "1.18.11",
     "effect": "3.22.1",
+    "jsonc-parser": "^3.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "smol-toml": "^1.9.0",
     "zod": "4.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@wxt-dev/module-react": "1.2.2",
+    "eslint": "^10.11.0",
+    "knip": "^6.38.0",
     "playwright": "1.61.1",
     "publish-browser-extension": "4.0.5",
     "typescript": "5.9.3",
+    "typescript-eslint": "^8.71.0",
     "wxt": "0.21.4",
     "yaml": "^2.9.0",
     "yazl": "3.1.0"

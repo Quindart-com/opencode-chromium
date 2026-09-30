@@ -17,7 +17,7 @@ if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") metada
 if (packageJson.bin?.["opencode-chromium"] !== "./dist/cli/index.js") metadataErrors.push("Canonical CLI binary is missing");
 if (packageJson.bin?.["opencode-chromium-mcp"] !== "./dist/adapters/mcp/server.js") metadataErrors.push("Canonical MCP binary is missing");
 if (packageJson.bin?.["opencode-browser-plugin-mcp"] !== "./dist/adapters/mcp/server.js") metadataErrors.push("Legacy MCP binary alias is missing");
-if (packageJson.exports?.["./server"] !== "./dist/adapters/opencode/index.js") metadataErrors.push("opencode ./server export is missing");
+if ((packageJson.exports?.["./server"]?.import ?? packageJson.exports?.["./server"]) !== "./dist/adapters/opencode/index.js") metadataErrors.push("opencode ./server export is missing");
 if (metadataErrors.length > 0) throw new Error(metadataErrors.join("\n"));
 const required = [
   "dist/core/index.js",
@@ -26,7 +26,7 @@ const required = [
   "dist/adapters/sdk/index.js",
   "dist/cli/index.js",
   "extension/manifest.json",
-  "native-host/src/host.js",
+  "native-host/dist/runtime.js",
   "native-host/dist/runtime.js",
   "native-host/dist/memory/profile-stats.js",
   "skills/opencode-browser-plugin/SKILL.md",

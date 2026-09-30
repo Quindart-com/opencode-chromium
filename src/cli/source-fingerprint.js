@@ -7,7 +7,8 @@ import { createHash } from "node:crypto";
 // or an uncommitted edit can never leave a stale bundle silently serving an
 // agent. Paths are normalized to "/" so the same tree hashes identically on
 // every OS.
-const SOURCE_ROOTS = ["src", "native-host/src"];
+const SOURCE_ROOTS = ["src", "native-host/src", "extension-src", "skills", "scripts"];
+const BUILD_INPUTS = ["package.json", "bun.lock", "tsconfig.json", "tsconfig.backend.json", "wxt.config.ts"];
 const SKIP = new Set(["node_modules", ".git"]);
 
 function collect(root, relative, files) {
@@ -41,6 +42,7 @@ export function sourceFingerprint(root = process.cwd()) {
   } catch {
     // A tree without package.json still hashes its sources.
   }
+  for (const file of BUILD_INPUTS) { try { hash.update(file).update(fs.readFileSync(path.join(root, file))); } catch { /* absent on older branches */ } }
   for (const relative of sourceFileList(root)) {
     hash.update(relative).update(fs.readFileSync(path.join(root, relative)));
   }

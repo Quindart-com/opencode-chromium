@@ -48,7 +48,12 @@ function launcherHeader() {
     "import { fileURLToPath, pathToFileURL } from \"node:url\";",
     "",
     "const dir = path.dirname(fileURLToPath(import.meta.url));",
-    `const root = JSON.parse(fs.readFileSync(path.join(dir, ${JSON.stringify(RUNTIME_MANIFEST)}), "utf8")).root;`,
+    `const activation = JSON.parse(fs.readFileSync(path.join(dir, ${JSON.stringify(RUNTIME_MANIFEST)}), "utf8"));`,
+    "const root = activation.root;",
+    "if ([\"development\", \"production\"].includes(activation.channel)) {",
+    "  const state = path.join(dir, \"state\", activation.channel);",
+    "  for (const [variable, folder] of Object.entries({ OPENCODE_BROWSER_MEMORY_DIR: \"memory\", AGENT_BROWSER_SEMANTIC_DIR: \"semantic\", AGENT_BROWSER_VISUAL_DIR: \"visual\", AGENT_BROWSER_PROVIDER_DIR: \"providers\", AGENT_BROWSER_ARTIFACT_DIR: \"artifacts\", AGENT_BROWSER_PROFILE_REGISTRY_DIR: \"profiles\" })) process.env[variable] = path.join(state, folder);",
+    "}",
   ];
 }
 
@@ -72,6 +77,10 @@ export const LAUNCHER_FINGERPRINT_SOURCE = [
   "  };",
   "  walk(\"src\");",
   "  walk(\"native-host/src\");",
+  "  walk(\"extension-src\");",
+  "  walk(\"skills\");",
+  "  walk(\"scripts\");",
+  "  for (const file of [\"package.json\", \"bun.lock\", \"tsconfig.json\", \"tsconfig.backend.json\", \"wxt.config.ts\"]) { try { hash.update(file).update(fs.readFileSync(path.join(root, file))); } catch {} }",
   "  for (const relative of files.sort()) hash.update(relative).update(fs.readFileSync(path.join(root, relative)));",
   "  return hash.digest(\"hex\");",
   "}",
@@ -105,9 +114,9 @@ function launcherBuildGuard() {
     "const entry = path.join(root, DIST_ENTRY);",
     "let built = null;",
     "try { built = JSON.parse(fs.readFileSync(manifestPath, \"utf8\")); } catch { /* never built */ }",
-    "const stale = !built || (typeof built.sourceSha256 === \"string\"",
+    "const stale = fs.existsSync(path.join(root, \"src\")) && (!built || (typeof built.sourceSha256 === \"string\"",
     "  ? built.sourceSha256 !== fingerprint(root)",
-    "  : Date.parse(built.generatedAt ?? 0) < newestSourceMtime(root));",
+    "  : Date.parse(built.generatedAt ?? 0) < newestSourceMtime(root)));",
     "if (stale) {",
     "  const { spawnSync } = await import(\"node:child_process\");",
     "  const build = spawnSync(process.execPath, [path.join(root, \"scripts\", \"build.js\")], { stdio: [\"ignore\", \"ignore\", \"inherit\"] });",
@@ -125,7 +134,7 @@ export function launcherSource(kind) {
   if (kind === "host") {
     // The host ships as source and runs directly, so a branch switch takes
     // effect on the next host start with no build step.
-    lines.push("", "await import(pathToFileURL(path.join(root, \"native-host\", \"src\", \"host.js\")).href);");
+    lines.push("", "await import(pathToFileURL(path.join(root, \"native-host\", \"dist\", \"runtime.js\")).href);");
     return lines.join("\n") + "\n";
   }
   const entry = kind === "plugin" ? "dist/adapters/opencode/index.js" : "dist/adapters/mcp/server.js";
@@ -252,13 +261,23 @@ function samePath(first, second) {
   return first.replaceAll("\\", "/").toLowerCase() === second.replaceAll("\\", "/").toLowerCase();
 }
 
-// Browsers to register: the ones present, plus any already registered. Keeping
-// an existing registration matters because a browser's executable can live
-// somewhere we do not look, and never removing one keeps this from breaking a
-// working setup.
+// Chromium resolves a native messaging host through several registry roots and
+// stops at the first valid manifest. A browser that identifies itself as
+// Chromium -- Brave in particular -- can therefore look in the shared Chrome
+// root rather than its own, so a host registered only under the browser's own
+// root can stay invisible and every connectNative fails as
+// "Specified native messaging host not found". `chrome` is always a target for
+// that reason: it costs one JSON file and one key when Chrome is absent, and it
+// is the difference between working and not when it is the root actually read.
+const SHARED_CHROMIUM_ROOTS = ["chrome"];
+
+// Browsers to register: the ones present, the shared Chromium root, plus any
+// already registered. Keeping an existing registration matters because a
+// browser's executable can live somewhere we do not look, and never removing
+// one keeps this from breaking a working setup.
 export function linkTargets(dir = runtimeDir()) {
   const registered = browserIds().filter((browser) => readRegistration(browser, dir).registered);
-  return [...new Set([...installedBrowsers(), ...registered])];
+  return [...new Set([...installedBrowsers(), ...SHARED_CHROMIUM_ROOTS, ...registered])];
 }
 
 export function linkRuntime({ root = packageRoot(), dir = runtimeDir(), dryRun = false, browsers = null } = {}) {
@@ -341,22 +360,6 @@ function runningHosts(root = packageRoot()) {
   }
 }
 
-function stopHosts({ root = packageRoot(), dryRun = false } = {}) {
-  const hosts = runningHosts(root);
-  if (hosts === null) return { supported: false, stopped: [] };
-  const stopped = [];
-  for (const host of hosts) {
-    stopped.push(host.pid);
-    if (dryRun) continue;
-    try {
-      process.kill(host.pid);
-    } catch {
-      // Already gone, or owned by another user: the extension respawns it.
-    }
-  }
-  return { supported: true, stopped };
-}
-
 export function syncRuntime({ root = packageRoot(), quiet = false, ifLinked = false } = {}) {
   const resolvedRoot = path.resolve(root);
   // Git hooks call this with --if-linked so it stays inert on a checkout that
@@ -372,8 +375,9 @@ export function syncRuntime({ root = packageRoot(), quiet = false, ifLinked = fa
     execFileSync(process.execPath, [path.join(resolvedRoot, "scripts", "build.js")], { stdio: quiet ? "ignore" : "inherit" });
     rebuilt = true;
   }
-  const hosts = stopHosts({ root: resolvedRoot });
-  return { root: resolvedRoot, rebuilt, fresh: !buildStatus(resolvedRoot).stale, stoppedHosts: hosts.stopped, hostsSupported: hosts.supported };
+  const hosts = runningHosts(resolvedRoot);
+  return { root: resolvedRoot, rebuilt, fresh: !buildStatus(resolvedRoot).stale, stoppedHosts: [], hostsSupported: hosts !== null,
+    pendingReload: Boolean(hosts?.length), instruction: "Reconnect tools after active work finishes; sync never interrupts running hosts" };
 }
 
 export { runtimeDir };

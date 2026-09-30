@@ -19,11 +19,11 @@ test("CLI configuration updates are isolated, backed up, and idempotent", () => 
     assert.equal(second.changed, false);
     assert.match(first.backup, /\.bak-/);
     assert.equal(installed.unrelated, true);
-    assert.equal(installed.mcp.servers["opencode-browser-plugin"].command[0], "bun");
+    assert.equal(installed.mcp["opencode-browser-plugin"].command[0], process.execPath);
 
     const removed = updateClientConfig({ client: "opencode-mcp", filePath: jsonPath, action: "uninstall", serverPath: "" });
     assert.equal(removed.changed, true);
-    assert.equal(JSON.parse(fs.readFileSync(jsonPath, "utf8")).mcp.servers["opencode-browser-plugin"], undefined);
+    assert.equal(JSON.parse(fs.readFileSync(jsonPath, "utf8")).mcp["opencode-browser-plugin"], undefined);
 
     const pluginPath = path.join(root, "plugin.json");
     const pluginServerPath = path.join(root, "plugin.js");
@@ -48,7 +48,7 @@ test("CLI configuration updates are isolated, backed up, and idempotent", () => 
     const configuredToml = fs.readFileSync(tomlPath, "utf8");
     assert.match(configuredToml, /\[mcp_servers\.other\]/);
     assert.match(configuredToml, /\[mcp_servers\.opencode-browser-plugin\]/);
-    assert.match(configuredToml, /command = "bun"/);
+    assert.ok(configuredToml.includes(JSON.stringify(process.execPath)));
     updateClientConfig({ client: "codex", filePath: tomlPath, action: "uninstall", serverPath: "" });
     const cleanedToml = fs.readFileSync(tomlPath, "utf8");
     assert.match(cleanedToml, /\[mcp_servers\.other\]/);

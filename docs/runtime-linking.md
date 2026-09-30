@@ -1,99 +1,26 @@
-# One runtime, one switch point
+# Runtime linking and developer channels
 
-Every OpenCode Chromium surface - the browser's native messaging host, the
-OpenCode plugin, the Codex MCP server, DSH, and the installed skills - points at
-a single stable install directory instead of at a checkout. The directory
-contains three tiny launchers plus one pointer:
+Use `setup` or `manage` for selectable client registration. See the [README](../README.md) for the unified CLI and current integration limits.
 
-| OS | Runtime directory |
-| --- | --- |
-| Windows | `%LOCALAPPDATA%\OpenCode\browser` |
-| macOS | `~/Library/Application Support/OpenCode/browser` |
-| Linux | `~/.config/opencode/browser` |
+## Stable launchers
 
-```
-opencode-browser-host.cmd   (Windows) / opencode-browser-host (unix)
-host.mjs                    resolves the native host from the active root
-mcp.mjs                     resolves the MCP server
-plugin.mjs                  resolves the OpenCode plugin
-runtime.json                { "root": "<absolute path to the active root>" }
+`OPENCODE_BROWSER_RUNTIME_DIR` overrides the shared runtime directory. The current default is `%LOCALAPPDATA%/OpenCode/browser` on Windows and `~/.config/opencode/browser` on macOS/Linux. Stable `host.mjs`, `mcp.mjs`, and `plugin.mjs` files read `runtime.json` at launch. Each harness still owns its server process.
+
+The compatible `link` command registers native messaging and its legacy default client surfaces. It can detect existing extension IDs; load the browser extension first. `link --dry-run` makes no changes. `sync` never terminates native hosts: reconnect after active work finishes.
+
+## Full-stack branch following
+
+```sh
+bun src/cli/index.js link --follow-branch
+bun src/cli/index.js sync
 ```
 
-Nothing in that list is version-specific, so **no registration or client config
-ever has to change again** — not when you switch branches, not when you upgrade,
-not when you point at a different checkout.
+Full-stack branch following creates immutable builds under the runtime directory and retains a separate active pointer. Clean `master` selects production; `dev` and feature branches select development. Detached HEAD retains the active channel. Source, lockfile, and build-configuration fingerprints invalidate stale snapshots.
 
-## Commands
+A lock serializes builds. Compilation, extension version checks, and a compiled CLI smoke check precede activation. Sources changing during a build or a failed build leave the previous pointer intact. A busy browser client defers activation; rerun sync after clients disconnect. Snapshot activation does not force-kill harnesses or desktop applications.
 
-```powershell
-bun run link      # once per machine: write the launchers, register the browser
-                  # host, point every client at the launchers, install skills
-bun run status    # what is actually live, and where it drifts
-bun run sync      # rebuild a stale bundle and restart the native host
-```
+Channel launchers separate provider preferences, memory, model caches, artifacts, and profile registries under `state/development` and `state/production`. Keys remain referenced through native-host environment variables.
 
-`link` is idempotent and backs up every configuration file it rewrites.
+Load the returned stable `extension` path unpacked once. Publication updates its files; the CLI currently reports a pending manual browser-extension reload and harness reconnect. A developer-control reload message and a framed runtime/extension handshake remain migration work. Store-installed extensions retain normal browser updates.
 
-## Branch is the channel
-
-`runtime.json` points at a checkout, and the branch you have checked out in that
-checkout is the version that runs. `dev` holds work in progress; `master` is the
-stable line.
-
-```powershell
-git checkout dev      # work here
-git checkout master   # stable, no reinstall, no commands to remember
-```
-
-**The launchers are what guarantee this, not the hooks.** Before starting,
-`mcp.mjs` and `plugin.mjs` compare the bundle against the checked-out sources and
-rebuild when they disagree, so a branch switch can never leave a stale bundle
-serving an agent. That check is self-contained — it carries its own copy of the
-fingerprint function, because a checkout predating that helper is exactly when it
-still has to work. If the tree itself is broken the rebuild fails and the last
-good bundle starts with a warning, rather than taking the browser tools down.
-
-`.githooks/post-checkout` and `.githooks/post-merge` are a convenience on top:
-they run `sync --if-linked`, which rebuilds immediately and restarts the native
-host so the browser picks up the new code without waiting for its next
-reconnect. They are inert on a checkout that was never linked, and because they
-belong to the branch, an older branch simply does not have them — correctness
-does not depend on them.
-
-Because the bundle records a `sourceSha256` of everything that feeds it,
-"is my build current?" is an exact answer rather than a guess.
-
-## Verifying
-
-`bun run status` prints one table: the runtime directory, the linked root, the
-branch and revision, bundle freshness, the browser registration, any running
-hosts, skill parity, and each agent surface with the path it points at. A
-non-zero `doctor` exit or a `DRIFT` marker means exactly one surface needs
-attention.
-
-The status launcher lives outside the branch, so the question is answerable even
-on a checkout that predates these commands:
-
-```powershell
-node "$env:LOCALAPPDATA\OpenCode\browser\status.mjs"
-```
-
-## Notes
-
-- `link` registers the browsers that are **installed**, plus any already
-  registered, so it never creates registrations for browsers that are not there
-  and never drops a working one. `check:native-host` checks the same set and
-  reports the rest as skipped; `--all` checks every browser anyway.
-- Extension ids from every available source are merged rather than replaced:
-  profile scanning cannot read preferences while a browser is running, so the
-  existing manifest and `scripts/extension-id.json` fill the gaps.
-- The native host runs from `native-host/src`, so a branch switch takes effect
-  on the next host start with no build step; only `dist/` (the MCP server and
-  plugin) needs rebuilding.
-- `link` refreshes the installed skill copies, which is what keeps agent
-  guidance in step with the code.
-- Set `OPENCODE_BROWSER_RUNTIME_DIR` to relocate the runtime directory, for
-  example to keep several configurations side by side.
-- `patchDshConfig` rewrites only the one argument that names the browser MCP
-  entry in `~/.dsh/profiles/web/cordis.patch.yml`, so hand-written comments
-  survive. DSH must be restarted before it picks up the new entry.
+Git hooks run only when Bun is available and the checkout is linked. They do not restart desktop applications. Legacy direct links may still rebuild their compiled backend on launch; explicitly opt into branch following for complete snapshots.
