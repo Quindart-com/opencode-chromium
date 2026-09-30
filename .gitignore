@@ -55,3 +55,12 @@ coverage/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Generated browser extension (built for npm and store releases)
+extension/*
+!extension/README.md
+# Private maintenance and local configuration
+.maintenance/
+*.bak-*
+
+.build/

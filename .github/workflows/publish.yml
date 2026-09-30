@@ -6,7 +6,6 @@ on:
       - master
     paths:
       - "package.json"
-      - "extension/manifest.json"
     tags:
       - "opencode-chromium-mcp-v*"
 
@@ -87,7 +86,7 @@ jobs:
         run: bun run check:tag -- "$RELEASE_TAG"
 
       - name: Build release
-        run: bun run build
+        run: bun run build && bun run build:extension
 
       - name: Re-run release checks
         run: bun run check
@@ -187,7 +186,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
           RELEASE_VERSION: ${{ needs.release-metadata.outputs.version }}
-        run: gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "opencode-chromium $RELEASE_VERSION" --generate-notes
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists."
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "opencode-chromium $RELEASE_VERSION" --generate-notes
+          fi
 
   webstore-release:
     name: Publish browser extension

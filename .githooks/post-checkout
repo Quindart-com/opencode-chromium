@@ -1,0 +1,10 @@
+#!/bin/sh
+# Switching branches changes the runtime source, so the local bundle and the
+# native host are brought back in step automatically. `--if-linked` makes this
+# a no-op on a checkout that never ran `opencode-chromium link`, so the hook
+# stays harmless for anyone else working in this repository.
+[ "$3" = "1" ] || exit 0
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -f "$root/src/cli/index.js" ] || exit 0
+command -v bun >/dev/null 2>&1 || exit 0
+bun "$root/src/cli/index.js" sync --quiet --if-linked || true

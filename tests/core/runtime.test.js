@@ -6,6 +6,7 @@ import test from "node:test";
 import { z } from "zod";
 import { AgentBrowserRuntime } from "../../src/core/runtime.js";
 import { ArtifactStore } from "../../src/core/artifacts.js";
+import { resultSchema } from "../../src/core/registry.js";
 import { MemoryStore } from "../../native-host/src/memory/store.js";
 
 function fakeRuntime() {
@@ -14,7 +15,7 @@ function fakeRuntime() {
     artifactStore: store,
     hostRequest: async (method) => {
       if (method === "semantic.status") return { settings: {} };
-      if (method === "memory.stats") return { enabled: false };
+      if (method === "memory.captureState" || method === "memory.stats") return { enabled: false };
       return {};
     },
   });
@@ -73,8 +74,8 @@ test("memory replay refuses a recipe whose actions differ from the live request"
   const runtime = fakeRuntime();
   const events = [];
   runtime.hostRequest = async (method, params) => {
-    if (method === "memory.stats") return { enabled: true };
-    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 7, confidence: 0.9, steps: [{ action: "hover", target_label: "Submit", hostname: "example.com" }] }] };
+    if (method === "memory.captureState") return { enabled: true, paused: false, embedding_profile: null };
+    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 7, similarity: 0.9, confidence: 0.9, failed_count: 0, steps: [{ action: "hover", target_label: "Submit", hostname: "example.com" }] }] };
     if (method === "memory.usageEvent") { events.push(params); return {}; }
     return {};
   };
@@ -87,7 +88,7 @@ test("memory replay refuses a recipe whose actions differ from the live request"
     );
     assert.equal(replay.fallback, true);
     assert.deepEqual(runtime.executed, []);
-    assert.equal(events.at(-1).reason, "recipe_mismatch");
+    assert.equal(events.at(-1).reason, "action_mismatch");
   } finally {
     runtime.close();
   }
@@ -178,10 +179,10 @@ test("memory replay is hostname-scoped and uses normal settling", async () => {
   runtime.memoryHostname = async () => "example.com";
   runtime.settleStep = async () => { settled += 1; return { settled: true }; };
   runtime.hostRequest = async (method, params) => {
-    if (method === "memory.stats") return { enabled: true };
+    if (method === "memory.captureState") return { enabled: true, paused: false, embedding_profile: null };
     if (method === "memory.search") {
       assert.equal(params.hostname, "example.com");
-      return { results: [{ kind: "chain_v2", id: 12, confidence: 0.95, steps: [{ action: "click", hostname: "example.com", target_label: "Open menu" }] }] };
+      return { results: [{ kind: "chain_v2", id: 12, similarity: 0.95, confidence: 0.95, failed_count: 0, steps: [{ action: "click", hostname: "example.com", target_label: "Open menu" }] }] };
     }
     if (method === "memory.usageEvent") events.push(params.eventType);
     return {};
@@ -202,15 +203,15 @@ test("memory replay rejects cross-host and newly risky bound targets", async () 
   runtime.memoryHostname = async () => "safe.example";
   let remembered = { action: "click", hostname: "other.example", target_label: "Open" };
   runtime.hostRequest = async (method, params) => {
-    if (method === "memory.stats") return { enabled: true };
-    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 5, confidence: 0.99, steps: [remembered] }] };
+    if (method === "memory.captureState") return { enabled: true, paused: false, embedding_profile: null };
+    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 5, similarity: 0.99, confidence: 0.99, failed_count: 0, steps: [remembered] }] };
     if (method === "memory.usageEvent") events.push(params.reason);
     return {};
   };
   try {
     const crossHost = await runtime.tryMemoryReplay({ memoryIntent: "open", steps: [{ action: "click", target: { query: "Open" } }] }, runtime.getSession("cross-host"), 42);
     assert.equal(crossHost.fallback, true);
-    assert.equal(events.at(-1), "recipe_mismatch");
+    assert.equal(events.at(-1), "hostname_mismatch");
 
     remembered = { action: "click", hostname: "safe.example", target_label: "Submit payment" };
     const risky = await runtime.tryMemoryReplay({ memoryIntent: "continue", steps: [{ action: "click", target: { selector: "#continue" } }] }, runtime.getSession("bound-risk"), 42);
@@ -226,8 +227,8 @@ test("memory replay stops after a completed mutation instead of falling through"
   const runtime = fakeRuntime();
   runtime.memoryHostname = async () => "example.com";
   runtime.hostRequest = async (method) => {
-    if (method === "memory.stats") return { enabled: true };
-    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 8, confidence: 0.99, steps: [
+    if (method === "memory.captureState") return { enabled: true, paused: false, embedding_profile: null };
+    if (method === "memory.search") return { results: [{ kind: "chain_v2", id: 8, similarity: 0.99, confidence: 0.99, failed_count: 0, steps: [
       { action: "click", hostname: "example.com", target_label: "Open" },
       { action: "find", hostname: "example.com", target_label: "Missing" },
     ] }] };
@@ -850,5 +851,214 @@ const runtime = new AgentBrowserRuntime({ artifactStore: store });
     assert.match(analyzeArgs.trace, /navigationStart/);
   } finally {
     runtime.close();
+  }
+});
+
+// ---- Action memory replay -------------------------------------------------
+
+function seededMemory(step) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-replay-store-"));
+  const store = new MemoryStore({ root });
+  store.enable();
+  store.recordStep({ chainId: "seed", position: 0, action: step.action, hostname: "example.com", target: step.target, success: true });
+  store.finalizeChain({ chainId: "seed", success: true });
+  return { store, root };
+}
+
+// Backs the runtime with a real MemoryStore so the replay path is exercised
+// against actual recipe fingerprints rather than a stub.
+function memoryRuntime(store, { enabled = true, search = null } = {}) {
+  const calls = [];
+  const runtime = new AgentBrowserRuntime({
+    artifactStore: new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-replay-artifacts-")) }),
+    hostRequest: async (method, params) => {
+      calls.push(method);
+      if (method === "semantic.status") return { settings: {} };
+      if (method === "memory.captureState") return { enabled, paused: false, embedding_profile: null };
+      if (method === "memory.recipe") return store.findRecipe(params);
+      if (method === "memory.search") return search ? search(params) : { results: [] };
+      if (method === "memory.usageEvent") return store.usageEvent(params);
+      if (method === "memory.recordStep") return store.recordStep(params);
+      if (method === "memory.finalizeChain") return store.finalizeChain(params);
+      return {};
+    },
+  });
+  runtime.calls = calls;
+  runtime.executed = [];
+  runtime.selectProfile = async (session) => { session.profileId = "profile-1"; return { profileId: "profile-1" }; };
+  runtime.ensureTab = async (session) => { session.activeTabId = 42; return 42; };
+  runtime.executeStep = async (step) => { runtime.executed.push(step.action); return { done: step.action }; };
+  runtime.settleStep = async () => null;
+  runtime.invoke = async (name) => name === "browser_get_tab" ? { id: 42, url: "https://example.com/page" } : {};
+  return runtime;
+}
+
+function closeMemory(store, root) {
+  store.close();
+  try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* Windows may still hold the WAL. */ }
+}
+
+test("browser_run replays a repeated recipe with no memory flags at all", async () => {
+  const { store, root } = seededMemory({ action: "click", target: { query: "Open menu" } });
+  const runtime = memoryRuntime(store);
+  try {
+    const result = await runtime.run({ sessionId: "auto-replay", steps: [{ action: "click", target: { query: "Open menu" } }] });
+    assert.equal(result.status, "memory_replay");
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.memory, { used: true, stepsReused: 1, fallback: false });
+    assert.deepEqual(runtime.executed, ["click"]);
+    const usage = store.status().usage;
+    assert.equal(usage.replay_attempts, 1);
+    assert.equal(usage.replay_successes, 1);
+    assert.equal(usage.replay_success_rate, 100);
+    assert.equal(usage.replay_rejections, 0);
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
+  }
+});
+
+test("memoryMode off skips memory entirely and never probes the host", async () => {
+  const { store, root } = seededMemory({ action: "click", target: { query: "Open menu" } });
+  const runtime = memoryRuntime(store);
+  try {
+    const result = await runtime.run({ sessionId: "memory-off", memoryMode: "off", steps: [{ action: "click", target: { query: "Open menu" } }] });
+    assert.equal(result.status, "completed");
+    assert.equal(result.memory, undefined);
+    assert.deepEqual(runtime.calls.filter((method) => method.startsWith("memory.")), []);
+    assert.equal(store.status().usage.replay_attempts, 0);
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
+  }
+});
+
+test("a request that matches no recipe costs no semantic search and no rejection event", async () => {
+  const { store, root } = seededMemory({ action: "click", target: { query: "Open menu" } });
+  const runtime = memoryRuntime(store);
+  try {
+    const result = await runtime.run({ sessionId: "no-recipe", steps: [{ action: "click", target: { query: "Something else" } }] });
+    assert.equal(result.status, "completed");
+    assert.equal(runtime.calls.includes("memory.recipe"), true);
+    assert.equal(runtime.calls.includes("memory.search"), false, "semantic recall requires an explicit memoryIntent");
+    const usage = store.status().usage;
+    assert.equal(usage.replay_attempts, 0);
+    assert.equal(usage.replay_rejections, 0);
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
+  }
+});
+
+test("the semantic replay floor sits above the retrieval threshold and rejects below it", async () => {
+  // Seeded with an unrelated recipe so the deterministic stage misses and the
+  // gated semantic stage is the one under test.
+  const { store, root } = seededMemory({ action: "click", target: { query: "Unrelated" } });
+  const chain = [{ action: "click", hostname: "example.com", target_label: "Open menu", target_role: null, selector: null }];
+  const runtime = memoryRuntime(store, {
+    search: () => ({ results: [{ kind: "chain_v2", id: 77, similarity: 0.61, failed_count: 0, confidence: 0.61, steps: chain }] }),
+  });
+  try {
+    const below = await runtime.run({ sessionId: "below-floor", memoryIntent: "open the menu", steps: [{ action: "click", target: { query: "Open menu" } }] });
+    assert.equal(below.status, "completed");
+    assert.equal(store.status().usage.replay_rejections_by_reason.below_similarity, 1);
+    assert.equal(store.status().usage.replay_attempts, 0);
+    assert.equal(runtime.executed.join(","), "click", "a skipped replay still runs normally");
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
+  }
+});
+
+test("a recipe with a recorded failure is never auto-replayed", async () => {
+  const { store, root } = seededMemory({ action: "click", target: { query: "Unrelated" } });
+  const chain = [{ action: "click", hostname: "example.com", target_label: "Open menu", target_role: null, selector: null }];
+  const runtime = memoryRuntime(store, {
+    search: () => ({ results: [{ kind: "chain_v2", id: 78, similarity: 0.99, failed_count: 2, confidence: 0.3, steps: chain }] }),
+  });
+  try {
+    await runtime.run({ sessionId: "negative", memoryIntent: "open the menu", steps: [{ action: "click", target: { query: "Open menu" } }] });
+    assert.equal(store.status().usage.replay_rejections_by_reason.negative_lesson, 1);
+    assert.equal(store.status().usage.replay_attempts, 0);
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
+  }
+});
+
+test("each replay skip reports its own precise reason", async () => {
+  const { store, root } = seededMemory({ action: "click", target: { query: "Unrelated" } });
+  let chain = [{ action: "click", hostname: "example.com", target_label: "Open menu" }];
+  const runtime = memoryRuntime(store, {
+    search: () => ({ results: [{ kind: "chain_v2", id: 79, similarity: 0.99, failed_count: 0, confidence: 1, steps: chain }] }),
+  });
+  // Driven through tryMemoryReplay: a navigate step without a url cannot pass
+  // browser_run validation, and every case here is about the skip reason.
+  const replay = (sessionId, steps) => runtime.tryMemoryReplay(
+    { memoryIntent: "open", steps },
+    runtime.getSession(sessionId),
+    42,
+  );
+  try {
+    await replay("reason-count", [
+      { action: "click", target: { query: "Open menu" } },
+      { action: "click", target: { query: "Next" } },
+    ]);
+    chain = [{ action: "click", hostname: "example.com", target_label: "Rename" }];
+    await replay("reason-label", [{ action: "click", target: { query: "Open menu" } }]);
+    chain = [{ action: "navigate", hostname: null, target_label: null, requiresRuntimeUrl: true }];
+    await replay("reason-url", [{ action: "navigate" }]);
+    chain = [{ action: "hover", hostname: "example.com", target_label: "Open menu" }];
+    await replay("reason-action", [{ action: "click", target: { query: "Open menu" } }]);
+
+    const reasons = store.status().usage.replay_rejections_by_reason;
+    assert.equal(reasons.step_count_mismatch, 1);
+    assert.equal(reasons.target_mismatch, 1);
+    assert.equal(reasons.missing_runtime_url, 1);
+    assert.equal(reasons.action_mismatch, 1);
+    assert.equal(store.status().usage.replay_rejections, 4);
+    assert.equal(store.status().usage.replay_fallbacks, 4);
+    assert.equal(store.status().usage.replay_attempts, 0);
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
+  }
+});
+
+test("a disabled memory store is never consulted for a recipe", async () => {
+  const { store, root } = seededMemory({ action: "click", target: { query: "Open menu" } });
+  const runtime = memoryRuntime(store, { enabled: false });
+  try {
+    const result = await runtime.run({ sessionId: "disabled", steps: [{ action: "click", target: { query: "Open menu" } }] });
+    assert.equal(result.status, "completed");
+    assert.equal(runtime.calls.includes("memory.recipe"), false);
+    assert.equal(store.status().usage.replay_attempts, 0);
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
+  }
+});
+
+// The memory tools' output schema requires a string sessionId. Returning the
+// raw argument meant null whenever the caller omitted it, which failed output
+// validation inside the MCP/adapter boundary and made every memory tool
+// unusable without an explicit id -- including the diagnostics for replay.
+test("memory tools satisfy their output schema without an explicit session id", async () => {
+  const { store, root } = seededMemory({ action: "click", target: { query: "Open menu" } });
+  const runtime = memoryRuntime(store);
+  try {
+    for (const [name, invoke] of [
+      ["memory_status", (context) => runtime.memoryStatus({}, context)],
+      ["memory_search", (context) => runtime.memorySearch({ query: "open" }, context)],
+      ["memory_query", (context) => runtime.memoryQuery({ limit: 1 }, context)],
+    ]) {
+      const result = await invoke({ sessionId: `schema-${name}` });
+      assert.equal(result.ok, true, `${name} must succeed without an explicit sessionId`);
+      assert.equal(typeof result.sessionId, "string", `${name} must echo a string sessionId`);
+      assert.equal(resultSchema.safeParse(result).success, true, `${name} must satisfy resultSchema`);
+    }
+  } finally {
+    runtime.close();
+    closeMemory(store, root);
   }
 });

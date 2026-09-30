@@ -9,6 +9,33 @@ const EMPTY_COUNTS: MemoryStatus["counts"] = {
   failed_total: 0,
 };
 
+// Replay is skipped silently by design, so the dashboard has to name the
+// reason: "replay success —" and "replays 0" are indistinguishable from a
+// feature that is simply not wired up. Legacy reasons from older hosts stay
+// mapped so historical rows keep reading correctly.
+const REPLAY_SKIP_LABELS: Record<string, string> = {
+  below_similarity: "no close enough match",
+  below_confidence: "no close enough match",
+  negative_lesson: "that recipe failed before",
+  step_count_mismatch: "a different number of steps was requested",
+  recipe_mismatch: "the requested steps changed",
+  hostname_mismatch: "the request was for a different site",
+  action_mismatch: "the requested actions changed",
+  target_mismatch: "the requested targets changed",
+  missing_runtime_value: "a typed value was missing",
+  missing_runtime_url: "a URL was missing",
+  approval_required: "the recipe needs your approval",
+};
+
+function dominantSkipReason(reasons: Record<string, number> | undefined): [string, number] | null {
+  if (!reasons) return null;
+  let best: [string, number] | null = null;
+  for (const [reason, count] of Object.entries(reasons)) {
+    if (!best || count > best[1]) best = [reason, count];
+  }
+  return best;
+}
+
 function MemoryChart({ daily }: { daily: MemoryStatus["recent_daily"] }): React.JSX.Element | null {
   const days = (Array.isArray(daily) ? daily : []).slice(-14);
   if (days.length === 0 || !days.some((day) => day.confirmed + day.failed > 0)) return null;
@@ -176,6 +203,20 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
     return `Memory index ready (${indexed})`;
   }, [status, indexed, unindexed]);
 
+  const replayLine = useMemo(() => {
+    if (!status || !enabled) return "";
+    const skipped = usage?.replay_rejections ?? usage?.replay_fallbacks ?? 0;
+    if (skipped > 0) {
+      const dominant = dominantSkipReason(usage?.replay_rejections_by_reason);
+      const noun = skipped === 1 ? "recipe" : "recipes";
+      if (!dominant) return `Skipped ${skipped} remembered ${noun}.`;
+      const label = REPLAY_SKIP_LABELS[dominant[0]] ?? dominant[0];
+      return `Skipped ${skipped} remembered ${noun}. Most often: ${label} (${dominant[1]}).`;
+    }
+    if (replayAttempts === 0 && v2Chains > 0) return "No replay attempted yet — repeating a stored recipe on the same site replays it automatically.";
+    return "";
+  }, [status, enabled, usage?.replay_fallbacks, usage?.replay_rejections, usage?.replay_rejections_by_reason, replayAttempts, v2Chains]);
+
   return (
     <section id="view-memory" className="view">
       {view === "settings" ? <>
@@ -265,6 +306,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
           {secondaryStats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id}>{status ? value : "—"}</span><span className="stat-label">{label}</span></div>)}
         </div>
         <p id="memory-health" className="help-note">{healthLine}</p>
+        {replayLine ? <p id="memory-replay-note" className="help-note">{replayLine}</p> : null}
         <div className="memory-actions">
           <button id="memory-reindex" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.reindex", "Memory index rebuilt.")}>Rebuild memory index</button>
         </div>
