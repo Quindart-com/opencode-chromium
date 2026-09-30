@@ -1172,3 +1172,43 @@ select { width: 100%; padding: 10px 12px; margin: 8px 0; border-radius: 10px; bo
 .profile-options { margin-top: 10px; padding: 12px; border: 1px solid var(--surface-border); border-radius: 10px; }
 .profile-options .checkbox-row { margin: 8px 0; }
 select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Provider settings: one decision, with connection details available on demand. */
+.provider-settings {
+  padding: 16px 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.provider-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.provider-heading h2 { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 700; letter-spacing: -0.01em; }
+.provider-experimental { color: var(--text-muted); font-size: 11px; font-weight: 500; }
+.provider-intro { margin: 7px 0 20px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.provider-field label { margin: 0 0 7px; font-size: 12px; }
+.provider-field select { margin: 0; min-height: 40px; padding: 9px 10px; background: var(--input-bg); font-size: 13px; font-weight: 500; }
+.provider-sharing { position: relative; display: flex; align-items: center; gap: 16px; margin: 18px 0 0; cursor: pointer; }
+.provider-sharing-copy { flex: 1; min-width: 0; }
+.provider-sharing-copy > span:first-child { display: block; color: var(--text); font-size: 13px; font-weight: 600; }
+.provider-sharing-copy > span:last-child { display: block; margin-top: 4px; font-size: 12px; line-height: 1.55; font-weight: 400; }
+.provider-sharing input { position: absolute; right: 0; width: 36px; height: 24px; opacity: 0; }
+.provider-switch { position: relative; flex: 0 0 36px; height: 22px; border: 1px solid var(--surface-border-strong); border-radius: 12px; background: var(--button-bg); pointer-events: none; }
+.provider-switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--text-muted); transition: transform 150ms ease-out; }
+.provider-sharing input:checked + .provider-switch { background: var(--accent); border-color: var(--accent); }
+.provider-sharing input:checked + .provider-switch::after { background: var(--primary-text); transform: translateX(14px); }
+.provider-sharing input:focus-visible + .provider-switch { outline: 2px solid var(--accent); outline-offset: 4px; }
+.provider-sharing:has(input:disabled) { cursor: default; opacity: 0.65; }
+.provider-advanced { margin-top: 18px; }
+.provider-advanced summary, .provider-migration summary { width: fit-content; padding: 5px 0; color: var(--text-muted); font-size: 12px; font-weight: 500; cursor: pointer; }
+.provider-advanced summary:hover, .provider-migration summary:hover { color: var(--text); }
+.provider-advanced .provider-field { margin-top: 12px; }
+.provider-field input { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.provider-field p, .provider-migration p { margin: 7px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.provider-save-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.provider-feedback { margin: 0; color: var(--text-muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.provider-feedback-error { color: var(--bad); }
+.provider-save-row .provider-save { flex: 0 0 auto; background: var(--accent); border-color: transparent; color: var(--primary-text); font-size: 12px; }
+.provider-save-row .provider-save:hover:not(:disabled) { background: var(--accent-hover); color: var(--primary-text); }
+.provider-save-row .provider-save:disabled { background: var(--disabled-bg); color: var(--disabled-text); }
+.provider-migration { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--surface-border); }
+.provider-migration .provider-dismiss { margin-top: 10px; min-height: 30px; padding: 4px 8px; font-size: 11.5px; }
+@media (prefers-reduced-motion: reduce) { .provider-switch::after { transition: none; } }

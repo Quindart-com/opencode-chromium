@@ -26,13 +26,13 @@ export async function runDoctor({ json = false } = {}) {
   }
   const checks = [
     check("node", Number.parseInt(process.versions.node, 10) >= 20, { version: process.versions.node }),
-    check("bun", Boolean(process.versions.bun), { version: process.versions.bun ?? null }),
+    check("runtime", Boolean(process.versions.bun) || Number.parseInt(process.versions.node, 10) >= 20, { bun: process.versions.bun ?? null, node: process.versions.node }),
     check("package", info.name === "opencode-chromium" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(info.version ?? ""), { name: info.name, version: info.version }),
     check("build", fs.existsSync(path.join(dist, "build-manifest.json")), { path: "dist" }),
     check("four-tools", tools.length === 4, { tools: tools.map((tool) => tool.name) }),
     check("artifact-directory", (() => { try { fs.mkdirSync(artifactDir, { recursive: true }); return fs.statSync(artifactDir).isDirectory(); } catch { return false; } })(), { configured: Boolean(process.env.AGENT_BROWSER_ARTIFACT_DIR ?? process.env.OPENCODE_BROWSER_ARTIFACT_DIR) }),
     check("extension", fs.existsSync(path.join(info.root, "extension", "manifest.json")), { installed: false, message: "Use check:extension for browser-profile discovery." }),
-    check("native-host", fs.existsSync(path.join(info.root, "native-host", "src", "host.js")), { installed: false, message: "Use install:native-host to register the host." }),
+    check("native-host", fs.existsSync(path.join(info.root, "native-host", "dist", "runtime.js")), { installed: false, message: "Use install:native-host to register the host." }),
     check("semantic-cache", true, { configured: Boolean(process.env.AGENT_BROWSER_SEMANTIC_DIR ?? process.env.OPENCODE_BROWSER_SEMANTIC_DIR) }),
     check("qwen-cache", true, { configured: Boolean(process.env.AGENT_BROWSER_SEMANTIC_DIR ?? process.env.OPENCODE_BROWSER_SEMANTIC_DIR) }),
     check("schema-budget", Buffer.byteLength(JSON.stringify(tools)) < MAX_SCHEMA_BYTES, { bytes: Buffer.byteLength(JSON.stringify(tools)), maxBytes: MAX_SCHEMA_BYTES }),
@@ -41,10 +41,17 @@ export async function runDoctor({ json = false } = {}) {
   const skillSource = skillSourceDirectory();
   const canonicalHash = fs.existsSync(path.join(skillSource, "SKILL.md")) ? directoryHash(skillSource) : null;
   const skillTargetsList = skillTargets();
+  const skillInstallCommand = "opencode-chromium install --client=skills";
+  // A stale installed skill is silent: the agent keeps following older guidance,
+  // which is how action-memory replay stayed disabled for a released version.
+  const staleSkillTargets = skillTargetsList.filter((target) => {
+    if (!fs.existsSync(path.join(target, "SKILL.md"))) return true;
+    return Boolean(canonicalHash) && directoryHash(target).sha256 !== canonicalHash.sha256;
+  });
   checks.push(
     check("skill-source", Boolean(canonicalHash), { path: "skills/opencode-browser-plugin" }),
-    check("skill-installed", Boolean(canonicalHash) && skillTargetsList.every((target) => fs.existsSync(path.join(target, "SKILL.md"))), { locations: skillTargetsList }),
-    check("skill-parity", Boolean(canonicalHash) && skillTargetsList.every((target) => fs.existsSync(path.join(target, "SKILL.md")) && directoryHash(target).sha256 === canonicalHash.sha256), {}),
+    check("skill-installed", Boolean(canonicalHash) && skillTargetsList.every((target) => fs.existsSync(path.join(target, "SKILL.md"))), { locations: skillTargetsList, installCommand: skillInstallCommand }),
+    check("skill-parity", staleSkillTargets.length === 0, { stale: staleSkillTargets, installCommand: skillInstallCommand }),
     check("skill-codex-config", (() => {
       const config = codexConfigPath();
       if (!fs.existsSync(config)) return false;

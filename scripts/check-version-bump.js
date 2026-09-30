@@ -72,7 +72,7 @@ if (process.argv[1]?.endsWith("check-version-bump.js")) {
     const previous = packageVersionAt(before);
     let result = checkVersionBump(previous, current);
     if (!result.shouldRelease) {
-      const currentManifest = JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8")).version;
+      const currentManifest = extensionManifestVersionAt("HEAD");
       if (isManifestVersionSyncRetry(extensionManifestVersionAt(before), currentManifest, current)) {
         result = { ...result, shouldRelease: true };
       }

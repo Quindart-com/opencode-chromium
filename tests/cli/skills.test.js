@@ -129,3 +129,19 @@ test("skills uninstall removes only the plugin skill and its config entry", () =
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("dry-run preserves an existing outdated skill and configuration", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-skills-"));
+  try {
+    installSkills({ homedir: root });
+    const target = skillTargets(root)[0];
+    fs.writeFileSync(path.join(target, "SKILL.md"), "older local skill\n");
+    const before = directoryHash(target);
+    const config = fs.readFileSync(codexConfigPath(root), "utf8");
+    assert.equal(installSkills({ homedir: root, dryRun: true }).changed, true);
+    assert.deepEqual(directoryHash(target), before);
+    assert.equal(fs.readFileSync(codexConfigPath(root), "utf8"), config);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

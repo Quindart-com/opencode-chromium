@@ -22,7 +22,7 @@ test("permissive policy keeps absolute, existing, readable file checks", () => {
   const { inside, cleanup } = sandbox();
   try {
     const policy = createFilePolicy({});
-    assert.equal(policy.assertAllowed(inside).filePath, path.resolve(inside));
+    assert.equal(policy.assertAllowed(inside).filePath, fs.realpathSync(inside));
   } finally {
     cleanup();
   }
@@ -33,7 +33,7 @@ test("allowed roots accept files inside including nested paths", () => {
   try {
     const policy = createFilePolicy({ allowedFileRoots: [root] });
     assert.equal(policy.assertAllowed(inside).allowedFileRoots.length, 1);
-    assert.equal(policy.assertAllowed(deep).filePath, path.resolve(deep));
+    assert.equal(policy.assertAllowed(deep).filePath, fs.realpathSync(deep));
   } finally {
     cleanup();
   }

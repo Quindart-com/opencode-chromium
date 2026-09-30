@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** August 27, 2026
+**Effective date:** September 30, 2026
 
 This privacy policy applies to the **opencode-chromium** extension for Chromium-based
 browsers (Chrome, Edge, Brave), published by Quindart.
@@ -9,8 +9,10 @@ browsers (Chrome, Edge, Brave), published by Quindart.
 
 opencode-chromium is a local browser-automation bridge. It lets an AI coding
 assistant (OpenCode, Codex, MCP clients) drive the browser on **your own machine**.
-The extension **does not collect, transmit, or store any personal data** on any
-remote server. Everything runs locally.
+Cloud decision assistance is off by default. The extension communicates with a
+local native host. If you explicitly enable a decision provider and text sharing,
+the native host sends bounded search queries and candidate page labels/text to
+the service you selected. Page text may contain personal information.
 
 ## What the extension does
 
@@ -25,17 +27,19 @@ remote server. Everything runs locally.
 
 ## Content boundaries
 
-- **No network egress.** All communication stays on your device. The extension
+- **Local extension communication.** The extension
   talks to a native messaging host installed on your computer over the
-  browser's native messaging channel. Neither the extension nor the host sends
-  data to Quindart, any cloud provider, or any third-party service.
+  browser's native messaging channel. The native host calls TypeSafe or
+  OpenRouter only after you enable a provider and consent to text sharing.
+  Requests never silently switch providers. No data is sent to Quindart.
 - **Local models, local data.** Optional semantic page search downloads a model
   bundle (a standard Hugging Face transformer) to a local cache directory you
-  can inspect and delete from the extension popup. Search happens locally in
-  your browser tab.
+  can inspect and delete from the extension popup. Local semantic inference
+  happens in the native host. Model downloads contact the model distributor.
 - **No accounts, no telemetry.** The extension has no accounts, does not use
-  analytics, and does not phone home. The vocabulary used with the native host
-  never leaves your machine.
+  analytics, and does not phone home. Provider accounts and their data-handling
+  policies apply separately when you enable cloud assistance. Keys are read
+  from the native host environment; preferences store only a variable name.
 - **No device identification.** The plugin, extension, and native host never
   read machine IDs, hostnames, usernames, MAC addresses, hardware serials, or
   install IDs, and never compute device fingerprints. The only persistent
@@ -45,7 +49,7 @@ remote server. Everything runs locally.
   last four characters only); the full value is revealed or copied only through
   an explicit "Developer details" action. Cache locations are shown as "Local
   model cache"; the raw path is only ever copied on explicit request, never
-  rendered. A repository contract test and the release hygiene scan pin these
+  rendered. Behavioral privacy tests verify these
   guarantees, and store-listing images are generated from deterministic demo
   fixtures rather than live popups.
 

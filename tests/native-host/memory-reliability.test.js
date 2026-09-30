@@ -54,6 +54,20 @@ test("an in-progress replay counts as an attempt without inventing a success rat
   assert.equal(usage.replay_success_rate, null);
 });
 
+test("skipped replays are reported per profile and per reason", (t) => {
+  const [store] = stores(t);
+  store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", profileId: "alpha" });
+  store.usageEvent({ eventType: "replay_rejected", reason: "step_count_mismatch", profileId: "beta" });
+  store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", profileId: "beta" });
+  const alpha = store.status({ profileIds: ["alpha"] }).usage;
+  const beta = store.status({ profileIds: ["beta"] }).usage;
+  assert.equal(alpha.replay_rejections, 1);
+  assert.deepEqual(alpha.replay_rejections_by_reason, { below_similarity: 1 });
+  assert.equal(beta.replay_rejections, 2);
+  assert.deepEqual(beta.replay_rejections_by_reason, { below_similarity: 1, step_count_mismatch: 1 });
+  assert.equal(store.status().usage.replay_rejections, 3);
+});
+
 test("action attribution failures roll back counters and recipes together", (t) => {
   const [store] = stores(t);
   store.enable();

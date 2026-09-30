@@ -89,10 +89,15 @@ enabled = true`;
 }
 
 export function upsertCodexSkillConfig(text, skillMetadataPath) {
-  let after = removeSkillsConfigBlocks(text, STALE_SKILL_MARKER);
-  after = removeSkillsConfigBlocks(after, SKILL_CONFIG_MARKER);
   const block = codexSkillBlock(skillMetadataPath);
-  return `${after.trimEnd()}${after.trim() ? "\n\n" : ""}${block}\n`;
+  // Leave an already-correct block where it is: re-appending it on every run
+  // moved it past the MCP section and rewrote the user's config each time.
+  const withoutStale = removeSkillsConfigBlocks(text, STALE_SKILL_MARKER);
+  if (withoutStale !== text || !text.includes(block)) {
+    const cleaned = removeSkillsConfigBlocks(withoutStale, SKILL_CONFIG_MARKER);
+    return `${cleaned.trimEnd()}${cleaned.trim() ? "\n\n" : ""}${block}\n`;
+  }
+  return text;
 }
 
 export function cleanCodexSkillConfig(text) {
@@ -100,8 +105,9 @@ export function cleanCodexSkillConfig(text) {
 }
 
 function copySkills(source, target, dryRun) {
+  if (dryRun) return;
   if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
-  if (!dryRun) fs.cpSync(source, target, { recursive: true });
+  fs.cpSync(source, target, { recursive: true });
 }
 
 export function installSkills({ dryRun = false, homedir } = {}) {

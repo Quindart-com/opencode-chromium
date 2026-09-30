@@ -20,6 +20,9 @@ rather than a GitHub issue:
 
 ```bash
 bun install
+bun run build
+bun run build:extension
+bun run typecheck:extension
 bun run check
 ```
 
@@ -35,6 +38,10 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 - Include tests for native-host protocol changes when practical.
 - Update README or component docs when setup behavior changes.
 - Do not commit generated files, browser profile data, `node_modules/`, local extension IDs, or internal reference material.
+- Keep new production modules below 500 lines. Existing migration exceptions are bounded in `architecture-exceptions.json`; increases require an explicit rationale in review.
+- Follow the [subsystem boundaries and migration status](docs/architecture.md). Validate contracts through behavior, including cancellation, failure, dry-run preservation, rollback, and mutation uncertainty.
+- Keep credentials and private benchmark/history inventories outside the checkout. Preserve runtime redaction, privacy behavior, synthetic fixtures, and ordinary secret scanning.
+- Follow [the contributor history-rewrite recovery procedure](docs/HISTORY-RECOVERY.md) after the maintainer announces a coordinated cutover.
 
 ## Security-Sensitive Changes
 
@@ -42,10 +49,11 @@ Changes to extension permissions, native messaging, file upload behavior, clipbo
 
 ## Releases
 
-`package.json` is the canonical release version. For a release PR, advance it to a higher SemVer version and set `extension/manifest.json` to the same value. Run the complete release gate before merging:
+`package.json` is the canonical release version. For a release PR, advance it to a higher SemVer version; the extension build derives its matching version. Run the complete release gate before merging:
 
 ```bash
 bun run build
+bun run build:extension
 bun run check
 bun run pack
 bun run test:tarball
