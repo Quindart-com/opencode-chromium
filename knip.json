@@ -1,0 +1,21 @@
+{
+  "entry": [
+    "src/cli/index.js",
+    "src/adapters/{sdk,opencode,mcp}/index.js",
+    "src/adapters/mcp/server.js",
+    "src/core/index.js",
+    "src/browser/operations/index.js",
+    "native-host/src/{host,runtime}.js",
+    "extension-src/entrypoints/background/index.js",
+    "extension-src/entrypoints/popup/main.tsx",
+    "extension-src/public/content-scripts/cursor.js"
+  ],
+  "project": [
+    "src/**/*.{js,ts}",
+    "native-host/src/**/*.{js,ts}",
+    "extension-src/**/*.{js,ts,tsx}"
+  ],
+  "ignore": [
+    "src/search/**"
+  ]
+}

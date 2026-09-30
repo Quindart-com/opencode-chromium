@@ -92,9 +92,13 @@ export type MemoryStatus = {
     replay_attempts: number;
     replay_successes: number;
     replay_failures: number;
+    /** Legacy name for the skipped-replay count. */
     replay_fallbacks: number;
     steps_reused: number;
     replay_success_rate: number | null;
+    /** Absent on native hosts older than the reason-level replay metrics. */
+    replay_rejections?: number;
+    replay_rejections_by_reason?: Record<string, number>;
   };
   recent_daily?: Array<{ confirmed: number; failed: number }>;
 };

@@ -71,12 +71,42 @@ normalizer (emails, UUIDs, long account-like numbers, query strings, tokens,
 and filesystem paths are stripped or redacted).
 
 A `memory_search` can return a whole recipe whose steps map 1:1 into
-`browser_run.steps` again: `browser_run` accepts `memoryMode: "auto"` with a
-transient `memoryIntent` and will replay a high-confidence remembered chain
-through the ordinary execution path (semantic target re-resolution, normal
-retry/settle logic), reporting only `{ memory: { used, stepsReused, fallback } }`.
-Stale targets fall back to normal exploration - never a hard failure - and the
-corrective run records a fresh chain generation (`replaced_by` lineage).
+`browser_run.steps` again. Replay is automatic: when memory is enabled,
+`browser_run` attempts a remembered recipe before normal exploration and reports
+only `{ memory: { used, stepsReused, fallback } }`. Pass `memoryMode: "off"` to
+skip memory entirely for one call, or a transient `memoryIntent` to also attempt
+bounded semantic recall. Typed values and URLs always come from the caller's own
+request, never from stored memory, and stale targets fall back to normal
+exploration - never a hard failure. A corrective run records a fresh chain
+generation (`replaced_by` lineage).
+
+Recall has two stages, and the first needs no model call:
+
+- **deterministic** - repeating a chain on the same host produces the same
+  canonical recipe fingerprint, so the stored recipe is found by exact indexed
+  lookup. This is how repeated actions replay with no embedding latency. The
+  request carries a single hostname, so recipes that span hosts are not matched
+  here; they fall through to semantic recall and are rejected by the per-step
+  hostname check.
+- **semantic** - only when the caller supplies `memoryIntent`. The query is
+  embedded locally and discarded, and a candidate is executed only when it is a
+  failure-free head whose similarity clears the replay floor.
+
+Two gates apply, and they are deliberately different:
+
+- the **retrieval threshold** (`DEFAULT_MEMORY_SIMILARITY_THRESHOLD`, 0.42,
+  calibrated per embedding profile) decides whether a candidate is worth
+  returning at all;
+- the **replay floor** adds `MEMORY_REPLAY_SIMILARITY_MARGIN` (0.2) on top of
+  that same threshold, so auto-execution is stricter than retrieval and the two
+  can never cross. Replays are skipped, with a recorded reason, when a candidate
+  is a known negative lesson (`negative_lesson`), when it is not similar enough
+  (`below_similarity`), when the request has a different step count
+  (`step_count_mismatch`) or different host, action, or target
+  (`hostname_mismatch`, `action_mismatch`, `target_mismatch`), when a step needs
+  a runtime value or URL the request did not supply (`missing_runtime_value`,
+  `missing_runtime_url`), or when the chain would need approval
+  (`approval_required`). `memory_status` reports the counts per reason.
 
 Chains evolve like Lego blocks:
 
@@ -155,9 +185,11 @@ tab (Chrome extension settings → "Action Memory"):
   purge period, prune now, and rebuild memory index;
 - **Dashboard tab** — live-refreshing (while the popup is open) replay
   metrics: replay success rate, unique actions, recipes, replays, steps
-  reused, plus total executions, negative lessons, and index readiness. The
-  14-day chart is built from timestamped `memory_usage_events`, so it shows
-  real daily activity rather than lifetime totals projected onto one day.
+  reused, plus total executions, negative lessons, and index readiness. When
+  replays were skipped, the dashboard names the dominant reason instead of
+  showing a bare placeholder. The 14-day chart is built from timestamped
+  `memory_usage_events`, so it shows real daily activity rather than lifetime
+  totals projected onto one day.
 
 ## Configuration and storage
 
@@ -184,5 +216,6 @@ tab (Chrome extension settings → "Action Memory"):
 | `embedding_errors` | Embedding attempts failed recently; failed items retry with bounded backoff, or run `opencode-chromium memory reindex`. |
 | `index_stale` | More actions than expected lack embeddings (for example after a model/dimension switch); run `opencode-chromium memory reindex` or use the popup's "Rebuild memory index". |
 | `queue_backpressure` | The embedding queue is dropping items under load; health reports it instead of failing silently. |
-| Model unavailable | Signatures store without embeddings; search returns `memory_model_unavailable` until the model loads. |
+| Model unavailable | Signatures store without embeddings; search returns `memory_model_unavailable` until the model loads. Deterministic replay of a repeated chain still works, because it needs no embedding. |
+| Replays stay at zero | No stored recipe matched the request steps on that host yet, or every attempt was skipped. Read `usage.replay_rejections_by_reason` from `memory_status` / `memory.stats` to see which gate rejected the candidates; the Overview tab shows the dominant reason. |
 | No SQLite runtime | Status reports `storage_unavailable`; upgrade to Node ≥ 22.5 or Bun ≥ 1.1. |
