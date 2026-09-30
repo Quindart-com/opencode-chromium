@@ -171,10 +171,12 @@ export function originIds(manifest) {
 // the browser's own directory is.
 export function readRegistration(browser, targetDir = runtimeDir()) {
   const browserDir = nativeMessagingDir(browser);
-  const manifestPath = process.platform !== "win32" && browserDir ? path.join(browserDir, `${HOST_NAME}.json`) : path.join(targetDir, `${HOST_NAME}.${browser}.json`);
+  const browserManifestPath = browserDir ? path.join(browserDir, `${HOST_NAME}.json`) : null;
+  const useBrowserDirectory = process.platform !== "win32" && samePath(targetDir, runtimeDir()) && browserManifestPath && fs.existsSync(browserManifestPath);
+  const manifestPath = useBrowserDirectory ? browserManifestPath : path.join(targetDir, `${HOST_NAME}.${browser}.json`);
   const manifest = readJsonIfPresent(manifestPath);
   const valid = Boolean(manifest) && manifest.name === HOST_NAME && typeof manifest.path === "string" && originIds(manifest).length > 0;
-  const registered = valid && (process.platform === "win32" ? samePath(registryManifestPath(browser), manifestPath) : Boolean(browserDir));
+  const registered = valid && (process.platform === "win32" ? samePath(registryManifestPath(browser), manifestPath) : Boolean(useBrowserDirectory));
   return {
     browser,
     registered,
