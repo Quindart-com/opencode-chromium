@@ -40,6 +40,8 @@ opencode-chromium uninstall --targets codex --json
 
 `setup`, `manage`, and `update` reconcile registrations with the installed runtime. Upgrade the npm package before `update`; it does not independently download a release. With `--json` and no targets, these commands only report discovery. Noninteractive changes require `--targets`. Configuration overrides are repeatable `--config harness-id=/path` values. Discovery respects `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, and `XDG_CONFIG_HOME`.
 
+Use `update --production --targets codex,opencode --json` to select the installed production package explicitly and stop following a developer checkout. Without `--production`, existing branch-following preferences are preserved.
+
 Configuration changes and selected-client skills are planned before writing, backed up, written atomically, and rolled back if a later file change fails. Dry runs leave configuration and skills untouched. JSONC edits preserve unrelated comments. Existing simple Codex TOML settings retain custom timeouts; complex owned sections currently require manual migration.
 
 Recognized native plugin duplicates and managed native/MCP overlaps are repaired. Custom entries under other names remain untouched; inspect them before removing duplicate browser tools. General duplicate MCP-name repair is still being expanded.
