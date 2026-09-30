@@ -4,5 +4,5 @@
 # `opencode-chromium link`.
 root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 [ -f "$root/src/cli/index.js" ] || exit 0
-command -v node >/dev/null 2>&1 || exit 0
-node "$root/src/cli/index.js" sync --quiet --if-linked || true
+command -v bun >/dev/null 2>&1 || exit 0
+bun "$root/src/cli/index.js" sync --quiet --if-linked || true

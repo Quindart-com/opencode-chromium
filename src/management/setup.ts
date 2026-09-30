@@ -43,7 +43,9 @@ export async function manageSetup(argv: string[], remove = false) {
     }
     const filePath = path.join(dir, "runtime.json");
     const existing = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, "utf8")) as { followBranch?: boolean } : null;
-    const manifest = existing?.followBranch ? existing : { root, version: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version };
+    const production = argv.includes("--production");
+    const manifest = existing?.followBranch && !production ? existing : { root, version: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version,
+      ...(production ? { channel: "production", followBranch: false, pendingReload: true } : {}) };
     changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: JSON.stringify(manifest, null, 2) + "\n" });
   }
   const result = applyTransaction(changes, dryRun);

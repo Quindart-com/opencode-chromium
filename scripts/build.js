@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { sourceFingerprint } from "../src/cli/source-fingerprint.js";
@@ -11,6 +11,23 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const hostDist = path.join(root, "native-host", "dist");
+const buildRoot = path.join(root, ".build");
+fs.mkdirSync(buildRoot, { recursive: true });
+const buildLock = path.join(buildRoot, "lock.json");
+const deadline = Date.now() + 120000;
+for (;;) {
+  try { fs.writeFileSync(buildLock, JSON.stringify({ pid: process.pid }), { flag: "wx" }); break; }
+  catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    try {
+      const owner = JSON.parse(fs.readFileSync(buildLock, "utf8"));
+      try { process.kill(owner.pid, 0); } catch (cause) { if (cause.code === "ESRCH") { fs.unlinkSync(buildLock); continue; } }
+    } catch { /* Another builder may be creating or removing its lock. */ }
+    if (Date.now() > deadline) throw new Error("Another build is still running; retry after it completes");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  }
+}
+process.once("exit", () => { try { fs.unlinkSync(buildLock); } catch {} });
 
 function cleanOutput(target) {
   const resolved = path.resolve(target);
@@ -27,7 +44,7 @@ if (process.argv.includes("--clean")) {
 
 // Use one checked compiler program. Module relocation is an AST transformation,
 // so unrelated strings, comments, and browser expressions are never rewritten.
-const stage = path.join(root, ".build");
+const stage = path.join(buildRoot, `stage-${randomUUID()}`);
 const rootNames = [];
 function collect(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -77,9 +94,25 @@ const relocate = context => source => {
 };
 const emitted = program.emit(undefined, undefined, undefined, false, { before: [relocate], afterDeclarations: [relocate] });
 if (emitted.emitSkipped || emitted.diagnostics.length) { report(emitted.diagnostics); process.exit(1); }
-cleanOutput(dist); cleanOutput(hostDist);
-fs.renameSync(path.join(stage, "src"), dist);
-fs.renameSync(path.join(stage, "native-host", "src"), hostDist);
+const outputs = [[path.join(stage, "src"), dist], [path.join(stage, "native-host", "src"), hostDist]];
+for (const [input] of outputs) if (!fs.existsSync(input)) throw new Error(`Compiler output is missing: ${input}`);
+const previous = [];
+const published = [];
+try {
+  for (const [input, target] of outputs) {
+    if (fs.existsSync(target)) {
+      const backup = path.join(stage, `previous-${previous.length}`);
+      fs.renameSync(target, backup);
+      previous.push([backup, target]);
+    }
+    fs.renameSync(input, target);
+    published.push(target);
+  }
+} catch (error) {
+  for (const target of published.reverse()) cleanOutput(target);
+  for (const [backup, target] of previous.reverse()) fs.renameSync(backup, target);
+  throw error;
+}
 fs.rmSync(stage, { recursive: true, force: true });
 
 for (const relative of ["cli/index.js", "adapters/mcp/server.js"]) {
