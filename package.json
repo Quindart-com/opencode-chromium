@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "description": "Provider-neutral Chromium browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -140,7 +140,6 @@
     "@modelcontextprotocol/node": "2.0.0-beta.4",
     "@modelcontextprotocol/server": "2.0.0-beta.4",
     "@opencode-ai/plugin": "1.18.11",
-    "adm-zip": "0.6.1",
     "effect": "3.22.1",
     "jsonc-parser": "^3.3.1",
     "react": "19.2.8",
@@ -165,6 +164,7 @@
     "yazl": "3.1.0"
   },
   "overrides": {
+    "adm-zip": "0.6.1",
     "protobufjs": "7.6.5"
   }
 }
