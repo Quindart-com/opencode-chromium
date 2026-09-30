@@ -13,7 +13,10 @@ export function createFilePolicy(config = {}) {
   const allowedFileRoots = (config.allowedFileRoots ?? [])
     .map(String)
     .filter((value) => value.length > 0)
-    .map((root) => path.resolve(root));
+    .map((root) => {
+      const absolute = path.resolve(root);
+      try { return fs.realpathSync(absolute); } catch { return absolute; }
+    });
   return {
     allowedFileRoots,
     assertAllowed(filePath) {
