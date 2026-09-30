@@ -25,7 +25,6 @@ bun run build
 bun run check:schemas
 bun run check:package
 bun run check:mcp
-bun run check:public-hygiene
 bun run test:opencode
 bun run pack
 bun run test:tarball

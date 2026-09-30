@@ -263,7 +263,9 @@ test("replay lifecycle and v2 execution metrics exclude rejected candidates", ()
   const { store, root } = openMemory();
   store.recordStep({ action: "click", hostname: "example.com", target: { label: "Go" }, success: true });
   store.recordStep({ action: "fill", hostname: "example.com", target: { label: "Name" }, success: false });
-  store.usageEvent({ eventType: "replay_rejected", reason: "below_confidence" });
+  store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity" });
+  store.usageEvent({ eventType: "replay_rejected", reason: "step_count_mismatch" });
+  store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity" });
   store.usageEvent({ eventType: "replay_started", chainId: 1 });
   store.usageEvent({ eventType: "replay_succeeded", chainId: 1, success: true, stepsReused: 2 });
   const status = store.status();
@@ -271,9 +273,29 @@ test("replay lifecycle and v2 execution metrics exclude rejected candidates", ()
   assert.equal(status.counts.failed_executions_v2, 1);
   assert.equal(status.counts.negative_actions_v2, 1);
   assert.equal(status.usage.replay_attempts, 1);
-  assert.equal(status.usage.replay_fallbacks, 1);
+  // A skipped replay is not an attempt: the success rate stays about replays
+  // that actually ran.
+  assert.equal(status.usage.replay_rejections, 3);
+  assert.equal(status.usage.replay_fallbacks, 3);
+  assert.deepEqual(status.usage.replay_rejections_by_reason, { below_similarity: 2, step_count_mismatch: 1 });
   assert.equal(status.usage.replay_success_rate, 100);
   assert.equal(status.usage.steps_reused, 2);
+  store.close();
+  removeRoot(root);
+});
+
+test("replay skip reasons keep reading after a reason vocabulary change", () => {
+  const { store, root } = openMemory();
+  // Rows written by 1.7.2 must stay visible in the breakdown.
+  store.usageEvent({ eventType: "replay_rejected", reason: "below_confidence" });
+  store.usageEvent({ eventType: "replay_rejected", reason: "recipe_mismatch" });
+  store.usageEvent({ eventType: "replay_rejected", reason: null });
+  assert.deepEqual(store.status().usage.replay_rejections_by_reason, {
+    below_confidence: 1,
+    recipe_mismatch: 1,
+    unknown: 1,
+  });
+  assert.equal(store.status().usage.replay_rejections, 3);
   store.close();
   removeRoot(root);
 });

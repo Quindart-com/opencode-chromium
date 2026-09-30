@@ -1,0 +1,8 @@
+#!/bin/sh
+# A pull changes the runtime source; keep the local bundle and native host in
+# step. `--if-linked` keeps this inert on checkouts that never ran
+# `opencode-chromium link`.
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -f "$root/src/cli/index.js" ] || exit 0
+command -v bun >/dev/null 2>&1 || exit 0
+bun "$root/src/cli/index.js" sync --quiet --if-linked || true

@@ -7,8 +7,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { EmbedQueue, MemoryStore, MEMORY_REPLAY_MIN_CONFIDENCE } from "../native-host/src/memory/index.js";
+import { EmbedQueue, MemoryStore, memoryReplayThreshold } from "../native-host/src/memory/index.js";
 import { embedFixtureText } from "../tests/fixtures/memory-threshold-calibration.js";
+
+const HOSTNAME = "fixture.example";
+const PROFILE = "fixture-concepts:q8:d44:prompt-v1";
 
 const WORKFLOWS = [
   { intent: "open settings and change a toggle", steps: [{ action: "click", label: "Settings" }, { action: "click", label: "Notifications toggle" }] },
@@ -22,17 +25,27 @@ function makeEmbedQueue(store) {
   const embed = async (texts) => ({
     model: "fixture-concepts",
     dims: 44,
-    embeddingProfile: "fixture-concepts:q8:d44:prompt-v1",
+    embeddingProfile: PROFILE,
     vectors: texts.map((text) => embedFixtureText(text)),
   });
   const queue = new EmbedQueue({ embed, onResults: null });
-  queue.setQueryEmbedder(async (query) => (await embed([query])).vectors[0]);
+  // The host contract is an object, not a bare vector: embedQuery reads
+  // .vector/.model/.dims/.embeddingProfile and reports memory_model_unavailable
+  // otherwise, which is why this benchmark used to measure zero replays.
+  queue.setQueryEmbedder(async (query) => {
+    const result = await embed([query]);
+    return { vector: result.vectors[0], model: result.model, dims: result.dims, embeddingProfile: result.embeddingProfile };
+  });
   queue.store = store;
   return queue;
 }
 
 function bytes(value) {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+function requestSteps(workflow) {
+  return workflow.steps.map((step) => ({ action: step.action, target: { label: step.label, role: "button" } }));
 }
 
 async function coldRun(store, workflow) {
@@ -44,11 +57,19 @@ async function coldRun(store, workflow) {
   return { finds, observations, steps: stepsExecuted, bytes: toolResultBytes, ms: Math.round(performance.now() - started) };
 }
 
+// Mirrors the runtime: a repeated chain on the same host resolves
+// deterministically with no embedding call, and only falls back to the gated
+// semantic path when no exact recipe exists.
 async function warmRun(store, workflow) {
   const started = performance.now();
-  const search = await store.search({ query: workflow.intent, limit: 1, kind: "chain" });
-  const match = search.results?.find((item) => item.kind === "chain_v2") ?? null;
-  if (!match || match.confidence < MEMORY_REPLAY_MIN_CONFIDENCE) {
+  let match = store.findRecipe({ steps: requestSteps(workflow), hostname: HOSTNAME }).match;
+  if (!match) {
+    const search = await store.search({ query: workflow.intent, limit: 1, kind: "chain", hostname: HOSTNAME });
+    const candidate = search.results?.find((item) => item.kind === "chain_v2") ?? null;
+    const floor = memoryReplayThreshold(store.meta.embedding_profile ?? null);
+    match = candidate && candidate.failed_count === 0 && candidate.similarity >= floor ? candidate : null;
+  }
+  if (!match) {
     const cold = await coldRun(store, workflow);
     return { ...cold, replayed: false };
   }
@@ -72,7 +93,7 @@ async function main() {
   for (const workflow of WORKFLOWS) {
     const chainId = `capture:${workflow.intent}`;
     for (const [index, step] of workflow.steps.entries()) {
-      store.recordStep({ chainId, position: index, action: step.action, hostname: "fixture.example", target: { label: step.label, role: "button" }, success: true });
+      store.recordStep({ chainId, position: index, action: step.action, hostname: HOSTNAME, target: { label: step.label, role: "button" }, success: true });
     }
     store.finalizeChain({ chainId, success: true });
   }

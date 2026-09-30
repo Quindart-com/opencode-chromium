@@ -29,6 +29,10 @@ export class RpcRelay {
     // Native-host memory methods write directly to the store.
   }
 
+  activity() {
+    return { clients: Math.max(0, this.#clients.size - 1), pending: this.#pendingRequests.size };
+  }
+
   addClient(socket) {
     this.#clients.add(socket);
     const cleanup = () => this.#removeClient(socket);
