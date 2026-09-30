@@ -311,7 +311,8 @@ test("link targets installed browsers plus already-registered ones", () => {
       path: "C:/launcher/opencode-browser-host.cmd",
       allowed_origins: ["chrome-extension://aaa/"],
     }), "utf8");
-    assert.equal(new Set(linkTargets(dir)).size, linkTargets(dir).length, "targets must be unique");
+    const updatedTargets = linkTargets(dir);
+    assert.equal(new Set(updatedTargets).size, updatedTargets.length, "targets must be unique");
   } finally {
     removeDir(dir);
   }
@@ -327,11 +328,13 @@ test("link targets always include the shared Chromium root", () => {
   try {
     // A browser is only a target here when its executable is absent, which is
     // exactly the condition that used to drop `chrome`.
-    const absent = browserIds().filter((browser) => !installedBrowsers().includes(browser));
+    const installed = new Set(installedBrowsers());
+    const absent = browserIds().filter((browser) => !installed.has(browser));
+    const targets = linkTargets(dir);
     for (const browser of ["chrome", ...absent.filter((id) => id !== "chrome")]) {
-      assert.equal(linkTargets(dir).includes("chrome"), true, `${browser} must not remove the shared Chrome root`);
+      assert.equal(targets.includes("chrome"), true, `${browser} must not remove the shared Chrome root`);
     }
-    assert.equal(linkTargets(dir).includes("chrome"), true, "chrome is always targeted");
+    assert.equal(targets.includes("chrome"), true, "chrome is always targeted");
   } finally {
     removeDir(dir);
   }
