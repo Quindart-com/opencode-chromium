@@ -1479,14 +1479,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === "GET_DECISION_SETTINGS" || message?.type === "SET_DECISION_SETTINGS") {
-    const method = message.type === "GET_DECISION_SETTINGS" ? "decision.status" : "decision.configure";
-    rpc.request(method, message.type === "SET_DECISION_SETTINGS" ? message.settings : {})
+  if (["GET_DECISION_SETTINGS", "SET_DECISION_SETTINGS", "TEST_DECISION_CONNECTION", "REMOVE_DECISION_KEY"].includes(message?.type)) {
+    const method = { GET_DECISION_SETTINGS: "decision.status", SET_DECISION_SETTINGS: "decision.configure",
+      TEST_DECISION_CONNECTION: "decision.saveAndTest", REMOVE_DECISION_KEY: "decision.removeKey" }[message.type];
+    rpc.request(method, message.type === "TEST_DECISION_CONNECTION" ? { settings: message.settings, ...(message.apiKey ? { apiKey: message.apiKey } : {}) } : message.type === "SET_DECISION_SETTINGS" ? message.settings : {})
       .then((result) => sendResponse({ result }))
       .catch((error) => sendResponse({ error: errorMessage(error) }));
     return true;
   }
-
   if (message?.type === "GET_SEMANTIC_SETTINGS") {
     rpc.request("semantic.status", {})
       .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))

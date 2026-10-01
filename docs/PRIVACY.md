@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** September 30, 2026
+**Effective date:** October 1, 2026
 
 This privacy policy applies to the **opencode-chromium** extension for Chromium-based
 browsers (Chrome, Edge, Brave), published by Quindart.
@@ -10,8 +10,8 @@ browsers (Chrome, Edge, Brave), published by Quindart.
 opencode-chromium is a local browser-automation bridge. It lets an AI coding
 assistant (OpenCode, Codex, MCP clients) drive the browser on **your own machine**.
 Cloud decision assistance is off by default. The extension communicates with a
-local native host. If you explicitly enable a decision provider and text sharing,
-the native host sends bounded search queries and candidate page labels/text to
+local native host. If you explicitly enable a decision provider,
+the native host sends bounded search/replay intent and candidate descriptions to
 the service you selected. Page text may contain personal information.
 
 ## What the extension does
@@ -30,7 +30,7 @@ the service you selected. Page text may contain personal information.
 - **Local extension communication.** The extension
   talks to a native messaging host installed on your computer over the
   browser's native messaging channel. The native host calls TypeSafe or
-  OpenRouter only after you enable a provider and consent to text sharing.
+  OpenRouter only after you enable a provider with the disclosed context sharing.
   Requests never silently switch providers. No data is sent to Quindart.
 - **Local models, local data.** Optional semantic page search downloads a model
   bundle (a standard Hugging Face transformer) to a local cache directory you
@@ -38,8 +38,11 @@ the service you selected. Page text may contain personal information.
   happens in the native host. Model downloads contact the model distributor.
 - **No accounts, no telemetry.** The extension has no accounts, does not use
   analytics, and does not phone home. Provider accounts and their data-handling
-  policies apply separately when you enable cloud assistance. Keys are read
-  from the native host environment; preferences store only a variable name.
+  policies apply separately when you enable cloud assistance. Keys can be supplied
+  in Settings or the native host environment. Saved keys stay in private native-host
+  state (DPAPI encrypted on Windows; owner-only files on macOS/Linux), never extension
+  storage or agent responses. Local usage records retain timings and reported
+  tokens/cost, without browsing context. Connection tests send synthetic data only.
 - **No device identification.** The plugin, extension, and native host never
   read machine IDs, hostnames, usernames, MAC addresses, hardware serials, or
   install IDs, and never compute device fingerprints. The only persistent
