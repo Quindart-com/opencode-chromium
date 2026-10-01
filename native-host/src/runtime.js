@@ -12,6 +12,8 @@ import { handleVisualHostMethod } from "./visual-map.js";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.js";
 import { handleDecisionHostMethod } from "./decisions/index.ts";
 import { decisionSearch } from "./decisions/search.ts";
+import { selectRecipe } from "./decisions/recipes.ts";
+import { candidateRecipes } from "./memory/recipe-candidates.ts";
 import { EmbedQueue, MemoryStore, embeddingEnabled } from "./memory/index.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
@@ -75,6 +77,8 @@ const relay = new RpcRelay({
   onProfile: registerProfile,
   localHandler: async (method, params) => {
     if (method === "runtime.activity") return relay.activity();
+    if (method === "memory.selectRecipe" && memoryStore) return await selectRecipe(params?.intent,
+      () => candidateRecipes(memoryStore, { hostname: params?.hostname, stepCount: params?.stepCount, profileId: activeProfileId })) ?? { match: null };
     const decision = await handleDecisionHostMethod(method, params);
     if (decision !== undefined) return decision;
     if (method === "semantic.rankPageUnits") {

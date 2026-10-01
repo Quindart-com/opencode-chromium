@@ -18,7 +18,7 @@ import { createAgentBrowserRuntime } from "../../core/runtime.js";
 import { createCoreRegistry, createMemoryRegistry } from "../../core/registry.js";
 import { jsonSchemaFor } from "../../core/schema-adapters.js";
 import { artifactUriTemplate } from "../../core/artifacts.js";
-import { contractMetadata, PLUGIN_NAME, PLUGIN_VERSION } from "../../core/versions.js";
+import { responseMetadata as contractMetadata, PLUGIN_NAME, PLUGIN_VERSION } from "../../core/versions.js";
 import { createBrowserOperations } from "../../browser/operations/index.js";
 import { closeBrowserClients } from "../../browser/client.js";
 import { memoryEnabledForServer } from "../../memory/index.js";
