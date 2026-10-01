@@ -4,10 +4,10 @@ import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
 import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
-import { memoryReplayThreshold } from "../memory/index.js";
+import { replayGateRejection } from "./replay-gate.ts";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
-import { contractMetadata } from "./versions.js";
+import { responseMetadata as contractMetadata } from "./versions.js";
 import { createLogger } from "./logging.js";
 import { selectProfile as selectConnectedProfile } from "./profiles.js";
 
@@ -122,18 +122,6 @@ function rememberedStepMismatch(remembered, source, hostname) {
   const sourceSelector = normalizedTargetText(sourceTarget.selector);
   const rememberedSelector = normalizedTargetText(remembered.selector);
   if (sourceSelector && rememberedSelector && sourceSelector !== rememberedSelector) return "target_mismatch";
-  return null;
-}
-
-// A deterministic hit already equals the caller's own steps, so it needs no
-// similarity floor. A semantic hit is only executed when it is a strong,
-// failure-free candidate: the floor is derived from the calibrated retrieval
-// threshold, so it can never sit below it.
-function replayGateRejection(match, memoryState) {
-  if (match.deterministic === true) return null;
-  if (Number(match.failed_count ?? 0) > 0) return "negative_lesson";
-  const similarity = Number(match.similarity);
-  if (!Number.isFinite(similarity) || similarity < memoryReplayThreshold(memoryState?.embedding_profile ?? null)) return "below_similarity";
   return null;
 }
 
@@ -687,6 +675,12 @@ export class AgentBrowserRuntime {
       match = found?.match ?? null;
     } catch {
       match = null;
+    }
+    if (!match && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0) {
+      try {
+        const selected = await this.requestHost("memory.selectRecipe", { intent: request.memoryIntent, hostname, stepCount: request.steps?.length }, session);
+        match = selected?.match ?? null;
+      } catch { /* Provider absence keeps ordinary memory recall available. */ }
     }
     if (!match && typeof request.memoryIntent === "string" && request.memoryIntent.length > 0) {
       try {
