@@ -53,6 +53,7 @@ export function similarityThreshold(embeddingProfile = null) {
   return DEFAULT_MEMORY_SIMILARITY_THRESHOLD;
 }
 
+/** @param {string | null} [embeddingProfile] */
 export function memoryReplayThreshold(embeddingProfile = null) {
   // Rounded so the derived floor is an exact, assertable number rather than a
   // binary-floating-point artifact of the addition.

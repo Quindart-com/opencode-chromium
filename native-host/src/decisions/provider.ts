@@ -46,7 +46,7 @@ export class JevProvider implements DecisionProvider {
             decision: { type: "choice", instructions: request.instructions, criteria },
           } }),
         });
-        if (!response.ok) throw new DecisionFailure({ code: response.status === 429 ? "rate_limited" : "provider_http_error" });
+        if (!response.ok) throw new DecisionFailure({ code: ({ 401: "invalid_key", 403: "access_denied", 402: "insufficient_credit", 429: "rate_limited" } as Record<number, string>)[response.status] ?? "provider_http_error" });
         const reader = response.body?.getReader();
         if (!reader) throw new DecisionFailure({ code: "empty_response" });
         const chunks: Uint8Array[] = [];
@@ -68,7 +68,7 @@ export class JevProvider implements DecisionProvider {
         const answer = result.answers.decision;
         const ids = Object.keys(criteria);
         const modelMatches = result.model === this.model || (this.route === "openrouter" && this.model === "typesafe/jev-1.13" && /^typesafe\/jev-1\.13-\d{8}$/.test(result.model));
-        if (!modelMatches || !ids.includes(answer.choice) || Object.keys(answer.probabilities).length !== ids.length ||
+        if (!modelMatches || !ids.includes(answer.choice) || answer.probabilities[answer.choice] !== Math.max(...Object.values(answer.probabilities)) || Object.keys(answer.probabilities).length !== ids.length ||
           ids.some(id => answer.probabilities[id] === undefined) ||
           Math.abs(Object.values(answer.probabilities).reduce((sum, p) => sum + p, 0) - 1) > 0.01) {
           throw new DecisionFailure({ code: "invalid_decision" });
@@ -81,7 +81,10 @@ export class JevProvider implements DecisionProvider {
       catch: cause => cause instanceof DecisionFailure ? cause : new DecisionFailure({ code: "invalid_or_failed_response" }),
     });
     try {
-      return await Effect.runPromise(this.semaphore.withPermits(1)(operation).pipe(Effect.timeout(this.timeoutMs)), { signal });
+      const outcome = await Effect.runPromise(this.semaphore.withPermits(1)(operation).pipe(Effect.timeout(this.timeoutMs), Effect.either), { signal });
+      if (outcome._tag === "Right") return outcome.right;
+      return { status: "abstained", elapsedMs: performance.now() - started,
+        reason: outcome.left instanceof DecisionFailure ? outcome.left.code : "timeout" };
     } catch {
       return { status: "abstained", elapsedMs: performance.now() - started,
         reason: signal?.aborted ? "cancelled" : "provider_unavailable_or_invalid_response" };

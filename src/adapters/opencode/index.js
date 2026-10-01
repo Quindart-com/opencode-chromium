@@ -4,7 +4,7 @@ import { Buffer } from "node:buffer";
 import { createAgentBrowserRuntime } from "../../core/runtime.js";
 import { createCoreRegistry, createMemoryRegistry } from "../../core/registry.js";
 import { dispatchBrowserTool, jsonSchemaFor } from "../../core/schema-adapters.js";
-import { contractMetadata, PLUGIN_NAME, PLUGIN_VERSION } from "../../core/versions.js";
+import { responseMetadata as contractMetadata, PLUGIN_NAME, PLUGIN_VERSION } from "../../core/versions.js";
 import { createLogger } from "../../core/logging.js";
 import { memoryEnabledForServer } from "../../memory/index.js";
 
