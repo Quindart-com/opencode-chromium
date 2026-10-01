@@ -867,7 +867,7 @@ function seededMemory(step) {
 
 // Backs the runtime with a real MemoryStore so the replay path is exercised
 // against actual recipe fingerprints rather than a stub.
-function memoryRuntime(store, { enabled = true, search = null } = {}) {
+function memoryRuntime(store, { enabled = true, search = null, decision = null } = {}) {
   const calls = [];
   const runtime = new AgentBrowserRuntime({
     artifactStore: new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-replay-artifacts-")) }),
@@ -876,6 +876,7 @@ function memoryRuntime(store, { enabled = true, search = null } = {}) {
       if (method === "semantic.status") return { settings: {} };
       if (method === "memory.captureState") return { enabled, paused: false, embedding_profile: null };
       if (method === "memory.recipe") return store.findRecipe(params);
+      if (method === "memory.selectRecipe") return { match: decision };
       if (method === "memory.search") return search ? search(params) : { results: [] };
       if (method === "memory.usageEvent") return store.usageEvent(params);
       if (method === "memory.recordStep") return store.recordStep(params);
@@ -897,6 +898,22 @@ function closeMemory(store, root) {
   store.close();
   try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* Windows may still hold the WAL. */ }
 }
+
+test("Jev-selected replay still rejects mismatched actions, hosts and risky targets", async () => {
+  for (const [request, step, reason] of [
+    [{ action: "click", target: { query: "Open menu" } }, { action: "press", hostname: "example.com", target_label: "Open menu" }, "action_mismatch"],
+    [{ action: "click", target: { query: "Open menu" } }, { action: "click", hostname: "other.com", target_label: "Open menu" }, "hostname_mismatch"],
+    [{ action: "click", target: { role: "button" } }, { action: "click", hostname: "example.com", target_label: "Delete account", target_role: "button" }, "approval_required"],
+  ]) {
+    const { store, root } = seededMemory({ action: "hover", target: { query: "Different recipe" } });
+    const runtime = memoryRuntime(store, { decision: { kind: "chain_v2", id: 99, decisionConfidence: 0.99, failed_count: 0, steps: [step] } });
+    try {
+      const result = await runtime.run({ sessionId: "decision-gates", memoryIntent: "Open settings", steps: [request] });
+      assert.notEqual(result.status, "memory_replay");
+      assert.equal(store.status().usage.replay_rejections_by_reason[reason], 1);
+    } finally { runtime.close(); closeMemory(store, root); }
+  }
+});
 
 test("browser_run replays a repeated recipe with no memory flags at all", async () => {
   const { store, root } = seededMemory({ action: "click", target: { query: "Open menu" } });

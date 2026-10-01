@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { protectKey, revealKey } from "./credentials.js";
 
 export const providerSettingsSchema = z.object({
   provider: z.enum(["off", "jev", "openai-decisions"]).default("off"),
@@ -15,6 +16,28 @@ export function providerSettingsPath(): string {
     path.join(process.env.LOCALAPPDATA ?? os.homedir(), "OpenCodeBrowser", "providers") :
     path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), "opencode-browser", "providers"));
   return path.join(base, "settings.json");
+}
+export function credentialPath(): string { return path.join(path.dirname(providerSettingsPath()), "credentials.json"); }
+export function providerKey(settings: ProviderSettings): string | undefined {
+  try {
+    const stored = JSON.parse(fs.readFileSync(credentialPath(), "utf8"));
+    if (typeof stored[settings.route] === "string" && stored[settings.route]) return revealKey(stored[settings.route]);
+  } catch { /* Environment-only installations need no credential file. */ }
+  return process.env[settings.keyEnv];
+}
+export function storeProviderKey(route: ProviderSettings["route"], key: string | null): void {
+  const file = credentialPath();
+  let credentials: Record<string, string> = {};
+  try { credentials = JSON.parse(fs.readFileSync(file, "utf8")); } catch { /* First setup. */ }
+  if (key === null) delete credentials[route]; else credentials[route] = protectKey(key);
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") fs.chmodSync(path.dirname(file), 0o700);
+  const temp = `${file}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(temp, JSON.stringify(credentials), { mode: 0o600 });
+    fs.renameSync(temp, file);
+    fs.chmodSync(file, 0o600);
+  } finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
 }
 export function getProviderSettings(): ProviderSettings {
   const file = providerSettingsPath();
@@ -34,7 +57,8 @@ export function configureProvider(settings: unknown): ProviderSettings {
 }
 export function providerStatus() {
   const settings = getProviderSettings();
-  const ready = settings.provider === "jev" && settings.shareText && Boolean(process.env[settings.keyEnv]);
-  return { ...settings, ready, experimental: true, model: settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null,
+  const credentialConfigured = Boolean(providerKey(settings));
+  const ready = settings.provider === "jev" && settings.shareText && credentialConfigured;
+  return { ...settings, ready, credentialConfigured, model: settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null,
     reason: settings.provider === "openai-decisions" ? "Preview API contract/access unavailable" : ready ? null : "Disabled, text sharing not enabled, or credential environment variable missing" };
 }

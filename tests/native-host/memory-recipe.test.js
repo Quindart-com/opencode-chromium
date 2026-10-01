@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { MemoryStore } from "../../native-host/src/memory/store.js";
 import { chainV2Fingerprint, shortFingerprint } from "../../native-host/src/memory/recipe.js";
+import { candidateRecipes } from "../../native-host/src/memory/recipe-candidates.ts";
 
 function removeRoot(root) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -29,6 +30,21 @@ function openStore() {
 function requestSteps(...steps) {
   return steps;
 }
+
+test("decision recipe candidates are scoped by profile, host, and step count", () => {
+  const { store, root } = openStore();
+  try {
+    for (const [chainId, profileId, hostname] of [["a", "work", "example.com"], ["b", "personal", "other.com"]]) {
+      store.recordStep({ chainId, position: 0, action: "click", hostname, profileId, target: { query: "Open menu" }, success: true });
+      store.finalizeChain({ chainId, success: true, profileId });
+    }
+    const query = { profileId: "work", hostname: "example.com", stepCount: 1 };
+    assert.equal(candidateRecipes(store, query).length, 1);
+    assert.equal(candidateRecipes(store, { ...query, profileId: "personal" }).length, 0);
+    assert.equal(candidateRecipes(store, { ...query, hostname: "other.com" }).length, 0);
+    assert.equal(candidateRecipes(store, { ...query, stepCount: 2 }).length, 0);
+  } finally { store.close(); removeRoot(root); }
+});
 
 // The canonical JSON is hashed, so a reordered field or a changed
 // requiresRuntime* derivation would silently invalidate every fingerprint

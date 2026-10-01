@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { versionNotice } from "../extension-src/version-status.ts";
 import { MemoryStore } from "../native-host/dist/memory/store.js";
+import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js";
+import { decisionUsage } from "../native-host/dist/decisions/usage.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 fs.mkdirSync(path.join(root, "reports"), { recursive: true });
@@ -25,6 +27,8 @@ store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", pro
 store.usageEvent({ eventType: "replay_rejected", reason: "step_count_mismatch", profileId: "primary" });
 const versionStatus = { state: "connected", versionChecked: true, nativeHostVersion: "1.6.5", clientVersions: ["1.6.5"] };
 let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUTER_API_KEY", shareText: true, shareImages: false, ready: true };
+const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
+process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url === "/rpc") {
@@ -39,10 +43,21 @@ const server = http.createServer(async (req, res) => {
         else throw new Error("Unexpected fixture method");
         result = { ok: true, result };
       } else if (message.type === "GET_PROFILE" || message.type === "GET_PROFILE_DETAILS") result = { profile: { profileId: "primary", profileLabel: "Primary" } };
-      else if (message.type === "GET_DECISION_SETTINGS") result = { result: decisionSettings };
+      else if (message.type === "GET_DECISION_SETTINGS") result = { result: { ...decisionSettings, usage: decisionUsage() } };
       else if (message.type === "SET_DECISION_SETTINGS") {
         decisionSettings = { ...message.settings, ready: message.settings.shareText };
         result = { result: decisionSettings };
+      }
+      else if (message.type === "TEST_DECISION_CONNECTION") {
+        const check = await saveAndTestProvider({ settings: message.settings, apiKey: message.apiKey }, async (url, init) => {
+          if (new Headers(init.headers).get("Authorization")?.includes("invalid-key-fixture")) return new Response("rejected", { status: 401 });
+          if (String(url).endsWith("/key")) return new Response("{}");
+          return new Response(JSON.stringify({ model: "typesafe/jev-1.13-20260917", answers: { decision: {
+            type: "choice", choice: "ready", confidence: 0.99, probabilities: { ready: 0.99, __abstain: 0.01 },
+          } }, usage: { input_tokens: 22, output_tokens: 0, cost: 0.000001 } }));
+        });
+        if (check.ok) decisionSettings = check.settings;
+        result = { result: check };
       }
       else if (message.type === "GET_SEMANTIC_SETTINGS") result = { semantic: { settings: { enabled: true, strategyPreference: "auto" }, models: [] } };
       else if (message.type === "SNOOZE_VERSION_NOTICE") {
@@ -64,9 +79,10 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 420, height: 800 } });
+  const page = await browser.newPage({ viewport: { width: 380, height: 800 } });
+  page.setDefaultTimeout(15000);
   const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", (error) => { errors.push(error.message); console.error(error.message); });
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { globalThis.fixtureCopiedText = text; } } });
     globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
@@ -77,7 +93,7 @@ try {
     } };
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
-  await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1");
+  await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
   assert.equal(await page.locator("#memory-replays").textContent(), "0");
   assert.equal(await page.locator("#memory-success").textContent(), "—");
   assert.equal(
@@ -126,19 +142,33 @@ try {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.locator(".provider-settings").screenshot({ path: path.join(root, "reports", "popup-provider-dark.png"), animations: "disabled" });
   await page.screenshot({ path: path.join(root, "reports", "popup-settings-dark.png"), fullPage: true });
-  await page.getByRole("switch", { name: "Share page text" }).uncheck();
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await page.getByText("Changes saved.", { exact: true }).waitFor();
-  assert.equal(decisionSettings.shareText, false, "sharing consent persists through the existing host API");
+  await page.locator("#decision-api-key").fill("invalid-key-fixture");
+  await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
+  await page.getByText("API key rejected. Check the key and selected service.", { exact: false }).waitFor();
+  assert.equal(await page.locator(".provider-feedback-error").count(), 1);
+  await page.locator("#decision-api-key").fill("sk-or-v1-synthetic-popup-fixture");
+  await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
+  await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
+  assert.equal(await page.locator(".provider-feedback-ok").count(), 1);
+  assert.equal(await page.locator("#decision-api-key").inputValue(), "", "clear the key after saving");
+  assert.match(await page.locator(".provider-timing").textContent(), /Key check \d+ ms · Decision \d+ ms/);
+  assert.equal(decisionSettings.shareText, true, "enabling Jev authorizes the documented bounded context");
+  await page.locator(".provider-settings").screenshot({ path: path.join(root, "reports", "popup-provider-success.png"), animations: "disabled" });
   await page.selectOption("#decision-provider", "jev-typesafe");
-  await page.getByText("Connection settings", { exact: true }).click();
+  await page.getByText("Advanced · Environment variable", { exact: true }).click();
   assert.equal(await page.locator("#decision-key-env").inputValue(), "TYPESAFE_API_KEY");
   await page.selectOption("#decision-provider", "off");
-  assert.equal(await page.getByRole("switch", { name: "Share page text" }).count(), 0);
+  assert.equal(await page.locator("#decision-api-key").count(), 0);
   await page.selectOption("#decision-provider", "jev-openrouter");
-  await page.getByText("Connection settings", { exact: true }).click();
+  await page.getByText("Advanced · Environment variable", { exact: true }).click();
   assert.equal(await page.locator("#decision-key-env").inputValue(), "OPENROUTER_API_KEY");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "popup must fit the viewport");
+  await page.setViewportSize({ width: 360, height: 800 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "popup must fit narrow windows");
+  await page.screenshot({ path: path.join(root, "reports", "popup-settings-narrow.png"), fullPage: true, animations: "disabled" });
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await page.getByRole("heading", { name: "Jev usage", exact: true }).waitFor();
+  await page.screenshot({ path: path.join(root, "reports", "popup-overview-dark.png"), fullPage: true, animations: "disabled" });
   versionStatus.nativeHostVersion = "1.8.0";
   versionStatus.clientVersions = ["1.8.0"];
   await page.reload();
@@ -152,6 +182,8 @@ try {
   assert.deepEqual(errors, []);
   console.log("Popup verified: scoped SQLite totals, shared-action deduplication, profile dropdown, preserved edits, collapsed model settings, no page errors.");
 } finally {
+  if (previousProviderDir === undefined) delete process.env.AGENT_BROWSER_PROVIDER_DIR;
+  else process.env.AGENT_BROWSER_PROVIDER_DIR = previousProviderDir;
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));
   for (const item of stores) item.close();
