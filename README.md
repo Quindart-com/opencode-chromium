@@ -52,7 +52,7 @@ Compatible commands remain: `install`, `configure`, and `uninstall --client open
 
 ## Providers and offline use
 
-Cloud decision assistance is disabled by default. Jev can assist finite page-target ranking through TypeSafe directly or OpenRouter. Keys stay in the native host's environment; preferences contain only credential references. The extension settings expose provider selection and explicit text-sharing consent.
+Cloud decisions are off by default. In **Settings → Jev decisions**, select OpenRouter or TypeSafe, paste an API key, and choose **Save & test connection**. A timed key check and one small, billable synthetic decision verify access before saving. Keys stay in private native-host state, never browser storage or tool responses. **Overview → Jev usage** shows calls, response times, reported tokens, and reported cost.
 
 ```sh
 # Set OPENROUTER_API_KEY securely in the native host environment first.
@@ -61,7 +61,7 @@ opencode-chromium providers status
 opencode-chromium providers configure --provider off
 ```
 
-Jev does not receive screenshots. Timeouts, invalid candidates, and abstentions fall back to deterministic results. No automatic provider fallback occurs. OpenAI Decisions API / Luna is shown as unavailable preview support until its official request contract and account access are verified.
+Enabling Jev authorizes bounded search/replay intent and candidate descriptions to the selected service. Jev ranks page targets and selects saved recipes for an explicit `memoryIntent`; exact recipe replay needs no cloud call. Recipe selection stays profile/site scoped and cannot bypass live target checks or approvals. Timeouts and abstentions preserve local fallback. No automatic provider fallback occurs. Screenshots are not sent. OpenAI Decisions API / Luna remains unavailable until its official request contract and account access are verified.
 
 The [provider guide and initial live measurements](docs/DECISION-PROVIDERS.md) report better synthetic synonym matching at higher latency than lexical search. Complete browser-flow speedups are not yet established.
 

@@ -286,7 +286,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
       </> : <div className="card memory-card">
         <div className="memory-head">
           <div>
-            <h2>Overview</h2>
+            <h2>Replay and memory</h2>
             <span className="memory-state-line">Shared action memory · statistics by browser profile.</span>
           </div>
         </div>
@@ -299,12 +299,9 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         </select>
         {scope === "selected" ? <fieldset className="profile-options"><legend>Profiles to include</legend>{profiles?.profiles.map((profile, index) => <label className="checkbox-row" key={profile.profileId}><input type="checkbox" checked={selectedProfiles.includes(profile.profileId)} onChange={(event) => { ++requestId.current; setStatus(null); setSelectedProfiles((previous) => event.target.checked ? [...previous, profile.profileId] : previous.filter((id) => id !== profile.profileId)); }} />{profile.profileLabel || profile.browserName || `Profile ${index + 1}`}{profile.profileId === profiles.currentProfileId ? " (this profile)" : ""}</label>)}</fieldset> : null}
         <p className="help-note">{!status ? "Loading statistics…" : !status.capabilities?.profileStatistics || !profiles ? "This host provides totals for all profiles. Update the native host to filter them." : scope === "current" ? `This profile: ${profiles.profiles.find((item) => item.profileId === profiles.currentProfileId)?.profileLabel || "current browser profile"}` : scope === "selected" ? `${selectedProfiles.length} profiles selected. Shared actions count once.` : scope === "unknown" ? "History saved before profile tracking was added." : "All profiles, including older unassigned activity."}</p>
-        <div className="memory-stats">
-          {stats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id} className={id === "memory-success" ? "memory-success" : undefined}>{status ? value : "—"}</span><span className="stat-label">{label}</span></div>)}
-        </div>
-        <div className="memory-stats memory-stats-secondary">
-          {secondaryStats.map(([id, value, label]) => <div key={id} className="memory-stat"><span id={id}>{status ? value : "—"}</span><span className="stat-label">{label}</span></div>)}
-        </div>
+        <dl className="decision-usage memory-usage">
+          {[...stats, ...secondaryStats].map(([id, value, label]) => <div key={id}><dt>{label}</dt><dd id={id}>{status ? value : "—"}</dd></div>)}
+        </dl>
         <p id="memory-health" className="help-note">{healthLine}</p>
         {replayLine ? <p id="memory-replay-note" className="help-note">{replayLine}</p> : null}
         <div className="memory-actions">
