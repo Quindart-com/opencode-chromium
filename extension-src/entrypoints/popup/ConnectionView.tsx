@@ -370,8 +370,8 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
       </div>
       </> : <>
 
-      <div className="card" aria-labelledby="semantic-title">
-        <h2 id="semantic-title">Page search</h2>
+      <details className="card search-settings" aria-labelledby="semantic-title">
+        <summary><h2 id="semantic-title">Local search and models</h2></summary>
         <div className="semantic-toggle-row">
           <div className="semantic-toggle-copy">
             <span className="semantic-toggle-title">Search by meaning</span>
@@ -462,7 +462,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             </button>
           </div>
         </details>
-      </div>
+      </details>
       </>}
     </section>
   );

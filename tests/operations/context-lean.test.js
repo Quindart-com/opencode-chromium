@@ -4,10 +4,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { createBrowserOperations, pageInspectExpression, pageSearchUnitsExpression, shapePageSearchRanking, visualMapExpression } from "../../src/browser/operations/index.js";
-import { contractMetadata } from "../../src/core/versions.js";
+import { contractMetadata, responseMetadata } from "../../src/core/versions.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const packageVersion = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
+
+test("normal response metadata contains only the useful plugin version", () => {
+  assert.deepEqual(responseMetadata(), { pluginVersion: packageVersion });
+  for (const key of ["protocolVersion", "schemaVersion", "capabilityVersion"]) assert.equal(key in contractMetadata(), false);
+  const old = JSON.stringify({ plugin: "opencode-browser-plugin", pluginVersion: packageVersion, protocolVersion: "1", schemaVersion: "1", capabilityVersion: "1" });
+  assert.ok(old.length - JSON.stringify(responseMetadata()).length > 100);
+});
 
 test("lean inspect omits verbose target html and styles by default", () => {
   const expression = pageInspectExpression({ nodeId: "node-1" });
