@@ -3,7 +3,7 @@ import type { Harness } from "./harnesses.js";
 
 /** The menu owns terminal raw mode only while selection is pending. */
 export async function selectHarnesses(rows: Harness[]): Promise<string[]> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("Noninteractive setup requires --targets codex,opencode,claude-code,claude-desktop");
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("Noninteractive setup requires --targets codex,opencode,claude-code,claude-desktop,dsh");
   const selected = new Set(rows.filter(row => row.managed && row.supported).map(row => row.id));
   let current = 0;
   let rendered = false;
