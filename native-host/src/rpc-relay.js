@@ -78,6 +78,16 @@ export class RpcRelay {
   }
 
   async handleClientMessage(socket, message) {
+    const commands = message?.method === "executeInputGesture" && Array.isArray(message.params?.steps) ? message.params.steps : message?.method === "executeCdp" ? [message.params] : [];
+    const hasFiles = commands.some(command => { const params = command?.commandParams ?? command?.command_params; return (command?.method === "DOM.setFileInputFiles" && params?.files?.length) || (command?.method === "Input.dispatchDragEvent" && params?.data?.files?.length); });
+    if (hasFiles && this.#state.profile?.uploadConsentVersion !== 1) {
+      if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Reload the updated extension to enable upload confirmation; no files were uploaded");
+      return;
+    }
+    if (message?.method?.startsWith("uploads.")) {
+      if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Upload file preparation is restricted to the extension");
+      return;
+    }
     if (typeof message?.clientVersion === "string" && /^\d{1,5}\.\d{1,5}\.\d{1,5}(?:\.\d{1,5})?(?:-[a-zA-Z0-9.-]{1,40})?$/.test(message.clientVersion) && this.#clientVersions.get(socket) !== message.clientVersion) {
       this.#clientVersions.set(socket, message.clientVersion);
       this.#broadcastVersions();

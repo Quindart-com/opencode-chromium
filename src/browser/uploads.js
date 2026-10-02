@@ -30,6 +30,9 @@ function attributesMap(attributes = []) {
 
 function fileUploadError(error) {
   const message = error instanceof Error ? error.message : String(error);
+  if (/Upload refused|File changed|Upload destination changed|Upload approval expired/.test(message)) {
+    return Object.assign(new Error(message), { code: "UPLOAD_NOT_AUTHORIZED", uncertain: false, retryable: false });
+  }
   if (message === "Not allowed" || /not allowed/i.test(message)) {
     return new Error('File upload was blocked by Chrome. In chrome://extensions, open Details for the agent-browser extension and enable "Allow access to file URLs."');
   }
@@ -81,7 +84,7 @@ export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringif
           throw new Error(`File input does not accept multiple files: ${args.selector}`);
         }
         try {
-          await cdp(context, args.tabId, "DOM.setFileInputFiles", { objectId, files: args.files });
+          await cdp(context, args.tabId, "DOM.setFileInputFiles", { objectId, files: args.files }, 120000);
         } catch (error) {
           throw fileUploadError(error);
         }
