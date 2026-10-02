@@ -31,7 +31,15 @@ test("production updates preserve memory, credentials, and usage paths; isolatio
     }
     const custom = { ...variables, OPENCODE_BROWSER_MEMORY_DIR: path.join(dir, "my-memory"), AGENT_BROWSER_PROVIDER_DIR: path.join(dir, "my-credentials") };
     assert.deepEqual(run({ channel: "production", stateIsolation: true }, custom), { memory: custom.OPENCODE_BROWSER_MEMORY_DIR, provider: custom.AGENT_BROWSER_PROVIDER_DIR });
-    assert.deepEqual(run({ channel: "development", stateIsolation: true }), { memory: path.join(dir, "state/development/memory"), provider: path.join(dir, "state/development/providers") });
+    for (const folder of ["memory", "providers"]) {
+      const target = path.join(dir, "state/development", folder); fs.mkdirSync(target, { recursive: true });
+      fs.writeFileSync(path.join(target, "identity"), folder);
+    }
+    const isolated = run({ channel: "development", stateIsolation: true });
+    // Windows short paths and macOS /var aliases may have different spelling.
+    // Verify that each launcher path addresses the intended storage directory.
+    assert.equal(fs.readFileSync(path.join(isolated.memory, "identity"), "utf8"), "memory");
+    assert.equal(fs.readFileSync(path.join(isolated.provider, "identity"), "utf8"), "providers");
   } finally { removeDir(dir); }
 });
 
