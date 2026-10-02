@@ -164,6 +164,10 @@ function isDebuggerDetachedError(error) {
 async function executeCdpRequest(context, tabId, method, commandParams = {}, timeoutMs, profileId = null) {
   const resolvedProfileId = profileId ?? await resolveSessionProfileId(context);
   markProfileUsed(context, resolvedProfileId);
+  if ((method === "DOM.setFileInputFiles" && commandParams.files?.length) || (method === "Input.dispatchDragEvent" && commandParams.data?.files?.length)) {
+    const policy = await extensionRequest(context, "uploadPolicy", { profile_id: resolvedProfileId }).catch(() => null);
+    if (policy?.version !== 1) throw new Error("Reload the updated browser extension to enable upload confirmation; no files were uploaded");
+  }
   return browserRequest(
     "executeCdp",
     sessionParams(context, {

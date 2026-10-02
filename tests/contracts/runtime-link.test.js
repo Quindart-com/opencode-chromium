@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { buildStatus, sourceFingerprint } from "../../src/cli/source-fingerprint.js";
 import { LAUNCHER_FINGERPRINT_SOURCE, launcherSource, linkTargets, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.js";
 import { BROWSERS, browserIds, executableCandidates, installedBrowsers, windowsRegistryKey } from "../../src/cli/browsers.js";
@@ -12,6 +13,27 @@ import { HOST_NAME, readRegistration, resolveExtensionIds } from "../../src/cli/
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
+
+test("production updates preserve memory, credentials, and usage paths; isolation is explicit and honors overrides", () => {
+  const dir = tempDir("runtime-state-continuity-");
+  try {
+    const root = path.join(dir, "package"); fs.mkdirSync(path.join(root, "native-host/dist"), { recursive: true });
+    fs.writeFileSync(path.join(root, "package.json"), '{"type":"module"}');
+    fs.writeFileSync(path.join(root, "native-host/dist/runtime.js"), 'console.log(JSON.stringify({memory:process.env.OPENCODE_BROWSER_MEMORY_DIR??null,provider:process.env.AGENT_BROWSER_PROVIDER_DIR??null}))');
+    fs.writeFileSync(path.join(dir, "host.mjs"), launcherSource("host"));
+    const variables = { ...process.env }; delete variables.OPENCODE_BROWSER_MEMORY_DIR; delete variables.AGENT_BROWSER_PROVIDER_DIR;
+    const run = (activation, env = variables) => {
+      fs.writeFileSync(path.join(dir, "runtime.json"), JSON.stringify({ root, ...activation }));
+      return JSON.parse(execFileSync(process.execPath, [path.join(dir, "host.mjs")], { env, encoding: "utf8" }));
+    };
+    for (const activation of [{ version: "1.8.1" }, { version: "1.8.2", channel: "production" }, { version: "1.8.3", channel: "development" }]) {
+      assert.deepEqual(run(activation), { memory: null, provider: null }, "release channels must keep the established platform defaults");
+    }
+    const custom = { ...variables, OPENCODE_BROWSER_MEMORY_DIR: path.join(dir, "my-memory"), AGENT_BROWSER_PROVIDER_DIR: path.join(dir, "my-credentials") };
+    assert.deepEqual(run({ channel: "production", stateIsolation: true }, custom), { memory: custom.OPENCODE_BROWSER_MEMORY_DIR, provider: custom.AGENT_BROWSER_PROVIDER_DIR });
+    assert.deepEqual(run({ channel: "development", stateIsolation: true }), { memory: path.join(dir, "state/development/memory"), provider: path.join(dir, "state/development/providers") });
+  } finally { removeDir(dir); }
+});
 
 function removeDir(target) {
   try {
