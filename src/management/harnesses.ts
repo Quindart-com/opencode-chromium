@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { type HarnessId, planConfiguration } from "./configuration.js";
 import type { FileChange } from "./transaction.js";
+import { deepSeekManaged } from "./deepseek.js";
 
 export interface Harness {
   id: HarnessId;
@@ -28,9 +29,8 @@ function executable(name: string): string | null {
 function version(binary: string | null): string | null {
   if (!binary) return null;
   if (/\.(cmd|ps1)$/.test(binary)) {
-    const packages = ["opencode-ai", "@openai/codex", "@anthropic-ai/claude-code"];
     const command = path.basename(binary).replace(/\.(cmd|ps1)$/, "");
-    const packageName = packages.find(name => command === "opencode" ? name === "opencode-ai" : command === "codex" ? name === "@openai/codex" : name === "@anthropic-ai/claude-code");
+    const packageName = ({ opencode: "opencode-ai", codex: "@openai/codex", claude: "@anthropic-ai/claude-code", dsh: "@deepseek-ai/dsh" } as Record<string, string>)[command];
     if (packageName) {
       try { return JSON.parse(fs.readFileSync(path.join(path.dirname(binary), "node_modules", packageName, "package.json"), "utf8")).version as string; } catch { return null; }
     }
@@ -45,6 +45,7 @@ export function detectHarnesses(home = os.homedir()): Harness[] {
   const specs: Array<[HarnessId, string, string, string, boolean]> = [
     ["codex", "Codex CLI / Desktop", "codex", path.join(process.env.CODEX_HOME ?? path.join(home, ".codex"), "config.toml"), true],
     ["opencode", "OpenCode", "opencode", path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "opencode", "opencode.json"), true],
+    ["dsh", "DeepSeek Harness", "dsh", path.join(process.env.DSH_HOME ?? path.join(home, ".dsh"), "profiles", "web", "cordis.patch.yml"), true],
     ["claude-code", "Claude Code", "claude", path.join(process.env.CLAUDE_CONFIG_DIR ?? home, ".claude.json"), true],
     ["claude-desktop", "Claude Desktop", "", path.join(desktop, "claude_desktop_config.json"), platform !== "linux"],
   ];
@@ -55,7 +56,7 @@ export function detectHarnesses(home = os.homedir()): Harness[] {
     const guiPath = id === "claude-desktop" ? platform === "darwin" ? "/Applications/Claude.app" : path.join(process.env.LOCALAPPDATA ?? "", "AnthropicClaude") : id === "codex" ? platform === "darwin" ? "/Applications/Codex.app" : path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Codex") : "";
     return { id, label, configPath: filePath, supported, detected: Boolean(binary || config || guiPath && fs.existsSync(guiPath)),
       version: version(binary), executable: binary, restart: id === "claude-desktop" ? "desktop" : "terminal",
-      managed: config && fs.readFileSync(filePath, "utf8").includes("opencode-browser-plugin") };
+      managed: config && (id === "dsh" ? deepSeekManaged(fs.readFileSync(filePath, "utf8")) : fs.readFileSync(filePath, "utf8").includes("opencode-browser-plugin")) };
   });
 }
 export function planHarness(harness: Harness, runtimeDir: string, action: "install" | "uninstall" = "install"): FileChange {
