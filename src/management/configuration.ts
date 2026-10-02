@@ -3,9 +3,10 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
+import { planDeepSeek } from "./deepseek.js";
 
 export const SERVER_ID = "opencode-browser-plugin";
-export type HarnessId = "codex" | "opencode" | "opencode-mcp" | "claude-code" | "claude-desktop";
+export type HarnessId = "codex" | "opencode" | "opencode-mcp" | "claude-code" | "claude-desktop" | "dsh";
 export interface ConfigOptions {
   client: HarnessId;
   serverPath: string;
@@ -64,6 +65,7 @@ function codexConfig(before: string, options: ConfigOptions): string {
 
 /** Pure, validated planning. JSONC edits preserve unrelated bytes and comments. */
 export function planConfiguration(before: string, options: ConfigOptions): string {
+  if (options.client === "dsh") return planDeepSeek(before, options.serverPath, options.interpreter ?? process.execPath, options.action === "uninstall");
   if (options.client === "codex") return codexConfig(before, options);
   const config = jsonConfig(before);
   let after = before;
