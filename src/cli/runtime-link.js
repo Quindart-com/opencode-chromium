@@ -49,9 +49,10 @@ function launcherHeader() {
     "const dir = path.dirname(fileURLToPath(import.meta.url));",
     `const activation = JSON.parse(fs.readFileSync(path.join(dir, ${JSON.stringify(RUNTIME_MANIFEST)}), "utf8"));`,
     "const root = activation.root;",
-    "if ([\"development\", \"production\"].includes(activation.channel)) {",
+    "// Releases share the user's existing data. Isolation is an explicit developer opt-in.",
+    "if (activation.stateIsolation === true && [\"development\", \"production\"].includes(activation.channel)) {",
     "  const state = path.join(dir, \"state\", activation.channel);",
-    "  for (const [variable, folder] of Object.entries({ OPENCODE_BROWSER_MEMORY_DIR: \"memory\", AGENT_BROWSER_SEMANTIC_DIR: \"semantic\", AGENT_BROWSER_VISUAL_DIR: \"visual\", AGENT_BROWSER_PROVIDER_DIR: \"providers\", AGENT_BROWSER_ARTIFACT_DIR: \"artifacts\", AGENT_BROWSER_PROFILE_REGISTRY_DIR: \"profiles\" })) process.env[variable] = path.join(state, folder);",
+    "  for (const [variable, folder] of Object.entries({ OPENCODE_BROWSER_MEMORY_DIR: \"memory\", AGENT_BROWSER_SEMANTIC_DIR: \"semantic\", AGENT_BROWSER_VISUAL_DIR: \"visual\", AGENT_BROWSER_PROVIDER_DIR: \"providers\", AGENT_BROWSER_ARTIFACT_DIR: \"artifacts\", AGENT_BROWSER_PROFILE_REGISTRY_DIR: \"profiles\" })) process.env[variable] ??= path.join(state, folder);",
     "}",
   ];
 }

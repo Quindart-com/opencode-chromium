@@ -86,7 +86,13 @@ Branch following maps clean `master` to production and other branches to develop
 
 Load the returned stable developer-extension path once. Successful activation publishes the selected extension there and reports pending reload: reload it through the browser's extensions page and reconnect tools. Automatic developer-control reload and protocol-handshake checks are still being completed. Store-installed extensions use the browser's normal update mechanism.
 
-Channel launchers isolate memory, provider settings, model caches, artifacts, and profile registries. Git hooks never terminate native hosts or silently restart desktop applications. Existing direct links retain their compatible behavior; run branch following explicitly to opt into full-stack snapshots.
+Updates and channel switches retain the established memory, provider settings, credentials, usage history, and model-cache paths. Explicit environment path overrides remain authoritative. Developers who need isolated state can opt in with `stateIsolation: true` in the runtime manifest; selecting a production build alone never changes the data namespace. Git hooks never terminate native hosts or silently restart desktop applications.
+
+## File upload consent
+
+**Settings → File uploads → Allow uploads without confirmation** is unchecked by default and stored in the browser profile. Each upload opens an extension-owned request showing the destination, file names, sizes, optional bounded raster previews, and file locations. Choose **Allow upload** to send those files; **Cancel upload**, closing the window, or a one-minute timeout sends nothing. An agent's tool approval token cannot authorize this user decision.
+
+Enabling the setting lets agents send any accessible local files to websites without a per-upload user prompt; file access restrictions still apply. Both file-input uploads and file drags pass through the extension consent gate, including direct CDP calls. Changed files or destinations require a new request. Approved bytes are copied into private temporary snapshots so later form submission reads the approved content. Copies are removed when the page closes or navigates, the native host exits, or after 24 hours. Batches allow up to 20 files, 256 MiB per file and 512 MiB total. Agents cannot control the confirmation window. Agent-controlled tabs intercept native file choosers so automation does not open Explorer, Finder, or a Linux file picker; detaching restores ordinary browser behavior. Older extensions must be reloaded before the updated runtime allows uploads.
 
 ## Browser behavior and documentation
 

@@ -1,4 +1,7 @@
 import { resolveTabActivation } from "./focus-policy.js";
+import { createUploadConsent } from "./upload-consent.js";
+import { createDebuggerAttacher } from "./debugger-attach.js";
+import { guardedCdp, uploadTargetUrl } from "./upload-gate.js";
 import { validVersion, versionNotice } from "../../version-status.ts";
 
 const HOST_NAME = "com.opencode.browser.plugin";
@@ -213,6 +216,11 @@ class NativeRpc {
 }
 
 const rpc = new NativeRpc();
+const uploadConsent = createUploadConsent({ chrome,
+  describe: files => rpc.request("uploads.describe", { files }, { timeoutMs: 60000 }),
+  snapshot: token => rpc.request("uploads.snapshot", { token }, { timeoutMs: 60000 }),
+  release: token => rpc.request("uploads.release", { token }),
+});
 
 function nowIso() {
   return new Date().toISOString();
@@ -303,7 +311,7 @@ function sanitizeSemanticForPopup(semantic) {
 
 async function announceProfile() {
   const generation = ++versionCheckGeneration;
-  const result = await rpc.request("profile.hello", await profileMetadata()).catch(() => null);
+  const result = await rpc.request("profile.hello", { ...await profileMetadata(), uploadConsentVersion: 1 }).catch(() => null);
   const reminder = (await storageGet(VERSION_REMINDER_KEY).catch(() => ({})))[VERSION_REMINDER_KEY] ?? null;
   if (generation !== versionCheckGeneration || hostStatus.state !== "connected") return;
   hostStatus.versionReminder = reminder;
@@ -773,21 +781,7 @@ async function withTabLock(tabId, operation) {
   }
 }
 
-async function attachTab(tabId, sessionId) {
-  return withTabLock(tabId, async () => {
-    if (attachedTabs.has(tabId)) return {};
-    try {
-      await chromeCall((done) => chrome.debugger.attach({ tabId }, DEBUGGER_VERSION, done));
-    } catch (error) {
-      if (/another debugger/i.test(errorMessage(error))) {
-        throw new Error(`Cannot attach debugger to tab ${tabId}: another debugger is already attached`);
-      }
-      throw error;
-    }
-    attachedTabs.set(tabId, sessionId);
-    return {};
-  });
-}
+const attachTab = createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS });
 
 async function detachTab(tabId) {
   return withTabLock(tabId, async () => {
@@ -842,12 +836,11 @@ async function executeCdp(params) {
   ensureControlledTab(params, tabId);
   if (!attachedTabs.has(tabId)) throw new Error("Debugger unattached");
 
-  return withTabLock(tabId, () => sendCdpCommand(
-    tabId,
-    method,
-    params.commandParams ?? params.command_params ?? {},
-    commandTimeoutMs(params),
-  ));
+  return withTabLock(tabId, () => guardedCdp({ method, tabId, consent: uploadConsent, getTab,
+    inspectTarget: (method, command) => uploadTargetUrl(method, command, (method, command) => sendCdpCommand(tabId, method, command, DEFAULT_CDP_TIMEOUT_MS)),
+    commandParams: params.commandParams ?? params.command_params ?? {},
+    send: command => sendCdpCommand(tabId, method, command, commandTimeoutMs(params)),
+  }));
 }
 
 async function executeInputGesture(params) {
@@ -907,12 +900,12 @@ async function executeInputGesture(params) {
       }
 
       if (typeof step.method === "string" && step.method.length > 0) {
-        results.push(await sendCdpCommand(
-          tabId,
-          step.method,
-          step.commandParams ?? step.command_params ?? {},
-          Number.isFinite(step.timeoutMs) && step.timeoutMs > 0 ? step.timeoutMs : methodTimeoutMs,
-        ));
+        results.push(await guardedCdp({ method: step.method, tabId, consent: uploadConsent, getTab,
+          inspectTarget: (method, command) => uploadTargetUrl(method, command, (method, command) => sendCdpCommand(tabId, method, command, DEFAULT_CDP_TIMEOUT_MS)),
+          commandParams: step.commandParams ?? step.command_params ?? {},
+          send: command => sendCdpCommand(tabId, step.method, command,
+            Number.isFinite(step.timeoutMs) && step.timeoutMs > 0 ? step.timeoutMs : methodTimeoutMs),
+        }));
       }
 
       const delayMs = Number(step.delayMs ?? step.delay_ms ?? 0);
@@ -1066,6 +1059,7 @@ rpc.register("attach", async (params) => {
 rpc.register("detach", async (params) => detachTab(tabIdFromParams(params)));
 
 rpc.register("executeCdp", executeCdp);
+rpc.register("uploadPolicy", async () => ({ version: 1 }));
 
 rpc.register("inputGesture", executeInputGesture);
 
@@ -1430,6 +1424,10 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (["GET_UPLOAD_SETTINGS", "SET_UPLOAD_SETTINGS", "GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST"].includes(message?.type)) {
+    uploadConsent.message(message, sender).then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
   if (message?.type === "SNOOZE_VERSION_NOTICE") {
     const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
     if (!notice) { sendResponse({ ok: true }); return false; }
