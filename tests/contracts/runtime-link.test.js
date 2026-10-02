@@ -15,7 +15,7 @@ function tempDir(prefix) {
 }
 
 test("production updates preserve memory, credentials, and usage paths; isolation is explicit and honors overrides", () => {
-  const dir = tempDir("runtime-state-continuity-");
+  const dir = fs.realpathSync(tempDir("runtime-state-continuity-"));
   try {
     const root = path.join(dir, "package"); fs.mkdirSync(path.join(root, "native-host/dist"), { recursive: true });
     fs.writeFileSync(path.join(root, "package.json"), '{"type":"module"}');
