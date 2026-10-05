@@ -98,6 +98,9 @@ Enabling the setting lets agents send any accessible local files to websites wit
 
 Browser actions operate in background tabs. Sessions support explicit profile selection, tab ownership, approvals, bounded read retries, mutation uncertainty, screenshot delivery, and artifact-backed evidence. The harness supplies the action sequence. Providers cannot supply executable code or bypass approvals.
 
+Controlled tabs show an agent cursor: it glides to the element an action is about to use, animates what that action is, and carries a small pill with the session's name. Each session gets its own colour, so concurrent agents are distinguishable. The design is ported from the MIT-licensed [Cua Driver](https://github.com/trycua/cua) cursor overlay.
+
+- [Agent cursor overlay](docs/agent-cursor.md)
 - [Action memory](docs/action-memory.md)
 - [Privacy](docs/PRIVACY.md)
 - [Security policy](SECURITY.md)
