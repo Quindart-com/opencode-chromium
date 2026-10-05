@@ -10,7 +10,7 @@ import { createCapabilityRegistry } from "./capabilities.js";
 import { responseMetadata as contractMetadata } from "./versions.js";
 import { createLogger } from "./logging.js";
 import { selectProfile as selectConnectedProfile } from "./profiles.js";
-import { errorDetails } from "./failure-context.js";
+import { errorDetails, shouldReobservePage } from "./failure-context.js";
 
 const APPROVAL_TTL_MS = 5 * 60 * 1000;
 const RISK_WORDS = /\b(delete|remove|send|submit|publish|post|buy|purchase|pay|checkout|confirm|approve|permission|save|sign[ -]?in|log[ -]?in)\b/i;
@@ -1146,9 +1146,8 @@ export class AgentBrowserRuntime {
             const detail = outcome.error;
             let observation;
             // Re-reading the page is only worth its bytes when the action may have
-            // had an effect and the outcome is genuinely unknown. A rejected step
-            // that never ran gets nothing.
-            const mayHaveActed = detail.uncertain === true && !READ_ACTIONS.has(step.action) && Boolean(step.target);
+            // had an effect and the outcome is genuinely unknown.
+            const mayHaveActed = shouldReobservePage({ uncertain: detail.uncertain, readOnly: READ_ACTIONS.has(step.action), hasTarget: Boolean(step.target) });
             if (mayHaveActed && session.activeTabId) {
               observation = await this.observeValue({ mode: "inspect", target: step.target, detail: "lean", limit: 5 }, tabId, session).catch(() => undefined);
             }
