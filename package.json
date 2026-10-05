@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "Provider-neutral Chromium browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -131,8 +131,12 @@
     "sync": "bun src/cli/index.js sync",
     "verify": "bun src/cli/index.js verify",
     "verify:popup": "node scripts/verify-popup.js",
+    "verify:uploads": "node scripts/verify-uploads.js",
+    "verify:cursor": "node scripts/verify-cursor.js",
     "lint": "eslint src/management src/cli/providers.ts native-host/src/decisions extension-src/entrypoints/popup/ProviderSettings.tsx",
-    "check:unused": "knip --no-progress --include files,dependencies"
+    "check:unused": "knip --no-progress --include files,dependencies",
+    "benchmark:decisions": "bun scripts/benchmark-decision-pipeline.ts",
+    "benchmark:flow": "bun scripts/benchmark-agent-flow.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -145,7 +149,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "smol-toml": "^1.9.0",
-    "zod": "4.2.0"
+    "zod": "4.2.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -160,7 +165,6 @@
     "typescript": "5.9.3",
     "typescript-eslint": "^8.71.0",
     "wxt": "0.21.4",
-    "yaml": "^2.9.0",
     "yazl": "3.1.0"
   },
   "overrides": {

@@ -24,6 +24,7 @@ opencode-chromium status --json
 | Claude Code | MCP | Windows, macOS, Linux |
 | Claude Desktop | MCP | Windows, macOS |
 | OpenCode | Native adapter by default; version-aware configuration | Windows, macOS, Linux |
+| DeepSeek Harness (`dsh`) | MCP client in a Cordis profile patch | Windows, macOS, Linux |
 | Other MCP clients | Standard stdio server | Client-dependent |
 
 These are configuration targets, not a claim that every installed client version has passed live testing. OpenCode uses `plugin` for the detected 1.x contract and `plugins` for 2.x. Native and MCP browser registrations are mutually exclusive in the managed OpenCode configuration. Missing clients remain visible; unsupported platform combinations show their limitation.
@@ -35,6 +36,8 @@ opencode-chromium manage
 opencode-chromium setup --targets codex,opencode --dry-run --json
 opencode-chromium setup --targets claude-code --config claude-code=/absolute/config/path --json
 opencode-chromium update --targets codex,opencode --json
+opencode-chromium update --targets dsh --json
+opencode-chromium setup --targets dsh --config dsh=/absolute/dsh/profiles/headless/cordis.patch.yml --json
 opencode-chromium uninstall --targets codex --json
 ```
 
@@ -48,7 +51,9 @@ Recognized native plugin duplicates and managed native/MCP overlaps are repaired
 
 After setup, the CLI offers graceful restart for supported running desktop applications. Use `--restart` for an explicit noninteractive request. Declining leaves a pending reload. Terminal sessions receive reconnect/relaunch instructions. Setup never force-kills applications. Uninstall removes selected client registrations and known skill files; shared runtime data and caches are retained.
 
-Compatible commands remain: `install`, `configure`, and `uninstall --client opencode|opencode-mcp|codex|claude-code|claude-desktop|skills`. Other MCP clients can run `opencode-chromium-mcp` as a stdio server. HTTP transport is documented in [the MCP guide](docs/mcp.md).
+DeepSeek discovery respects `DSH_HOME` and defaults to the `web` profile's `cordis.patch.yml`. Initialize the profile with `dsh web` first; use `--config dsh=...` for another initialized profile. Setup preserves unrelated YAML rows, comments, expressions, server names, and custom timeouts. It updates the legacy `mcp-browser` row or inserts the official MCP client when no browser row exists. Uninstall removes an inserted client or disables a bundle-owned client so the earlier layer cannot reactivate it. Reconnect MCP or relaunch the profile to load updated tools. This follows the [official profile composition contract](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/reference/README.md).
+
+Compatible commands remain: `install`, `configure`, and `uninstall --client opencode|opencode-mcp|codex|claude-code|claude-desktop|dsh|skills`. Other MCP clients can run `opencode-chromium-mcp` as a stdio server. HTTP transport is documented in [the MCP guide](docs/mcp.md).
 
 ## Providers and offline use
 
@@ -81,11 +86,19 @@ Branch following maps clean `master` to production and other branches to develop
 
 Load the returned stable developer-extension path once. Successful activation publishes the selected extension there and reports pending reload: reload it through the browser's extensions page and reconnect tools. Automatic developer-control reload and protocol-handshake checks are still being completed. Store-installed extensions use the browser's normal update mechanism.
 
-Channel launchers isolate memory, provider settings, model caches, artifacts, and profile registries. Git hooks never terminate native hosts or silently restart desktop applications. Existing direct links retain their compatible behavior; run branch following explicitly to opt into full-stack snapshots.
+Updates and channel switches retain the established memory, provider settings, credentials, usage history, and model-cache paths. Explicit environment path overrides remain authoritative. Developers who need isolated state can opt in with `stateIsolation: true` in the runtime manifest; selecting a production build alone never changes the data namespace. Git hooks never terminate native hosts or silently restart desktop applications.
+
+## File upload consent
+
+**Settings → File uploads → Allow uploads without confirmation** is unchecked by default and stored in the browser profile. Each upload opens an extension-owned request showing the destination, file names, sizes, optional bounded raster previews, and file locations. Choose **Allow upload** to send those files; **Cancel upload**, closing the window, or a one-minute timeout sends nothing. An agent's tool approval token cannot authorize this user decision.
+
+Enabling the setting lets agents send any accessible local files to websites without a per-upload user prompt; file access restrictions still apply. Both file-input uploads and file drags pass through the extension consent gate, including direct CDP calls. Changed files or destinations require a new request. Approved bytes are copied into private temporary snapshots so later form submission reads the approved content. Copies are removed when the page closes or navigates, the native host exits, or after 24 hours. Batches allow up to 20 files, 256 MiB per file and 512 MiB total. Agents cannot control the confirmation window. Agent-controlled tabs intercept native file choosers so automation does not open Explorer, Finder, or a Linux file picker; detaching restores ordinary browser behavior. Older extensions must be reloaded before the updated runtime allows uploads.
 
 ## Browser behavior and documentation
 
 Browser actions operate in background tabs. Sessions support explicit profile selection, tab ownership, approvals, bounded read retries, mutation uncertainty, screenshot delivery, and artifact-backed evidence. The harness supplies the action sequence. Providers cannot supply executable code or bypass approvals.
+
+Controlled tabs show an agent cursor: it glides to the element an action is about to use, animates what that action is, and carries a small pill with the session's name. Each session gets its own colour, so concurrent agents are distinguishable. It animates only while its tab is on screen and its window is focused; background work places it without spending animation frames. The design is ported from the MIT-licensed [Cua Driver](https://github.com/trycua/cua) cursor overlay, with attribution in the source.
 
 - [Action memory](docs/action-memory.md)
 - [Privacy](docs/PRIVACY.md)

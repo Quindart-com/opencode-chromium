@@ -1,4 +1,8 @@
 import { resolveTabActivation } from "./focus-policy.js";
+import { createUploadConsent } from "./upload-consent.js";
+import { createDebuggerAttacher } from "./debugger-attach.js";
+import { guardedCdp, uploadTargetUrl } from "./upload-gate.js";
+import { CURSOR_SCRIPTS, cursorIdFromParams, cursorState, gestureAction } from "./cursor-state.js";
 import { validVersion, versionNotice } from "../../version-status.ts";
 
 const HOST_NAME = "com.opencode.browser.plugin";
@@ -213,6 +217,11 @@ class NativeRpc {
 }
 
 const rpc = new NativeRpc();
+const uploadConsent = createUploadConsent({ chrome,
+  describe: files => rpc.request("uploads.describe", { files }, { timeoutMs: 60000 }),
+  snapshot: token => rpc.request("uploads.snapshot", { token }, { timeoutMs: 60000 }),
+  release: token => rpc.request("uploads.release", { token }),
+});
 
 function nowIso() {
   return new Date().toISOString();
@@ -303,7 +312,7 @@ function sanitizeSemanticForPopup(semantic) {
 
 async function announceProfile() {
   const generation = ++versionCheckGeneration;
-  const result = await rpc.request("profile.hello", await profileMetadata()).catch(() => null);
+  const result = await rpc.request("profile.hello", { ...await profileMetadata(), uploadConsentVersion: 1 }).catch(() => null);
   const reminder = (await storageGet(VERSION_REMINDER_KEY).catch(() => ({})))[VERSION_REMINDER_KEY] ?? null;
   if (generation !== versionCheckGeneration || hostStatus.state !== "connected") return;
   hostStatus.versionReminder = reminder;
@@ -396,11 +405,6 @@ function tabIdFromParams(params) {
   const tabId = params.tabId ?? params.tab_id ?? params.target?.tabId;
   if (!Number.isInteger(tabId)) throw new Error("Expected numeric tabId");
   return tabId;
-}
-
-function cursorIdFromParams(params) {
-  const id = params.cursorId ?? params.cursor_id ?? params.session_id ?? params.sessionId;
-  return typeof id === "string" && id.length > 0 ? id : "default";
 }
 
 function cursorStatesForTab(tabId) {
@@ -660,7 +664,7 @@ async function injectCursor(tabId, options = {}) {
   try {
     await chromeCall((done) => {
       chrome.scripting.executeScript(
-        { target: { tabId }, files: ["content-scripts/cursor.js"], injectImmediately: true },
+        { target: { tabId }, files: CURSOR_SCRIPTS, injectImmediately: true },
         done,
       );
     });
@@ -716,23 +720,22 @@ async function publishCursorState(tabId, state) {
 
 async function moveMouse(params) {
   const tabId = tabIdFromParams(params);
-  ensureControlledTab(params, tabId);
+  const { session } = ensureControlledTab(params, tabId);
 
   const cursorId = cursorIdFromParams(params);
   const previous = cursorStateByTabId.get(tabId)?.get(cursorId);
   const moveSequence = Number.isInteger(params.moveSequence)
     ? params.moveSequence
     : (previous?.moveSequence ?? 0) + 1;
-  const x = finiteNumber(params.x, "x");
-  const y = finiteNumber(params.y, "y");
-  const state = {
-    x,
-    y,
+  const state = cursorState({
+    cursorId,
+    session,
+    x: finiteNumber(params.x, "x"),
+    y: finiteNumber(params.y, "y"),
     visible: params.visible !== false,
     moveSequence,
-    cursorId,
-    imageUrl: chrome.runtime.getURL("images/cursor-chat.png"),
-  };
+    action: typeof params.action === "string" ? params.action : null,
+  });
 
   const arrival = params.waitForArrival
     ? waitForCursorArrival(tabId, cursorId, moveSequence, params.timeoutMs ?? 2000)
@@ -773,21 +776,7 @@ async function withTabLock(tabId, operation) {
   }
 }
 
-async function attachTab(tabId, sessionId) {
-  return withTabLock(tabId, async () => {
-    if (attachedTabs.has(tabId)) return {};
-    try {
-      await chromeCall((done) => chrome.debugger.attach({ tabId }, DEBUGGER_VERSION, done));
-    } catch (error) {
-      if (/another debugger/i.test(errorMessage(error))) {
-        throw new Error(`Cannot attach debugger to tab ${tabId}: another debugger is already attached`);
-      }
-      throw error;
-    }
-    attachedTabs.set(tabId, sessionId);
-    return {};
-  });
-}
+const attachTab = createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS });
 
 async function detachTab(tabId) {
   return withTabLock(tabId, async () => {
@@ -842,18 +831,17 @@ async function executeCdp(params) {
   ensureControlledTab(params, tabId);
   if (!attachedTabs.has(tabId)) throw new Error("Debugger unattached");
 
-  return withTabLock(tabId, () => sendCdpCommand(
-    tabId,
-    method,
-    params.commandParams ?? params.command_params ?? {},
-    commandTimeoutMs(params),
-  ));
+  return withTabLock(tabId, () => guardedCdp({ method, tabId, consent: uploadConsent, getTab,
+    inspectTarget: (method, command) => uploadTargetUrl(method, command, (method, command) => sendCdpCommand(tabId, method, command, DEFAULT_CDP_TIMEOUT_MS)),
+    commandParams: params.commandParams ?? params.command_params ?? {},
+    send: command => sendCdpCommand(tabId, method, command, commandTimeoutMs(params)),
+  }));
 }
 
 async function executeInputGesture(params) {
   const tabId = tabIdFromParams(params);
   const methodTimeoutMs = commandTimeoutMs(params);
-  const { sessionId } = ensureControlledTab(params, tabId);
+  const { sessionId, session } = ensureControlledTab(params, tabId);
   const cursorId = cursorIdFromParams(params);
   const steps = Array.isArray(params.steps) ? params.steps : [];
   if (!steps.length) throw new Error("inputGesture requires at least one step");
@@ -879,40 +867,36 @@ async function executeInputGesture(params) {
     const hasCursorSteps = steps.some((s) => s.cursor && Number.isFinite(s.cursor.x) && Number.isFinite(s.cursor.y));
     const cursorPublishInterval = hasCursorSteps && steps.length > 20 ? Math.max(1, Math.floor(steps.length / 20)) : 1;
     let stepIndex = 0;
+    let pointerDown = false;
 
     for (const step of steps) {
       stepIndex += 1;
       const isLast = stepIndex === steps.length;
+      const commandParams = step.commandParams ?? step.command_params ?? {};
+      const action = gestureAction(step, pointerDown);
       if (step.cursor && Number.isFinite(step.cursor.x) && Number.isFinite(step.cursor.y)) {
         moveSequence += 1;
-        if (isLast || stepIndex % cursorPublishInterval === 1) {
-          await publishCursorState(tabId, {
-            x: Number(step.cursor.x),
-            y: Number(step.cursor.y),
-            visible: step.cursor.visible !== false,
-            moveSequence,
-            cursorId,
-            imageUrl: chrome.runtime.getURL("images/cursor-chat.png"),
-          });
-        } else {
-          cursorStatesForTab(tabId).set(cursorId, {
-            x: Number(step.cursor.x),
-            y: Number(step.cursor.y),
-            visible: step.cursor.visible !== false,
-            moveSequence,
-            cursorId,
-            imageUrl: chrome.runtime.getURL("images/cursor-chat.png"),
-          });
-        }
+        const patch = cursorState({
+          cursorId,
+          session,
+          x: step.cursor.x,
+          y: step.cursor.y,
+          visible: step.cursor.visible !== false,
+          moveSequence,
+          action,
+        });
+        if (isLast || stepIndex % cursorPublishInterval === 1) await publishCursorState(tabId, patch);
+        else cursorStatesForTab(tabId).set(cursorId, patch);
       }
+      if (step.method === "Input.dispatchMouseEvent") pointerDown = commandParams.type !== "mouseReleased" && Number(commandParams.buttons) > 0;
 
       if (typeof step.method === "string" && step.method.length > 0) {
-        results.push(await sendCdpCommand(
-          tabId,
-          step.method,
-          step.commandParams ?? step.command_params ?? {},
-          Number.isFinite(step.timeoutMs) && step.timeoutMs > 0 ? step.timeoutMs : methodTimeoutMs,
-        ));
+        results.push(await guardedCdp({ method: step.method, tabId, consent: uploadConsent, getTab,
+          inspectTarget: (method, command) => uploadTargetUrl(method, command, (method, command) => sendCdpCommand(tabId, method, command, DEFAULT_CDP_TIMEOUT_MS)),
+          commandParams,
+          send: command => sendCdpCommand(tabId, step.method, command,
+            Number.isFinite(step.timeoutMs) && step.timeoutMs > 0 ? step.timeoutMs : methodTimeoutMs),
+        }));
       }
 
       const delayMs = Number(step.delayMs ?? step.delay_ms ?? 0);
@@ -1066,6 +1050,7 @@ rpc.register("attach", async (params) => {
 rpc.register("detach", async (params) => detachTab(tabIdFromParams(params)));
 
 rpc.register("executeCdp", executeCdp);
+rpc.register("uploadPolicy", async () => ({ version: 1 }));
 
 rpc.register("inputGesture", executeInputGesture);
 
@@ -1430,6 +1415,10 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (["GET_UPLOAD_SETTINGS", "SET_UPLOAD_SETTINGS", "GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST"].includes(message?.type)) {
+    uploadConsent.message(message, sender).then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));
+    return true;
+  }
   if (message?.type === "SNOOZE_VERSION_NOTICE") {
     const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
     if (!notice) { sendResponse({ ok: true }); return false; }
