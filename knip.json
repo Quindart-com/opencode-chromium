@@ -9,7 +9,8 @@
     "extension-src/entrypoints/background/index.js",
     "extension-src/entrypoints/popup/main.tsx",
     "extension-src/entrypoints/upload-confirm/main.tsx",
-    "extension-src/public/content-scripts/cursor.js"
+    "extension-src/public/content-scripts/cursor.js",
+    "extension-src/public/content-scripts/cursor-theme.js"
   ],
   "project": [
     "src/**/*.{js,ts}",
