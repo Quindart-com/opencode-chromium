@@ -28,7 +28,8 @@ The local retrieval result is authoritative. A paid decision is consulted only w
 A decision is skipped when any of these holds:
 
 - fewer than two candidates carry a node reference;
-- the query is an exact phrase of exactly one candidate;
+- the query names exactly one interactive element by its own label, in which case that element leads — the local pipeline does not always surface it, because a container's aggregated text scores well against the same phrase, and promoting the named element is deterministic rather than a score guess;
+- the leading result already contains the query and no other interactive result competes with it;
 - the local pipeline embedded the query and the leading score is at least 0.18 ahead of the next one;
 - an identical decision was already made for the same query, page fingerprint, and candidate set within 30 seconds;
 - an identical decision is already in flight, in which case the two callers share one request;
@@ -60,15 +61,19 @@ Two caveats. Input tokens per paid call did not fall: 610 before and 615 after. 
 
 ## End-to-end flow — October 5, 2026
 
-The same build was driven through the real tool registry against a local fixture settings page: navigate, seven searches, two clicks, and a fill. Reproduce with `bun scripts/benchmark-agent-flow.js <report.json>`. The page is served on `127.0.0.1`; nothing leaves the machine except the decisions themselves.
+The same build was driven through the real tool registry against a local fixture settings page of about thirty controls: navigate, seven searches, two clicks, and a fill. Reproduce with `bun scripts/benchmark-agent-flow.js <report.json>`. The page is served on `127.0.0.1`; nothing leaves the machine except the decisions themselves.
+
+Both columns are cold: the native host is restarted so no decision is cached before the run. The page is deliberately dense, so a container's aggregated text competes with the named elements — the worst case for the local gates.
 
 | Measurement | Before | After |
 | --- | --- | --- |
-| Total wall time for eleven calls | 4,423 ms | 1,767 ms |
-| Search wall time (seven searches) | 4,215 ms | 1,576 ms |
-| Call latency p50 / max | 458.5 / 1,371.8 ms | 13.3 / 533.8 ms |
-| Paid calls | 7 | 3 |
-| Response characters | 6,959 | 6,981 |
+| Total wall time for eleven calls | 4,423 ms | 3,399 ms |
+| Search wall time (seven searches) | 4,215 ms | 3,186 ms |
+| Call latency p50 / max | 458.5 / 1,371.8 ms | 137.6 / 1,299.3 ms |
+| Paid calls | 7 | 4 |
+| Response characters | 6,959 | 6,958 |
+
+Repeating the run against the same host serves the repeated queries from the decision cache and completes the same eleven calls in about 2.2 seconds. The searches that still pay are the paraphrases, which is the intended split: exact names are answered locally, ambiguous intent is not.
 
 ## Initial live experiment — September 30, 2026
 

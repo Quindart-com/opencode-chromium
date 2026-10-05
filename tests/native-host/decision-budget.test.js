@@ -9,17 +9,40 @@ import { test } from "node:test";
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "decision-budget-"));
 process.env.AGENT_BROWSER_PROVIDER_DIR = fixture;
 
-const { DecisionBudget, decisionFingerprint, describeCandidate, rankingIsDecisive } = await import("../../native-host/src/decisions/budget.ts");
+const { DecisionBudget, decisionFingerprint, describeCandidate, leadingExactMatch, rankingIsDecisive } = await import("../../native-host/src/decisions/budget.ts");
 const { decisionSearch } = await import("../../native-host/src/decisions/search.ts");
 
-const result = (node_id, score, extra = {}) => ({ node_id, score, name: null, text: null, ...extra });
+const result = (node_id, score, extra = {}) => ({ node_id, score, name: null, text: null, interactive: true, ...extra });
 
 test("a decision is skipped when the local ranking already separates one target", () => {
   assert.deepEqual(rankingIsDecisive("anything", [result("a", 1)]), { decisive: true, reason: "single_candidate" });
   assert.deepEqual(rankingIsDecisive("save changes", [result("a", 1, { text: "Save changes" }), result("b", 0.2, { text: "Cancel" })]),
     { decisive: true, reason: "unique_exact_match" });
   assert.equal(rankingIsDecisive("save", [result("a", 1, { text: "Save" }), result("b", 1, { text: "Save draft" })]).decisive, false,
-    "two equally valid phrase matches stay ambiguous");
+    "two competing matches stay ambiguous");
+  assert.equal(rankingIsDecisive("save changes", [result("b", 1, { text: "Cancel" }), result("a", 0.9, { text: "Save changes" })]).decisive, false,
+    "the named element must already be ranked first");
+});
+
+test("containers that aggregate child labels do not count as competition", () => {
+  // A container's text is its children's labels joined, so it contains the phrase
+  // as well. Only another interactive element competes with the top result.
+  const container = result("section", 0.4, { text: "Save changes Cancel Delete workspace", interactive: false });
+  const button = result("save", 0.9, { text: "Save changes", interactive: true });
+  assert.equal(rankingIsDecisive("save changes", [button, container]).decisive, true);
+  assert.equal(rankingIsDecisive("save changes", [container, button, result("other", 0.2, { text: "Save changes too", interactive: true })]).decisive, false,
+    "a rival interactive match keeps the decision");
+});
+
+test("a query naming exactly one interactive element leads even when a container outscores it", () => {
+  const container = result("section", 5, { text: "Save changes Cancel Delete workspace", interactive: false });
+  const button = result("save", 0.9, { text: "Save changes", interactive: true });
+  assert.equal(leadingExactMatch("save changes", [container, button]), button);
+  assert.equal(leadingExactMatch("save changes", [container]), null, "a container alone is not an element the agent can act on");
+  assert.equal(leadingExactMatch("save changes", [button, result("other", 0.1, { text: "Save changes too" })]), null,
+    "two named elements are ambiguous");
+  assert.equal(leadingExactMatch("make it easier at night", [container, button]), null, "a paraphrase names nothing");
+  assert.equal(leadingExactMatch("", [button]), null);
 });
 
 test("a wide margin only counts when the local pipeline actually embedded the query", () => {

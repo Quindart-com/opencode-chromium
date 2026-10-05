@@ -57,6 +57,7 @@ interface RankedResult {
   text?: unknown;
   label?: unknown;
   score?: unknown;
+  interactive?: unknown;
   scores?: { lexical?: unknown } | null;
 }
 
@@ -70,10 +71,33 @@ function resultLabel(result: RankedResult | undefined): string {
   return normalize(result?.name ?? result?.label ?? result?.text);
 }
 
-// When the caller's own ranking already separates one target from the rest, a
-// paid decision cannot add information; calling it only adds latency and cost.
+function resultContains(result: RankedResult, phrase: string): boolean {
+  return resultLabel(result).toLocaleLowerCase().includes(phrase);
+}
+
+// A query that names exactly one interactive element has an unambiguous answer,
+// and the local pipeline does not always surface it: a container's aggregated
+// text scores well against the same phrase, so the container can lead. Promoting
+// the named element is deterministic — it uses the element's own label, not a
+// score — and the paid decision that would have done the same reordering is
+// skipped. Broad or paraphrased queries match nothing here and are unaffected.
+export function leadingExactMatch(query: string, results: RankedResult[]): RankedResult | null {
+  const phrase = normalize(query).toLocaleLowerCase();
+  if (!phrase) return null;
+  const matches = results.filter((result) => result.interactive !== false && resultContains(result, phrase));
+  return matches.length === 1 ? matches[0] ?? null : null;
+}
+
+// When the caller's own ranking already puts the one element named by the query
+// on top, a paid decision cannot add information; calling it only adds latency
+// and cost.
 //
-// `modelUsed` matters: a wide margin between raw lexical scores is normal and
+// The competition check matters. A container's text is the concatenation of its
+// children, so it contains almost every label on a dense page; counting raw
+// phrase matches would find "matches" everywhere and never skip. Only a
+// competing interactive element counts as competition.
+//
+// `modelUsed` matters too: a wide margin between raw lexical scores is normal and
 // says nothing about confidence, while a wide margin after a fused
 // embedding-and-lexical score does. A decision is only skipped on a margin when
 // the local pipeline actually embedded the query.
@@ -84,9 +108,9 @@ export function rankingIsDecisive(
 ): { decisive: boolean; reason: string | null } {
   if (results.length < 2) return { decisive: true, reason: "single_candidate" };
   const normalized = normalize(query).toLocaleLowerCase();
-  if (normalized) {
-    const exact = results.filter((result) => resultLabel(result).toLocaleLowerCase().includes(normalized)).length;
-    if (exact === 1) return { decisive: true, reason: "unique_exact_match" };
+  if (normalized && results[0] && resultContains(results[0], normalized)) {
+    const rivals = results.filter((result) => result !== results[0] && result.interactive !== false && resultContains(result, normalized));
+    if (rivals.length === 0) return { decisive: true, reason: "unique_exact_match" };
   }
   const margin = options.margin ?? 0.18;
   if (options.modelUsed === true && resultScore(results[0]) - resultScore(results[1]) >= margin) {
