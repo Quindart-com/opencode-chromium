@@ -91,7 +91,7 @@ const BUILT_INS = {
   },
   "clipboard.read": { operation: "browser_clipboard_read_text", safety: "sensitive-read", required: ["tabId"] },
   "clipboard.write": { operation: "browser_clipboard_write_text", safety: "write", required: ["tabId", "text"] },
-  "uploads.setFileInput": { operation: "browser_set_file_input", safety: "write", required: ["tabId", "selector", "files"] },
+  "uploads.setFileInput": { operation: "browser_set_file_input", safety: "write", required: ["tabId", "files"] },
   "diagnostics.profiles": { operation: "browser_list_profiles", safety: "read", required: [] },
   "diagnostics.tabs": { operation: "browser_list_tabs", safety: "read", required: [] },
   "diagnostics.cdp": { operation: "browser_cdp", safety: "write", required: ["tabId", "method"] },

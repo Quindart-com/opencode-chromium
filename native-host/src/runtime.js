@@ -14,6 +14,7 @@ import { handleDecisionHostMethod } from "./decisions/index.ts";
 import { decisionSearch } from "./decisions/search.ts";
 import { selectRecipe } from "./decisions/recipes.ts";
 import { candidateRecipes } from "./memory/recipe-candidates.ts";
+import { createUploadFiles } from "./uploads.js";
 import { EmbedQueue, MemoryStore, embeddingEnabled } from "./memory/index.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
@@ -71,11 +72,13 @@ try {
 } catch (error) {
   log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
+const uploadFiles = createUploadFiles();
 const relay = new RpcRelay({
   state,
   extensionWriter: (message) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
   localHandler: async (method, params) => {
+    if (method.startsWith("uploads.")) return uploadFiles(method, params);
     if (method === "runtime.activity") return relay.activity();
     if (method === "memory.selectRecipe" && memoryStore) return await selectRecipe(params?.intent,
       () => candidateRecipes(memoryStore, { hostname: params?.hostname, stepCount: params?.stepCount, profileId: activeProfileId })) ?? { match: null };

@@ -35,6 +35,8 @@ jobs:
       - run: bun run check:schemas
       - run: bunx playwright install --with-deps chromium
       - run: node scripts/verify-popup.js
+      - run: node scripts/verify-uploads.js
+      - run: node scripts/verify-cursor.js
 
   package-smoke:
     name: Package / Node ${{ matrix.node }}

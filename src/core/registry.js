@@ -145,7 +145,7 @@ export function createCoreRegistry(runtime, { memory = false } = {}) {
         postObserve: observationSchema,
         returnMode: z.enum(["last", "all", "summary"]).optional(),
         maxChars: z.number().int().positive().optional(),
-        memoryMode: z.enum(["auto", "off"]).optional().default("auto").describe("auto (default) = replay a remembered recipe for these exact steps first; off = never consult memory."),
+        memoryMode: z.enum(["auto", "off"]).optional().describe("auto (default) = replay a remembered recipe for these exact steps first; off = never consult memory."),
         memoryIntent: z.string().min(1).max(512).optional().describe("Optional recipe-selection intent. Uses Jev if enabled, then local recall. Never stored."),
       }),
       outputSchema: resultSchema,

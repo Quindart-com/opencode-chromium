@@ -37,6 +37,28 @@
   --shadow: none;
 }
 
+.upload-preference { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0 12px; font-weight: 600; }
+.upload-preference input { margin-top: 3px; flex: none; }
+.upload-settings p { line-height: 1.5; }
+.upload-risk, .upload-expiry { color: var(--text-muted); }
+.upload-error { color: var(--bad); overflow-wrap: anywhere; }
+body.upload-confirm-page { width: auto; min-width: 300px; }
+.upload-confirm-page main { max-width: 560px; margin: 0 auto; padding: 24px; }
+.upload-identity { display: flex; align-items: center; gap: 10px; color: var(--text-muted); margin-bottom: 24px; }
+.upload-confirm h1 { font-size: 24px; margin: 0 0 16px; }
+.upload-confirm p { line-height: 1.5; }
+.upload-destination { font-weight: 600; overflow-wrap: anywhere; }
+.upload-files { list-style: none; padding: 0; margin: 24px 0; }
+.upload-files li { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--surface-border); }
+.upload-files li > div { min-width: 0; }
+.upload-files strong, .upload-files span { display: block; overflow-wrap: anywhere; }
+.upload-files span { color: var(--text-muted); margin: 4px 0 8px; }
+.upload-files details p { overflow-wrap: anywhere; }
+.upload-files summary { cursor: pointer; color: var(--text-muted); }
+.upload-preview { width: 72px; height: 72px; object-fit: contain; flex: none; background: var(--surface); }
+.upload-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.upload-actions .button { min-height: 40px; }
+
 .card.version-notice { border-color: var(--warn-border); background: var(--warn-soft); }
 .version-notice p { margin: 10px 0; line-height: 1.5; }
 .version-notice details { margin: 12px 0; }
