@@ -31,6 +31,13 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
   const reducedMotion = () => {
     try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
   };
+  // Animation only earns its frames when someone can see them: the tab has to be
+  // on screen and its window focused. Everything else is drawn directly at the
+  // target, which also keeps a background run off the CPU entirely.
+  const isWatched = () => {
+    if (document.hidden || reducedMotion()) return false;
+    try { return document.hasFocus(); } catch { return true; }
+  };
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const easeOut = (value) => 1 - (1 - value) ** 3;
 
@@ -59,17 +66,7 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     document.getElementById(ROOT_ID)?.remove();
     host = document.createElement("div");
     host.id = ROOT_ID;
-    host.style.cssText = [
-      "position: fixed",
-      "left: 0",
-      "top: 0",
-      "width: 0",
-      "height: 0",
-      "z-index: 2147483647",
-      "pointer-events: none",
-      "overflow: visible",
-      "contain: style",
-    ].join(";");
+    host.style.cssText = "position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 2147483647; pointer-events: none; overflow: visible; contain: style;";
     document.documentElement.appendChild(host);
     shadow = host.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
@@ -239,16 +236,21 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     entry.seeded = true;
   }
 
+  // Each published move sequence is answered exactly once, wherever the pointer
+  // happens to settle: a finished glide, a hidden tab, or a reduced-motion jump.
+  function reportArrival(entry) {
+    if (entry.pendingArrival !== entry.moveSequence) return;
+    const sequence = entry.pendingArrival;
+    entry.pendingArrival = null;
+    notifyArrived(entry, sequence);
+  }
+
   function finishAtTarget(entry) {
     stopAnimation(entry);
     entry.current = { ...entry.target };
     entry.plan = null;
     applyTransform(entry);
-    if (entry.pendingArrival === entry.moveSequence) {
-      const sequence = entry.pendingArrival;
-      entry.pendingArrival = null;
-      notifyArrived(entry, sequence);
-    }
+    reportArrival(entry);
   }
 
   function stopAnimation(entry) {
@@ -341,16 +343,12 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
       if (raw >= 1) {
         entry.current = { ...entry.target };
         entry.plan = null;
-        if (entry.pendingArrival === entry.moveSequence) {
-          const sequence = entry.pendingArrival;
-          entry.pendingArrival = null;
-          notifyArrived(entry, sequence);
-        }
+        reportArrival(entry);
       }
     }
     applyActionFrame(entry, now);
     applyTransform(entry);
-    if (entry.visible && (entry.plan || entry.action !== "idle" || !reducedMotion())) {
+    if (entry.visible && isWatched()) {
       entry.raf = requestAnimationFrame(() => animate(entry));
     } else {
       entry.raf = null;
@@ -358,7 +356,7 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
   }
 
   function ensureAnimating(entry) {
-    if (document.hidden || reducedMotion()) return;
+    if (!isWatched()) return;
     if (entry.raf == null) entry.raf = requestAnimationFrame(() => animate(entry));
   }
 
@@ -387,24 +385,22 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     if (!visible) {
       stopAnimation(entry);
       entry.plan = null;
-      entry.pendingArrival = null;
-      notifyArrived(entry, entry.moveSequence);
+      reportArrival(entry);
       return;
     }
 
     if (!wasVisible) revealLabel(entry);
 
     if (!entry.seeded || wasVisible === false) seedFor(entry, entry.target);
-    if (document.hidden || reducedMotion()) {
+    // Nothing is watching, so the pointer is placed rather than flown. It is
+    // still in the right place the moment anyone looks, and a background run
+    // costs no animation frames at all.
+    if (!isWatched()) {
       entry.current = { ...entry.target };
       entry.plan = null;
       applyTransform(entry);
       if (reducedMotion()) applyActionFrame(entry, performance.now());
-      if (entry.pendingArrival === entry.moveSequence) {
-        const sequence = entry.pendingArrival;
-        entry.pendingArrival = null;
-        notifyArrived(entry, sequence);
-      }
+      reportArrival(entry);
       return;
     }
 
@@ -450,18 +446,24 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     return true;
   });
 
+  // Losing focus or visibility stops every animation immediately, so an
+  // unwatched run costs nothing. Regaining it brings the label back so the
+  // session is identifiable, and the pointer is already on its target because
+  // moves made while unwatched were placed rather than flown.
   function handleVisibility() {
     for (const entry of cursors.values()) {
-      if (!document.hidden) {
-        applyTransform(entry);
-        ensureAnimating(entry);
-      } else stopAnimation(entry);
+      if (!isWatched() || !entry.visible) {
+        stopAnimation(entry);
+        continue;
+      }
+      revealLabel(entry);
+      ensureAnimating(entry);
     }
   }
 
   // Read-only introspection for the browser verification script and for field
   // diagnosis. Content scripts run in an isolated world, so page scripts cannot
-  // reach this, and it exposes no way to drive the overlay.
+  // reach this and it exposes no way to drive the overlay.
   globalThis.__opencodeCursorInspect = () => [...cursors.values()].map((entry) => ({
     cursorId: entry.cursorId,
     x: entry.current.x,
@@ -483,6 +485,8 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     listenersActive = true;
     window.addEventListener("resize", refreshBounds);
     window.addEventListener("mousemove", handlePointerMove, { passive: true });
+    window.addEventListener("focus", handleVisibility);
+    window.addEventListener("blur", handleVisibility);
     document.addEventListener("visibilitychange", handleVisibility);
     window.visualViewport?.addEventListener("resize", refreshCurrentState);
     window.visualViewport?.addEventListener("scroll", refreshCurrentState);
