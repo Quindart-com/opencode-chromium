@@ -134,7 +134,9 @@
     "verify:uploads": "node scripts/verify-uploads.js",
     "verify:cursor": "node scripts/verify-cursor.js",
     "lint": "eslint src/management src/cli/providers.ts native-host/src/decisions extension-src/entrypoints/popup/ProviderSettings.tsx",
-    "check:unused": "knip --no-progress --include files,dependencies"
+    "check:unused": "knip --no-progress --include files,dependencies",
+    "benchmark:decisions": "bun scripts/benchmark-decision-pipeline.ts",
+    "benchmark:flow": "bun scripts/benchmark-agent-flow.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
