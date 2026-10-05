@@ -6,7 +6,7 @@ import test from "node:test";
 import { z } from "zod";
 import { AgentBrowserRuntime } from "../../src/core/runtime.js";
 import { ArtifactStore } from "../../src/core/artifacts.js";
-import { resultSchema } from "../../src/core/registry.js";
+import { resultSchema, createCoreRegistry } from "../../src/core/registry.js";
 import { MemoryStore } from "../../native-host/src/memory/store.js";
 
 function fakeRuntime() {
@@ -37,6 +37,36 @@ function fakeRuntime() {
   runtime.invoke = async (name) => ({ ended: name === "browser_turn_end" });
   return runtime;
 }
+
+test("schema-parsed token-only follow-up executes an approved upload", async () => {
+  const runtime = fakeRuntime();
+  try {
+    const tool = createCoreRegistry(runtime).browser_run;
+    const first = await tool.execute(tool.inputSchema.parse({ sessionId: "upload-schema", steps: [
+      { action: "upload", target: { nodeId: "node-logo" }, files: [path.resolve("logo.png")] },
+    ] }));
+    assert.equal(first.status, "approval_required");
+    const followup = tool.inputSchema.parse({ approvalToken: first.approvalToken });
+    assert.deepEqual(Object.keys(followup), ["approvalToken"]);
+    const second = await tool.execute(followup);
+    assert.equal(second.status, "completed");
+    assert.deepEqual(runtime.executed, ["upload"]);
+  } finally { runtime.close(); }
+});
+
+test("upload dispatch preserves the selected page node rather than the first input", async () => {
+  const runtime = fakeRuntime();
+  let called;
+  runtime.invoke = async (name, args) => { called = { name, args }; return { set: true }; };
+  try {
+    await AgentBrowserRuntime.prototype.executeStep.call(runtime,
+      { action: "upload", target: { nodeId: "node-logo" }, files: ["logo.png"] },
+      42, new Map(), runtime.getSession("upload-target"));
+    assert.equal(called.name, "browser_set_file_input");
+    assert.equal(called.args.nodeId, "node-logo");
+    assert.equal(called.args.selector, undefined);
+  } finally { runtime.close(); }
+});
 
 test("risky action chain pauses once before any browser action", async () => {
   const runtime = fakeRuntime();

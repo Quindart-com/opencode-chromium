@@ -42,9 +42,9 @@ export async function manageSetup(argv: string[], remove = false) {
       changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: launcherSource(kind) });
     }
     const filePath = path.join(dir, "runtime.json");
-    const existing = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, "utf8")) as { followBranch?: boolean } : null;
+    const existing = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, "utf8")) as { followBranch?: boolean; stateIsolation?: boolean } : null;
     const production = argv.includes("--production");
-    const manifest = existing?.followBranch && !production ? existing : { root, version: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version,
+    const manifest = existing?.followBranch && !production ? existing : { ...existing, root, version: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version,
       ...(production ? { channel: "production", followBranch: false, pendingReload: true } : {}) };
     changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: JSON.stringify(manifest, null, 2) + "\n" });
   }
