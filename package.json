@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "1.8.1",
+  "version": "1.8.3",
   "description": "Provider-neutral Chromium browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -145,7 +145,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "smol-toml": "^1.9.0",
-    "zod": "4.2.0"
+    "zod": "4.2.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -160,7 +161,6 @@
     "typescript": "5.9.3",
     "typescript-eslint": "^8.71.0",
     "wxt": "0.21.4",
-    "yaml": "^2.9.0",
     "yazl": "3.1.0"
   },
   "overrides": {
