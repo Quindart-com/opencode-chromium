@@ -68,6 +68,7 @@ try {
     assert.deepEqual(await inspect(page), [], "no cursor exists until the background publishes one");
 
     await deliver(page, { cursorId: "alpha", label: "Alpha Agent", x: 300, y: 220, moveSequence: 1, action: "navigate" });
+    const revealedAt = Date.now();
 
     const host = await page.evaluate(() => {
       const element = document.getElementById("opencode-agent-cursor-root");
@@ -102,10 +103,12 @@ try {
     assert.deepEqual(translation(alpha.transform), { x: 300, y: 220 }, "the tip lands on the requested point");
     assert.match(alpha.artTransform, /rotate\(0deg\)/, "the artwork is unrotated at the source heading");
 
-    // The label holds for two seconds and then fades out on its own.
-    await sleep(1600);
-    assert.equal((await inspect(page))[0].labelVisible, true, "the label is still held at 1.6s");
-    await sleep(900);
+    // The label holds for two seconds and then fades out on its own. The waits are
+    // deadlines measured from the reveal, so slow assertions cannot drift past the
+    // hold on a slower runner.
+    await sleep(Math.max(0, 1_500 - (Date.now() - revealedAt)));
+    assert.equal((await inspect(page))[0].labelVisible, true, "the label is still held at 1.5s");
+    await sleep(Math.max(0, 2_600 - (Date.now() - revealedAt)));
     assert.equal((await inspect(page))[0].labelVisible, false, "the label fades after the hold");
 
     // The default session is the one that keeps the Cua blue.
@@ -142,17 +145,28 @@ try {
   {
     const { context, page } = await openPage(browser, { reducedMotion: "no-preference" });
 
+    // Sampling runs inside the page on the frame loop the overlay itself uses, so
+    // a fast machine cannot finish the glide between two driver round trips.
+    await page.evaluate(() => {
+      const samples = [];
+      globalThis.__cursorSamples = samples;
+      const record = () => {
+        const entry = globalThis.__opencodeCursorInspect?.()[0];
+        if (entry) samples.push({ x: entry.x, y: entry.y });
+        if (samples.length < 90) requestAnimationFrame(record);
+      };
+      requestAnimationFrame(record);
+    });
+
     await deliver(page, { cursorId: "alpha", label: "Alpha Agent", x: 620, y: 480, moveSequence: 1, action: "navigate" });
-    const samples = [];
-    for (let index = 0; index < 24; index += 1) {
-      samples.push((await inspect(page))[0]);
-      await sleep(25);
-    }
+    await sleep(700);
+    const samples = await page.evaluate(() => globalThis.__cursorSamples);
+    const settled = (await inspect(page))[0];
+    assert.ok(samples.length > 5, `the frame loop produced samples, got ${samples.length}`);
     const start = samples[0];
-    const end = samples.at(-1);
     assert.ok(Math.abs(start.x - 620) > 100 || Math.abs(start.y - 480) > 100, "the first reveal starts away from the target and glides in");
-    assert.deepEqual({ x: end.x, y: end.y }, { x: 620, y: 480 }, "the glide settles exactly on the target");
-    assert.ok(samples.some((sample) => sample.x > start.x + 2 && sample.x < 620 - 2), "the pointer is observed in flight, not snapped");
+    assert.ok(samples.some((sample) => sample.x > start.x + 2 && sample.x < 617), "the pointer is observed in flight, not snapped");
+    assert.deepEqual({ x: settled.x, y: settled.y }, { x: 620, y: 480 }, "the glide settles exactly on the target");
     assert.equal(await arrivals(page), 1, "a completed glide reports arrival once");
 
     for (const [action, layers] of [["click", 3], ["text", 1], ["scroll", 2], ["drag", 2], ["observe", 2], ["system", 1]]) {
