@@ -18,7 +18,9 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
     return () => { active = false; window.clearInterval(timer); };
   }, []);
   const usage = status?.usage;
+  const efficiency = status?.efficiency;
   const number = (value?: number) => value === undefined ? "—" : value.toLocaleString();
+  const avoided = efficiency ? efficiency.skipped + efficiency.cacheHits + efficiency.coalesced + efficiency.budgetSkipped : undefined;
   return <section className="decision-overview" aria-labelledby="jev-usage-heading">
     <div className="decision-overview-heading"><h2 id="jev-usage-heading">Jev usage</h2><button type="button" className="button-mini" onClick={onConfigure}>Configure</button></div>
     <p className="help-note">{error || (!status ? "Loading…" : status.ready ? `Enabled via ${status.route === "openrouter" ? "OpenRouter" : "TypeSafe"}` : "Off · Local search and replay available")}</p>
@@ -28,7 +30,9 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
       <div><dt>Input / output tokens</dt><dd>{usage ? `${number(usage.inputTokens)} / ${number(usage.outputTokens)}` : "—"}</dd></div>
       <div><dt>Provider-reported cost</dt><dd>{usage?.costReportedCalls ? `$${usage.reportedCost.toFixed(6)}` : "Not reported"}</dd></div>
       <div><dt>Average / last response</dt><dd>{usage?.calls ? `${Math.round(usage.averageMs)} / ${Math.round(usage.lastMs)} ms` : "—"}</dd></div>
+      <div><dt>Calls avoided</dt><dd>{number(avoided)}</dd></div>
     </dl>
     <p className="provider-test-help">{usage ? `Includes ${usage.tests} connection tests. Usage reported for ${usage.usageReportedCalls}/${usage.calls} calls; cost for ${usage.costReportedCalls}/${usage.calls}. ${usage.window}.` : "Only provider-reported tokens and cost are counted. Harness usage is separate."}</p>
+    {efficiency ? <p className="provider-test-help">{`Avoided since the host started: ${number(efficiency.skipped)} unambiguous rankings, ${number(efficiency.cacheHits)} repeated searches, ${number(efficiency.coalesced)} duplicate requests in flight${efficiency.budgetSkipped ? `, ${number(efficiency.budgetSkipped)} over the burst limit` : ""}. A paid call is only made when the local ranking is genuinely ambiguous.`}</p> : null}
   </section>;
 }
