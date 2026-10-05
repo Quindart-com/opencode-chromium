@@ -202,7 +202,70 @@ try {
     await context.close();
   }
 
-  console.log("Cursor browser checks passed: host isolation, hotspot accuracy, per-session palette, label hold and truncation, glide motion, six action animations, arrival protocol, reduced motion.");
+  // --- an unwatched tab places the pointer instead of animating it
+  {
+    const { context, page } = await openPage(browser, { reducedMotion: "no-preference" });
+    // hasFocus and hidden are read-only, so the fixture drives them directly and
+    // dispatches the events the overlay listens for.
+    await page.evaluate(() => {
+      let focused = true;
+      globalThis.__setFocus = (value) => {
+        focused = value;
+        Object.defineProperty(document, "hasFocus", { configurable: true, value: () => focused });
+        Object.defineProperty(document, "hidden", { configurable: true, get: () => !focused && globalThis.__hardHidden === true });
+        window.dispatchEvent(new Event(value ? "focus" : "blur"));
+        document.dispatchEvent(new Event("visibilitychange"));
+      };
+      globalThis.__setFocus(true);
+    });
+
+    // Watched: the pointer is observed travelling, as before.
+    await page.evaluate(() => {
+      const samples = [];
+      globalThis.__watched = samples;
+      const record = () => {
+        const entry = globalThis.__opencodeCursorInspect?.()[0];
+        if (entry) samples.push({ x: entry.x, y: entry.y });
+        if (samples.length < 60) requestAnimationFrame(record);
+      };
+      requestAnimationFrame(record);
+    });
+    await deliver(page, { cursorId: "watched", label: "Watched", x: 700, y: 500, moveSequence: 1, action: "click" });
+    await sleep(600);
+    const watched = await page.evaluate(() => globalThis.__watched);
+    assert.ok(watched.some((sample) => sample.x > 5 && sample.x < 695), "a focused window animates the move");
+
+    // Unfocused: no frames are spent, and the pointer is simply placed.
+    await page.evaluate(() => {
+      globalThis.__setFocus(false);
+      const samples = [];
+      globalThis.__unwatched = samples;
+      const record = () => {
+        const entry = globalThis.__opencodeCursorInspect?.()[0];
+        if (entry) samples.push({ x: entry.x, y: entry.y });
+        if (samples.length < 60) requestAnimationFrame(record);
+      };
+      requestAnimationFrame(record);
+    });
+    await deliver(page, { cursorId: "watched", label: "Watched", x: 120, y: 90, moveSequence: 2, action: "click" });
+    const placed = (await inspect(page))[0];
+    assert.deepEqual({ x: placed.x, y: placed.y }, { x: 120, y: 90 }, "an unfocused window places the pointer at the target");
+    await sleep(200);
+    const unwatched = await page.evaluate(() => globalThis.__unwatched);
+    assert.ok(unwatched.every((sample) => sample.x === 120 && sample.y === 90), "nothing is animated while the window is unfocused");
+    assert.equal(await arrivals(page), 2, "an unwatched move still answers its arrival waiter");
+
+    // Refocusing reveals the label again without moving a pointer that is
+    // already on its target.
+    await page.evaluate(() => globalThis.__setFocus(true));
+    await sleep(80);
+    const refocused = (await inspect(page))[0];
+    assert.deepEqual({ x: refocused.x, y: refocused.y }, { x: 120, y: 90 }, "refocusing does not move the pointer");
+    assert.equal(refocused.labelVisible, true, "the label returns with focus so the session is identifiable");
+    await context.close();
+  }
+
+  console.log("Cursor browser checks passed: host isolation, hotspot accuracy, per-session palette, label hold and truncation, glide motion, six action animations, arrival protocol, reduced motion, focus gating.");
 
   // --- reference stills
   // The Cua Driver renders its 128 canvas at 128/48 backing scale; capturing the

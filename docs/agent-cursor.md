@@ -107,6 +107,24 @@ Reduced motion (`prefers-reduced-motion: reduce`) removes interpolation, the idl
 float and the animation loop: the position is set directly and the action paints
 its designated still frame.
 
+### Seeing it move
+
+Animation only earns its frames when someone can see them. The overlay checks that
+the tab is on screen **and that its window has focus**; when it does, moves glide
+as usual. When the window is unfocused, hidden, or in reduced motion, the pointer
+is placed directly at its target instead of being flown: nothing is animated, no
+animation frames are spent at all, and it is already in the right place the moment
+anyone looks. Arrival is reported exactly once either way, so a waiter never
+hangs.
+
+Losing focus stops every running animation immediately. Regaining it brings the
+label back so the session is identifiable, without moving a pointer that is
+already on its target.
+
+Agents never take focus: the runtime activates a tab only when a caller asks, and
+`browser_run` has no option that brings a window forward. Background automation
+stays background automation.
+
 ## Adaptations
 
 Kept deliberately, and reviewed as part of the design:
