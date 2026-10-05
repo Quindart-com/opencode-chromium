@@ -4,6 +4,7 @@ import path from "node:path";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { browserRequest, listBrowserProfiles, resolveBrowserProfile } from "../client.js";
+import { cursorActionForTool, cursorPoint } from "../cursor.js";
 import { NETWORK_INSPECT_ARGS } from "../../core/network-capability.js";
 import { assertNavigationAllowed } from "../url-policy.js";
 import { inspectNetworkEvents } from "../network.js";
@@ -228,6 +229,23 @@ async function activate(context, tabId) {
 
 async function moveCursor(context, tabId, x, y, options = {}) {
   return extensionRequest(context, "moveMouse", { tabId, x, y, ...options }).catch(() => null);
+}
+
+// Landing the cursor is cosmetic, so it never blocks the action that follows:
+// one short message to the extension starts the glide, and the caller does not
+// wait for the animation to finish.
+async function pointCursor(context, tabId, point, action) {
+  const target = cursorPoint(point);
+  if (!target || !action) return null;
+  return moveCursor(context, tabId, target.x, target.y, { action, waitForArrival: false });
+}
+
+// Resolves a selector or node to a viewport point without clicking, so the
+// cursor can land on the element the action is about to use.
+async function resolveCursorPoint(context, tabId, target) {
+  if (target?.nodeId) return runtimeEvaluate(context, tabId, domNodeHoverTargetExpression(target.nodeId)).catch(() => null);
+  if (target?.selector) return runtimeEvaluate(context, tabId, selectorHoverTargetExpression(target.selector)).catch(() => null);
+  return cursorPoint(target);
 }
 
 async function inputGesture(context, tabId, steps, timeoutMs) {
@@ -1848,6 +1866,16 @@ function focusedEditableSnapshotExpression(options = {}) {
   })()`;
 }
 
+// The cursor lands on the element a typing action will change, so the pointer
+// is not left somewhere else while text appears.
+export function focusedEditableTargetExpression() {
+  return `(() => {
+    ${interactionHelpersSource()}
+    const element = focusedEditableElement(false);
+    return element ? hoverTarget(element) : null;
+  })()`;
+}
+
 function verifyFocusedEditableExpression(before, options = {}) {
   return `(() => {
     ${interactionHelpersSource()}
@@ -2053,6 +2081,7 @@ async function scrollTab(context, tabId, args) {
   finiteNumber(args.scrollY, "scrollY");
   await activate(context, tabId);
   const point = await scrollPoint(context, tabId, args.x, args.y);
+  await pointCursor(context, tabId, point, "scroll");
   const before = await runtimeEvaluate(context, tabId, scrollSnapshotExpression(point.x, point.y), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
   if (args.scrollX === 0 && args.scrollY === 0) {
     return { scrolled: false, fallbackUsed: false, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: before };
@@ -2504,7 +2533,7 @@ async execute(args, context) {
         async execute(args, context) {
           finiteNumber(args.x, "x");
           finiteNumber(args.y, "y");
-          const result = await moveCursor(context, args.tabId, args.x, args.y, { waitForArrival: args.waitForArrival });
+          const result = await moveCursor(context, args.tabId, args.x, args.y, { waitForArrival: args.waitForArrival, action: cursorActionForTool("browser_move") });
           return stringify({ moved: true, visibleCursor: result !== null, tabId: args.tabId, x: args.x, y: args.y, result });
         },
       }),
@@ -2518,6 +2547,7 @@ async execute(args, context) {
           button: tool.schema.enum(["left", "middle", "right"]).default("left"),
         },
         async execute(args, context) {
+          await pointCursor(context, args.tabId, args, "click");
           await clickPoint(context, args.tabId, args.x, args.y, args.button);
           return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y });
         },
@@ -2534,6 +2564,8 @@ async execute(args, context) {
         async execute(args, context) {
           finiteNumber(args.x, "x");
           finiteNumber(args.y, "y");
+          const point = await resolveCursorPoint(context, args.tabId, args);
+          if (point) await pointCursor(context, args.tabId, point, "click");
           await activate(context, args.tabId);
           await runtimeEvaluate(context, args.tabId, clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2 }), { userGesture: true });
           return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y });
@@ -2560,6 +2592,7 @@ async execute(args, context) {
             finiteNumber(point.x, "x");
             finiteNumber(point.y, "y");
           }
+          await pointCursor(context, args.tabId, point, "observe");
           await hoverPoint(context, args.tabId, point.x, point.y);
           return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point });
         },
@@ -2615,6 +2648,7 @@ async execute(args, context) {
             finiteNumber(point.x, `path[${index}].x`);
             finiteNumber(point.y, `path[${index}].y`);
           }
+          await pointCursor(context, args.tabId, args.path[0], "drag");
           await activate(context, args.tabId);
           const points = interpolatePath(args.path);
           const [start, ...rest] = points;
@@ -2641,6 +2675,7 @@ async execute(args, context) {
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await runtimeEvaluate(context, args.tabId, focusedEditableTargetExpression()).catch(() => null), "text");
           const before = await runtimeEvaluate(context, args.tabId, focusedEditableSnapshotExpression());
           const after = await insertTextAndVerify(context, args.tabId, before, args.text);
           return stringify({ typed: true, tabId: args.tabId, length: args.text.length, kind: after.kind, valueLength: after.value.length });
@@ -2828,6 +2863,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "click");
           const target = await runtimeEvaluate(context, args.tabId, domNodeClickExpression(args.nodeId), { userGesture: true });
           return stringify({ clicked: true, tabId: args.tabId, nodeId: args.nodeId, target });
         },
@@ -2843,6 +2879,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "text");
           const before = await runtimeEvaluate(context, args.tabId, domNodeEditableExpression(args.nodeId, {
             selectAll: args.mode === "replace",
             cursorAtEnd: args.mode === "append",
@@ -2875,6 +2912,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "click");
           const target = await runtimeEvaluate(context, args.tabId, selectorClickExpression(args.selector), { userGesture: true });
           return stringify({ clicked: true, tabId: args.tabId, selector: args.selector, target });
         },
@@ -2890,6 +2928,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "text");
           const before = await runtimeEvaluate(context, args.tabId, selectorEditableExpression(args.selector, {
             selectAll: args.mode === "replace",
             cursorAtEnd: args.mode === "append",
