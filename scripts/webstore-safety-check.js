@@ -43,7 +43,7 @@ const expectedEntries = new Set([
   "popup.html",
   "background.js",
   "content-scripts/cursor.js",
-  "images/cursor-chat.png",
+  "content-scripts/cursor-theme.js",
   "images/icon16.png",
   "images/icon32.png",
   "images/icon48.png",
