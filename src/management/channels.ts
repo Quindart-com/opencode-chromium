@@ -14,6 +14,7 @@ export interface Activation {
   fingerprint: string;
   followBranch: boolean;
   pendingReload: boolean;
+  stateIsolation?: boolean;
 }
 function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8", windowsHide: true }).trim();
@@ -71,7 +72,8 @@ export async function activateChannel({ root, dir, dryRun = false, followBranch 
       fs.renameSync(stage, destination);
     }
     const version = JSON.parse(fs.readFileSync(path.join(destination, "package.json"), "utf8")).version as string;
-    const activation: Activation = { root: destination, sourceRoot: root, channel, fingerprint, version, followBranch, pendingReload: true };
+    const activation: Activation = { root: destination, sourceRoot: root, channel, fingerprint, version, followBranch, pendingReload: true,
+      ...(active?.stateIsolation === true ? { stateIsolation: true } : {}) };
     if (busy || isBusy && await isBusy()) {
       atomicWrite(path.join(dir, "pending-activation.json"), JSON.stringify(activation, null, 2) + "\n");
       return { activated: false, pending: true, channel, reason: "Connected browser clients must finish and disconnect before activation" };

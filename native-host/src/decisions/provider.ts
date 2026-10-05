@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { z } from "zod";
 
-const candidateSchema = z.object({ id: z.string().min(1).max(100).refine(id => id !== "__abstain"), description: z.string().min(1).max(2000) });
+const candidateSchema = z.object({ id: z.string().min(1).max(100).refine(id => id !== "__abstain"), description: z.string().min(1).max(160) });
 export const decisionSchema = z.object({
   purpose: z.enum(["select", "rank", "verify"]), context: z.string().max(32000),
   instructions: z.string().min(1).max(2000), candidates: z.array(candidateSchema).min(1).max(128),
@@ -22,6 +22,11 @@ export interface DecisionResult {
 }
 export interface DecisionProvider { decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionResult> }
 export class DecisionFailure extends Data.TaggedError("DecisionFailure")<{ code: string }> {}
+
+// Ranking sits on a tool call's critical path, so its budget is a fraction of
+// the round trips the recorded usage shows. Connecting a key still uses the
+// longer budget in connection.ts.
+export const DEFAULT_DECISION_TIMEOUT_MS = 1500;
 const responseSchema = z.object({
   model: z.string(),
   answers: z.object({ decision: z.object({ type: z.literal("choice"), choice: z.string(),
@@ -31,7 +36,7 @@ const responseSchema = z.object({
 export class JevProvider implements DecisionProvider {
   private readonly semaphore = Effect.unsafeMakeSemaphore(2);
   constructor(private readonly key: string, private readonly fetcher: typeof fetch = fetch,
-    private readonly model = "jev-1.13.0", private readonly timeoutMs = 5000,
+    private readonly model = "jev-1.13.0", private readonly timeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
     private readonly route: "typesafe" | "openrouter" = "typesafe") {}
   async decide(input: DecisionRequest, signal?: AbortSignal): Promise<DecisionResult> {
     const started = performance.now();

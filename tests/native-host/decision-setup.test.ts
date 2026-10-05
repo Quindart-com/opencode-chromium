@@ -63,10 +63,12 @@ test("recipe decisions resolve finite IDs and reject stale or uncertain recipes"
   try {
     const recipe = { id: 7, signature: "Open settings", steps: [{ action: "click" }], failed_count: 0 };
     const valid = async () => ({ status: "selected" as const, candidateId: "7", confidence: 0.99, elapsedMs: 1 });
+    // Each intent is distinct because an identical repeated decision is now
+    // served from the decision cache instead of being billed again.
     expect((await selectRecipe("Open settings", () => [recipe], valid))?.match?.id).toBe(7);
-    expect((await selectRecipe("Open settings", () => [recipe], async () => ({ ...await valid(), candidateId: "999" })))?.match).toBe(null);
-    expect((await selectRecipe("Open settings", () => [recipe], async () => ({ ...await valid(), confidence: 0.9 })))?.match).toBe(null);
+    expect((await selectRecipe("Open settings now", () => [recipe], async () => ({ ...await valid(), candidateId: "999" })))?.match).toBe(null);
+    expect((await selectRecipe("Open the settings", () => [recipe], async () => ({ ...await valid(), confidence: 0.9 })))?.match).toBe(null);
     let reads = 0;
-    expect((await selectRecipe("Open settings", () => ++reads === 1 ? [recipe] : [], valid))?.match).toBe(null);
+    expect((await selectRecipe("Open settings dialog", () => ++reads === 1 ? [recipe] : [], valid))?.match).toBe(null);
   } finally { delete process.env.SYNTHETIC_DECISION_KEY; }
 });

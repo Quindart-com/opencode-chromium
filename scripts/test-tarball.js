@@ -13,7 +13,10 @@ const tarball = process.argv[2] ?? path.join(root, tarballName);
 if (!fs.existsSync(tarball)) throw new Error(`Tarball not found: ${tarball}`);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-chromium-package-"));
 try {
-  execFileSync("tar", ["-xzf", tarball, "-C", temp], { stdio: "inherit" });
+  // GNU tar reads a Windows drive letter as a remote host ("Cannot connect to
+  // C:"), so the archive is named relative to its own directory and extracted
+  // from there. The relative path works the same way on every platform.
+  execFileSync("tar", ["-xzf", path.basename(tarball), "-C", temp], { cwd: path.dirname(tarball), stdio: "inherit" });
   const packageRoot = path.join(temp, "package");
   for (const relative of ["dist/core/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "dist/cli/index.js"]) {
     if (!fs.existsSync(path.join(packageRoot, relative))) throw new Error(`Tarball is missing ${relative}`);

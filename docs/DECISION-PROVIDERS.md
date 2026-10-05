@@ -23,7 +23,57 @@ OpenAI Decisions API / Luna remains unavailable until its official request contr
 
 ### Search and replay limits
 
-Page ranking uses up to 16 lexical candidates with deduplicated descriptions of at most 400 characters. A single candidate needs no paid decision. Exact recipe replay remains the first, free lookup. For an explicit `browser_run.memoryIntent`, Jev can select among at most 16 confirmed, failure-free saved recipes for the current profile, hostname, and requested step count. The host re-reads candidates after inference to reject superseded recipes. Confidence must be at least 0.95; ordinary per-step action/target checks, runtime-value binding, approvals, and mutation uncertainty handling still apply. Jev never generates an action sequence.
+The local retrieval result is authoritative. A paid decision is consulted only when that result is genuinely ambiguous, and it can only reorder candidates the local pipeline already found. When the provider is unavailable, abstains, times out, or exceeds its burst budget, the local result is returned unchanged.
+
+A decision is skipped when any of these holds:
+
+- fewer than two candidates carry a node reference;
+- the query names exactly one interactive element by its own label, in which case that element leads — the local pipeline does not always surface it, because a container's aggregated text scores well against the same phrase, and promoting the named element is deterministic rather than a score guess;
+- the leading result already contains the query and no other interactive result competes with it;
+- the local pipeline embedded the query and the leading score is at least 0.18 ahead of the next one;
+- an identical decision was already made for the same query, page fingerprint, and candidate set within 30 seconds;
+- an identical decision is already in flight, in which case the two callers share one request;
+- the burst budget is exhausted (six decisions, refilled one every three seconds).
+
+Every skip is counted and shown in the popup's **Jev usage** panel as *Calls avoided*, so the saving is visible rather than assumed.
+
+Page ranking uses up to 16 candidates with deduplicated descriptions of at most 160 characters, gathered from at most four label parts. The local pipeline is asked for a wider pool than the caller requested so a decision can promote a target it was shown; every return path trims back to the requested count, so enabling or disabling the provider never changes how many results the caller receives. A ranking request has a 1.5-second budget; connecting a key still uses the longer budget.
+
+Exact recipe replay remains the first, free lookup. For an explicit `browser_run.memoryIntent`, Jev can select among at most 16 confirmed, failure-free saved recipes for the current profile, hostname, and requested step count. A single in-scope candidate is still a decision — replaying the wrong recipe costs more than the call. The host re-reads candidates after inference to reject superseded recipes. Confidence must be at least 0.95; ordinary per-step action/target checks, runtime-value binding, approvals, and mutation uncertainty handling still apply. Jev never generates an action sequence.
+
+## Measured pipeline — October 5, 2026
+
+Thirty synthetic UI units, twelve target-selection tasks (six exact labels, six paraphrases with no shared vocabulary), three rounds, driven through the real pipeline rather than the raw provider. Reproduce with `bun scripts/benchmark-decision-pipeline.ts <report.json>`; the fixture is in the script and no browser is involved.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| Paid calls for 36 searches | 36 | 7 |
+| Abstentions | 3 | 2 |
+| Reported cost | $0.00092194 | $0.00018085 |
+| Input / output tokens | 21,951 / 5,898 | 4,306 / 1,154 |
+| Search latency p50 / p95 | 449.8 / 562.3 ms | 0.9 / 460.9 ms |
+| Exact-label accuracy | 18/18 | 18/18 |
+| Paraphrase accuracy | 15/18 | 15/18 |
+
+A cold run with twelve distinct queries (`BENCHMARK_ROUNDS=1`) makes six paid calls instead of twelve, keeps 11/12 correct against the same baseline, and returns a median search in 6 ms.
+
+Two caveats. Input tokens per paid call did not fall: 610 before and 615 after. The request's fixed scaffolding dominates the candidate descriptions, so fewer calls — not smaller calls — is the cost lever. And a wide margin between raw lexical scores is not a confidence signal: gating on it dropped paraphrase accuracy to 3/18 in testing, which is why the margin rule requires an embedding-backed ranking.
+
+## End-to-end flow — October 5, 2026
+
+The same build was driven through the real tool registry against a local fixture settings page of about thirty controls: navigate, seven searches, two clicks, and a fill. Reproduce with `bun scripts/benchmark-agent-flow.js <report.json>`. The page is served on `127.0.0.1`; nothing leaves the machine except the decisions themselves.
+
+Both columns are cold: the native host is restarted so no decision is cached before the run. The page is deliberately dense, so a container's aggregated text competes with the named elements — the worst case for the local gates.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| Total wall time for eleven calls | 4,423 ms | 3,399 ms |
+| Search wall time (seven searches) | 4,215 ms | 3,186 ms |
+| Call latency p50 / max | 458.5 / 1,371.8 ms | 137.6 / 1,299.3 ms |
+| Paid calls | 7 | 4 |
+| Response characters | 6,959 | 6,958 |
+
+Repeating the run against the same host serves the repeated queries from the decision cache and completes the same eleven calls in about 2.2 seconds. The searches that still pay are the paraphrases, which is the intended split: exact names are answered locally, ambiguous intent is not.
 
 ## Initial live experiment — September 30, 2026
 

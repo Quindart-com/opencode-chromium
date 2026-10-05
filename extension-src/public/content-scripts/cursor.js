@@ -1,141 +1,172 @@
-const OPENCODE_CURSOR_VERSION = 3;
+const OPENCODE_CURSOR_VERSION = 4;
 
 if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorInstalledVersion < OPENCODE_CURSOR_VERSION) {
   globalThis.__opencodeCursorInstalledVersion = OPENCODE_CURSOR_VERSION;
 
+  const theme = globalThis.__opencodeCursorTheme;
   const ROOT_ID = "opencode-agent-cursor-root";
-  const CURSOR_SIZE = 36;
-  const BOUNDS_MARGIN = 0;
-  const SPRING = 0.32;
+  const SCALE = theme ? theme.DISPLAY_SIZE / theme.CANVAS : 42 / 128;
+  const HOTSPOT_LEFT = theme ? theme.HOTSPOT.x * SCALE : 18.05;
+  const HOTSPOT_TOP = theme ? theme.HOTSPOT.y * SCALE : 9.84;
+  const CUE_PIVOT = { x: 32, y: 31 };
+  const GLIDE_SPEED = 1.7;
+  const MIN_GLIDE_MS = 180;
+  const MAX_GLIDE_MS = 900;
+  const ARC_SIZE = 0.25;
+  const HANDLE = 0.3;
+  const SEED_OFFSET = 140;
+  const HOLD_ACTION_MS = 2400;
+  const LABEL_HOLD_MS = 2000;
+  const LABEL_MAX_CHARS = 28;
+  const BADGE_GAP = 25;
+  const ANCHOR_OFFSET = 16;
+  const FLOAT_PERIOD_MS = 4000;
   const ARRIVAL_DISTANCE = 0.8;
 
   let host;
   let shadow;
-  let messageListenerActive = false;
+  let listenersActive = false;
   const cursors = new Map();
 
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
+  const reducedMotion = () => {
+    try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
+  };
+  // Animation only earns its frames when someone can see them: the tab has to be
+  // on screen and its window focused. Everything else is drawn directly at the
+  // target, which also keeps a background run off the CPU entirely.
+  const isWatched = () => {
+    if (document.hidden || reducedMotion()) return false;
+    try { return document.hasFocus(); } catch { return true; }
+  };
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const easeOut = (value) => 1 - (1 - value) ** 3;
 
-  function viewportBounds() {
+  function clampPoint(value) {
     const viewport = window.visualViewport;
-    const width = viewport?.width ?? window.innerWidth;
-    const height = viewport?.height ?? window.innerHeight;
-    const offsetLeft = viewport?.offsetLeft ?? 0;
-    const offsetTop = viewport?.offsetTop ?? 0;
-    return {
-      minX: offsetLeft + BOUNDS_MARGIN,
-      minY: offsetTop + BOUNDS_MARGIN,
-      maxX: offsetLeft + width - BOUNDS_MARGIN,
-      maxY: offsetTop + height - BOUNDS_MARGIN,
-    };
+    const minX = viewport?.offsetLeft ?? 0;
+    const minY = viewport?.offsetTop ?? 0;
+    const maxX = minX + (viewport?.width ?? window.innerWidth);
+    const maxY = minY + (viewport?.height ?? window.innerHeight);
+    return { x: clamp(value.x, minX, maxX), y: clamp(value.y, minY, maxY) };
   }
 
-  function clampPoint(point) {
-    const bounds = viewportBounds();
-    return {
-      x: clamp(point.x, bounds.minX, bounds.maxX),
-      y: clamp(point.y, bounds.minY, bounds.maxY),
-    };
+  function truncateLabel(value) {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    return text.length > LABEL_MAX_CHARS ? `${text.slice(0, LABEL_MAX_CHARS - 1)}…` : text;
+  }
+
+  function mixText(base, session, ratio) {
+    const mixed = theme ? theme.mix(base, session, ratio) : base;
+    return `${mixed[0]},${mixed[1]},${mixed[2]}`;
   }
 
   function ensureHost() {
     if (shadow) return shadow;
-
     document.getElementById(ROOT_ID)?.remove();
     host = document.createElement("div");
     host.id = ROOT_ID;
-    host.style.cssText = [
-      "position: fixed",
-      "left: 0",
-      "top: 0",
-      "width: 100vw",
-      "height: 100vh",
-      "z-index: 2147483647",
-      "pointer-events: none",
-      "overflow: visible",
-      "contain: style",
-    ].join(";");
+    host.style.cssText = "position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 2147483647; pointer-events: none; overflow: visible; contain: style;";
     document.documentElement.appendChild(host);
-
     shadow = host.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = `
-      .cursor {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: ${CURSOR_SIZE}px;
-        height: ${CURSOR_SIZE}px;
-        transform: translate3d(-100px, -100px, 0) rotate(-8deg);
-        transform-origin: 7px 7px;
-        opacity: 0;
-        filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.24));
-        transition: opacity 140ms ease-out;
-        will-change: transform, opacity;
+      .cursor { position: fixed; left: 0; top: 0; width: 0; height: 0; opacity: 0; transition: opacity 140ms ease-out; }
+      .cursor.visible { opacity: 1; }
+      .art {
+        position: absolute; left: ${-HOTSPOT_LEFT}px; top: ${-HOTSPOT_TOP}px;
+        width: ${theme.DISPLAY_SIZE}px; height: ${theme.DISPLAY_SIZE}px;
+        overflow: visible; transform-origin: ${HOTSPOT_LEFT}px ${HOTSPOT_TOP}px; will-change: transform;
       }
-
-      .cursor.visible {
-        opacity: 1;
+      .cue { transform-box: view-box; transform-origin: ${CUE_PIVOT.x}px ${CUE_PIVOT.y}px; }
+      .cue > g, .pointer { transform-box: view-box; transform-origin: 0 0; }
+      .badge {
+        position: absolute; top: ${BADGE_GAP}px; left: 0; transform: translateX(-50%);
+        display: flex; align-items: center; gap: 4px; box-sizing: border-box;
+        min-width: 55px; max-width: 188px; height: 28px; padding: 0 10px; border-radius: 14px;
+        color: #fff; white-space: nowrap; opacity: 0; transition: opacity 400ms ease;
+        font: 500 11.5px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.34); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.31), 0 0 14px var(--glow);
       }
-
-      .cursor img,
-      .fallback svg {
-        display: block;
-        width: 100%;
-        height: 100%;
+      .badge.visible { opacity: 1; }
+      .badge .chip {
+        display: none; flex: none; width: 18px; height: 18px; border-radius: 5px;
+        background: var(--chip); border: 0.75px solid rgba(255, 255, 255, 0.72);
       }
-
-      .fallback {
-        display: none;
-      }
-
-      .cursor.image-error img {
-        display: none;
-      }
-
-      .cursor.image-error .fallback {
-        display: block;
-      }
+      .badge.has-chip .chip { display: block; }
+      .badge .label { overflow: hidden; text-overflow: ellipsis; }
     `;
     shadow.append(style);
     return shadow;
   }
 
+  function badgeStyle(session) {
+    const stop = (base, ratio, alpha) => `rgba(${mixText(base, session, ratio)}, ${alpha})`;
+    return `background: linear-gradient(135deg, ${stop([94, 151, 178], 0.66, 0.925)} 0%, ${stop([43, 92, 119], 0.52, 0.937)} 46%, ${stop([13, 27, 38], 0.26, 0.961)} 100%);` +
+      ` border: 1px solid rgba(${mixText([255, 255, 255], session, 0.55)}, 0.745);` +
+      ` --chip: rgba(${session[0]},${session[1]},${session[2]}, 0.863);` +
+      ` --glow: rgba(${mixText([13, 27, 38], session, 0.7)}, 0.1);`;
+  }
+
   function createCursor(cursorId) {
     ensureHost();
+    const session = theme ? theme.sessionColor(cursorId) : [94, 192, 232];
 
     const cursor = document.createElement("div");
     cursor.className = "cursor";
     cursor.dataset.cursorId = cursorId;
 
-    const image = document.createElement("img");
-    image.alt = "";
-    image.decoding = "async";
-    image.addEventListener("error", () => cursor.classList.add("image-error"));
+    const art = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    art.setAttribute("class", "art");
+    art.setAttribute("viewBox", `0 0 ${theme ? theme.CANVAS : 128} ${theme ? theme.CANVAS : 128}`);
+    const floatGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    floatGroup.setAttribute("class", "float");
+    const cue = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    cue.setAttribute("class", "cue");
+    const pointer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    pointer.setAttribute("class", "pointer");
+    pointer.innerHTML = theme ? theme.pointerMarkup(session) : "";
+    floatGroup.append(cue, pointer);
+    art.append(floatGroup);
 
-    const fallback = document.createElement("div");
-    fallback.className = "fallback";
-    fallback.innerHTML = `
-      <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M5 3L31 16L19.7 20L15 32L5 3Z" fill="#10A37F" stroke="white" stroke-width="3"/>
-      </svg>
-    `;
+    const badge = document.createElement("div");
+    badge.className = "badge";
+    badge.setAttribute("style", badgeStyle(session));
+    badge.innerHTML = '<span class="chip"></span><span class="label"></span>';
+    const chip = badge.querySelector(".chip");
+    const label = badge.querySelector(".label");
 
-    cursor.append(image, fallback);
+    cursor.append(art, badge);
     shadow.append(cursor);
 
     return {
       cursorId,
+      session,
       cursor,
-      image,
+      art,
+      cue,
+      pointer,
+      badge,
+      chip,
+      label,
+      labelText: null,
       current: { x: -100, y: -100 },
       target: { x: -100, y: -100 },
+      heading: Math.PI / 4,
+      plan: null,
+      action: "idle",
+      actionStartedAt: 0,
+      actionUntil: 0,
+      labelTimer: null,
       moveSequence: 0,
       pendingArrival: null,
       raf: null,
+      frame: 0,
       visible: false,
+      seeded: false,
+      cueAction: null,
+      layerNodes: [],
+      chipAction: null,
     };
   }
 
@@ -147,14 +178,6 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
       cursors.set(id, entry);
     }
     return entry;
-  }
-
-  function transformFor(entry, point) {
-    const dx = entry.target.x - entry.current.x;
-    const dy = entry.target.y - entry.current.y;
-    const angle = Math.atan2(dy, dx) * 180 / Math.PI + 45;
-    const stretch = clamp(Math.hypot(dx, dy) / 160, 0, 0.18);
-    return `translate3d(${point.x}px, ${point.y}px, 0) rotate(${angle}deg) scale(${1 + stretch}, ${1 - stretch * 0.45})`;
   }
 
   function sendRuntimeMessage(message, callback) {
@@ -170,45 +193,171 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     sendRuntimeMessage({ type: "OPENCODE_CURSOR_ARRIVED", cursorId: entry.cursorId, moveSequence: sequence });
   }
 
+  function planGlide(from, to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const distance = Math.hypot(dx, dy);
+    const normalX = distance > 0 ? -dy / distance : 0;
+    const normalY = distance > 0 ? dx / distance : 0;
+    const bulge = Math.min(distance * ARC_SIZE, 90);
+    return {
+      from: { ...from },
+      to: { ...to },
+      distance,
+      control1: { x: from.x + dx * HANDLE + normalX * bulge, y: from.y + dy * HANDLE + normalY * bulge },
+      control2: { x: from.x + dx * (1 - HANDLE) + normalX * bulge, y: from.y + dy * (1 - HANDLE) + normalY * bulge },
+      duration: clamp(distance / GLIDE_SPEED, MIN_GLIDE_MS, MAX_GLIDE_MS),
+      startedAt: performance.now(),
+    };
+  }
+
+  function pointAt(plan, progress) {
+    const u = 1 - progress;
+    const a = u * u * u;
+    const b = 3 * u * u * progress;
+    const c = 3 * u * progress * progress;
+    const d = progress * progress * progress;
+    return {
+      x: a * plan.from.x + b * plan.control1.x + c * plan.control2.x + d * plan.to.x,
+      y: a * plan.from.y + b * plan.control1.y + c * plan.control2.y + d * plan.to.y,
+    };
+  }
+
+  function headingAt(plan, progress) {
+    const u = 1 - progress;
+    const dx = 3 * u * u * (plan.control1.x - plan.from.x) + 6 * u * progress * (plan.control2.x - plan.control1.x) + 3 * progress * progress * (plan.to.x - plan.control2.x);
+    const dy = 3 * u * u * (plan.control1.y - plan.from.y) + 6 * u * progress * (plan.control2.y - plan.control1.y) + 3 * progress * progress * (plan.to.y - plan.control2.y);
+    return dx === 0 && dy === 0 ? null : Math.atan2(dy, dx);
+  }
+
+  function seedFor(entry, target) {
+    const seed = clampPoint({ x: target.x - SEED_OFFSET, y: target.y - SEED_OFFSET });
+    entry.current = seed;
+    entry.seeded = true;
+  }
+
+  // Each published move sequence is answered exactly once, wherever the pointer
+  // happens to settle: a finished glide, a hidden tab, or a reduced-motion jump.
+  function reportArrival(entry) {
+    if (entry.pendingArrival !== entry.moveSequence) return;
+    const sequence = entry.pendingArrival;
+    entry.pendingArrival = null;
+    notifyArrived(entry, sequence);
+  }
+
+  function finishAtTarget(entry) {
+    stopAnimation(entry);
+    entry.current = { ...entry.target };
+    entry.plan = null;
+    applyTransform(entry);
+    reportArrival(entry);
+  }
+
   function stopAnimation(entry) {
     if (entry.raf != null) cancelAnimationFrame(entry.raf);
     entry.raf = null;
   }
 
-  function finishAtTarget(entry) {
-    stopAnimation(entry);
-    entry.current = entry.target;
-    entry.cursor.style.transform = transformFor(entry, entry.current);
-    if (entry.pendingArrival === entry.moveSequence) {
-      const sequence = entry.pendingArrival;
-      entry.pendingArrival = null;
-      notifyArrived(entry, sequence);
+  function floatOffset(now) {
+    if (reducedMotion()) return { dx: 0, dy: 0, rotation: 0 };
+    const progress = (now % FLOAT_PERIOD_MS) / FLOAT_PERIOD_MS;
+    const angle = progress * Math.PI * 2;
+    return { dx: Math.sin(angle) * 5, dy: 6 * Math.cos(angle) - 5, rotation: 2.5 * Math.cos(angle) };
+  }
+
+  function applyTransform(entry) {
+    const float = floatOffset(performance.now());
+    const rotation = (entry.heading * 180) / Math.PI - 45 + float.rotation;
+    entry.cursor.style.transform = `translate3d(${entry.current.x + float.dx * SCALE}px, ${entry.current.y + float.dy * SCALE}px, 0)`;
+    entry.art.style.transform = `rotate(${rotation}deg)`;
+    // The label trails the pointer's anchor, which the source places one
+    // POINTER_ANCHOR_OFFSET along the heading from the tip, then BADGE_GAP below.
+    entry.badge.style.left = `${Math.cos(entry.heading) * ANCHOR_OFFSET}px`;
+    entry.badge.style.top = `${BADGE_GAP + Math.sin(entry.heading) * ANCHOR_OFFSET}px`;
+  }
+
+  function applyAction(entry, actionId) {
+    const id = theme && theme.ACTIONS[actionId] ? actionId : "idle";
+    if (entry.cueAction !== id) {
+      entry.cueAction = id;
+      entry.cue.innerHTML = theme ? theme.cueMarkup(id, entry.session) : "";
+      entry.layerNodes = [...entry.cue.children];
+    }
+    entry.action = id;
+    entry.actionStartedAt = performance.now();
+    const duration = theme ? theme.ACTIONS[id].duration : 0;
+    entry.actionUntil = id === "idle" ? 0 : performance.now() + Math.max(duration, HOLD_ACTION_MS);
+    if (entry.chipAction !== id) {
+      entry.chipAction = id;
+      entry.chip.innerHTML = theme ? theme.chipGlyph(id) : "";
+      entry.badge.classList.toggle("has-chip", id !== "idle");
     }
   }
 
-  function animate(entry) {
-    const dx = entry.target.x - entry.current.x;
-    const dy = entry.target.y - entry.current.y;
-    const distance = Math.hypot(dx, dy);
+  function scaleAbout(x, y, scale) {
+    return scale === 1 ? "" : `translate(${x}px, ${y}px) scale(${scale}) translate(${-x}px, ${-y}px)`;
+  }
 
-    if (distance <= ARRIVAL_DISTANCE) {
-      entry.current = entry.target;
-      entry.cursor.style.transform = transformFor(entry, entry.current);
-      entry.raf = null;
-      if (entry.pendingArrival === entry.moveSequence) {
-        const sequence = entry.pendingArrival;
-        entry.pendingArrival = null;
-        notifyArrived(entry, sequence);
-      }
+  function applyActionFrame(entry, now) {
+    if (entry.action === "idle") {
+      entry.cue.style.transform = "";
+      for (const node of entry.layerNodes) node.style.opacity = "";
+      entry.pointer.style.transform = "";
       return;
     }
+    if (now > entry.actionUntil) {
+      applyAction(entry, "idle");
+      return;
+    }
+    const definition = theme.ACTIONS[entry.action];
+    const elapsed = now - entry.actionStartedAt;
+    // Reduced motion paints the animation's designated still frame instead of
+    // animating, which is what the source does with `still_frame`.
+    const progress = reducedMotion() ? theme.staticProgress(entry.action)
+      : definition.mode === "oneshot" ? Math.min(1, elapsed / definition.duration) : (elapsed % definition.duration) / definition.duration;
+    const motion = theme.actionMotion(entry.action, progress);
+    entry.cue.style.transform = `translate(${motion.group.dx}px, ${motion.group.dy}px) rotate(${motion.group.rotate}deg) scale(${motion.group.scale})`;
+    motion.layers.forEach((layer, index) => {
+      const node = entry.layerNodes[index];
+      if (!node) return;
+      node.style.opacity = String(layer.opacity);
+      node.style.transform = scaleAbout(CUE_PIVOT.x, CUE_PIVOT.y, layer.scale);
+    });
+    entry.pointer.style.transform = scaleAbout(theme.HOTSPOT.x, theme.HOTSPOT.y, motion.pointer.scale);
+  }
 
-    entry.current = {
-      x: entry.current.x + dx * SPRING,
-      y: entry.current.y + dy * SPRING,
-    };
-    entry.cursor.style.transform = transformFor(entry, entry.current);
-    entry.raf = requestAnimationFrame(() => animate(entry));
+  function revealLabel(entry) {
+    entry.badge.classList.add("visible");
+    clearTimeout(entry.labelTimer);
+    entry.labelTimer = setTimeout(() => entry.badge.classList.remove("visible"), LABEL_HOLD_MS);
+  }
+
+  function animate(entry) {
+    const now = performance.now();
+    if (entry.plan) {
+      const raw = Math.min(1, (now - entry.plan.startedAt) / entry.plan.duration);
+      const progress = easeOut(raw);
+      entry.current = pointAt(entry.plan, progress);
+      const heading = headingAt(entry.plan, Math.max(progress, 0.02));
+      if (heading !== null) entry.heading = heading;
+      if (raw >= 1) {
+        entry.current = { ...entry.target };
+        entry.plan = null;
+        reportArrival(entry);
+      }
+    }
+    applyActionFrame(entry, now);
+    applyTransform(entry);
+    if (entry.visible && isWatched()) {
+      entry.raf = requestAnimationFrame(() => animate(entry));
+    } else {
+      entry.raf = null;
+    }
+  }
+
+  function ensureAnimating(entry) {
+    if (!isWatched()) return;
+    if (entry.raf == null) entry.raf = requestAnimationFrame(() => animate(entry));
   }
 
   function applyState(state) {
@@ -217,42 +366,59 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const entry = entryFor(state.cursorId);
     const wasVisible = entry.visible;
-    if (state.imageUrl && entry.image.src !== state.imageUrl) {
-      entry.cursor.classList.remove("image-error");
-      entry.image.src = state.imageUrl;
+
+    const nextLabel = truncateLabel(state.label ?? state.cursorLabel ?? entry.cursorId);
+    if (nextLabel !== entry.labelText) {
+      entry.labelText = nextLabel;
+      entry.label.textContent = nextLabel;
     }
 
     entry.target = clampPoint({ x, y });
     entry.moveSequence = Number.isInteger(state.moveSequence) ? state.moveSequence : entry.moveSequence + 1;
     entry.pendingArrival = entry.moveSequence;
+    if (state.action) applyAction(entry, state.action);
+
     const visible = state.visible !== false;
     entry.visible = visible;
     entry.cursor.classList.toggle("visible", visible);
 
     if (!visible) {
       stopAnimation(entry);
-      entry.pendingArrival = null;
-      notifyArrived(entry, entry.moveSequence);
+      entry.plan = null;
+      reportArrival(entry);
       return;
     }
 
-    if (!wasVisible || document.hidden) {
+    if (!wasVisible) revealLabel(entry);
+
+    if (!entry.seeded || wasVisible === false) seedFor(entry, entry.target);
+    // Nothing is watching, so the pointer is placed rather than flown. It is
+    // still in the right place the moment anyone looks, and a background run
+    // costs no animation frames at all.
+    if (!isWatched()) {
+      entry.current = { ...entry.target };
+      entry.plan = null;
+      applyTransform(entry);
+      if (reducedMotion()) applyActionFrame(entry, performance.now());
+      reportArrival(entry);
+      return;
+    }
+
+    const distance = Math.hypot(entry.target.x - entry.current.x, entry.target.y - entry.current.y);
+    if (distance <= ARRIVAL_DISTANCE) {
       finishAtTarget(entry);
+      ensureAnimating(entry);
       return;
     }
-
-    if (entry.raf == null) entry.raf = requestAnimationFrame(() => animate(entry));
-  }
-
-  function applyStates(states) {
-    for (const state of states) applyState(state);
+    entry.plan = planGlide(entry.current, entry.target);
+    ensureAnimating(entry);
   }
 
   function refreshCurrentState() {
     sendRuntimeMessage({ type: "OPENCODE_GET_CURSOR_STATE" }, (response) => {
       if (chrome.runtime.lastError) return;
-      if (Array.isArray(response?.states)) applyStates(response.states);
-      else if (response?.state) applyState(response.state);
+      const states = Array.isArray(response?.states) ? response.states : response?.state ? [response.state] : [];
+      for (const state of states) applyState(state);
     });
   }
 
@@ -260,7 +426,16 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     for (const entry of cursors.values()) {
       entry.target = clampPoint(entry.target);
       entry.current = clampPoint(entry.current);
-      entry.cursor.style.transform = transformFor(entry, entry.current);
+      if (entry.plan) entry.plan = planGlide(entry.current, entry.target);
+      applyTransform(entry);
+    }
+  }
+
+  // The synthetic cursor is pointer-events:none, so re-revealing the label when
+  // the real pointer comes near is a proximity test rather than a hover event.
+  function handlePointerMove(event) {
+    for (const entry of cursors.values()) {
+      if (entry.visible && Math.hypot(event.clientX - entry.current.x, event.clientY - entry.current.y) < 40) revealLabel(entry);
     }
   }
 
@@ -271,9 +446,48 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     return true;
   });
 
-  if (!messageListenerActive) {
-    messageListenerActive = true;
+  // Losing focus or visibility stops every animation immediately, so an
+  // unwatched run costs nothing. Regaining it brings the label back so the
+  // session is identifiable, and the pointer is already on its target because
+  // moves made while unwatched were placed rather than flown.
+  function handleVisibility() {
+    for (const entry of cursors.values()) {
+      if (!isWatched() || !entry.visible) {
+        stopAnimation(entry);
+        continue;
+      }
+      revealLabel(entry);
+      ensureAnimating(entry);
+    }
+  }
+
+  // Read-only introspection for the browser verification script and for field
+  // diagnosis. Content scripts run in an isolated world, so page scripts cannot
+  // reach this and it exposes no way to drive the overlay.
+  globalThis.__opencodeCursorInspect = () => [...cursors.values()].map((entry) => ({
+    cursorId: entry.cursorId,
+    x: entry.current.x,
+    y: entry.current.y,
+    target: { ...entry.target },
+    fill: [...entry.session],
+    heading: entry.heading,
+    action: entry.action,
+    visible: entry.visible,
+    label: entry.labelText,
+    labelVisible: entry.badge.classList.contains("visible"),
+    transform: entry.cursor.style.transform,
+    artTransform: entry.art.style.transform,
+    cueAction: entry.cueAction,
+    layers: entry.layerNodes.length,
+  }));
+
+  if (!listenersActive) {
+    listenersActive = true;
     window.addEventListener("resize", refreshBounds);
+    window.addEventListener("mousemove", handlePointerMove, { passive: true });
+    window.addEventListener("focus", handleVisibility);
+    window.addEventListener("blur", handleVisibility);
+    document.addEventListener("visibilitychange", handleVisibility);
     window.visualViewport?.addEventListener("resize", refreshCurrentState);
     window.visualViewport?.addEventListener("scroll", refreshCurrentState);
     refreshCurrentState();

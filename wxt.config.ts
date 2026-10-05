@@ -42,7 +42,7 @@ export default defineConfig({
     web_accessible_resources: [
       {
         matches: ["<all_urls>"],
-        resources: ["images/cursor-chat.png", "popup.html"],
+        resources: ["popup.html"],
       },
     ],
   },

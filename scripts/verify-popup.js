@@ -27,6 +27,7 @@ store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", pro
 store.usageEvent({ eventType: "replay_rejected", reason: "step_count_mismatch", profileId: "primary" });
 const versionStatus = { state: "connected", versionChecked: true, nativeHostVersion: "1.6.5", clientVersions: ["1.6.5"] };
 let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUTER_API_KEY", shareText: true, shareImages: false, ready: true };
+let uploadSettings = { allowWithoutConfirmation: false };
 const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
@@ -36,7 +37,9 @@ const server = http.createServer(async (req, res) => {
       for await (const chunk of req) text += chunk;
       const message = JSON.parse(text);
       let result;
-      if (message.type === "MEMORY_CALL") {
+      if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
+      else if (message.type === "SET_UPLOAD_SETTINGS") { uploadSettings = { allowWithoutConfirmation: message.allowWithoutConfirmation === true }; result = { result: uploadSettings }; }
+      else if (message.type === "MEMORY_CALL") {
         if (message.method === "memory.profiles") result = { currentProfileId: "primary", profiles: store.profiles.list().map((profile) => ({ ...profile, connected: true })) };
         else if (message.method === "memory.stats") result = store.status(message.params);
         else if (message.method === "memory.configure") result = store.configure(message.params);
@@ -127,6 +130,16 @@ try {
   await page.selectOption("#connected-profile", "secondary");
   assert.equal(await page.locator("#connected-profile").inputValue(), "secondary");
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  const uploadPreference = page.getByRole("checkbox", { name: "Allow uploads without confirmation", exact: true });
+  await uploadPreference.waitFor();
+  await page.waitForFunction(() => !document.querySelector('.upload-preference input')?.disabled);
+  assert.equal(await uploadPreference.isChecked(), false);
+  await uploadPreference.check();
+  await page.waitForFunction(() => document.querySelector('.upload-preference input')?.checked && !document.querySelector('.upload-preference input')?.disabled);
+  assert.equal(uploadSettings.allowWithoutConfirmation, true);
+  await uploadPreference.uncheck();
+  await page.waitForFunction(() => !document.querySelector('.upload-preference input')?.checked && !document.querySelector('.upload-preference input')?.disabled);
+  assert.equal(uploadSettings.allowWithoutConfirmation, false);
   await page.waitForSelector("#purge-days:not(:disabled)");
   assert.equal(await page.locator(".version-notice").isVisible(), true, "instructions stay available in Settings");
   await page.locator("#purge-days").fill("21");
