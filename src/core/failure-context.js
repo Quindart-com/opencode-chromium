@@ -38,6 +38,14 @@ export function failureHint(code) {
   return FAILURE_HINTS[code] ?? FAILURE_HINTS.BROWSER_OPERATION_FAILED;
 }
 
+// Re-reading the page costs a round trip and a slice of the model's context, so
+// it is only worth it when the action may have changed something the agent
+// cannot see: an uncertain outcome, a mutating action, and a named target. A
+// step rejected before it ran gets nothing.
+export function shouldReobservePage({ uncertain, readOnly, hasTarget } = {}) {
+  return uncertain === true && readOnly !== true && hasTarget === true;
+}
+
 export function errorDetails(error) {
   const message = errorMessage(error);
   const timeout = /timed?\s*out|timeout/i.test(message);
