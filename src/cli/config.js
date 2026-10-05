@@ -17,6 +17,7 @@ export function packageRoot() {
 
 export function configPath(client, explicit) {
   if (explicit) return path.resolve(explicit);
+  if (client === "dsh") return path.join(process.env.DSH_HOME ?? path.join(home(), ".dsh"), "profiles", "web", "cordis.patch.yml");
   if (client === "claude-code") return path.join(process.env.CLAUDE_CONFIG_DIR ?? home(), ".claude.json");
   if (client === "claude-desktop") return path.join(process.platform === "win32" ? process.env.APPDATA ?? path.join(home(), "AppData", "Roaming") : path.join(home(), "Library", "Application Support"), "Claude", "claude_desktop_config.json");
   if (client === "codex") return path.join(process.env.CODEX_HOME ?? path.join(home(), ".codex"), "config.toml");

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createFileInputOperation } from "../uploads.js";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
@@ -163,6 +164,10 @@ function isDebuggerDetachedError(error) {
 async function executeCdpRequest(context, tabId, method, commandParams = {}, timeoutMs, profileId = null) {
   const resolvedProfileId = profileId ?? await resolveSessionProfileId(context);
   markProfileUsed(context, resolvedProfileId);
+  if ((method === "DOM.setFileInputFiles" && commandParams.files?.length) || (method === "Input.dispatchDragEvent" && commandParams.data?.files?.length)) {
+    const policy = await extensionRequest(context, "uploadPolicy", { profile_id: resolvedProfileId }).catch(() => null);
+    if (policy?.version !== 1) throw new Error("Reload the updated browser extension to enable upload confirmation; no files were uploaded");
+  }
   return browserRequest(
     "executeCdp",
     sessionParams(context, {
@@ -643,41 +648,6 @@ async function navigateDataUrl(context, tabId, url) {
   if (!frameId) throw new Error("Could not find main frame for data URL navigation");
   await cdp(context, tabId, "Page.setDocumentContent", { frameId, html: document.html });
   return { tabId, url, loadedAs: "documentContent", mimeType: document.mimeType };
-}
-
-function validateUploadFiles(files, filePolicy = null) {
-  if (!Array.isArray(files) || files.length === 0) throw new Error("browser_set_file_input requires at least one file");
-  for (const file of files) {
-    if (filePolicy) {
-      filePolicy.assertAllowed(file);
-      continue;
-    }
-    if (typeof file !== "string" || file.length === 0) throw new Error("File paths must be non-empty strings");
-    if (!path.isAbsolute(file)) throw new Error(`File path must be absolute: ${file}`);
-    let stat;
-    try {
-      stat = fs.statSync(file);
-    } catch {
-      throw new Error(`File does not exist: ${file}`);
-    }
-    if (!stat.isFile()) throw new Error(`Path is not a file: ${file}`);
-  }
-}
-
-function attributesMap(attributes = []) {
-  const map = new Map();
-  for (let index = 0; index < attributes.length; index += 2) {
-    map.set(String(attributes[index]).toLowerCase(), attributes[index + 1] ?? "");
-  }
-  return map;
-}
-
-function fileUploadError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  if (message === "Not allowed" || /not allowed/i.test(message)) {
-    return new Error('File upload was blocked by Chrome. In chrome://extensions, open Details for the agent-browser extension and enable "Allow access to file URLs."');
-  }
-  return error;
 }
 
 function mouseStep(commandParams, cursor, delayMs = 0) {
@@ -2943,35 +2913,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
       }),
 
-      browser_set_file_input: tool({
-        description: "Set files on an input[type=file] matched by a CSS selector using CDP.",
-        args: {
-          tabId: tool.schema.number().int().positive(),
-          selector: tool.schema.string().default("input[type=file]"),
-          files: tool.schema.array(tool.schema.string()).describe("Absolute file paths to attach"),
-        },
-async execute(args, context) {
-          validateUploadFiles(args.files, context?.filePolicy);
-          await enableCdpDomains(context, args.tabId, ["DOM"], { optional: true });
-          const documentResult = await cdp(context, args.tabId, "DOM.getDocument", { depth: 0, pierce: true });
-          const queryResult = await cdp(context, args.tabId, "DOM.querySelector", { nodeId: documentResult.root.nodeId, selector: args.selector });
-          if (!queryResult.nodeId) throw new Error(`No file input matches selector: ${args.selector}`);
-          const description = await cdp(context, args.tabId, "DOM.describeNode", { nodeId: queryResult.nodeId, depth: 0 });
-          const attributes = attributesMap(description.node?.attributes);
-          if (description.node?.localName !== "input" || String(attributes.get("type") ?? "").toLowerCase() !== "file") {
-            throw new Error(`Selector does not match an input[type=file]: ${args.selector}`);
-          }
-          if (args.files.length > 1 && !attributes.has("multiple")) {
-            throw new Error(`File input does not accept multiple files: ${args.selector}`);
-          }
-          try {
-            await cdp(context, args.tabId, "DOM.setFileInputFiles", { nodeId: queryResult.nodeId, files: args.files });
-          } catch (error) {
-            throw fileUploadError(error);
-          }
-          return stringify({ set: true, tabId: args.tabId, files: args.files.length });
-        },
-      }),
+      browser_set_file_input: createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }),
 
       browser_clipboard_read_text: tool({
         description: "Read plain text from the browser clipboard in a controlled tab context.",

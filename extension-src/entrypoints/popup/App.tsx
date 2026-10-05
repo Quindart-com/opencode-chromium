@@ -6,6 +6,7 @@ import MemoryView from "./MemoryView";
 import VersionNotice from "./VersionNotice";
 import ProviderSettings from "./ProviderSettings";
 import DecisionOverview from "./DecisionOverview";
+import UploadSettings from "./UploadSettings";
 
 type ViewName = "overview" | "profiles" | "settings";
 
@@ -120,7 +121,7 @@ export default function App(): React.JSX.Element {
       <Header status={nativeStatus} />
       <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
       <ViewTabs active={activeView} onChange={setActiveView} />
-      {activeView === "overview" ? <><DecisionOverview onConfigure={() => setActiveView("settings")} /><MemoryView /></> : activeView === "profiles" ? <ConnectionView status={nativeStatus} view="profiles" /> : <><ProviderSettings /><ConnectionView status={nativeStatus} view="settings" /><MemoryView view="settings" /></>}
+      {activeView === "overview" ? <><DecisionOverview onConfigure={() => setActiveView("settings")} /><MemoryView /></> : activeView === "profiles" ? <ConnectionView status={nativeStatus} view="profiles" /> : <><UploadSettings /><ProviderSettings /><ConnectionView status={nativeStatus} view="settings" /><MemoryView view="settings" /></>}
       <footer id="app-footer">
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
           Source on GitHub

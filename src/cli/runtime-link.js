@@ -1,11 +1,10 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { browserIds, installedBrowsers } from "./browsers.js";
 import { installManifest, readRegistration, runtimeDir, HOST_NAME } from "./native-host.js";
 import { directoryHash, installSkills, skillSourceDirectory, skillTargets } from "./skills.js";
-import { backup, packageRoot } from "./config.js";
+import { packageRoot, updateClientConfig, configPath } from "./config.js";
 import { installClient } from "./install.js";
 import { packageInfo } from "./version.js";
 import { buildStatus } from "./source-fingerprint.js";
@@ -50,9 +49,10 @@ function launcherHeader() {
     "const dir = path.dirname(fileURLToPath(import.meta.url));",
     `const activation = JSON.parse(fs.readFileSync(path.join(dir, ${JSON.stringify(RUNTIME_MANIFEST)}), "utf8"));`,
     "const root = activation.root;",
-    "if ([\"development\", \"production\"].includes(activation.channel)) {",
+    "// Releases share the user's existing data. Isolation is an explicit developer opt-in.",
+    "if (activation.stateIsolation === true && [\"development\", \"production\"].includes(activation.channel)) {",
     "  const state = path.join(dir, \"state\", activation.channel);",
-    "  for (const [variable, folder] of Object.entries({ OPENCODE_BROWSER_MEMORY_DIR: \"memory\", AGENT_BROWSER_SEMANTIC_DIR: \"semantic\", AGENT_BROWSER_VISUAL_DIR: \"visual\", AGENT_BROWSER_PROVIDER_DIR: \"providers\", AGENT_BROWSER_ARTIFACT_DIR: \"artifacts\", AGENT_BROWSER_PROFILE_REGISTRY_DIR: \"profiles\" })) process.env[variable] = path.join(state, folder);",
+    "  for (const [variable, folder] of Object.entries({ OPENCODE_BROWSER_MEMORY_DIR: \"memory\", AGENT_BROWSER_SEMANTIC_DIR: \"semantic\", AGENT_BROWSER_VISUAL_DIR: \"visual\", AGENT_BROWSER_PROVIDER_DIR: \"providers\", AGENT_BROWSER_ARTIFACT_DIR: \"artifacts\", AGENT_BROWSER_PROFILE_REGISTRY_DIR: \"profiles\" })) process.env[variable] ??= path.join(state, folder);",
     "}",
   ];
 }
@@ -232,7 +232,7 @@ export function linkClientSurfaces({ dir = runtimeDir(), clients = ["codex", "op
       continue;
     }
     if (client === "dsh") {
-      results.push(patchDshConfig(path.join(os.homedir(), ".dsh", "profiles", "web", "cordis.patch.yml"), mcp, dryRun));
+      results.push(patchDshConfig(configPath("dsh"), mcp, dryRun));
       continue;
     }
     results.push({ client, skipped: true, reason: "unsupported surface" });
@@ -240,20 +240,11 @@ export function linkClientSurfaces({ dir = runtimeDir(), clients = ["codex", "op
   return { mcp, plugin, results };
 }
 
-// DSH keeps a hand-curated profile patch, so this replaces exactly the one
-// argument that names the browser MCP entry and leaves every comment intact.
+// Legacy link shares the validated YAML planner used by setup/update.
 export function patchDshConfig(filePath, target, dryRun = false) {
   if (!fs.existsSync(filePath)) return { client: "dsh", path: filePath, changed: false, reason: "not installed" };
-  const before = fs.readFileSync(filePath, "utf8");
-  const pattern = /(mcp-browser[\s\S]*?args:\s*\n\s*-\s*')([^']+)(')/;
-  const match = before.match(pattern);
-  if (!match) return { client: "dsh", path: filePath, changed: false, reason: "mcp-browser entry not found" };
-  if (samePath(match[2], target)) return { client: "dsh", path: filePath, changed: false, current: match[2] };
-  const after = before.replace(pattern, `$1${target}$3`);
-  if (dryRun) return { client: "dsh", path: filePath, changed: true, current: match[2], next: target };
-  const backupPath = backup(filePath);
-  fs.writeFileSync(filePath, after, "utf8");
-  return { client: "dsh", path: filePath, changed: true, current: match[2], next: target, backup: backupPath };
+  const result = updateClientConfig({ client: "dsh", filePath, serverPath: target, dryRun });
+  return { client: "dsh", path: filePath, changed: result.changed, next: target, backup: result.backup };
 }
 
 function samePath(first, second) {

@@ -594,7 +594,7 @@ export class AgentBrowserRuntime {
         case "scroll": return this.invoke("browser_scroll", mem({ tabId, x: target.x, y: target.y, scrollX: step.scrollX ?? 0, scrollY: step.scrollY ?? 0 }), session.sessionId);
         case "drag": return this.invoke("browser_drag", mem({ tabId, path: step.path, button: step.button ?? "left" }), session.sessionId);
         case "assert": return this.assertTarget(target, tabId, step, session.sessionId, chainId, stepIndex);
-        case "upload": return this.invoke("browser_set_file_input", mem({ tabId, selector: target.selector ?? "input[type=file]", files: step.files }), session.sessionId);
+        case "upload": return this.invoke("browser_set_file_input", mem({ tabId, nodeId: target.nodeId ?? undefined, selector: target.selector, files: step.files }), session.sessionId);
         case "clipboardRead": return this.invoke("browser_clipboard_read_text", mem({ tabId }), session.sessionId);
         case "clipboardWrite": return this.invoke("browser_clipboard_write_text", mem({ tabId, text: step.value }), session.sessionId);
         case "screenshot": {
