@@ -10,6 +10,7 @@ import { createCapabilityRegistry } from "./capabilities.js";
 import { responseMetadata as contractMetadata } from "./versions.js";
 import { createLogger } from "./logging.js";
 import { selectProfile as selectConnectedProfile } from "./profiles.js";
+import { errorDetails, shouldReobservePage } from "./failure-context.js";
 
 const APPROVAL_TTL_MS = 5 * 60 * 1000;
 const RISK_WORDS = /\b(delete|remove|send|submit|publish|post|buy|purchase|pay|checkout|confirm|approve|permission|save|sign[ -]?in|log[ -]?in)\b/i;
@@ -61,19 +62,6 @@ function clamp(value, fallback, minimum, maximum) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(minimum, Math.min(maximum, Math.trunc(number)));
-}
-
-function errorDetails(error) {
-  const message = errorMessage(error);
-  const timeout = /timed?\s*out|timeout/i.test(message);
-  const disconnected = /disconnect|closed target|(?:session|connection|socket|host).+(?:closed|ended)|websocket/i.test(message);
-  const validation = error instanceof z.ZodError || /requires |invalid |unsupported |must |missing/i.test(message);
-  return {
-    code: String(error?.code ?? (timeout ? "TIMEOUT" : validation ? "INVALID_REQUEST" : "BROWSER_OPERATION_FAILED")),
-    message,
-    retryable: Boolean(error?.retryable ?? (timeout || disconnected)),
-    uncertain: Boolean(error?.uncertain ?? (timeout || disconnected)),
-  };
 }
 
 function isStaleTargetError(error) {
@@ -1157,10 +1145,13 @@ export class AgentBrowserRuntime {
             failed = true;
             const detail = outcome.error;
             let observation;
-            if (!READ_ACTIONS.has(step.action) && detail.uncertain && session.activeTabId) {
-              observation = await this.observeValue({ mode: "inspect", target: step.target, detail: "lean", limit: 8 }, tabId, session).catch(() => undefined);
+            // Re-reading the page is only worth its bytes when the action may have
+            // had an effect and the outcome is genuinely unknown.
+            const mayHaveActed = shouldReobservePage({ uncertain: detail.uncertain, readOnly: READ_ACTIONS.has(step.action), hasTarget: Boolean(step.target) });
+            if (mayHaveActed && session.activeTabId) {
+              observation = await this.observeValue({ mode: "inspect", target: step.target, detail: "lean", limit: 5 }, tabId, session).catch(() => undefined);
             }
-            results.push({ index, id: step.id ?? null, action: step.action, ok: false, ...(outcome.value !== undefined ? { result: outcome.value } : {}), error: detail, ...(observation ? { observation } : {}) });
+            results.push({ index, id: step.id ?? null, action: step.action, ok: false, error: detail, ...(observation ? { observation } : {}) });
             if (step.onError !== "continue") break;
             continue;
           }
