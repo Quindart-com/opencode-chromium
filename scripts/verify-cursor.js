@@ -285,7 +285,7 @@ try {
       await page.screenshot({ path: path.join(screenshotDir, `cursor-reference-${action}.png`), clip: { x: 136, y: 130, width: 126, height: 126 } });
     }
     await context.close();
-    console.log(`Reference stills: reports/cursor-reference-*.png (compare with .build/cua-reference/preview/*.png, and with ${"`cua-driver cursor-theme preview`"} for a fresh export).`);
+    console.log("Reference stills written to reports/cursor-reference-*.png for review.");
   }
 } finally {
   await browser.close();
