@@ -4,6 +4,7 @@ import {
   decisionBudget,
   decisionFingerprint,
   describeCandidate,
+  leadingExactMatch,
   rankingIsDecisive,
   type DecisionCandidate,
   type DecisionStats,
@@ -70,6 +71,13 @@ export async function decisionSearch(params: unknown, local: (input: Record<stri
   if (!providerStatus().ready) return trim(results);
 
   const pool = results.slice(0, MAX_DECISION_CANDIDATES);
+  // A query that names exactly one interactive element is answered locally: the
+  // element leads, and the paid call that would have reordered it is skipped.
+  const named = leadingExactMatch(input.query, pool);
+  if (named) {
+    decisionBudget.skipped("unique_exact_match");
+    return trim([named as Record<string, unknown>, ...pool.filter((unit) => unit !== named)], { status: "skipped", reason: "unique_exact_match", elapsedMs: 0 });
+  }
   const modelUsed = (baseline.model as { used?: boolean } | undefined)?.used === true;
   const gate = rankingIsDecisive(input.query, pool, { modelUsed });
   if (gate.decisive) {
