@@ -1,8 +1,10 @@
 import fs from "node:fs";
+import { createFileInputOperation } from "../uploads.js";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { browserRequest, listBrowserProfiles, resolveBrowserProfile } from "../client.js";
+import { cursorActionForTool, cursorPoint } from "../cursor.js";
 import { NETWORK_INSPECT_ARGS } from "../../core/network-capability.js";
 import { assertNavigationAllowed } from "../url-policy.js";
 import { inspectNetworkEvents } from "../network.js";
@@ -163,6 +165,10 @@ function isDebuggerDetachedError(error) {
 async function executeCdpRequest(context, tabId, method, commandParams = {}, timeoutMs, profileId = null) {
   const resolvedProfileId = profileId ?? await resolveSessionProfileId(context);
   markProfileUsed(context, resolvedProfileId);
+  if ((method === "DOM.setFileInputFiles" && commandParams.files?.length) || (method === "Input.dispatchDragEvent" && commandParams.data?.files?.length)) {
+    const policy = await extensionRequest(context, "uploadPolicy", { profile_id: resolvedProfileId }).catch(() => null);
+    if (policy?.version !== 1) throw new Error("Reload the updated browser extension to enable upload confirmation; no files were uploaded");
+  }
   return browserRequest(
     "executeCdp",
     sessionParams(context, {
@@ -223,6 +229,23 @@ async function activate(context, tabId) {
 
 async function moveCursor(context, tabId, x, y, options = {}) {
   return extensionRequest(context, "moveMouse", { tabId, x, y, ...options }).catch(() => null);
+}
+
+// Landing the cursor is cosmetic, so it never blocks the action that follows:
+// one short message to the extension starts the glide, and the caller does not
+// wait for the animation to finish.
+async function pointCursor(context, tabId, point, action) {
+  const target = cursorPoint(point);
+  if (!target || !action) return null;
+  return moveCursor(context, tabId, target.x, target.y, { action, waitForArrival: false });
+}
+
+// Resolves a selector or node to a viewport point without clicking, so the
+// cursor can land on the element the action is about to use.
+async function resolveCursorPoint(context, tabId, target) {
+  if (target?.nodeId) return runtimeEvaluate(context, tabId, domNodeHoverTargetExpression(target.nodeId)).catch(() => null);
+  if (target?.selector) return runtimeEvaluate(context, tabId, selectorHoverTargetExpression(target.selector)).catch(() => null);
+  return cursorPoint(target);
 }
 
 async function inputGesture(context, tabId, steps, timeoutMs) {
@@ -643,41 +666,6 @@ async function navigateDataUrl(context, tabId, url) {
   if (!frameId) throw new Error("Could not find main frame for data URL navigation");
   await cdp(context, tabId, "Page.setDocumentContent", { frameId, html: document.html });
   return { tabId, url, loadedAs: "documentContent", mimeType: document.mimeType };
-}
-
-function validateUploadFiles(files, filePolicy = null) {
-  if (!Array.isArray(files) || files.length === 0) throw new Error("browser_set_file_input requires at least one file");
-  for (const file of files) {
-    if (filePolicy) {
-      filePolicy.assertAllowed(file);
-      continue;
-    }
-    if (typeof file !== "string" || file.length === 0) throw new Error("File paths must be non-empty strings");
-    if (!path.isAbsolute(file)) throw new Error(`File path must be absolute: ${file}`);
-    let stat;
-    try {
-      stat = fs.statSync(file);
-    } catch {
-      throw new Error(`File does not exist: ${file}`);
-    }
-    if (!stat.isFile()) throw new Error(`Path is not a file: ${file}`);
-  }
-}
-
-function attributesMap(attributes = []) {
-  const map = new Map();
-  for (let index = 0; index < attributes.length; index += 2) {
-    map.set(String(attributes[index]).toLowerCase(), attributes[index + 1] ?? "");
-  }
-  return map;
-}
-
-function fileUploadError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  if (message === "Not allowed" || /not allowed/i.test(message)) {
-    return new Error('File upload was blocked by Chrome. In chrome://extensions, open Details for the agent-browser extension and enable "Allow access to file URLs."');
-  }
-  return error;
 }
 
 function mouseStep(commandParams, cursor, delayMs = 0) {
@@ -1878,6 +1866,16 @@ function focusedEditableSnapshotExpression(options = {}) {
   })()`;
 }
 
+// The cursor lands on the element a typing action will change, so the pointer
+// is not left somewhere else while text appears.
+export function focusedEditableTargetExpression() {
+  return `(() => {
+    ${interactionHelpersSource()}
+    const element = focusedEditableElement(false);
+    return element ? hoverTarget(element) : null;
+  })()`;
+}
+
 function verifyFocusedEditableExpression(before, options = {}) {
   return `(() => {
     ${interactionHelpersSource()}
@@ -2083,6 +2081,7 @@ async function scrollTab(context, tabId, args) {
   finiteNumber(args.scrollY, "scrollY");
   await activate(context, tabId);
   const point = await scrollPoint(context, tabId, args.x, args.y);
+  await pointCursor(context, tabId, point, "scroll");
   const before = await runtimeEvaluate(context, tabId, scrollSnapshotExpression(point.x, point.y), { timeoutMs: 3000, runtimeTimeoutMs: 1000 });
   if (args.scrollX === 0 && args.scrollY === 0) {
     return { scrolled: false, fallbackUsed: false, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: before };
@@ -2534,7 +2533,7 @@ async execute(args, context) {
         async execute(args, context) {
           finiteNumber(args.x, "x");
           finiteNumber(args.y, "y");
-          const result = await moveCursor(context, args.tabId, args.x, args.y, { waitForArrival: args.waitForArrival });
+          const result = await moveCursor(context, args.tabId, args.x, args.y, { waitForArrival: args.waitForArrival, action: cursorActionForTool("browser_move") });
           return stringify({ moved: true, visibleCursor: result !== null, tabId: args.tabId, x: args.x, y: args.y, result });
         },
       }),
@@ -2548,6 +2547,7 @@ async execute(args, context) {
           button: tool.schema.enum(["left", "middle", "right"]).default("left"),
         },
         async execute(args, context) {
+          await pointCursor(context, args.tabId, args, "click");
           await clickPoint(context, args.tabId, args.x, args.y, args.button);
           return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y });
         },
@@ -2564,6 +2564,8 @@ async execute(args, context) {
         async execute(args, context) {
           finiteNumber(args.x, "x");
           finiteNumber(args.y, "y");
+          const point = await resolveCursorPoint(context, args.tabId, args);
+          if (point) await pointCursor(context, args.tabId, point, "click");
           await activate(context, args.tabId);
           await runtimeEvaluate(context, args.tabId, clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2 }), { userGesture: true });
           return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y });
@@ -2590,6 +2592,7 @@ async execute(args, context) {
             finiteNumber(point.x, "x");
             finiteNumber(point.y, "y");
           }
+          await pointCursor(context, args.tabId, point, "observe");
           await hoverPoint(context, args.tabId, point.x, point.y);
           return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point });
         },
@@ -2645,6 +2648,7 @@ async execute(args, context) {
             finiteNumber(point.x, `path[${index}].x`);
             finiteNumber(point.y, `path[${index}].y`);
           }
+          await pointCursor(context, args.tabId, args.path[0], "drag");
           await activate(context, args.tabId);
           const points = interpolatePath(args.path);
           const [start, ...rest] = points;
@@ -2671,6 +2675,7 @@ async execute(args, context) {
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await runtimeEvaluate(context, args.tabId, focusedEditableTargetExpression()).catch(() => null), "text");
           const before = await runtimeEvaluate(context, args.tabId, focusedEditableSnapshotExpression());
           const after = await insertTextAndVerify(context, args.tabId, before, args.text);
           return stringify({ typed: true, tabId: args.tabId, length: args.text.length, kind: after.kind, valueLength: after.value.length });
@@ -2858,6 +2863,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "click");
           const target = await runtimeEvaluate(context, args.tabId, domNodeClickExpression(args.nodeId), { userGesture: true });
           return stringify({ clicked: true, tabId: args.tabId, nodeId: args.nodeId, target });
         },
@@ -2873,6 +2879,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "text");
           const before = await runtimeEvaluate(context, args.tabId, domNodeEditableExpression(args.nodeId, {
             selectAll: args.mode === "replace",
             cursorAtEnd: args.mode === "append",
@@ -2905,6 +2912,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "click");
           const target = await runtimeEvaluate(context, args.tabId, selectorClickExpression(args.selector), { userGesture: true });
           return stringify({ clicked: true, tabId: args.tabId, selector: args.selector, target });
         },
@@ -2920,6 +2928,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
         async execute(args, context) {
           await activate(context, args.tabId);
+          await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "text");
           const before = await runtimeEvaluate(context, args.tabId, selectorEditableExpression(args.selector, {
             selectAll: args.mode === "replace",
             cursorAtEnd: args.mode === "append",
@@ -2943,35 +2952,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         },
       }),
 
-      browser_set_file_input: tool({
-        description: "Set files on an input[type=file] matched by a CSS selector using CDP.",
-        args: {
-          tabId: tool.schema.number().int().positive(),
-          selector: tool.schema.string().default("input[type=file]"),
-          files: tool.schema.array(tool.schema.string()).describe("Absolute file paths to attach"),
-        },
-async execute(args, context) {
-          validateUploadFiles(args.files, context?.filePolicy);
-          await enableCdpDomains(context, args.tabId, ["DOM"], { optional: true });
-          const documentResult = await cdp(context, args.tabId, "DOM.getDocument", { depth: 0, pierce: true });
-          const queryResult = await cdp(context, args.tabId, "DOM.querySelector", { nodeId: documentResult.root.nodeId, selector: args.selector });
-          if (!queryResult.nodeId) throw new Error(`No file input matches selector: ${args.selector}`);
-          const description = await cdp(context, args.tabId, "DOM.describeNode", { nodeId: queryResult.nodeId, depth: 0 });
-          const attributes = attributesMap(description.node?.attributes);
-          if (description.node?.localName !== "input" || String(attributes.get("type") ?? "").toLowerCase() !== "file") {
-            throw new Error(`Selector does not match an input[type=file]: ${args.selector}`);
-          }
-          if (args.files.length > 1 && !attributes.has("multiple")) {
-            throw new Error(`File input does not accept multiple files: ${args.selector}`);
-          }
-          try {
-            await cdp(context, args.tabId, "DOM.setFileInputFiles", { nodeId: queryResult.nodeId, files: args.files });
-          } catch (error) {
-            throw fileUploadError(error);
-          }
-          return stringify({ set: true, tabId: args.tabId, files: args.files.length });
-        },
-      }),
+      browser_set_file_input: createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }),
 
       browser_clipboard_read_text: tool({
         description: "Read plain text from the browser clipboard in a controlled tab context.",
