@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { JevProvider, UnavailableProvider, decisionSchema } from "../../native-host/src/decisions/provider.ts";
+import { JevProvider, decisionSchema } from "../../native-host/src/decisions/provider.ts";
 
 const request = { purpose: "select" as const, context: "Settings dialog", instructions: "Select save", candidates: [{ id: "n1", description: "Save settings" }] };
 function mockResponse(choice = "n1", confidence = 0.95) {
@@ -31,9 +31,8 @@ test("timeout interrupts fetch and returns abstention", async () => {
   })) as typeof fetch, "jev-1.13.0", 10);
   expect((await provider.decide(request)).status).toBe("abstained");
 });
-test("duplicate candidates are invalid and Luna is explicitly unavailable", async () => {
+test("duplicate candidates are invalid", () => {
   expect(decisionSchema.safeParse({ ...request, candidates: [request.candidates[0], request.candidates[0]] }).success).toBe(false);
-  expect((await new UnavailableProvider().decide()).status).toBe("unavailable");
 });
 test("OpenRouter uses its decisions endpoint and reports the dated model and cost", async () => {
   const provider = new JevProvider("fake", (async (url) => {

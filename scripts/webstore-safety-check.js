@@ -80,8 +80,8 @@ for (const size of ["16", "32", "48", "128"]) {
 }
 
 const suspiciousPatterns = [
-  [/eval\s*\(/, "eval("],
-  [/new\s+Function\s*\(/, "new Function("],
+  [/eval\s*\(/, "dynamic evaluation"],
+  [/new\s+Function\s*\(/, "Function constructor"],
   [/document\.write\s*\(/, "document.write("],
   [/https?:\/\/localhost/i, "localhost URL"],
   [/127\.0\.0\.1/, "127.0.0.1 reference"],
