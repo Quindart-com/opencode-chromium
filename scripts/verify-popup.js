@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { versionNotice } from "../extension-src/version-status.ts";
@@ -171,7 +172,7 @@ try {
   await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
   await page.getByText("API key rejected. Check the key and selected service.", { exact: false }).waitFor();
   assert.equal(await page.locator(".provider-feedback-error").count(), 1);
-  await page.locator("#decision-api-key").fill("sk-or-v1-synthetic-popup-fixture");
+  await page.locator("#decision-api-key").fill(`fixture-${randomUUID()}`);
   await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
   await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
   assert.equal(await page.locator(".provider-feedback-ok").count(), 1);

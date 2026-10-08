@@ -103,8 +103,3 @@ export class JevProvider implements DecisionProvider {
   }
 }
 
-export class UnavailableProvider implements DecisionProvider {
-  async decide(): Promise<DecisionResult> {
-    return { status: "unavailable", elapsedMs: 0, reason: "OpenAI Decisions API/Luna requires published API documentation and preview access" };
-  }
-}

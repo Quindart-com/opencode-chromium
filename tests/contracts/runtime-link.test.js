@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { buildStatus, sourceFingerprint } from "../../src/cli/source-fingerprint.js";
 import { LAUNCHER_FINGERPRINT_SOURCE, launcherSource, linkTargets, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.js";
@@ -133,12 +133,13 @@ test("launchers resolve the runtime root instead of pinning a checkout", () => {
 
 // The launcher has to work on a branch that predates source-fingerprint.js, so
 // it carries its own copy. This is what stops the two from drifting apart.
-test("the launcher's inline fingerprint matches the canonical implementation", () => {
+test("the launcher's inline fingerprint matches the canonical implementation", async () => {
   const root = fakeTree();
   try {
-    // Evaluated the way the generated launcher runs it: ESM top-level scope,
-    // where the node:crypto import is already bound.
-    const inline = new Function("fs", "path", "createHash", `${LAUNCHER_FINGERPRINT_SOURCE}\nreturn fingerprint;`)(fs, path, createHash);
+    // Import the generated source in the same ESM scope as the real launcher.
+    const modulePath = path.join(root, "fingerprint.mjs");
+    fs.writeFileSync(modulePath, `import fs from "node:fs";\nimport path from "node:path";\nimport { createHash } from "node:crypto";\n${LAUNCHER_FINGERPRINT_SOURCE}\nexport default fingerprint;\n`);
+    const { default: inline } = await import(pathToFileURL(modulePath).href);
     assert.equal(inline(root), sourceFingerprint(root));
 
     fs.writeFileSync(path.join(root, "src", "cli", "index.js"), "export const value = 3;\n", "utf8");
