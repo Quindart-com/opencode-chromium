@@ -1,3 +1,4 @@
+import { createPageBackend } from "../page-backend.js";
 import fs from "node:fs";
 import { createFileInputOperation } from "../uploads.js";
 import path from "node:path";
@@ -988,7 +989,10 @@ function interactionHelpersSource() {
   `;
 }
 
+const pageBackend = createPageBackend({ request: extensionRequest, evaluate: runtimeEvaluate, command: cdp, ready: waitForPageReady });
 async function navigateHistory(context, tabId, delta) {
+  const alternate = await pageBackend.history(context, tabId, delta);
+  if (alternate) return alternate;
   await enableCdpDomains(context, tabId, ["Page"], { optional: true });
   const history = await cdp(context, tabId, "Page.getNavigationHistory", {});
   const targetIndex = history.currentIndex + delta;
@@ -1343,9 +1347,12 @@ return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING 
       return unit;
     });
     const scopeBox = scopeInfo.root && scopeInfo.root !== document ? boxFor(scopeInfo.root) : { x: 0, y: 0, width: innerWidth, height: innerHeight };
+    let stateHash = 2166136261;
+    for (const character of (document.body?.innerText ?? '').slice(0, 32000)) stateHash = Math.imul(stateHash ^ character.charCodeAt(0), 16777619);
     return {
       url: location.href,
       title: document.title,
+      decisionState: JSON.stringify([performance.timeOrigin, location.href, innerWidth, innerHeight, scrollX, scrollY, stateHash]),
       scope: {
         requested: requestedScope,
         mode: scopeInfo.mode,
@@ -1755,13 +1762,13 @@ function backgroundClickExpression(targetExpression, options = {}) {
     ${interactionHelpersSource()}
     const element = ${targetExpression};
     const target = clickTarget(element);
-    backgroundClick(element, target, ${JSON.stringify(clickOptions)});
+    ${options.trusted ? "" : `backgroundClick(element, target, ${JSON.stringify(clickOptions)});`}
     return target;
   })()`;
 }
 
-export function domNodeClickExpression(nodeId) {
-  return backgroundClickExpression(`nodeByIdStrict(${JSON.stringify(nodeId)})`);
+export function domNodeClickExpression(nodeId, options = {}) {
+  return backgroundClickExpression(`nodeByIdStrict(${JSON.stringify(nodeId)})`, options);
 }
 
 export function domNodeHoverTargetExpression(nodeId) {
@@ -1785,8 +1792,8 @@ export function selectorClickTargetExpression(selector) {
   })()`;
 }
 
-export function selectorClickExpression(selector) {
-  return backgroundClickExpression(`querySelectorStrict(${JSON.stringify(selector)})`);
+export function selectorClickExpression(selector, options = {}) {
+  return backgroundClickExpression(`querySelectorStrict(${JSON.stringify(selector)})`, options);
 }
 
 export function clickAtPointExpression(x, y, options = {}) {
@@ -1803,7 +1810,7 @@ export function clickAtPointExpression(x, y, options = {}) {
     if (!element) throw new Error('No element at viewport point: ' + point.x + ', ' + point.y);
     assertPointerInteractable(element);
     visibleRect(element);
-    backgroundClick(element, point, ${JSON.stringify(clickOptions)});
+    ${options.trusted ? "" : `backgroundClick(element, point, ${JSON.stringify(clickOptions)});`}
     return {
       x: point.x,
       y: point.y,
@@ -1926,14 +1933,14 @@ async function clickPoint(context, tabId, x, y, button = "left") {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   await activate(context, tabId);
-  return runtimeEvaluate(context, tabId, clickAtPointExpression(x, y, { button }), { userGesture: true });
+  return pageBackend.click(context, tabId, trusted => clickAtPointExpression(x, y, { button, trusted }), { button });
 }
 
 async function hoverPoint(context, tabId, x, y) {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   await activate(context, tabId);
-  return runtimeEvaluate(context, tabId, hoverAtPointExpression(x, y), { userGesture: false });
+  return pageBackend.hover(context, tabId, await runtimeEvaluate(context, tabId, hoverAtPointExpression(x, y), { userGesture: false }));
 }
 
 async function insertTextAndVerify(context, tabId, before, text, options = {}) {
@@ -2136,6 +2143,7 @@ function networkConditions(value) {
 }
 
 async function applyEnvironment(context, tabId, env) {
+  if (await pageBackend.configure(context, tabId, env)) return;
   if (env.viewport) {
     await cdp(context, tabId, "Emulation.setDeviceMetricsOverride", {
       width: env.viewport.width,
@@ -2177,6 +2185,7 @@ async function applyEnvironment(context, tabId, env) {
 }
 
 async function resetEnvironment(context, tabId) {
+  if (await pageBackend.reset(context, tabId)) return;
   await cdp(context, tabId, "Emulation.clearDeviceMetricsOverride").catch(() => {});
   await cdp(context, tabId, "Emulation.setTouchEmulationEnabled", { enabled: false }).catch(() => {});
   await cdp(context, tabId, "Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => {});
@@ -2268,7 +2277,6 @@ export const createBrowserOperations = async () => {
           return stringify({ host, selectedProfileId: selectedProfilesBySession.get(sessionKey(context)) ?? null, extension });
         },
       }),
-
       browser_list_profiles: tool({
         description: "List currently connected browser profiles available to OpenCode. Closed profiles are not launched or returned.",
         args: {},
@@ -2276,7 +2284,6 @@ export const createBrowserOperations = async () => {
           return stringify({ profiles: await listBrowserProfiles() });
         },
       }),
-
       browser_selected_profile: tool({
         description: "Return the browser profile selected for this OpenCode session, if any.",
         args: {},
@@ -2287,7 +2294,6 @@ export const createBrowserOperations = async () => {
           return stringify({ selectedProfileId, selectedProfile, profiles });
         },
       }),
-
       browser_select_profile: tool({
         description: "Select which connected browser profile subsequent browser tools should use.",
         args: {
@@ -2301,7 +2307,6 @@ export const createBrowserOperations = async () => {
           return stringify({ selected: true, profileId: profile.profileId, profileLabel: profile.profileLabel ?? null, browserName: profile.browserName ?? null });
         },
       }),
-
       browser_name_profile: tool({
         description: "Set a local label for a connected browser profile, such as work or personal.",
         args: {
@@ -2314,7 +2319,6 @@ export const createBrowserOperations = async () => {
           return stringify(result);
         },
       }),
-
       browser_capabilities: tool({
         description: "List capabilities advertised by the agent-browser extension.",
         args: {},
@@ -2322,7 +2326,6 @@ export const createBrowserOperations = async () => {
           return stringify(await extensionRequest(context, "getInfo"));
         },
       }),
-
       browser_list_tabs: tool({
         description: "List Chromium tabs available to OpenCode or all user tabs.",
         args: {
@@ -2334,7 +2337,6 @@ export const createBrowserOperations = async () => {
           return stringify(addProfileToTabResult(result, profileId));
         },
       }),
-
       browser_selected_tab: tool({
         description: "Return the current logical tab selected for this browser session.",
         args: {},
@@ -2343,7 +2345,6 @@ export const createBrowserOperations = async () => {
           return stringify(result ? addProfileToTabResult(result, profileId) : null);
         },
       }),
-
       browser_get_tab: tool({
         description: "Get metadata for a controlled Chromium tab.",
         args: {
@@ -2354,7 +2355,6 @@ export const createBrowserOperations = async () => {
           return stringify(addProfileToTabResult(result, profileId));
         },
       }),
-
       browser_new_tab: tool({
         description: "Create a new Chromium tab controlled by OpenCode.",
         args: {},
@@ -2363,7 +2363,6 @@ export const createBrowserOperations = async () => {
           return stringify(addProfileToTabResult(result, profileId));
         },
       }),
-
       browser_claim_tab: tool({
         description: "Claim an existing Chromium tab by tab ID so OpenCode can control it.",
         args: {
@@ -2374,7 +2373,6 @@ export const createBrowserOperations = async () => {
           return stringify(addProfileToTabResult(result, profileId));
         },
       }),
-
       browser_name_session: tool({
         description: "Name the current browser automation session and tab group.",
         args: {
@@ -2384,7 +2382,6 @@ export const createBrowserOperations = async () => {
           return stringify(await extensionRequest(context, "nameSession", { name: args.name }));
         },
       }),
-
       browser_navigate: tool({
         description: "Navigate a controlled Chromium tab to a URL. Creates a tab when tabId is omitted.",
         args: {
@@ -2412,7 +2409,6 @@ async execute(args, context) {
           return stringify({ profileId, tabId: tab.id, url: args.url, readiness });
         },
       }),
-
       browser_reload: tool({
         description: "Reload a controlled Chromium tab.",
         args: {
@@ -2423,7 +2419,6 @@ async execute(args, context) {
           return stringify(await extensionRequest(context, "reloadTab", { tabId: args.tabId, bypassCache: args.bypassCache }));
         },
       }),
-
       browser_back: tool({
         description: "Navigate a controlled Chromium tab back in its history.",
         args: {
@@ -2433,7 +2428,6 @@ async execute(args, context) {
           return stringify(await navigateHistory(context, args.tabId, -1));
         },
       }),
-
       browser_forward: tool({
         description: "Navigate a controlled Chromium tab forward in its history.",
         args: {
@@ -2443,7 +2437,6 @@ async execute(args, context) {
           return stringify(await navigateHistory(context, args.tabId, 1));
         },
       }),
-
       browser_close_tab: tool({
         description: "Close a controlled Chromium tab and remove it from the session.",
         args: {
@@ -2455,7 +2448,6 @@ async execute(args, context) {
           return stringify(result);
         },
       }),
-
       browser_history: tool({
         description: "Search recent browser history through the extension history API.",
         args: {
@@ -2468,7 +2460,6 @@ async execute(args, context) {
           return stringify(await extensionRequest(context, "getUserHistory", args));
         },
       }),
-
       browser_screenshot: tool({
         description: "Capture a screenshot from a Chromium tab via CDP. fullPage:false captures the visible viewport; fullPage:true captures the entire scrollable page. The payload is sized for direct visual inspection.",
         args: {
@@ -2521,7 +2512,6 @@ async execute(args, context) {
           });
         },
       }),
-
       browser_move: tool({
         description: "Move the visible OpenCode cursor overlay in a Chromium tab.",
         args: {
@@ -2537,7 +2527,6 @@ async execute(args, context) {
           return stringify({ moved: true, visibleCursor: result !== null, tabId: args.tabId, x: args.x, y: args.y, result });
         },
       }),
-
       browser_click: tool({
         description: "Click Chromium tab viewport coordinates.",
         args: {
@@ -2552,7 +2541,6 @@ async execute(args, context) {
           return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y });
         },
       }),
-
       browser_double_click: tool({
         description: "Double-click Chromium tab viewport coordinates.",
         args: {
@@ -2567,11 +2555,10 @@ async execute(args, context) {
           const point = await resolveCursorPoint(context, args.tabId, args);
           if (point) await pointCursor(context, args.tabId, point, "click");
           await activate(context, args.tabId);
-          await runtimeEvaluate(context, args.tabId, clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2 }), { userGesture: true });
+          await pageBackend.click(context, args.tabId, trusted => clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2, trusted }), { button: args.button, clickCount: 2 });
           return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y });
         },
       }),
-
       browser_hover: tool({
         description: "Hover the pointer over a DOM node, CSS selector, or viewport coordinates in a controlled tab.",
         args: {
@@ -2597,7 +2584,6 @@ async execute(args, context) {
           return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point });
         },
       }),
-
       browser_handle_dialog: tool({
         description: "Accept or dismiss the currently showing JavaScript dialog on a controlled tab.",
         args: {
@@ -2620,7 +2606,6 @@ async execute(args, context) {
           });
         },
       }),
-
       browser_scroll: tool({
         description: "Scroll a Chromium tab from a viewport coordinate.",
         args: {
@@ -2634,7 +2619,6 @@ async execute(args, context) {
           return stringify(await scrollTab(context, args.tabId, args));
         },
       }),
-
       browser_drag: tool({
         description: "Drag in a Chromium tab along a path of viewport coordinates.",
         args: {
@@ -2666,7 +2650,6 @@ async execute(args, context) {
           return stringify({ dragged: true, tabId: args.tabId, points: args.path.length, dispatchedPoints: points.length });
         },
       }),
-
       browser_type: tool({
         description: "Type text into the currently focused element in a Chromium tab.",
         args: {
@@ -2681,7 +2664,6 @@ async execute(args, context) {
           return stringify({ typed: true, tabId: args.tabId, length: args.text.length, kind: after.kind, valueLength: after.value.length });
         },
       }),
-
       browser_keypress: tool({
         description: "Dispatch a key press or common key chord in a Chromium tab.",
         args: {
@@ -2692,7 +2674,6 @@ async execute(args, context) {
           return stringify(await pressKey(context, args.tabId, args.key));
         },
       }),
-
       browser_snapshot: tool({
         description: "Get a Chromium accessibility tree snapshot for a tab.",
         args: {
@@ -2704,7 +2685,6 @@ async execute(args, context) {
           return stringify(result);
         },
       }),
-
       browser_dom_snapshot: tool({
         description: "Return visible interactable DOM nodes with stable node IDs for DOM CUA actions.",
         args: {
@@ -2714,7 +2694,6 @@ async execute(args, context) {
           return stringify(await runtimeEvaluate(context, args.tabId, domSnapshotExpression()));
         },
       }),
-
       browser_page_search: tool({
         description: "Search the current page with local semantic retrieval (auto by default) and return only relevant actionable page units.",
         args: {
@@ -2757,13 +2736,16 @@ async execute(args, context) {
           });
           const ranking = await browserRequest("semantic.rankPageUnits", sessionParams(context, {
             profile_id: profileId,
+            tabId: args.tabId,
+            pageUrl: page.url,
+            decisionState: page.decisionState,
             query: args.query,
             units: page.units,
             maxResults,
             mode: strategy,
             embeddingCandidates,
             rerankCandidates: args.rerankCandidates,
-            pageFingerprint: `${page.url}|${page.title}|${page.units.length}`,
+            pageFingerprint: `${page.decisionState}|${page.title}|${page.units.length}`,
           }), { profileId, timeoutMs });
           return stringify(shapePageSearchRanking({
             url: page.url,
@@ -2776,7 +2758,6 @@ async execute(args, context) {
           }, args.detail));
         },
       }),
-
       browser_visual_map: tool({
         description: "Return lean visual UI boxes for visible controls and containers without screenshot payloads.",
         args: {
@@ -2832,7 +2813,6 @@ async execute(args, context) {
           return stringify(map);
         },
       }),
-
       browser_page_inspect: tool({
         description: "Return focused zoom-in DOM context for a page-search node ID or CSS selector.",
         args: {
@@ -2854,7 +2834,6 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           }));
         },
       }),
-
       browser_dom_click: tool({
         description: "Click a DOM node ID returned by browser_dom_snapshot.",
         args: {
@@ -2864,11 +2843,10 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "click");
-          const target = await runtimeEvaluate(context, args.tabId, domNodeClickExpression(args.nodeId), { userGesture: true });
+          const target = await pageBackend.click(context, args.tabId, trusted => domNodeClickExpression(args.nodeId, { trusted }));
           return stringify({ clicked: true, tabId: args.tabId, nodeId: args.nodeId, target });
         },
       }),
-
       browser_dom_type: tool({
         description: "Focus, append to, or replace text in a DOM node returned by browser_dom_snapshot.",
         args: {
@@ -2891,7 +2869,6 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           return stringify({ typed: true, tabId: args.tabId, nodeId: args.nodeId, length: args.text.length, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash });
         },
       }),
-
       browser_locator_count: tool({
         description: "Count elements matching a CSS selector in a controlled tab.",
         args: {
@@ -2903,7 +2880,6 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           return stringify({ count });
         },
       }),
-
       browser_locator_click: tool({
         description: "Click the first element matching a CSS selector in a controlled tab.",
         args: {
@@ -2913,11 +2889,10 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "click");
-          const target = await runtimeEvaluate(context, args.tabId, selectorClickExpression(args.selector), { userGesture: true });
+          const target = await pageBackend.click(context, args.tabId, trusted => selectorClickExpression(args.selector, { trusted }));
           return stringify({ clicked: true, tabId: args.tabId, selector: args.selector, target });
         },
       }),
-
       browser_locator_fill: tool({
         description: "Focus, append to, or replace the first editable element matching a CSS selector.",
         args: {
@@ -2940,7 +2915,6 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           return stringify({ typed: true, tabId: args.tabId, selector: args.selector, length: args.value.length, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash });
         },
       }),
-
       browser_locator_text: tool({
         description: "Read text from the first element matching a CSS selector in a controlled tab.",
         args: {
@@ -2951,9 +2925,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           return stringify({ text: await runtimeEvaluate(context, args.tabId, selectorTextExpression(args.selector)) });
         },
       }),
-
       browser_set_file_input: createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }),
-
       browser_clipboard_read_text: tool({
         description: "Read plain text from the browser clipboard in a controlled tab context.",
         args: {
@@ -2966,7 +2938,6 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           return stringify({ text });
         },
       }),
-
       browser_clipboard_write_text: tool({
         description: "Write plain text to the browser clipboard in a controlled tab context.",
         args: {
@@ -2980,7 +2951,6 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           return stringify({ written: true, length: args.text.length });
         },
       }),
-
       browser_enable_inspection: tool({
         description: "Enable CDP Runtime, Log, Network, Page, DOM, and Accessibility inspection domains for a tab.",
         args: {
@@ -3015,7 +2985,6 @@ browser_console_logs: tool({
           return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack, sourceMapped: true, resolver }));
         },
       }),
-
       browser_dialog_events: tool({
         description: "Read captured JavaScript dialog lifecycle events from a controlled tab.",
         args: {
@@ -3032,7 +3001,6 @@ browser_console_logs: tool({
           return stringify(compactDialogEvents(response));
         },
       }),
-
       browser_network_events: tool({
         description: "Read captured Network.* CDP events from a Chromium tab.",
         args: {
@@ -3048,7 +3016,6 @@ browser_console_logs: tool({
           }));
         },
       }),
-
       browser_clear_events: tool({
         description: "Clear captured CDP events for a Chromium tab.",
         args: {
@@ -3058,7 +3025,6 @@ browser_console_logs: tool({
           return stringify(await extensionRequest(context, "clearCdpEvents", { tabId: args.tabId }));
         },
       }),
-
       browser_download_events: tool({
         description: "Read captured Chromium download lifecycle events.",
         args: {
@@ -3068,7 +3034,6 @@ browser_console_logs: tool({
           return stringify(await extensionRequest(context, "getDownloadEvents", { limit: args.limit }));
         },
       }),
-
       browser_clear_download_events: tool({
         description: "Clear captured Chromium download lifecycle events.",
         args: {},
@@ -3076,7 +3041,6 @@ browser_console_logs: tool({
           return stringify(await extensionRequest(context, "clearDownloadEvents"));
         },
       }),
-
       browser_cdp: tool({
         description: "Run a raw Chrome DevTools Protocol command against a controlled tab.",
         args: {
@@ -3087,10 +3051,10 @@ browser_console_logs: tool({
           timeoutMs: tool.schema.number().int().positive().optional(),
         },
         async execute(args, context) {
+          if ((await extensionRequest(context, "getInfo")).engine === "gecko") throw new Error("unsupported_capability: raw CDP is Chromium-only");
           return stringify(await cdp(context, args.tabId, args.method, cdpParamsFromArgs(args), args.timeoutMs));
         },
       }),
-
       browser_turn_end: tool({
         description: "End the current browser turn by detaching debuggers and hiding cursors without closing tabs.",
         args: {},
@@ -3103,7 +3067,6 @@ browser_console_logs: tool({
           return stringify({ profiles: results });
         },
       }),
-
       browser_trace_record: tool({
         description: "Record a CDP performance trace for a controlled tab and return computed insights.",
         args: {
@@ -3166,7 +3129,6 @@ browser_console_logs: tool({
           }
         },
       }),
-
       browser_trace_analyze: tool({
         description: "Analyze an existing performance trace JSON document into summary and insights.",
         args: {
@@ -3186,7 +3148,6 @@ browser_console_logs: tool({
           return stringify(analysis);
         },
       }),
-
       browser_configure: tool({
         description: "Apply persistent emulation, network, and initialization overrides to a controlled tab.",
         args: {

@@ -1,6 +1,6 @@
-# Experimental decision assistance
+# Decision assistance
 
-Jev is disabled by default. Select a service under **Settings → Jev decisions**, paste an API key, and use **Save & test connection**. The key input accepts the key itself; the optional Advanced field accepts an environment-variable name. Selecting and saving a service authorizes bounded search/replay intent and candidate descriptions. Screenshots and executable actions are never sent. Treat candidate text and your intent as potentially private.
+Cloud decision assistance is disabled by default. Select a service under **Settings → Decision assistance**, paste an API key, and use **Save & test connection**. The key input accepts the key itself; the optional Advanced field accepts an environment-variable name. Selecting and saving a service authorizes bounded search/replay intent and candidate descriptions. Executable actions are never sent. Luna screenshot sharing is separately opt-in; Jev remains text-only. Treat candidate text and your intent as potentially private.
 
 OpenRouter's key check uses its documented `GET /api/v1/key`. A single small synthetic Decisions request then verifies access to the pinned Jev model; this test is billable. Settings and a replacement key are saved only after successful verification. Rejected credentials, insufficient credits, rate limits, and timeouts are shown with timings; tests never retry automatically. No browser data is used during connection tests.
 
@@ -19,7 +19,11 @@ For TypeSafe directly, use `--route typesafe` and `TYPESAFE_API_KEY`. An explici
 
 OpenRouter uses its [documented Decisions endpoint](https://openrouter.ai/blog/tutorials/how-to-use-jev/). Its evaluated build is pinned to `typesafe/jev-1.13-20260917`; TypeSafe direct uses `jev-1.13.0`. Requests never silently switch services. Timeouts, unavailable credentials, invalid IDs, and low confidence preserve deterministic fallback results. The agent remains responsible for action sequences, browser-state checks, and approvals.
 
-OpenAI Decisions API / Luna remains unavailable until its official request contract and preview access can be verified. No alternative OpenAI model is substituted.
+OpenAI Luna is available through OpenRouter with model `openai/gpt-6-luna-decisions` and the same Decisions endpoint. Select **OpenAI Luna through OpenRouter** and save/test your connection. Existing provider choices stay unchanged on upgrade. CLI: `opencode-chromium providers configure --provider openai-decisions --route openrouter --share-text`.
+
+Enable screenshot sharing separately in Settings or with `--share-images`. For an ambiguous page decision, at most one JPEG screenshot of the controlled tab is shared, bounded to 300 KB before base64 encoding. Capture and inference share the 1.5-second budget. Exact named matches never capture an image. Coalescing includes provider, model, page state, and tab identity; visual cache entries also include image identity. Revoking consent prevents sending new images. Validated candidate IDs and probabilities can only reorder existing targets; normal live checks and approvals remain authoritative.
+
+Requests follow the [multimodal state contract](https://openrouter.ai/docs/guides/community/multimodal-decisions): text plus a base64 `image_url` part with low detail. [Luna documentation](https://openrouter.ai/openai/gpt-6-luna-decisions). Images may contain private page content.
 
 ### Search and replay limits
 
@@ -35,7 +39,7 @@ A decision is skipped when any of these holds:
 - an identical decision is already in flight, in which case the two callers share one request;
 - the burst budget is exhausted (six decisions, refilled one every three seconds).
 
-Every skip is counted and shown in the popup's **Jev usage** panel as *Calls avoided*, so the saving is visible rather than assumed.
+Every skip is counted and shown in the popup's **Decision assistance** panel as *Calls avoided*, so the saving is visible rather than assumed.
 
 Page ranking uses up to 16 candidates with deduplicated descriptions of at most 160 characters, gathered from at most four label parts. The local pipeline is asked for a wider pool than the caller requested so a decision can promote a target it was shown; every return path trims back to the requested count, so enabling or disabling the provider never changes how many results the caller receives. A ranking request has a 1.5-second budget; connecting a key still uses the longer budget.
 

@@ -64,3 +64,4 @@ extension/*
 *.bak-*
 
 .build/
+extension-firefox/
