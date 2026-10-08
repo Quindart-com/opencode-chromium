@@ -3,7 +3,7 @@ import path from "node:path";
 import { detectHarnesses, planHarness } from "./harnesses.js";
 import { selectHarnesses } from "./menu.js";
 import { applyTransaction, type FileChange } from "./transaction.js";
-import { runtimeDir } from "../cli/native-host.js";
+import { runtimeDir, planNativeHosts, applyRegistryChanges } from "../cli/native-host.js";
 import { packageRoot } from "../cli/config.js";
 import { launcherSource } from "../cli/runtime-link.js";
 import { offerRestart } from "./restart.js";
@@ -22,10 +22,11 @@ export async function manageSetup(argv: string[], remove = false) {
     if (!row || delimiter < 1 || !override?.slice(delimiter + 1)) throw new Error("Use --config harness-id=/absolute/config/path");
     row.configPath = path.resolve(override.slice(delimiter + 1));
   }
-  const explicit = argv.includes("--targets") ? flag("--targets")?.split(",") : undefined;
+  if (argv.includes("--all") && argv.includes("--targets")) throw new Error("Choose --all or --targets, not both");
+  const explicit = argv.includes("--all") ? rows.filter(row => row.detected && row.supported).map(row => row.id) : argv.includes("--targets") ? flag("--targets")?.split(",") : undefined;
   if (argv.includes("--json") && !explicit) return { ok: true, applied: false, harnesses: rows, runtimeDir: dir };
   const selected = explicit ?? await selectHarnesses(rows);
-  if (!selected.length) return { ok: true, applied: false, harnesses: rows };
+  if (!selected.length && !argv.includes("--all")) return { ok: true, applied: false, harnesses: rows };
   for (const id of selected) if (!rows.some(row => row.id === id)) throw new Error(`Unknown harness: ${id}`);
   const root = packageRoot();
   if (!remove && !fs.existsSync(path.join(root, "dist", "build-manifest.json"))) throw new Error("Build the runtime before setup: bun run build");
@@ -48,11 +49,13 @@ export async function manageSetup(argv: string[], remove = false) {
       ...(production ? { channel: "production", followBranch: false, pendingReload: true } : {}) };
     changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: JSON.stringify(manifest, null, 2) + "\n" });
   }
-  const result = applyTransaction(changes, dryRun);
+  const hosts = !remove && argv.includes("--all") ? planNativeHosts(dir) : null;
+  if (hosts) changes.push(...hosts.changes);
+  const result = applyTransaction(changes, dryRun, hosts ? () => { if (process.platform !== "win32") fs.chmodSync(hosts.hostPath, 0o755); applyRegistryChanges(hosts.registry); } : undefined);
   const restarts = dryRun ? [] : await offerRestart(selected, argv.includes("--restart"), !argv.includes("--json"));
   return { ok: true, applied: !dryRun, dryRun, ...result, targets: selected,
     restarts,
     pendingReload: dryRun ? [] : rows.filter(row => selected.includes(row.id)).map(row => ({ id: row.id,
       instruction: row.restart === "desktop" ? "Quit and reopen the desktop application to reload MCP configuration." : "Reconnect MCP or relaunch the terminal session to reload tools." })),
-    browserSetup: "Install the browser extension, then run opencode-chromium link to register its native messaging host." };
+    browserSetup: hosts ? "Native hosts registered. Install the matching store extension; Firefox also needs its guided loopback transport configuration." : "Install the browser extension, then run opencode-chromium link to register its native messaging host." };
 }

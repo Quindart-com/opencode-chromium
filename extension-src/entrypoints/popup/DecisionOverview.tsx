@@ -22,8 +22,10 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
   const number = (value?: number) => value === undefined ? "—" : value.toLocaleString();
   const avoided = efficiency ? efficiency.skipped + efficiency.cacheHits + efficiency.coalesced + efficiency.budgetSkipped : undefined;
   return <section className="decision-overview" aria-labelledby="jev-usage-heading">
-    <div className="decision-overview-heading"><h2 id="jev-usage-heading">Jev usage</h2><button type="button" className="button-mini" onClick={onConfigure}>Configure</button></div>
-    <p className="help-note">{error || (!status ? "Loading…" : status.ready ? `Enabled via ${status.route === "openrouter" ? "OpenRouter" : "TypeSafe"}` : "Off · Local search and replay available")}</p>
+    <div className="decision-overview-heading"><h2 id="jev-usage-heading">Decision assistance</h2><button type="button" className="button-mini" onClick={onConfigure}>Configure</button></div>
+    <p className="decision-model">{!status ? error ? "Not connected" : "Loading…" : status.ready ? status.provider === "openai-decisions" ? "OpenAI Luna" : "Jev" : "Local search"}</p>
+    <p className="help-note">{error || (!status ? "Checking your configuration…" : status.ready ? `Connected through ${status.route === "openrouter" ? "OpenRouter" : "TypeSafe"}` : "Cloud assistance is off. Search and replay remain available.")}</p>
+    <details className="usage-details"><summary>Usage and performance</summary>
     <dl className="decision-usage">
       <div><dt>Call attempts</dt><dd>{number(usage?.calls)}</dd></div>
       <div><dt>Selected / abstained</dt><dd>{usage ? `${number(usage.selected)} / ${number(usage.abstained)}` : "—"}</dd></div>
@@ -33,6 +35,7 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
       <div><dt>Calls avoided</dt><dd>{number(avoided)}</dd></div>
     </dl>
     <p className="provider-test-help">{usage ? `Includes ${usage.tests} connection tests. Usage reported for ${usage.usageReportedCalls}/${usage.calls} calls; cost for ${usage.costReportedCalls}/${usage.calls}. ${usage.window}.` : "Only provider-reported tokens and cost are counted. Harness usage is separate."}</p>
-    {efficiency ? <p className="provider-test-help">{`Avoided since the host started: ${number(efficiency.skipped)} unambiguous rankings, ${number(efficiency.cacheHits)} repeated searches, ${number(efficiency.coalesced)} duplicate requests in flight${efficiency.budgetSkipped ? `, ${number(efficiency.budgetSkipped)} over the burst limit` : ""}. A paid call is only made when the local ranking is genuinely ambiguous.`}</p> : null}
+    {efficiency ? <p className="provider-test-help">{`Avoided since the host started: ${number(efficiency.skipped)} unambiguous rankings, ${number(efficiency.cacheHits)} repeated searches, ${number(efficiency.coalesced)} duplicate requests in flight${efficiency.budgetSkipped ? `, ${number(efficiency.budgetSkipped)} over the burst limit` : ""}. Paid decisions only resolve ambiguous rankings.`}</p> : null}
+    </details>
   </section>;
 }

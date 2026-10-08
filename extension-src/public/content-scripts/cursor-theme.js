@@ -397,7 +397,20 @@ if ((globalThis.__opencodeCursorThemeVersion ?? 0) < OPENCODE_CURSOR_THEME_VERSI
     return `<svg viewBox="0 0 22 22" width="18" height="18" aria-hidden="true"><path d="${d}" fill="none" stroke="rgba(255,255,255,.93)" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   }
 
+  // Packaged cursor geometry accepts only inert SVG elements and attributes.
+  function replaceArtwork(target, markup) {
+    const parsed = new DOMParser().parseFromString('<svg xmlns="http://www.w3.org/2000/svg">' + markup + '</svg>', 'image/svg+xml');
+    const tags = new Set(['svg', 'g', 'path']);
+    const attributes = new Set(['xmlns', 'd', 'fill', 'stroke', 'stroke-opacity', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'data-layer', 'viewBox', 'width', 'height', 'aria-hidden']);
+    for (const element of parsed.querySelectorAll('*')) {
+      if (!tags.has(element.localName)) { element.remove(); continue; }
+      for (const attribute of [...element.attributes]) if (!attributes.has(attribute.name)) element.removeAttribute(attribute.name);
+    }
+    target.replaceChildren(...[...parsed.documentElement.childNodes].map(node => document.importNode(node, true)));
+  }
+
   globalThis.__opencodeCursorTheme = {
+    replaceArtwork,
     version: OPENCODE_CURSOR_THEME_VERSION,
     CANVAS,
     DISPLAY_SIZE,

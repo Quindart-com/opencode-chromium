@@ -26,6 +26,7 @@ const required = [
   "dist/adapters/sdk/index.js",
   "dist/cli/index.js",
   "extension/manifest.json",
+  "extension-firefox/manifest.json",
   "native-host/dist/runtime.js",
   "native-host/dist/runtime.js",
   "native-host/dist/memory/profile-stats.js",

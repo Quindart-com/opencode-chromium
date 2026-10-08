@@ -11,31 +11,11 @@ const EXTENSION_ID_ENV = "OPENCODE_BROWSER_EXTENSION_ID";
 const USER_DATA_ENV = "OPENCODE_BROWSER_USER_DATA_DIR";
 const PREFERENCES_ENV = "OPENCODE_BROWSER_PREFERENCES_PATH";
 
-const USER_DATA_PARTS = {
-  chrome: {
-    win32: ["Google", "Chrome", "User Data"],
-    darwin: ["Library", "Application Support", "Google", "Chrome"],
-    linux: [".config", "google-chrome"],
-  },
-  edge: {
-    win32: ["Microsoft", "Edge", "User Data"],
-    darwin: ["Library", "Application Support", "Microsoft Edge"],
-    linux: [".config", "microsoft-edge"],
-  },
-  brave: {
-    win32: ["BraveSoftware", "Brave-Browser", "User Data"],
-    darwin: ["Library", "Application Support", "BraveSoftware", "Brave-Browser"],
-    linux: [".config", "BraveSoftware", "Brave-Browser"],
-  },
-  chromium: {
-    win32: ["Chromium", "User Data"],
-    darwin: ["Library", "Application Support", "Chromium"],
-    linux: [".config", "chromium"],
-  },
-};
+import { BROWSERS, browserUserDataRoot } from "../src/cli/browsers.js";
+import { firefoxProfiles } from "../src/cli/firefox-profiles.js";
 
 function usage() {
-  console.error("Usage: node scripts/check-extension-installed.js [--browser chrome|edge|brave|chromium] [--extension-id <id>] [--json]");
+  console.error("Usage: node scripts/check-extension-installed.js [--browser chrome|edge|brave|chromium|firefox|librewolf] [--extension-id <id>] [--json]");
   console.error(`Optional env: ${EXTENSION_ID_ENV}, ${USER_DATA_ENV}, ${PREFERENCES_ENV}`);
 }
 
@@ -53,7 +33,7 @@ function parseArgs(argv) {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  if (!USER_DATA_PARTS[args.browser]) throw new Error(`Unsupported browser: ${args.browser}`);
+  if (!BROWSERS[args.browser]) throw new Error(`Unsupported browser: ${args.browser}`);
   return args;
 }
 
@@ -81,11 +61,7 @@ function configuredExtensionIds(explicitId) {
 
 function userDataRoot(browser) {
   if (process.env[USER_DATA_ENV]) return path.resolve(process.env[USER_DATA_ENV]);
-  const platform = process.platform === "win32" ? "win32" : process.platform === "darwin" ? "darwin" : "linux";
-  const base = process.platform === "win32"
-    ? process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local")
-    : os.homedir();
-  return path.join(base, ...USER_DATA_PARTS[browser][platform]);
+  return browserUserDataRoot(browser);
 }
 
 function profileDirectories(root) {
@@ -118,11 +94,12 @@ function extensionMatches(id, extension, expectedIds) {
 
 function inspect(browser, explicitId) {
   const root = userDataRoot(browser);
-  const expectedIds = configuredExtensionIds(explicitId);
+  const expectedIds = BROWSERS[browser].engine === "gecko" ? [explicitId ?? "opencode-browser-plugin@quindart.com"] : configuredExtensionIds(explicitId);
   const matches = [];
-  for (const preferencesPath of preferencePaths(root)) {
+  const paths = BROWSERS[browser].engine === "gecko" ? firefoxProfiles(root).map(profile => path.join(profile.path, "extensions.json")) : preferencePaths(root);
+  for (const preferencesPath of paths) {
     const preferences = readJsonIfPresent(preferencesPath);
-    const settings = preferences?.extensions?.settings;
+    const settings = BROWSERS[browser].engine === "gecko" ? Object.fromEntries((preferences?.addons ?? []).filter(addon => expectedIds.includes(addon.id)).map(addon => [addon.id, { manifest: { name: addon.defaultLocale?.name }, path: addon.path, state: addon.active ? 1 : 0 }])) : preferences?.extensions?.settings;
     if (!settings || typeof settings !== "object") continue;
     for (const [id, extension] of Object.entries(settings)) {
       if (!extensionMatches(id, extension, expectedIds)) continue;
