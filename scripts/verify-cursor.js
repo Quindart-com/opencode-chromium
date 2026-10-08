@@ -236,8 +236,13 @@ try {
     assert.ok(watched.some((sample) => sample.x > 5 && sample.x < 695), "a focused window animates the move");
 
     // Unfocused: no frames are spent, and the pointer is simply placed.
+    await page.evaluate(() => globalThis.__setFocus(false));
+    await deliver(page, { cursorId: "watched", label: "Watched", x: 120, y: 90, moveSequence: 2, action: "click" });
+    const placed = (await inspect(page))[0];
+    assert.deepEqual({ x: placed.x, y: placed.y }, { x: 120, y: 90 }, "an unfocused window places the pointer at the target");
+    // Sample after delivery. A frame between separate protocol calls can still
+    // show the previous target, which is not an animation of the new move.
     await page.evaluate(() => {
-      globalThis.__setFocus(false);
       const samples = [];
       globalThis.__unwatched = samples;
       const record = () => {
@@ -247,9 +252,6 @@ try {
       };
       requestAnimationFrame(record);
     });
-    await deliver(page, { cursorId: "watched", label: "Watched", x: 120, y: 90, moveSequence: 2, action: "click" });
-    const placed = (await inspect(page))[0];
-    assert.deepEqual({ x: placed.x, y: placed.y }, { x: 120, y: 90 }, "an unfocused window places the pointer at the target");
     await sleep(200);
     const unwatched = await page.evaluate(() => globalThis.__unwatched);
     assert.ok(unwatched.every((sample) => sample.x === 120 && sample.y === 90), "nothing is animated while the window is unfocused");
