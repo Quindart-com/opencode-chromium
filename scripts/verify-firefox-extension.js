@@ -29,6 +29,8 @@ fs.writeFileSync(background, fs.readFileSync(background, 'utf8').replaceAll('com
 const registry = path.join(fixture, 'registry'); fs.mkdirSync(registry);
 const runtimeDir = path.join(fixture, 'runtime');
 const env = { ...process.env, OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: registry, OPENCODE_BROWSER_RUNTIME_DIR: runtimeDir, OPENCODE_BROWSER_MEMORY_DIR: path.join(fixture, 'memory'), AGENT_BROWSER_PROVIDER_DIR: path.join(fixture, 'providers'), OPENCODE_BROWSER_SEMANTIC_DIR: path.join(fixture, 'models') };
+const { MemoryStore } = await import('../native-host/dist/memory/store.js');
+const fixtureMemory = new MemoryStore({ root: env.OPENCODE_BROWSER_MEMORY_DIR }); fixtureMemory.enable(); fixtureMemory.close();
 if (browser === 'librewolf') {
   env.USERPROFILE = fixture; env.HOME = fixture;
   const overrides = path.join(fixture, '.librewolf'); fs.mkdirSync(overrides);
@@ -82,6 +84,10 @@ try {
   for (let i = 0; i < 30; i++) { downloads = await call('browser_observe', { tabId, mode: 'downloads' }); if (JSON.stringify(downloads).includes('fixture.txt')) break; await new Promise(resolve => setTimeout(resolve, 100)); }
   assert.match(JSON.stringify(downloads), /fixture.txt/); report.checks.push('download events through runtime');
   await call('browser_run', { tabId, steps: [{ action: 'click', target: { selector: '#next' } }, { action: 'back' }], postObserve: { mode: 'inspect', target: { selector: '#choose' } } }); report.checks.push('history and navigation target renewal');
+  const remembered = { tabId, steps: [{ action: 'hover', target: { selector: '#choose' } }, { action: 'click', target: { selector: '#choose' } }] };
+  await call('browser_run', remembered);
+  const replayed = await call('browser_run', remembered);
+  assert.equal(replayed.status, 'memory_replay'); report.checks.push('local action memory replay through runtime');
   await call('browser_session', { action: 'configure', tabId, environment: { viewport: { width: 800, height: 600 } } }); await call('browser_session', { action: 'configure', tabId, environment: { reset: true } }); report.checks.push('viewport configuration and reset');
   const second = await call('browser_session', { action: 'new-tab', sessionId: 'firefox-second-session' });
   await call('browser_run', { sessionId: 'firefox-second-session', tabId: second.activeTabId, steps: [{ action: 'navigate', url: origin }] });
