@@ -86,7 +86,7 @@ jobs:
         run: bun run check:tag -- "$RELEASE_TAG"
 
       - name: Build release
-        run: bun run build && bun run build:extension
+        run: bun run build && bun run build:extension && bun run build:extension:firefox
 
       - name: Re-run release checks
         run: bun run check
