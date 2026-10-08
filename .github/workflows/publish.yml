@@ -176,7 +176,7 @@ jobs:
   github-release:
     name: Create GitHub release
     if: needs.release-metadata.outputs.should_release == 'true'
-    needs: [release-metadata, publish, webstore-release]
+    needs: [release-metadata, publish, webstore-release, firefox-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -198,6 +198,15 @@ jobs:
     if: needs.release-metadata.outputs.should_release == 'true'
     needs: [release-metadata, publish]
     uses: ./.github/workflows/webstore.yml
+    with:
+      dry_run: false
+    secrets: inherit
+
+  firefox-release:
+    name: Publish Firefox extension
+    if: needs.release-metadata.outputs.should_release == 'true'
+    needs: [release-metadata, publish]
+    uses: ./.github/workflows/firefox.yml
     with:
       dry_run: false
     secrets: inherit

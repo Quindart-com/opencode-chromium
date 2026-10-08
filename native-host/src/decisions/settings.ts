@@ -11,6 +11,10 @@ export const providerSettingsSchema = z.object({
   keyEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/).default("TYPESAFE_API_KEY"),
 });
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
+export const LUNA_MODEL = "openai/gpt-6-luna-decisions";
+export function providerModel(settings: ProviderSettings): string | null {
+  return settings.provider === "openai-decisions" ? LUNA_MODEL : settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null;
+}
 export function providerSettingsPath(): string {
   const base = process.env.AGENT_BROWSER_PROVIDER_DIR ?? (process.platform === "win32" ?
     path.join(process.env.LOCALAPPDATA ?? os.homedir(), "OpenCodeBrowser", "providers") :
@@ -46,6 +50,7 @@ export function getProviderSettings(): ProviderSettings {
 export function configureProvider(settings: unknown): ProviderSettings {
   const validated = providerSettingsSchema.parse(settings);
   if (validated.provider === "jev" && validated.shareImages) throw new Error("Jev accepts text only");
+  if (validated.provider === "openai-decisions" && validated.route !== "openrouter") throw new Error("Luna requires OpenRouter");
   const file = providerSettingsPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.tmp`;
@@ -58,7 +63,7 @@ export function configureProvider(settings: unknown): ProviderSettings {
 export function providerStatus() {
   const settings = getProviderSettings();
   const credentialConfigured = Boolean(providerKey(settings));
-  const ready = settings.provider === "jev" && settings.shareText && credentialConfigured;
-  return { ...settings, ready, credentialConfigured, model: settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null,
-    reason: settings.provider === "openai-decisions" ? "Preview API contract/access unavailable" : ready ? null : "Disabled, text sharing not enabled, or credential environment variable missing" };
+  const ready = settings.provider !== "off" && (settings.provider !== "openai-decisions" || settings.route === "openrouter") && settings.shareText && credentialConfigured;
+  return { ...settings, ready, credentialConfigured, model: providerModel(settings),
+    reason: ready ? null : "Disabled, text sharing not enabled, or credential environment variable missing" };
 }

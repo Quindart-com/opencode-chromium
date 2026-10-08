@@ -15,6 +15,7 @@ import { decisionSearch } from "./decisions/search.ts";
 import { selectRecipe } from "./decisions/recipes.ts";
 import { candidateRecipes } from "./memory/recipe-candidates.ts";
 import { createUploadFiles } from "./uploads.js";
+import { createFirefoxHost } from "./firefox/backend.js";
 import { EmbedQueue, MemoryStore, embeddingEnabled } from "./memory/index.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
@@ -73,11 +74,16 @@ try {
   log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
 const uploadFiles = createUploadFiles();
+const firefoxHost = createFirefoxHost({ getProfile: () => state.profile, onEvent: (tabId, method, params) => {
+  void relay.requestExtension("firefox.event", { tabId, method, params }).catch(() => {});
+} });
 const relay = new RpcRelay({
   state,
   extensionWriter: (message) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
   localHandler: async (method, params) => {
+    const firefox = await firefoxHost(method, params);
+    if (firefox !== undefined) return firefox;
     if (method.startsWith("uploads.")) return uploadFiles(method, params);
     if (method === "runtime.activity") return relay.activity();
     if (method === "memory.selectRecipe" && memoryStore) return await selectRecipe(params?.intent,
@@ -85,7 +91,10 @@ const relay = new RpcRelay({
     const decision = await handleDecisionHostMethod(method, params);
     if (decision !== undefined) return decision;
     if (method === "semantic.rankPageUnits") {
-      const ranked = await decisionSearch(params, rankPageUnits);
+      const ranked = await decisionSearch(params, rankPageUnits, async () => {
+        const result = await relay.requestExtension("decisionImage", params, 750);
+        return result?.image;
+      });
       if (ranked !== undefined) return ranked;
     }
     const semantic = await handleSemanticHostMethod(method, params);
@@ -199,7 +208,8 @@ function shutdownHost(reason, exitCode = 0) {
   memoryStore?.close();
   cleanupProfileRegistration();
   relay.shutdown(reason);
-  server.close(() => {
+  server.close(async () => {
+    await firefoxHost.close();
     cleanupSocketPath();
     process.exit(exitCode);
   });

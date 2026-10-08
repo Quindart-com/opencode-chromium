@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { createBrowserAgent } from "../adapters/sdk/index.js";
 import { createCapabilityRegistry } from "../core/capabilities.js";
 import { packageInfo } from "./version.js";
+import { firefoxHealth } from "./firefox.js";
+import { readProfileRegistrations } from "../../native-host/src/profile-registry.js";
 import { codexConfigPath, directoryHash, skillSourceDirectory, skillTargets, STALE_SKILL_MARKER } from "./skills.js";
 
 const MAX_SCHEMA_BYTES = 13000;
@@ -39,6 +41,12 @@ export async function runDoctor({ json = false } = {}) {
     check("stale-client-paths", !fs.existsSync(path.join(info.root, ["opencode", "plugin"].join("-"))) && !fs.existsSync(path.join(info.root, ["codex", "adapter"].join("-"))), {}),
   ];
   const skillSource = skillSourceDirectory();
+  for (const profile of readProfileRegistrations().filter(item => /Firefox|LibreWolf/i.test(item.browserName ?? ""))) {
+    try {
+      const health = await firefoxHealth(profile.profileId);
+      checks.push(check("firefox-remote-agent", health.configured && health.reachable, health));
+    } catch (error) { checks.push(check("firefox-remote-agent", false, { profileId: profile.profileId, message: error.message })); }
+  }
   const canonicalHash = fs.existsSync(path.join(skillSource, "SKILL.md")) ? directoryHash(skillSource) : null;
   const skillTargetsList = skillTargets();
   const skillInstallCommand = "opencode-chromium install --client=skills";

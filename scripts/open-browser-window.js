@@ -10,59 +10,11 @@ const ABOUT_BLANK_URL = "about:blank";
 const USER_DATA_ENV = "OPENCODE_BROWSER_USER_DATA_DIR";
 const PREFERENCES_ENV = "OPENCODE_BROWSER_PREFERENCES_PATH";
 
-const BROWSERS = {
-  chrome: {
-    name: "Google Chrome",
-    commands: ["chrome", "google-chrome"],
-    windowsExecutables: ["Google\\Chrome\\Application\\chrome.exe"],
-    macApps: ["Google Chrome.app"],
-    linuxPaths: ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/opt/google/chrome/chrome"],
-    userData: {
-      win32: ["Google", "Chrome", "User Data"],
-      darwin: ["Library", "Application Support", "Google", "Chrome"],
-      linux: [".config", "google-chrome"],
-    },
-  },
-  edge: {
-    name: "Microsoft Edge",
-    commands: ["msedge", "microsoft-edge"],
-    windowsExecutables: ["Microsoft\\Edge\\Application\\msedge.exe"],
-    macApps: ["Microsoft Edge.app"],
-    linuxPaths: ["/usr/bin/microsoft-edge", "/usr/bin/microsoft-edge-stable"],
-    userData: {
-      win32: ["Microsoft", "Edge", "User Data"],
-      darwin: ["Library", "Application Support", "Microsoft Edge"],
-      linux: [".config", "microsoft-edge"],
-    },
-  },
-  brave: {
-    name: "Brave Browser",
-    commands: ["brave", "brave-browser"],
-    windowsExecutables: ["BraveSoftware\\Brave-Browser\\Application\\brave.exe"],
-    macApps: ["Brave Browser.app"],
-    linuxPaths: ["/usr/bin/brave", "/usr/bin/brave-browser"],
-    userData: {
-      win32: ["BraveSoftware", "Brave-Browser", "User Data"],
-      darwin: ["Library", "Application Support", "BraveSoftware", "Brave-Browser"],
-      linux: [".config", "BraveSoftware", "Brave-Browser"],
-    },
-  },
-  chromium: {
-    name: "Chromium",
-    commands: ["chromium", "chromium-browser"],
-    windowsExecutables: ["Chromium\\Application\\chrome.exe"],
-    macApps: ["Chromium.app"],
-    linuxPaths: ["/usr/bin/chromium", "/usr/bin/chromium-browser"],
-    userData: {
-      win32: ["Chromium", "User Data"],
-      darwin: ["Library", "Application Support", "Chromium"],
-      linux: [".config", "chromium"],
-    },
-  },
-};
+import { BROWSERS, executableCandidates as browserExecutables, browserUserDataRoot } from "../src/cli/browsers.js";
+import { firefoxProfiles } from "../src/cli/firefox-profiles.js";
 
 function usage() {
-  console.error("Usage: node scripts/open-browser-window.js [--browser chrome|edge|brave|chromium] [--url <url>] [--dry-run] [--json]");
+  console.error("Usage: node scripts/open-browser-window.js [--browser chrome|edge|brave|chromium|firefox|librewolf] [--url <url>] [--dry-run] [--json]");
   console.error(`Optional env: ${USER_DATA_ENV}, ${PREFERENCES_ENV}`);
 }
 
@@ -71,6 +23,8 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--browser") args.browser = argv[++i];
+    else if (arg === "--profile") args.profile = argv[++i];
+    else if (arg === "--port") args.port = Number(argv[++i]);
     else if (arg === "--url") args.url = argv[++i];
     else if (arg === "--dry-run") args.dryRun = true;
     else if (arg === "--json") args.json = true;
@@ -85,51 +39,13 @@ function parseArgs(argv) {
   return args;
 }
 
-function commandPath(command) {
-  const executable = process.platform === "win32" ? "where" : "which";
-  try {
-    return execFileSync(executable, [command], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function executableCandidates(browser) {
-  const candidates = [];
-  if (process.platform === "win32") {
-    const roots = [process.env.LOCALAPPDATA, process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"]].filter(Boolean);
-    for (const root of roots) {
-      for (const relative of browser.windowsExecutables) candidates.push(path.join(root, relative));
-    }
-  } else if (process.platform === "darwin") {
-    for (const root of ["/Applications", "/System/Applications", path.join(os.homedir(), "Applications")]) {
-      for (const appName of browser.macApps) candidates.push(path.join(root, appName));
-    }
-  } else {
-    candidates.push(...browser.linuxPaths);
-  }
-
-  for (const command of browser.commands) {
-    const found = commandPath(command);
-    if (found) candidates.push(found);
-  }
-  return candidates;
-}
-
 function resolveExecutable(browser) {
-  return executableCandidates(browser).find((candidate) => fs.existsSync(candidate)) ?? null;
+  return browserExecutables(browser).find((candidate) => fs.existsSync(candidate)) ?? null;
 }
 
 function userDataRoot(browser) {
   if (process.env[USER_DATA_ENV]) return path.resolve(process.env[USER_DATA_ENV]);
-  const platform = process.platform === "win32" ? "win32" : process.platform === "darwin" ? "darwin" : "linux";
-  const base = process.platform === "win32"
-    ? process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local")
-    : os.homedir();
-  return path.join(base, ...browser.userData[platform]);
+  return browserUserDataRoot(browser);
 }
 
 function readJsonIfPresent(filePath) {
@@ -204,11 +120,21 @@ function launch(command, args) {
 try {
   const args = parseArgs(process.argv.slice(2));
   const browser = BROWSERS[args.browser];
-  const executablePath = resolveExecutable(browser);
+  const executablePath = resolveExecutable(args.browser);
   if (!executablePath) throw new Error(`${browser.name} executable was not found`);
-  const root = userDataRoot(browser);
-  const profileDirectory = resolveProfileDirectory(root);
-  const command = launchCommand(args.browser, browser, executablePath, profileDirectory, args.url);
+  const root = userDataRoot(args.browser);
+  const profileDirectory = browser.engine === "gecko" ? (args.profile ? path.resolve(args.profile) : firefoxProfiles(root)[0]?.path) : (args.profile ?? resolveProfileDirectory(root));
+  if (!profileDirectory) throw new Error("No Firefox profile found; specify --profile /absolute/profile/path");
+  let command = launchCommand(args.browser, browser, executablePath, profileDirectory, args.url);
+  if (browser.engine === "gecko") {
+    const launchArgs = ["--profile", profileDirectory, args.url];
+    if (args.port !== undefined) {
+      if (!Number.isInteger(args.port) || args.port < 1024 || args.port > 65535) throw new Error("Choose a port between 1024 and 65535");
+      if (["parent.lock", ".parentlock", "lock"].some(name => fs.existsSync(path.join(profileDirectory, name)))) throw new Error("Selected profile may already be occupied; close it yourself before changing launch configuration");
+      launchArgs.unshift("--no-remote", "--remote-debugging-port", String(args.port));
+    }
+    command.args = process.platform === "darwin" && executablePath.endsWith(".app") ? ["-na", executablePath, "--args", ...launchArgs] : launchArgs;
+  }
 
   if (args.json || args.dryRun) console.log(JSON.stringify({ ...command, userDataRoot: root, dryRun: args.dryRun }, null, 2));
   else console.log(`Opening ${browser.name} with profile ${profileDirectory}`);
