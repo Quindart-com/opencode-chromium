@@ -89,7 +89,8 @@ jobs:
         run: bunx playwright install --only-shell chromium
       - name: Verify preinstalled Windows Chrome
         if: runner.os == 'Windows'
-        run: node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch({ channel: 'chrome', headless: true }); console.log('Using preinstalled Chrome ' + browser.version()); await browser.close(); })().catch(error => { console.error(error.message); process.exit(1); });"
+        run: |
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch({ channel: 'chrome', headless: true }); console.log('Using preinstalled Chrome ' + browser.version()); await browser.close(); })().catch(error => { console.error(error.message); process.exit(1); });"
       - run: node scripts/verify-popup.js
       - run: bun run firefox:submit -- --dry-run
       - run: node scripts/verify-uploads.js
