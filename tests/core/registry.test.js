@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 import { createCoreRegistry } from "../../src/core/registry.js";
 import { toolDefinitionsForDialect } from "../../src/core/schema-adapters.js";
 
@@ -28,7 +29,7 @@ test("typed run schema rejects arbitrary code and oversized chains", () => {
   assert.equal(schema.safeParse({ steps: [{ action: "wait" }] }).success, false);
   assert.equal(schema.safeParse({ steps: [{ action: "navigate", url: "javascript:alert(1)" }] }).success, false);
   assert.equal(schema.safeParse({ steps: [{ action: "navigate", url: "about:blank" }] }).success, true);
-  assert.equal(schema.safeParse({ approvalToken: "approved-request" }).success, true);
+  assert.equal(schema.safeParse({ approvalToken: randomUUID() }).success, true);
   assert.equal(schema.safeParse({ steps: [{ action: "press", key: "CTRL+A" }], maxChars: 500000 }).success, true);
 });
 
