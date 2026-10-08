@@ -28,7 +28,8 @@ if (process.argv.includes("--dry-run")) {
   if (!issuer || !secret) throw new Error("Configure WEB_EXT_API_KEY and WEB_EXT_API_SECRET repository secrets");
   const encode = obj => Buffer.from(JSON.stringify(obj)).toString("base64url");
   const base = "https://addons.mozilla.org/api/v5/addons/addon/opencode-browser-plugin%40quindart.com/versions/";
-  let next = base + "?page_size=50", alreadySubmitted = false, pages = 0;
+  // Author-only filter includes pending review versions, not just public ones.
+  let next = base + "?filter=all_with_unlisted&page_size=50", alreadySubmitted = false, pages = 0;
   while (next && !alreadySubmitted) {
     if (++pages > 100 || !next.startsWith(base)) throw new Error("AMO version pagination could not be verified; submission cancelled");
     const now = Math.floor(Date.now() / 1000);
