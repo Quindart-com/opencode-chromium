@@ -41,7 +41,7 @@ const server = http.createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 origin = `http://127.0.0.1:${server.address().port}`;
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, channel: process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
   const context = await browser.newContext({ viewport: { width: 500, height: 560 } });
   const website = await context.newPage();
   await website.goto(`${origin}/website`);

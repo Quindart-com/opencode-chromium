@@ -57,7 +57,7 @@ const translation = (transform) => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const screenshotDir = path.join(root, "reports");
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, channel: process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
 try {
   fs.mkdirSync(screenshotDir, { recursive: true });
 
