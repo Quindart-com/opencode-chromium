@@ -76,7 +76,7 @@ function Header({ status }: { status: NativeStatus }): React.JSX.Element {
     <header id="app-header">
       <img id="app-logo" src="/images/icon48.png" width="48" height="48" alt="opencode-chromium logo" />
       <div id="app-identity">
-        <h1>opencode-chromium</h1>
+        <h1>OpenCode Browser</h1>
         <p id="app-subtitle">
           <span id="app-version">v{browser.runtime.getManifest().version}</span> · Local browser automation
         </p>
@@ -101,6 +101,16 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
             className={`view-tab${isActive ? " active" : ""}`}
             role="tab"
             aria-selected={isActive}
+            aria-controls={`panel-${view}`}
+            tabIndex={isActive ? 0 : -1}
+            onKeyDown={event => {
+              const views = ["overview", "profiles", "settings"] as const;
+              const index = views.indexOf(view);
+              const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : event.key === "ArrowRight" ? (index + 1) % 3 : event.key === "ArrowLeft" ? (index + 2) % 3 : null;
+              if (next === null) return;
+              event.preventDefault(); onChange(views[next]!);
+              document.getElementById(`tab-${views[next]}`)?.focus();
+            }}
             type="button"
             onClick={() => onChange(view)}
           >
@@ -121,7 +131,15 @@ export default function App(): React.JSX.Element {
       <Header status={nativeStatus} />
       <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
       <ViewTabs active={activeView} onChange={setActiveView} />
-      {activeView === "overview" ? <><DecisionOverview onConfigure={() => setActiveView("settings")} /><MemoryView /></> : activeView === "profiles" ? <ConnectionView status={nativeStatus} view="profiles" /> : <><UploadSettings /><ProviderSettings /><ConnectionView status={nativeStatus} view="settings" /><MemoryView view="settings" /></>}
+      <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={activeView !== "overview"}>
+        {activeView === "overview" && <><DecisionOverview onConfigure={() => setActiveView("settings")} /><MemoryView /></>}
+      </div>
+      <div className="view-panel" role="tabpanel" id="panel-profiles" aria-labelledby="tab-profiles" hidden={activeView !== "profiles"}>
+        {activeView === "profiles" && <ConnectionView status={nativeStatus} view="profiles" />}
+      </div>
+      <div className="view-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden={activeView !== "settings"}>
+        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><details className="settings-advanced"><summary>Advanced · Local search and models</summary><ConnectionView status={nativeStatus} view="settings" /></details></>}
+      </div>
       <footer id="app-footer">
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
           Source on GitHub

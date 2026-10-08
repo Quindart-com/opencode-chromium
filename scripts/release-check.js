@@ -55,7 +55,7 @@ const packOutput = execFileSync(process.execPath, ["pm", "pack", "--dry-run", "-
 for (const needle of [["opencode", "plugin"].join("-") + "/", ["browser", "core"].join("-") + "/", ["codex", "adapter"].join("-") + "/", ".opencode/", "package-lock.json", "scripts/extension-id.json", "native-host/test/"]) {
   if (packOutput.includes(needle)) errors.push(`Packed artifact contains forbidden path: ${needle}`);
 }
-for (const required of ["dist/core/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "dist/cli/index.js", "extension/manifest.json", "native-host/dist/runtime.js", "skills/opencode-browser-plugin/SKILL.md", "skills/opencode-browser-plugin/agents/openai.yaml"]) {
+for (const required of ["dist/core/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "dist/cli/index.js", "extension/manifest.json", "extension-firefox/manifest.json", "native-host/dist/firefox/backend.js", "native-host/dist/runtime.js", "skills/opencode-browser-plugin/SKILL.md", "skills/opencode-browser-plugin/agents/openai.yaml"]) {
   if (!packOutput.includes(required)) errors.push(`Packed artifact is missing: ${required}`);
 }
 

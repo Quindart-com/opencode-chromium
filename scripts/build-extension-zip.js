@@ -7,7 +7,8 @@ import yazl from "yazl";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-const extensionDir = path.join(root, "extension");
+const firefox = process.argv.includes("--firefox");
+const extensionDir = path.join(root, firefox ? "extension-firefox" : "extension");
 const outDir = path.join(root, "dist-extension");
 const manifestPath = path.join(extensionDir, "manifest.json");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
@@ -18,7 +19,7 @@ if (manifest.version !== packageJson.version) {
   throw new Error(`Extension manifest version ${manifest.version} must match package version ${packageJson.version}`);
 }
 
-const zipName = `opencode-chromium-${packageJson.version}-chrome.zip`;
+const zipName = `opencode-chromium-${packageJson.version}-${firefox ? "firefox" : "chrome"}.zip`;
 const zipPath = path.join(outDir, zipName);
 fs.mkdirSync(outDir, { recursive: true });
 if (fs.existsSync(zipPath)) fs.rmSync(zipPath);
