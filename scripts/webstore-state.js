@@ -9,7 +9,7 @@ export function releaseDecision(status, version) {
   return { action: "upload", reason: "No outstanding submission was reported." };
 }
 
-export async function fetchReleaseState({ clientId, clientSecret, refreshToken, extensionId, publisherId, fetcher = fetch }) {
+export async function refreshStoreAccessToken({ clientId, clientSecret, refreshToken, fetcher = fetch }) {
   const tokenResponse = await fetcher("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -19,8 +19,13 @@ export async function fetchReleaseState({ clientId, clientSecret, refreshToken, 
   if (!tokenResponse.ok) throw new Error(`Store authorization failed (${tokenResponse.status})`);
   const token = await tokenResponse.json();
   if (typeof token.access_token !== "string") throw new Error("Store authorization returned no access token");
+  return token.access_token;
+}
+
+export async function fetchReleaseState({ clientId, clientSecret, refreshToken, accessToken, extensionId, publisherId, fetcher = fetch }) {
+  const bearer = accessToken ?? await refreshStoreAccessToken({ clientId, clientSecret, refreshToken, fetcher });
   const response = await fetcher(`https://chromewebstore.googleapis.com/v2/publishers/${encodeURIComponent(publisherId)}/items/${encodeURIComponent(extensionId)}:fetchStatus`, {
-    headers: { Authorization: `Bearer ${token.access_token}` },
+    headers: { Authorization: `Bearer ${bearer}` },
     signal: AbortSignal.timeout(30000),
   });
   if (!response.ok) throw new Error(`Store status lookup failed (${response.status}); no upload attempted`);
