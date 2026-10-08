@@ -17,6 +17,7 @@ if (!executable) throw Error('Test browser executable missing');
 const root = process.cwd();
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-firefox-extension-'));
 const profile = path.join(fixture, 'profile'); fs.mkdirSync(profile);
+fs.writeFileSync(path.join(profile, 'user.js'), 'user_pref("browser.download.useDownloadDir",true);\nuser_pref("browser.download.dir",' + JSON.stringify(path.join(fixture, 'downloads')) + ');\nuser_pref("browser.download.folderList",2);\nuser_pref("browser.helperApps.neverAsk.saveToDisk","text/plain,application/octet-stream");\n');
 // web-ext's temporary-add-on installer uses Firefox's separate developer RDP
 // server. LibreWolf disables that by default; enable it only in this disposable
 // QA profile, keeping its listener local. Production automation uses BiDi.
@@ -40,7 +41,7 @@ const manifest = path.join(fixture, 'native.json');
 fs.writeFileSync(manifest, JSON.stringify({ name: host, description: 'Disposable extension verification host', path: launcher, type: 'stdio', allowed_extensions: ['opencode-browser-plugin@quindart.com'] }));
 let nativeKey, nativeFile, child, agent, profileId;
 const server = http.createServer((req, res) => {
-  if (req.url === '/download') { res.setHeader('Content-Disposition', 'attachment; filename="fixture.txt"'); res.end('owned fixture'); return; }
+  if (req.url === '/download') { res.setHeader('Content-Type', 'text/plain'); res.setHeader('Content-Disposition', 'attachment; filename="fixture.txt"'); res.end('owned fixture'); return; }
   res.setHeader('Content-Type', 'text/html');
   res.end(req.url === '/next' ? '<h1>Next page</h1>' : '<title>Extension parity fixture</title><button id="choose" onclick="document.querySelector(\'#result\').textContent=event.isTrusted?\'Trusted choice\':\'Synthetic choice\'">Choose blue</button><p id="result">Ready</p><input id="name" aria-label="Your name"><button id="dialog" onclick="alert(\'Owned fixture dialog\')">Open dialog</button><div id="drag" style="width:60px;height:60px;background:blue" onpointerdown="window.dragged=event.isTrusted" onpointerup="window.released=event.isTrusted"></div><a id="next" href="/next">Next</a><a id="download" href="/download">Download fixture</a>');
 });
@@ -72,8 +73,14 @@ try {
   const tab = await call('browser_session', { action: 'new-tab' }); const tabId = tab.activeTabId;
   await call('browser_run', { tabId, steps: [{ action: 'navigate', url: origin }, { action: 'click', target: { selector: '#choose' } }], postObserve: { mode: 'inspect', target: { selector: '#result' } } });
   const chosen = await call('browser_observe', { tabId, mode: 'inspect', target: { selector: '#result' } }); assert.match(JSON.stringify(chosen), /Trusted choice/); report.checks.push('navigation and trusted click through four tools');
+  await call('browser_run', { tabId, steps: [{ id: 'choice', action: 'find', target: { query: 'Choose blue' } }, { action: 'click', target: { fromStep: 'choice' }, settle: { condition: 'contains', target: { selector: '#result' }, value: 'Trusted choice' } }] }); report.checks.push('find action and settle');
   await call('browser_run', { tabId, steps: [{ action: 'fill', target: { selector: '#name' }, value: 'Luna fixture' }, { action: 'press', target: { selector: '#name' }, key: 'End' }, { action: 'type', target: { selector: '#name' }, value: ' complete' }, { action: 'hover', target: { selector: '#choose' } }] }); report.checks.push('forms keyboard and hover');
   const shot = await call('browser_observe', { tabId, mode: 'screenshot', format: 'jpeg', quality: 45, delivery: 'artifact' }); assert.ok(shot); report.checks.push('screenshot through runtime');
+  await call('browser_run', { tabId, steps: [{ action: 'drag', path: [{ x: 20, y: 110 }, { x: 35, y: 125 }] }] }); report.checks.push('drag through runtime');
+  await call('browser_run', { tabId, steps: [{ action: 'click', target: { selector: '#download' } }] });
+  let downloads;
+  for (let i = 0; i < 30; i++) { downloads = await call('browser_observe', { tabId, mode: 'downloads' }); if (JSON.stringify(downloads).includes('fixture.txt')) break; await new Promise(resolve => setTimeout(resolve, 100)); }
+  assert.match(JSON.stringify(downloads), /fixture.txt/); report.checks.push('download events through runtime');
   await call('browser_run', { tabId, steps: [{ action: 'click', target: { selector: '#next' } }, { action: 'back' }], postObserve: { mode: 'inspect', target: { selector: '#choose' } } }); report.checks.push('history and navigation target renewal');
   await call('browser_session', { action: 'configure', tabId, environment: { viewport: { width: 800, height: 600 } } }); await call('browser_session', { action: 'configure', tabId, environment: { reset: true } }); report.checks.push('viewport configuration and reset');
   const second = await call('browser_session', { action: 'new-tab', sessionId: 'firefox-second-session' });
