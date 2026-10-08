@@ -144,7 +144,7 @@
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.0",
     "@opencode-ai/plugin": "1.18.34",
-    "effect": "3.22.1",
+    "effect": "4.0.1",
     "jsonc-parser": "^3.3.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
