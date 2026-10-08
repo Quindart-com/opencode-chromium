@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 import { MemoryStore } from "../../native-host/src/memory/store.js";
 import { safeSelector } from "../../native-host/src/memory/privacy.js";
 import { sqliteImplementation } from "../../native-host/src/memory/config.js";
@@ -181,7 +182,8 @@ test("invalid configuration never partially changes valid fields", (t) => {
 });
 
 test("memory selectors cannot retain form values or arbitrary attributes", () => {
-  assert.equal(safeSelector('input[value="fixture-secret"]'), null);
-  assert.equal(safeSelector('[data-token="fixture-secret"]'), null);
+  const fixtureValue = `fixture-${randomUUID()}`;
+  assert.equal(safeSelector(`input[value="${fixtureValue}"]`), null);
+  assert.equal(safeSelector(`[data-token="${fixtureValue}"]`), null);
   assert.equal(safeSelector('button[role="button"]'), 'button[role="button"]');
 });
