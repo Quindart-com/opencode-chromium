@@ -35,6 +35,7 @@ jobs:
           echo "OPENCODE_FIREFOX_TEST_EXECUTABLE=$release/firefox/firefox" >> "$GITHUB_ENV"
       - run: node scripts/verify-firefox.js
       - run: node scripts/verify-firefox-extension.js
+      - run: node scripts/verify-firefox-uploads.js
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
