@@ -161,7 +161,7 @@
     "eslint": "^10.11.0",
     "knip": "^6.38.0",
     "playwright": "1.63.0",
-    "publish-browser-extension": "4.0.5",
+    "publish-browser-extension": "6.2.0",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.71.0",
     "wxt": "0.21.4",
