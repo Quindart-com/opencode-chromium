@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   firefox-integration:
     name: Firefox / extension and native host
@@ -44,6 +48,9 @@ jobs:
 
   verify:
     runs-on: ${{ matrix.os }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+      OPENCODE_TEST_BROWSER_CHANNEL: ${{ matrix.os == 'windows-latest' && 'chrome' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -70,7 +77,20 @@ jobs:
       - run: node --test tests/native-host/memory-reliability.test.js tests/native-host/memory-search.test.js tests/native-host/embedding-service.test.js tests/native-host/framing.test.js tests/core/reliability.test.js
       - run: bun run check:package
       - run: bun run check:schemas
-      - run: bunx playwright install --with-deps chromium
+      - name: Cache Chromium headless shell
+        if: runner.os != 'Windows'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: chromium-cache
+        with:
+          path: .cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-chromium-shell-${{ hashFiles('bun.lock') }}
+      - name: Install Chromium headless shell on cache miss
+        if: runner.os != 'Windows' && steps.chromium-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --only-shell chromium
+      - name: Verify preinstalled Windows Chrome
+        if: runner.os == 'Windows'
+        run: |
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch({ channel: 'chrome', headless: true }); console.log('Using preinstalled Chrome ' + browser.version()); await browser.close(); })().catch(error => { console.error(error.message); process.exit(1); });"
       - run: node scripts/verify-popup.js
       - run: bun run firefox:submit -- --dry-run
       - run: node scripts/verify-uploads.js

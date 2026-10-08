@@ -91,7 +91,7 @@ if (process.argv.includes("--serve")) {
 }
 let browser;
 try {
-  browser = await chromium.launch({ headless: true, timeout: 30000 });
+  browser = await chromium.launch({ headless: true, timeout: 30000, channel: process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
   console.log("Popup browser ready");
   const page = await browser.newPage({ viewport: { width: 380, height: 800 } });
   page.setDefaultTimeout(15000);
