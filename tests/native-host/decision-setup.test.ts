@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { saveAndTestProvider } from "../../native-host/src/decisions/connection.ts";
 import { configureProvider, credentialPath, providerKey, providerStatus, storeProviderKey } from "../../native-host/src/decisions/settings.ts";
 import { decisionUsage, recordDecision } from "../../native-host/src/decisions/usage.ts";
@@ -12,7 +13,7 @@ let root: string;
 const original = process.env.AGENT_BROWSER_PROVIDER_DIR;
 beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "decision-setup-")); process.env.AGENT_BROWSER_PROVIDER_DIR = root; });
 afterEach(() => { process.env.AGENT_BROWSER_PROVIDER_DIR = original; if (original === undefined) delete process.env.AGENT_BROWSER_PROVIDER_DIR; fs.rmSync(root, { recursive: true, force: true }); });
-const secret = "synthetic-secret-for-tests";
+const secret = `fixture-${randomUUID()}`;
 const answer = (id = "ready") => new Response(JSON.stringify({ model: "typesafe/jev-1.13-20260917",
   answers: { decision: { type: "choice", choice: id, confidence: 0.99, probabilities: { [id]: 0.99, __abstain: 0.01 } } },
   usage: { input_tokens: 22, output_tokens: 0, cost: 0.000001 } }));
@@ -37,7 +38,7 @@ test("rejected key makes no billable call and preserves previous key and setting
   configureProvider({ provider: "off" });
   storeProviderKey("openrouter", secret);
   let calls = 0;
-  const result = await saveAndTestProvider({ settings, apiKey: "invalid-but-allowed-input" }, (async () => { calls++; return new Response(secret, { status: 401 }); }) as typeof fetch);
+  const result = await saveAndTestProvider({ settings, apiKey: `invalid-${randomUUID()}` }, (async () => { calls++; return new Response(secret, { status: 401 }); }) as typeof fetch);
   expect(result.ok).toBe(false); expect(result.message).toContain("API key rejected"); expect(calls).toBe(1);
   expect(providerStatus().provider).toBe("off"); expect(providerKey(settings)).toBe(secret);
   expect(JSON.stringify(result)).not.toContain(secret);
