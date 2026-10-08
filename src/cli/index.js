@@ -5,6 +5,7 @@ import path from "node:path";
 import { main as mcpMain } from "../adapters/mcp/server.js";
 import { manageSetup } from "../management/setup.ts";
 import { runProviderCommand } from "./providers.ts";
+import { runFirefoxCommand } from "./firefox.js";
 import { activateChannel, readActivation } from "../management/channels.ts";
 import { runtimeDir } from "./native-host.js";
 import { packageRoot } from "./config.js";
@@ -77,6 +78,7 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(JSON.stringify(runProviderCommand(rest), null, 2));
     return;
   }
+  if (command === "firefox") { console.log(JSON.stringify(await runFirefoxCommand(rest), null, 2)); return; }
   if (["setup", "manage", "update"].includes(command) || command === "uninstall" && !has(rest, "--client")) {
     console.log(JSON.stringify(await manageSetup(rest, command === "uninstall"), null, 2));
     return;

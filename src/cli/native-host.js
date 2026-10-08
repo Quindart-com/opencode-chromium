@@ -9,6 +9,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const HOST_NAME = "com.opencode.browser.plugin";
+export const FIREFOX_EXTENSION_ID = "opencode-browser-plugin@quindart.com";
 export { HOST_NAME };
 function usage() {
   console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id> ...] [--browsers chrome,edge,brave,chromium|all] [--host-path <executable>]");
@@ -67,7 +68,7 @@ function parseArgs(argv) {
     const configured = Array.isArray(config?.extensionIds) ? config.extensionIds : typeof config?.extensionId === "string" ? [config.extensionId] : [];
     args.extensionIds = configured.filter((id) => typeof id === "string" && id.length > 0);
   }
-  if (args.extensionIds.length === 0 && !args.auto) throw new Error("Missing --extension-id, OPENCODE_BROWSER_EXTENSION_ID, or --auto");
+  if (args.extensionIds.length === 0 && !args.auto && !args.browsers?.every(browser => BROWSERS[browser]?.engine === "gecko")) throw new Error("Missing --extension-id, OPENCODE_BROWSER_EXTENSION_ID, or --auto");
   args.browsers ??= ["chrome"];
   for (const browser of args.browsers) {
     if (!BROWSERS[browser]) throw new Error(`Unsupported browser: ${browser}`);
@@ -138,7 +139,7 @@ function writeWrapper(targetDir, launcherPath) {
 }
 
 function manifestPathForBrowser(browser, targetDir) {
-  if (process.platform === "win32") return path.join(targetDir, `${HOST_NAME}.${browser}.json`);
+  if (process.platform === "win32") return path.join(targetDir, `${HOST_NAME}.${BROWSERS[browser]?.engine === "gecko" ? "firefox" : browser}.json`);
   const manifestDir = nativeMessagingDir(browser);
   if (!manifestDir) return path.join(targetDir, `${HOST_NAME}.${browser}.json`);
   fs.mkdirSync(manifestDir, { recursive: true });
@@ -149,17 +150,51 @@ function writeManifest({ browser, extensionIds, hostPath, targetDir }) {
   const manifestPath = manifestPathForBrowser(browser, targetDir);
   const manifest = {
     name: HOST_NAME,
-    description: "OpenCode Chromium browser native messaging host",
+    description: "OpenCode browser native messaging host",
     path: hostPath,
     type: "stdio",
-    allowed_origins: extensionIds.map((extensionId) => `chrome-extension://${extensionId}/`),
+    ...(BROWSERS[browser]?.engine === "gecko" ? { allowed_extensions: [FIREFOX_EXTENSION_ID] } : { allowed_origins: extensionIds.map((extensionId) => `chrome-extension://${extensionId}/`) }),
   };
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
   return manifestPath;
 }
 
+// Plan host files and registry entries before setup applies any changes.
+export function planNativeHosts(targetDir = runtimeDir()) {
+  const changes = [], registry = [], seen = new Set();
+  const hostPath = path.join(targetDir, process.platform === "win32" ? "opencode-browser-host.cmd" : "opencode-browser-host");
+  const wrapper = process.platform === "win32" ? `@echo off\r\n"${process.execPath}" "${path.join(targetDir, "host.mjs")}"\r\n` : `#!/usr/bin/env sh\nexec "${process.execPath}" "${path.join(targetDir, "host.mjs")}"\n`;
+  const add = (filePath, after) => changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after });
+  add(hostPath, wrapper);
+  for (const browser of installedBrowsers()) {
+    const ids = resolveExtensionIds({ browser, targetDir }).extensionIds;
+    if (!ids.length && BROWSERS[browser]?.engine !== "gecko") ids.push("hdljmmpfnhojebplbbgdgejoobmjcbml");
+    const id = BROWSERS[browser]?.engine === "gecko" ? "firefox" : browser;
+    const filePath = process.platform === "win32" ? path.join(targetDir, `${HOST_NAME}.${id}.json`) : path.join(nativeMessagingDir(browser), `${HOST_NAME}.json`);
+    if (seen.has(filePath)) continue; seen.add(filePath);
+    add(filePath, JSON.stringify({ name: HOST_NAME, description: "OpenCode Browser native messaging host", path: hostPath, type: "stdio", ...(BROWSERS[browser]?.engine === "gecko" ? { allowed_extensions: [FIREFOX_EXTENSION_ID] } : { allowed_origins: ids.map(value => `chrome-extension://${value}/`) }) }, null, 2) + "\n");
+    if (process.platform === "win32") registry.push({ key: windowsRegistryKey(browser, HOST_NAME), before: registryManifestPath(browser), after: filePath });
+  }
+  return { changes, registry, hostPath };
+}
+export function applyRegistryChanges(changes, restore = false) {
+  const completed = [];
+  try {
+    for (const item of changes) {
+      const value = restore ? item.before : item.after;
+      if (value) execFileSync("reg", ["add", item.key, "/ve", "/t", "REG_SZ", "/d", value, "/f"], { stdio: "ignore", windowsHide: true });
+      else execFileSync("reg", ["delete", item.key, "/ve", "/f"], { stdio: "ignore", windowsHide: true });
+      completed.push(item);
+    }
+  } catch (error) {
+    if (!restore) applyRegistryChanges(completed.reverse(), true);
+    throw error;
+  }
+}
+
 // A manifest's allowed origins, reduced to bare extension ids.
 export function originIds(manifest) {
+  if (manifest?.allowed_extensions) return manifest.allowed_extensions;
   return (manifest?.allowed_origins ?? [])
     .map((origin) => String(origin).replace(/^chrome-extension:\/\//, "").replace(/\/$/, ""))
     .filter(Boolean);
@@ -221,6 +256,7 @@ function installWindowsRegistry(browser, manifestPath) {
 // preferences, and the recorded config may predate an extension. Narrowing to
 // whichever source answered first would silently lock out a working extension.
 export function resolveExtensionIds({ browser, extensionIds = [], noDetection = false, targetDir = runtimeDir() } = {}) {
+  if (BROWSERS[browser]?.engine === "gecko") return { extensionIds: [FIREFOX_EXTENSION_ID], source: "stable Firefox add-on ID" };
   if (extensionIds.length > 0) return { extensionIds, source: "argument" };
   const ids = new Set();
   const sources = [];
@@ -266,7 +302,7 @@ export function installManifest(args) {
     const manifestPath = writeManifest({ browser, extensionIds: resolved.extensionIds, hostPath, targetDir });
     if (process.platform === "win32") installWindowsRegistry(browser, manifestPath);
     installed.push({ browser, manifestPath, extensionIds: resolved.extensionIds, resolvedFrom: resolved.source });
-    allExtensionIds.push(...resolved.extensionIds);
+    if (BROWSERS[browser]?.engine !== "gecko") allExtensionIds.push(...resolved.extensionIds);
   }
 
   const extensionIdConfigPath = writeExtensionIdConfig(targetDir, allExtensionIds);

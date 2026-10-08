@@ -1,0 +1,207 @@
+{
+  "generatedAt": "2026-10-08T09:13:47.0460507Z",
+  "narrative": {
+    "keyCharacteristics": [
+      "Neutral bordered surfaces and blue interaction states.",
+      "Compact system typography with sentence-case section headings.",
+      "Automatic light and dark themes.",
+      "Progressive disclosure and visible keyboard focus."
+    ],
+    "rules": [
+      {
+        "body": "Keep semantic color roles together when the operating-system theme changes; use the shipped custom properties instead of hard-coded component colors.",
+        "name": "The Semantic Theme Rule",
+        "section": "colors"
+      },
+      {
+        "body": "Use sentence-case headings for the operating panel; the final card-heading rule supersedes the earlier uppercase declaration.",
+        "name": "The Sentence Case Rule",
+        "section": "typography"
+      },
+      {
+        "body": "Panels use borders and surface tone for separation. Reserve the existing small shadows for controls, selection, and focus.",
+        "name": "The Flat Panel Rule",
+        "section": "elevation"
+      }
+    ],
+    "northStar": "The Compact Operating Panel",
+    "overview": "The compact professional operating panel keeps operational information readable through restrained neutral surfaces, the existing blue accent, and system typography. Flat bordered panels and small, consistent controls carry the interface across automatic light and dark themes.\n\nThe existing shipping logo remains the identity asset. Sentence-case headings, visible keyboard focus, and progressively disclosed details express the approved direction without decorative imagery.",
+    "dos": [
+      "Do use the existing semantic custom properties in both themes.",
+      "Do keep the shipping logo and neutral panel language.",
+      "Do show text with status colors and retain visible keyboard focus.",
+      "Do wrap action rows and long identifiers inside their available width.",
+      "Do disclose detailed operational values with labelled summaries."
+    ],
+    "donts": [
+      "Don't introduce a display font or a decorative image system into this panel.",
+      "Don't use color alone to communicate connection or error states.",
+      "Don't copy superseded uppercase card-heading styles or legacy fallback colors into new surfaces."
+    ]
+  },
+  "extensions": {
+    "shadows": [
+      {
+        "purpose": "Flat bordered panels.",
+        "name": "panel",
+        "value": "none"
+      },
+      {
+        "purpose": "Light-theme focused controls.",
+        "name": "focus-light",
+        "value": "0 0 0 3px rgba(73, 111, 244, 0.25)"
+      },
+      {
+        "purpose": "Dark-theme focused controls.",
+        "name": "focus-dark",
+        "value": "0 0 0 3px rgba(134, 166, 255, 0.4)"
+      },
+      {
+        "purpose": "Existing gradient primary actions.",
+        "name": "primary-action",
+        "value": "0 5px 14px -9px var(--accent)"
+      }
+    ],
+    "breakpoints": [],
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Application identity",
+        "purpose": "Compact product identity, not a display face."
+      },
+      "title": {
+        "displayName": "Section title",
+        "purpose": "Sentence-case panel headings."
+      }
+    },
+    "motion": [
+      {
+        "purpose": "Shipped standard action response.",
+        "name": "control",
+        "value": "color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease"
+      },
+      {
+        "purpose": "Shipped field response.",
+        "name": "field",
+        "value": "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease"
+      }
+    ],
+    "colorMeta": {
+      "bad": {
+        "role": "semantic",
+        "displayName": "bad"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "surface"
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "text muted"
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "text"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "accent"
+      },
+      "ok": {
+        "role": "semantic",
+        "displayName": "ok"
+      },
+      "warn": {
+        "role": "semantic",
+        "displayName": "warn"
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "bg"
+      }
+    }
+  },
+  "components": [
+    {
+      "kind": "button",
+      "name": "Default Action",
+      "css": ".ds-control{min-height:36px;padding:8px 12px;border:1px solid var(--button-border);border-radius:9px;color:var(--text);background:var(--button-bg);font:700 12.5px/1.45 system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:color .15s ease,background .15s ease,border-color .15s ease,transform .05s ease,box-shadow .15s ease;}.ds-control:hover:not(:disabled){border-color:var(--accent-border);background:var(--button-hover)}.ds-control:active:not(:disabled){transform:translateY(1px)}.ds-control:focus-visible{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 3px var(--focus-ring)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);cursor:not-allowed}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);box-shadow:none}",
+      "refersTo": "button-default",
+      "html": "<button class=\"ds-control\">Default Action</button>",
+      "description": "Shipped compact action variant with hover, press, focus, and disabled states."
+    },
+    {
+      "kind": "button",
+      "name": "Save Action",
+      "css": ".ds-control{min-height:36px;padding:8px 12px;border:1px solid var(--button-border);border-radius:9px;color:var(--text);background:var(--button-bg);font:700 12.5px/1.45 system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:color .15s ease,background .15s ease,border-color .15s ease,transform .05s ease,box-shadow .15s ease;min-height:42px;width:100%;background:var(--accent);border-color:transparent;color:var(--primary-text);font-size:13px;font-weight:650;}.ds-control:hover:not(:disabled){border-color:var(--accent-border);background:var(--button-hover)}.ds-control:active:not(:disabled){transform:translateY(1px)}.ds-control:focus-visible{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 3px var(--focus-ring)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);cursor:not-allowed}.ds-control:hover:not(:disabled){background:var(--accent-hover);color:var(--primary-text)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);box-shadow:none}",
+      "refersTo": "button-save",
+      "html": "<button class=\"ds-control\">Save Action</button>",
+      "description": "Shipped compact action variant with hover, press, focus, and disabled states."
+    },
+    {
+      "kind": "button",
+      "name": "Success Action",
+      "css": ".ds-control{min-height:36px;padding:8px 12px;border:1px solid var(--button-border);border-radius:9px;color:var(--text);background:var(--button-bg);font:700 12.5px/1.45 system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:color .15s ease,background .15s ease,border-color .15s ease,transform .05s ease,box-shadow .15s ease;background:var(--ok);border-color:var(--ok);color:var(--ok-ink);box-shadow:0 6px 16px -10px var(--ok);}.ds-control:hover:not(:disabled){border-color:var(--accent-border);background:var(--button-hover)}.ds-control:active:not(:disabled){transform:translateY(1px)}.ds-control:focus-visible{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 3px var(--focus-ring)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);cursor:not-allowed}.ds-control:hover:not(:disabled){background:color-mix(in srgb,var(--ok) 86%,#ffffff 14%);border-color:var(--ok);color:var(--ok-ink)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);box-shadow:none}",
+      "refersTo": "button-success",
+      "html": "<button class=\"ds-control\">Success Action</button>",
+      "description": "Shipped compact action variant with hover, press, focus, and disabled states."
+    },
+    {
+      "kind": "button",
+      "name": "Danger Action",
+      "css": ".ds-control{min-height:36px;padding:8px 12px;border:1px solid var(--button-border);border-radius:9px;color:var(--text);background:var(--button-bg);font:700 12.5px/1.45 system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:color .15s ease,background .15s ease,border-color .15s ease,transform .05s ease,box-shadow .15s ease;background:var(--bad-soft);border-color:var(--bad-border);color:var(--bad);}.ds-control:hover:not(:disabled){border-color:var(--accent-border);background:var(--button-hover)}.ds-control:active:not(:disabled){transform:translateY(1px)}.ds-control:focus-visible{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 3px var(--focus-ring)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);cursor:not-allowed}.ds-control:hover:not(:disabled){background:color-mix(in srgb,var(--bad-soft) 78%,var(--bad) 22%);color:var(--bad)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);box-shadow:none}",
+      "refersTo": "button-danger",
+      "html": "<button class=\"ds-control\">Danger Action</button>",
+      "description": "Shipped compact action variant with hover, press, focus, and disabled states."
+    },
+    {
+      "kind": "input",
+      "name": "Text Field",
+      "css": ".ds-label{display:block;margin-bottom:5px;color:var(--text-muted);font:650 11.5px/1.45 system-ui,sans-serif}.ds-field{width:100%;min-height:36px;padding:8px 10px;border:1px solid var(--surface-border-strong);border-radius:9px;color:var(--text);background:var(--input-bg);font:13px/1.45 system-ui,sans-serif;caret-color:var(--accent);transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}.ds-field::placeholder{color:var(--text-faint)}.ds-field:hover{border-color:var(--accent-border)}.ds-field:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-ring)}",
+      "refersTo": "field",
+      "html": "<label class=\"ds-label\" for=\"ds-profile\">Profile label</label><input id=\"ds-profile\" class=\"ds-field\" placeholder=\"Work browser\">",
+      "description": "Neutral field with visible accent focus."
+    },
+    {
+      "kind": "button",
+      "name": "Gradient Primary Action",
+      "css": ".ds-control{min-height:36px;padding:8px 12px;border:1px solid var(--button-border);border-radius:9px;color:var(--text);background:var(--button-bg);font:700 12.5px/1.45 system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:color .15s ease,background .15s ease,border-color .15s ease,transform .05s ease,box-shadow .15s ease;}.ds-control:hover:not(:disabled){border-color:var(--accent-border);background:var(--button-hover)}.ds-control:active:not(:disabled){transform:translateY(1px)}.ds-control:focus-visible{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 3px var(--focus-ring)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);cursor:not-allowed}.ds-primary{border-color:var(--accent);color:var(--primary-text);background:linear-gradient(135deg,var(--accent),var(--accent-hover));box-shadow:0 5px 14px -9px var(--accent)}.ds-primary:hover:not(:disabled){border-color:var(--accent-hover);color:var(--primary-text);background:linear-gradient(135deg,var(--accent-hover),var(--accent))}.ds-primary:disabled{border-color:var(--accent-border);color:var(--disabled-primary-text);background:var(--disabled-primary-bg);box-shadow:none}",
+      "refersTo": "button-primary",
+      "html": "<button class=\"ds-control ds-primary\">Allow upload</button>",
+      "description": "Existing upload-confirmation primary action."
+    },
+    {
+      "kind": "button",
+      "name": "Secondary Action",
+      "css": ".ds-control{min-height:36px;padding:8px 12px;border:1px solid var(--button-border);border-radius:9px;color:var(--text);background:var(--button-bg);font:700 12.5px/1.45 system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:color .15s ease,background .15s ease,border-color .15s ease,transform .05s ease,box-shadow .15s ease;}.ds-control:hover:not(:disabled){border-color:var(--accent-border);background:var(--button-hover)}.ds-control:active:not(:disabled){transform:translateY(1px)}.ds-control:focus-visible{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 3px var(--focus-ring)}.ds-control:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg);cursor:not-allowed}.ds-secondary{border-color:var(--accent-border);color:var(--accent);background:var(--accent-soft)}.ds-secondary:hover:not(:disabled){color:var(--text);background:color-mix(in srgb,var(--accent-soft) 78%,var(--accent) 22%)}.ds-secondary:disabled{border-color:var(--surface-border);color:var(--disabled-text);background:var(--disabled-bg)}",
+      "refersTo": "button-secondary",
+      "html": "<button class=\"ds-control ds-secondary\">Prepare model</button>",
+      "description": "Existing softly filled accent action."
+    },
+    {
+      "kind": "nav",
+      "name": "View Navigation",
+      "css": ".ds-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border:1px solid var(--surface-border);border-radius:12px;background:var(--surface)}.ds-tab{min-width:0;min-height:34px;padding:8px 10px;border:1px solid transparent;border-radius:8px;color:var(--text-muted);background:transparent;font:700 12.5px/1.2 system-ui,sans-serif;cursor:pointer}.ds-tab:hover{color:var(--text);background:var(--surface-raised)}.ds-active{color:var(--text);border-color:var(--accent-border);background:var(--accent-soft);box-shadow:inset 0 1px 0 color-mix(in srgb,#ffffff 14%,transparent)}.ds-tab:focus-visible{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 3px var(--focus-ring)}",
+      "refersTo": "tab-active",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Extension views\"><button class=\"ds-tab ds-active\">Overview</button><button class=\"ds-tab\">Profiles</button><button class=\"ds-tab\">Settings</button></nav>",
+      "description": "Three equal operating views with a softly filled active tab."
+    },
+    {
+      "kind": "chip",
+      "name": "Connection Pill",
+      "css": ".ds-pill{display:inline-flex;align-items:center;gap:6px;max-width:165px;min-height:26px;padding:5px 9px;border:1px solid var(--ok-border);border-radius:999px;color:var(--ok);background:var(--ok-soft);font:700 11.5px/1.45 system-ui,sans-serif;white-space:nowrap}.ds-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 16%,transparent)}",
+      "refersTo": "status-connected",
+      "html": "<span class=\"ds-pill\" role=\"status\"><span class=\"ds-dot\" aria-hidden=\"true\"></span>connected</span>",
+      "description": "Status text and indicator with a semantic surface."
+    },
+    {
+      "kind": "card",
+      "name": "Panel and Disclosure",
+      "css": ".ds-card{padding:13px;border:1px solid var(--surface-border);border-radius:12px;color:var(--text);background:var(--surface);font:14px/1.45 system-ui,sans-serif}.ds-title{margin:0 0 8px;font-size:15px;font-weight:650;line-height:1.25}.ds-copy{margin:9px 0 0;color:var(--text-muted);font-size:11.5px;line-height:1.5}.ds-details{margin-top:18px;border-top:1px solid var(--surface-border);padding-top:14px}.ds-details>summary{cursor:pointer;font-weight:600;color:var(--text);min-height:24px}.ds-details[open]>summary{margin-bottom:16px}.ds-details>summary:hover{color:var(--accent)}.ds-details>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}",
+      "refersTo": "card",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-title\">Replay and memory</h2><p class=\"ds-copy\">Memory is on. Saved actions help with repeat tasks.</p><details class=\"ds-details\"><summary>Activity and memory statistics</summary><p class=\"ds-copy\">Statistics by browser profile.</p></details></section>",
+      "description": "Flat bordered panel with progressive disclosure."
+    }
+  ],
+  "schemaVersion": 2,
+  "title": "Design System: OpenCode Browser Plugin"
+}

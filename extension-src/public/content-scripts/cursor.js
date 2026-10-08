@@ -4,6 +4,7 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
   globalThis.__opencodeCursorInstalledVersion = OPENCODE_CURSOR_VERSION;
 
   const theme = globalThis.__opencodeCursorTheme;
+  const replaceArtwork = (target, markup) => theme ? theme.replaceArtwork(target, markup) : target.replaceChildren();
   const ROOT_ID = "opencode-agent-cursor-root";
   const SCALE = theme ? theme.DISPLAY_SIZE / theme.CANVAS : 42 / 128;
   const HOTSPOT_LEFT = theme ? theme.HOTSPOT.x * SCALE : 18.05;
@@ -125,14 +126,14 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     cue.setAttribute("class", "cue");
     const pointer = document.createElementNS("http://www.w3.org/2000/svg", "g");
     pointer.setAttribute("class", "pointer");
-    pointer.innerHTML = theme ? theme.pointerMarkup(session) : "";
+    replaceArtwork(pointer, theme ? theme.pointerMarkup(session) : "");
     floatGroup.append(cue, pointer);
     art.append(floatGroup);
 
     const badge = document.createElement("div");
     badge.className = "badge";
     badge.setAttribute("style", badgeStyle(session));
-    badge.innerHTML = '<span class="chip"></span><span class="label"></span>';
+    for (const name of ["chip", "label"]) { const span = document.createElement("span"); span.className = name; badge.append(span); }
     const chip = badge.querySelector(".chip");
     const label = badge.querySelector(".label");
 
@@ -280,7 +281,7 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     const id = theme && theme.ACTIONS[actionId] ? actionId : "idle";
     if (entry.cueAction !== id) {
       entry.cueAction = id;
-      entry.cue.innerHTML = theme ? theme.cueMarkup(id, entry.session) : "";
+      replaceArtwork(entry.cue, theme ? theme.cueMarkup(id, entry.session) : "");
       entry.layerNodes = [...entry.cue.children];
     }
     entry.action = id;
@@ -289,7 +290,7 @@ if (!globalThis.__opencodeCursorInstalledVersion || globalThis.__opencodeCursorI
     entry.actionUntil = id === "idle" ? 0 : performance.now() + Math.max(duration, HOLD_ACTION_MS);
     if (entry.chipAction !== id) {
       entry.chipAction = id;
-      entry.chip.innerHTML = theme ? theme.chipGlyph(id) : "";
+      replaceArtwork(entry.chip, theme ? theme.chipGlyph(id) : "");
       entry.badge.classList.toggle("has-chip", id !== "idle");
     }
   }

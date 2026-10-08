@@ -7,6 +7,18 @@ import { execFileSync } from "node:child_process";
 // messaging registration and its executable are the same facts whoever asks, so
 // they are described once here instead of in a table per script.
 export const BROWSERS = {
+  firefox: {
+    name: "Firefox", engine: "gecko", registryRoot: "Mozilla", commands: ["firefox"],
+    windowsExecutables: ["Mozilla Firefox\\firefox.exe"], macApps: ["Firefox.app"], linuxPaths: ["/usr/bin/firefox"],
+    userDataDir: { win32: ["Mozilla", "Firefox"], darwin: ["Library", "Application Support", "Firefox"], linux: [".mozilla", "firefox"] },
+    nativeMessagingDir: { darwin: ["Library", "Application Support", "Mozilla", "NativeMessagingHosts"], linux: [".mozilla", "native-messaging-hosts"] },
+  },
+  librewolf: {
+    name: "LibreWolf", engine: "gecko", registryRoot: "Mozilla", commands: ["librewolf"],
+    windowsExecutables: ["LibreWolf\\librewolf.exe"], macApps: ["LibreWolf.app"], linuxPaths: ["/usr/bin/librewolf"],
+    userDataDir: { win32: ["librewolf"], darwin: ["Library", "Application Support", "librewolf"], linux: [".librewolf"] },
+    nativeMessagingDir: { darwin: ["Library", "Application Support", "Mozilla", "NativeMessagingHosts"], linux: [".mozilla", "native-messaging-hosts"] },
+  },
   chrome: {
     name: "Google Chrome",
     registryRoot: "Google\\Chrome",
@@ -64,7 +76,7 @@ function localAppData() {
 export function browserUserDataRoot(browser) {
   const parts = BROWSERS[browser]?.userDataDir[platformKey()];
   if (!parts) return null;
-  return process.platform === "win32" ? path.join(localAppData(), ...parts) : path.join(os.homedir(), ...parts);
+  return process.platform === "win32" ? path.join(BROWSERS[browser]?.engine === "gecko" ? process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming") : localAppData(), ...parts) : path.join(os.homedir(), ...parts);
 }
 
 export function nativeMessagingDir(browser) {

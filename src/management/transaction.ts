@@ -12,7 +12,7 @@ export function atomicWrite(filePath: string, text: string): void {
     fs.renameSync(temp, filePath);
   } finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
 }
-export function applyTransaction(changes: FileChange[], dryRun = false): { changedFiles: string[]; backups: string[] } {
+export function applyTransaction(changes: FileChange[], dryRun = false, afterFiles?: () => void): { changedFiles: string[]; backups: string[] } {
   const selected = changes.filter(change => change.before !== change.after);
   if (new Set(selected.map(change => path.resolve(change.filePath))).size !== selected.length) throw new Error("Duplicate transaction path");
   const completed: FileChange[] = [];
@@ -31,6 +31,7 @@ export function applyTransaction(changes: FileChange[], dryRun = false): { chang
       else atomicWrite(change.filePath, change.after);
       completed.push(change);
     }
+    afterFiles?.();
   } catch (cause) {
     const errors: unknown[] = [cause];
     for (const change of completed.reverse()) {

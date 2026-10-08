@@ -237,7 +237,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
       <div className="card memory-card">
         <div className="memory-head">
           <div>
-            <h2>Storage limit</h2>
+            <h2 id="quota-heading">Storage limit</h2>
             <span id="quota-caption" className="memory-state-line">
               {powerUser ? "Expanded storage enabled — up to 10 GB." : "Standard limit. Turn on expanded storage to raise it."}
             </span>
@@ -246,6 +246,8 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         </div>
         <input
           id="quota-slider"
+          aria-labelledby="quota-heading"
+          aria-describedby="quota-caption quota-now"
           className="quota-slider"
           type="range"
           min="100"
@@ -290,6 +292,8 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
             <span className="memory-state-line">Shared action memory · statistics by browser profile.</span>
           </div>
         </div>
+        <p className="help-note">{loadError ? "Memory is unavailable. Reconnect the native host." : !status ? "Checking memory state…" : enabled ? "Memory is on. Saved actions help with repeat tasks." : "Memory is off. Enable it in Settings to save repeat tasks."}</p>
+        <details className="usage-details"><summary>Activity and memory statistics</summary>
         <label className="field-label" htmlFor="statistics-scope">Show activity for</label>
         <select id="statistics-scope" value={scope} disabled={!profiles || !status?.capabilities?.profileStatistics} onChange={(event) => { ++requestId.current; setStatus(null); setScope(event.target.value); }}>
           <option value="current">This profile</option>
@@ -309,6 +313,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         </div>
         <MemoryChart daily={status?.recent_daily} />
         <p className="help-note">{status?.observedAt ? `Updated ${new Date(status.observedAt).toLocaleTimeString()} · chart days use UTC` : "Waiting for statistics…"}</p>
+        </details>
       </div>}
       <p id="memory-feedback" className="feedback" role="status">{memoryFeedback}</p>
       {loadError ? <p className="feedback" role="alert">Statistics unavailable: {loadError}{status ? " Showing the last successful update." : ""}</p> : null}

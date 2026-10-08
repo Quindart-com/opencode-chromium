@@ -18,6 +18,7 @@ export class RpcRelay {
   #state;
   #onProfile;
   #localHandler;
+  #hostPending = new Map();
   constructor({ extensionWriter, state, onProfile, localHandler }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
@@ -27,6 +28,17 @@ export class RpcRelay {
 
   flushMemory() {
     // Native-host memory methods write directly to the store.
+  }
+
+  requestExtension(method, params, timeoutMs = 1500) {
+    const id = this.#nextRequestId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { this.#hostPending.delete(id); reject(new Error("Extension request timed out")); }, timeoutMs);
+      this.#hostPending.set(id, { resolve, reject, timer });
+      Promise.resolve(this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id, method, params })).catch(error => {
+        clearTimeout(timer); this.#hostPending.delete(id); reject(error);
+      });
+    });
   }
 
   activity() {
@@ -84,7 +96,7 @@ export class RpcRelay {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Reload the updated extension to enable upload confirmation; no files were uploaded");
       return;
     }
-    if (message?.method?.startsWith("uploads.")) {
+    if (message?.method?.startsWith("uploads.") || message?.method?.startsWith("firefox.")) {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Upload file preparation is restricted to the extension");
       return;
     }
@@ -219,6 +231,12 @@ export class RpcRelay {
   }
 
   async #handleExtensionResponse(message) {
+    const hostPending = this.#hostPending.get(message.id);
+    if (hostPending) {
+      clearTimeout(hostPending.timer); this.#hostPending.delete(message.id);
+      if (message.error) hostPending.reject(new Error(message.error.message)); else hostPending.resolve(message.result);
+      return;
+    }
     const pending = this.#deletePending(message.id);
     if (!pending) return;
     await writeFrame(pending.socket, { ...message, id: pending.clientId });
@@ -273,6 +291,8 @@ export class RpcRelay {
   }
 
   shutdown(message = "Browser extension disconnected") {
+    for (const pending of this.#hostPending.values()) { clearTimeout(pending.timer); pending.reject(new Error(message)); }
+    this.#hostPending.clear();
     for (const extensionId of [...this.#pendingRequests.keys()]) {
       const pending = this.#deletePending(extensionId);
       if (pending) void this.#writeClientError(pending.socket, pending.clientId, -32000, message);
