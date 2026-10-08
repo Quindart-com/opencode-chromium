@@ -3,7 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchReleaseState, releaseDecision } from "./webstore-state.js";
+import { fetchReleaseState, releaseDecision, refreshStoreAccessToken } from "./webstore-state.js";
+import { chromeReleaseConfig } from "./webstore-config.js";
 import { submit } from "publish-browser-extension";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,6 +27,9 @@ const clientSecret = flagValue("client-secret", null) ?? process.env.CHROME_CLIE
 const refreshToken = flagValue("refresh-token", null) ?? process.env.CHROME_REFRESH_TOKEN;
 const extensionId = flagValue("extension-id", null) ?? process.env.CHROME_EXTENSION_ID;
 const publishTarget = flagValue("publish-target", "default");
+const publisherId = process.env.CHROME_PUBLISHER_ID;
+if (!publisherId) throw new Error("Configure CHROME_PUBLISHER_ID repository secret");
+if (publishTarget !== "default") throw new Error("Chrome Web Store API v2 uses the item's saved visibility; --publish-target must be default");
 
 if (!fs.existsSync(zip)) throw new Error(`Extension zip not found: ${zip}`);
 if (!clientId || !clientSecret || !refreshToken) {
@@ -41,17 +45,8 @@ if (!extensionId) {
   throw new Error("CHROME_EXTENSION_ID is required: upload the first version in the Chrome Web Store dev console and store the item ID as a repository secret");
 }
 
-const config = {
-  dryRun,
-  chrome: {
-    zip,
-    extensionId,
-    clientId,
-    clientSecret,
-    refreshToken,
-    publishTarget,
-  },
-};
+const accessToken = await refreshStoreAccessToken({ clientId, clientSecret, refreshToken });
+const config = chromeReleaseConfig({ dryRun, zip, extensionId, publisherId, accessToken });
 
 console.log(JSON.stringify({
   dryRun,
@@ -62,8 +57,8 @@ console.log(JSON.stringify({
   action: dryRun ? "validating credentials and package (no store changes)" : "uploading and publishing",
 }, null, 2));
 
-if (!dryRun && process.env.CHROME_PUBLISHER_ID) {
-  const status = await fetchReleaseState({ clientId, clientSecret, refreshToken, extensionId, publisherId: process.env.CHROME_PUBLISHER_ID });
+if (!dryRun) {
+  const status = await fetchReleaseState({ accessToken, extensionId, publisherId });
   const decision = releaseDecision(status, packageJson.version);
   console.log(decision.reason);
   if (decision.action === "blocked") process.exit(1);
