@@ -141,15 +141,15 @@
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@jridgewell/trace-mapping": "^0.3.31",
-    "@modelcontextprotocol/node": "2.0.0-beta.4",
-    "@modelcontextprotocol/server": "2.0.0-beta.4",
-    "@opencode-ai/plugin": "1.18.11",
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.0",
+    "@opencode-ai/plugin": "1.18.34",
     "effect": "3.22.1",
     "jsonc-parser": "^3.3.1",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "smol-toml": "^1.9.0",
-    "zod": "4.2.0",
+    "zod": "4.6.5",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
@@ -160,12 +160,12 @@
     "@wxt-dev/module-react": "1.2.2",
     "eslint": "^10.11.0",
     "knip": "^6.38.0",
-    "playwright": "1.61.1",
+    "playwright": "1.63.0",
     "publish-browser-extension": "4.0.5",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.71.0",
     "wxt": "0.21.4",
-    "yazl": "3.1.0"
+    "yazl": "3.3.1"
   },
   "overrides": {
     "adm-zip": "0.6.1",
