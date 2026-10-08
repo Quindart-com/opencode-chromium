@@ -2,12 +2,14 @@ import { Data, Effect } from "effect";
 import { z } from "zod";
 
 const candidateSchema = z.object({ id: z.string().min(1).max(100).refine(id => id !== "__abstain"), description: z.string().min(1).max(160) });
+export const decisionImageSchema = z.string().max(400000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/);
 export const decisionSchema = z.object({
   purpose: z.enum(["select", "rank", "verify"]), context: z.string().max(32000),
   instructions: z.string().min(1).max(2000), candidates: z.array(candidateSchema).min(1).max(128),
+  image: decisionImageSchema.optional(),
 }).superRefine((value, ctx) => {
   if (new Set(value.candidates.map(candidate => candidate.id)).size !== value.candidates.length) ctx.addIssue({ code: "custom", message: "Duplicate candidate IDs" });
-  if (Buffer.byteLength(JSON.stringify(value)) > 64000) ctx.addIssue({ code: "custom", message: "Decision input exceeds byte budget" });
+  if (Buffer.byteLength(JSON.stringify({ ...value, image: undefined })) > 64000) ctx.addIssue({ code: "custom", message: "Decision input exceeds byte budget" });
 });
 export type DecisionRequest = z.infer<typeof decisionSchema>;
 export interface DecisionResult {
@@ -43,11 +45,12 @@ export class JevProvider implements DecisionProvider {
     const operation = Effect.tryPromise({
       try: async (effectSignal) => {
         const request = decisionSchema.parse(input);
+        if (request.image && this.model !== "openai/gpt-6-luna-decisions") throw new DecisionFailure({ code: "images_not_supported" });
         const criteria = Object.fromEntries(request.candidates.map(candidate => [candidate.id, candidate.description]));
         criteria.__abstain = "None of the candidates can be selected reliably from this context.";
         const response = await this.fetcher(this.route === "openrouter" ? "https://openrouter.ai/api/alpha/decisions" : "https://api.typesafe.ai/v1/systemone", {
           method: "POST", signal: effectSignal, headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: this.model, state: request.context, questions: {
+          body: JSON.stringify({ model: this.model, state: request.image ? [request.context, { type: "image_url", image_url: { url: request.image, detail: "low" } }] : request.context, questions: {
             decision: { type: "choice", instructions: request.instructions, criteria },
           } }),
         });
@@ -72,7 +75,10 @@ export class JevProvider implements DecisionProvider {
         const result = responseSchema.parse(JSON.parse(text));
         const answer = result.answers.decision;
         const ids = Object.keys(criteria);
-        const modelMatches = result.model === this.model || (this.route === "openrouter" && this.model === "typesafe/jev-1.13" && /^typesafe\/jev-1\.13-\d{8}$/.test(result.model));
+        const modelMatches = result.model === this.model || (this.route === "openrouter" && (
+          this.model === "typesafe/jev-1.13" && /^typesafe\/jev-1\.13-\d{8}$/.test(result.model) ||
+          this.model === "openai/gpt-6-luna-decisions" && /^openai\/gpt-6-luna-decisions-\d{8}$/.test(result.model)
+        ));
         if (!modelMatches || !ids.includes(answer.choice) || answer.probabilities[answer.choice] !== Math.max(...Object.values(answer.probabilities)) || Object.keys(answer.probabilities).length !== ids.length ||
           ids.some(id => answer.probabilities[id] === undefined) ||
           Math.abs(Object.values(answer.probabilities).reduce((sum, p) => sum + p, 0) - 1) > 0.01) {
@@ -97,8 +103,3 @@ export class JevProvider implements DecisionProvider {
   }
 }
 
-export class UnavailableProvider implements DecisionProvider {
-  async decide(): Promise<DecisionResult> {
-    return { status: "unavailable", elapsedMs: 0, reason: "OpenAI Decisions API/Luna requires published API documentation and preview access" };
-  }
-}

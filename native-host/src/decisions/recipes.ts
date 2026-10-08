@@ -18,7 +18,8 @@ export async function selectRecipe(intent: unknown, getCandidates: () => Recipe[
     return description ? [{ id: String(recipe.id), description }] : [];
   });
   if (!options.length) return { match: null };
-  const key = decisionFingerprint(intent, "recipe", options);
+  const status = providerStatus();
+  const key = decisionFingerprint(intent, `recipe:${status.provider}:${status.route}:${status.model}`, options);
   const cached = decisionBudget.get(key) as DecisionResult | undefined;
   if (!cached && !decisionBudget.allow()) return { match: null };
   const result = cached ?? await decisionBudget.coalesce(key, () => {

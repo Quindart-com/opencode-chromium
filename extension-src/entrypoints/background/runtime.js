@@ -1,11 +1,13 @@
 import { resolveTabActivation } from "./focus-policy.js";
 import { createUploadConsent } from "./upload-consent.js";
-import { createDebuggerAttacher } from "./debugger-attach.js";
+import { createDebuggerAttacher, installChromiumEvents } from "./debugger-attach.js";
+import { createFirefoxAttacher, registerDecisionImageCapture } from "./firefox-bridge.js";
 import { guardedCdp, uploadTargetUrl } from "./upload-gate.js";
 import { CURSOR_SCRIPTS, cursorIdFromParams, cursorState, gestureAction } from "./cursor-state.js";
 import { validVersion, versionNotice } from "../../version-status.ts";
 
 const HOST_NAME = "com.opencode.browser.plugin";
+const IS_FIREFOX = import.meta.env.BROWSER === "firefox";
 const DEBUGGER_VERSION = "1.3";
 const KEEPALIVE_ALARM = "opencode-browser-plugin-keepalive";
 const HEARTBEAT_ALARM = "opencode-browser-plugin-heartbeat";
@@ -245,6 +247,7 @@ function normalizeProfileLabel(label) {
 }
 
 function browserNameFromUserAgent() {
+  if (IS_FIREFOX) return "Firefox";
   const userAgent = navigator.userAgent ?? "";
   if (/Edg\//.test(userAgent)) return "Microsoft Edge";
   if (/OPR\//.test(userAgent)) return "Opera";
@@ -429,7 +432,7 @@ function normalizeKeepItem(item) {
 }
 
 function isBrowserInternalUrl(url) {
-  return /^(chrome|edge|brave|vivaldi|opera|chrome-extension):\/\//i.test(url ?? "");
+  return /^(chrome|edge|brave|vivaldi|opera|chrome-extension|moz-extension):/i.test(url ?? "") || (/^about:/i.test(url ?? "") && url !== "about:blank");
 }
 
 function normalizeTab(tab, extra = {}) {
@@ -776,12 +779,15 @@ async function withTabLock(tabId, operation) {
   }
 }
 
-const attachTab = createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS });
+const attachChromiumTab = createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS });
+const attachTab = IS_FIREFOX ? createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chromeCall, chrome, rpc }) : attachChromiumTab;
 
 async function detachTab(tabId) {
   return withTabLock(tabId, async () => {
     if (!attachedTabs.has(tabId)) return {};
-    await chromeCall((done) => chrome.debugger.detach({ tabId }, done)).catch(() => {});
+    if (IS_FIREFOX) await rpc.request("firefox.detach", { tabId }).catch(() => {});
+    else await chromeCall((done) => chrome.debugger.detach({ tabId }, done)).catch(() => {});
+    if (IS_FIREFOX) await chromeCall(done => chrome.scripting.executeScript({ target: { tabId }, func: () => { document.removeEventListener("click", globalThis.__opencodeFileGuard, true); delete globalThis.__opencodeFileGuard; } }, done)).catch(() => {});
     attachedTabs.delete(tabId);
     return {};
   });
@@ -797,6 +803,10 @@ function sleep(ms) {
 }
 
 async function sendCdpCommand(tabId, method, commandParams, timeoutMs) {
+  if (IS_FIREFOX) return rpc.request("firefox.command", { tabId, method, commandParams, timeoutMs }).catch(error => {
+    if (/bridge required|connection closed|remote connection/i.test(errorMessage(error))) attachedTabs.delete(tabId);
+    throw error;
+  });
   let timeoutId;
   let settled = false;
   return new Promise((resolve, reject) => {
@@ -823,6 +833,7 @@ async function executeCdp(params) {
   if (typeof method !== "string" || method.length === 0) throw new Error("Expected CDP method");
 
   if (method === "Target.getTargets") {
+    if (IS_FIREFOX) return { targetInfos: (await queryTabs({})).map(tab => ({ targetId: String(tab.id), type: "page", url: tab.url, title: tab.title })) };
     const targets = await chromeCall((done) => chrome.debugger.getTargets(done));
     return { targetInfos: targets };
   }
@@ -1011,6 +1022,7 @@ rpc.register("getInfo", async () => {
     name: "opencode-browser-plugin",
     version: chrome.runtime.getManifest().version,
     type: "extension",
+    engine: IS_FIREFOX ? "gecko" : "chromium",
     profile,
     capabilities: {
       browser: [
@@ -1337,34 +1349,13 @@ rpc.register("clearDownloadEvents", async () => {
 });
 
 rpc.register("executeUnhandledCommand", async (params) => ({ handled: false, command: params.command ?? null }));
-
-chrome.debugger.onEvent.addListener((source, method, params) => {
-  const tabId = cdpEventTabId(source);
-  if (Number.isInteger(tabId)) {
-    const buffer = traceBuffers.get(tabId);
-    if (buffer && method === "Tracing.dataCollected") {
-      if (Array.isArray(params.value)) {
-        for (const value of params.value) {
-          buffer.chunks.push(typeof value === "string" ? value : JSON.stringify(value));
-          buffer.eventCount += 1;
-          if (buffer.chunks.length >= MAX_TRACE_CHUNKS) buffer.overflowed = true;
-        }
-      }
-      return;
-    }
-    if (buffer && method === "Tracing.tracingComplete") {
-      buffer.complete = true;
-      buffer.endTime = params.timestamp ?? buffer.endTime;
-      return;
-    }
-  }
-  recordCdpEvent(source, method, params);
+rpc.register("firefox.event", async ({ tabId, method, params }) => {
+  if (IS_FIREFOX && attachedTabs.has(tabId)) recordCdpEvent({ tabId }, method, params);
+  return {};
 });
+registerDecisionImageCapture({ rpc, tabIdFromParams, ensureControlledTab, getTab, isBrowserInternalUrl, attachTab, requiredSessionId, sendCdpCommand });
 
-chrome.debugger.onDetach.addListener((source) => {
-  if (Number.isInteger(source.tabId)) attachedTabs.delete(source.tabId);
-});
-
+if (!IS_FIREFOX) installChromiumEvents({ chrome, cdpEventTabId, traceBuffers, MAX_TRACE_CHUNKS, recordCdpEvent, attachedTabs });
 chrome.tabs.onRemoved.addListener((tabId) => {
   attachedTabs.delete(tabId);
   cdpEventsByTabId.delete(tabId);

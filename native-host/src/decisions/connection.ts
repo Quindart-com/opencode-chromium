@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { JevProvider } from "./provider.js";
-import { configureProvider, providerKey, providerSettingsSchema, providerStatus, storeProviderKey } from "./settings.js";
+import { configureProvider, providerKey, providerModel, providerSettingsSchema, providerStatus, storeProviderKey } from "./settings.js";
 import { recordDecision } from "./usage.js";
 
 const inputSchema = z.object({ settings: providerSettingsSchema,
@@ -16,8 +16,9 @@ export async function saveAndTestProvider(params: unknown, fetcher: typeof fetch
   const parsed = inputSchema.safeParse(params);
   if (!parsed.success) return { ok: false, message: "Check your provider settings and API key.", elapsedMs: 0 };
   const { settings, apiKey } = parsed.data;
-  if (settings.shareImages) return { ok: false, message: "Jev supports text decisions only.", elapsedMs: 0 };
-  if (settings.provider !== "jev") { configureProvider(settings); return { ok: true, settings: providerStatus() }; }
+  if (settings.provider === "jev" && settings.shareImages) return { ok: false, message: "Jev supports text decisions only.", elapsedMs: 0 };
+  if (settings.provider === "openai-decisions" && settings.route !== "openrouter") return { ok: false, message: "Luna requires OpenRouter.", elapsedMs: 0 };
+  if (settings.provider === "off") { configureProvider(settings); return { ok: true, settings: providerStatus() }; }
   const key = apiKey ?? providerKey(settings);
   if (!key) return { ok: false, message: "Enter an API key or configure the environment variable in Advanced settings.", elapsedMs: 0 };
   const started = performance.now();
@@ -35,7 +36,7 @@ export async function saveAndTestProvider(params: unknown, fetcher: typeof fetch
   }
   // One explicitly requested synthetic probe verifies model access as well as
   // authentication. Never send browsing data during setup or retry this call.
-  const model = settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0";
+  const model = providerModel(settings)!;
   const result = await new JevProvider(key, fetcher, model, 5000, settings.route).decide({
     purpose: "verify", context: "Connection test: select the ready option.",
     instructions: "Select ready.", candidates: [{ id: "ready", description: "Ready" }],
