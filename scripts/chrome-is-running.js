@@ -4,6 +4,8 @@ import { execFileSync } from "node:child_process";
 import process from "node:process";
 
 const PROCESS_NAMES = {
+  firefox: ["firefox.exe", "firefox", "Firefox"],
+  librewolf: ["librewolf.exe", "librewolf", "LibreWolf"],
   chrome: ["chrome.exe", "Google Chrome", "Google Chrome Helper", "chrome", "google-chrome"],
   edge: ["msedge.exe", "Microsoft Edge", "Microsoft Edge Helper", "msedge"],
   brave: ["brave.exe", "Brave Browser", "Brave Browser Helper", "brave", "brave-browser"],
@@ -11,7 +13,7 @@ const PROCESS_NAMES = {
 };
 
 function usage() {
-  console.error("Usage: node scripts/chrome-is-running.js [--browser chrome|edge|brave|chromium] [--check] [--json]");
+  console.error("Usage: node scripts/chrome-is-running.js [--browser chrome|edge|brave|chromium|firefox|librewolf] [--check] [--json]");
 }
 
 function parseArgs(argv) {

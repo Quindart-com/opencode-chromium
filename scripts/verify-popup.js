@@ -32,6 +32,7 @@ const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
   try {
+    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end("globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: { id: \"fixture\", getManifest: () => ({version:\"1.9.1\"}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch(\"/rpc\", {method:\"POST\",body:JSON.stringify(message)}).then(r=>r.json()) } };"); return; }
     if (req.url === "/rpc") {
       let text = "";
       for await (const chunk of req) text += chunk;
@@ -55,7 +56,7 @@ const server = http.createServer(async (req, res) => {
         const check = await saveAndTestProvider({ settings: message.settings, apiKey: message.apiKey }, async (url, init) => {
           if (new Headers(init.headers).get("Authorization")?.includes("invalid-key-fixture")) return new Response("rejected", { status: 401 });
           if (String(url).endsWith("/key")) return new Response("{}");
-          return new Response(JSON.stringify({ model: "typesafe/jev-1.13-20260917", answers: { decision: {
+          return new Response(JSON.stringify({ model: JSON.parse(String(init.body)).model === "openai/gpt-6-luna-decisions" ? "openai/gpt-6-luna-decisions" : "typesafe/jev-1.13-20260917", answers: { decision: {
             type: "choice", choice: "ready", confidence: 0.99, probabilities: { ready: 0.99, __abstain: 0.01 },
           } }, usage: { input_tokens: 22, output_tokens: 0, cost: 0.000001 } }));
         });
@@ -64,7 +65,7 @@ const server = http.createServer(async (req, res) => {
       }
       else if (message.type === "GET_SEMANTIC_SETTINGS") result = { semantic: { settings: { enabled: true, strategyPreference: "auto" }, models: [] } };
       else if (message.type === "SNOOZE_VERSION_NOTICE") {
-        versionStatus.versionReminder = { key: versionNotice("1.7.1", versionStatus).key, until: Date.now() + 7 * 86400000 };
+        versionStatus.versionReminder = { key: versionNotice("1.9.1", versionStatus).key, until: Date.now() + 7 * 86400000 };
         result = { ok: true };
       } else result = { status: versionStatus };
       res.setHeader("Content-Type", "application/json");
@@ -75,13 +76,22 @@ const server = http.createServer(async (req, res) => {
     if (!file.startsWith(path.join(root, "extension") + path.sep)) { res.writeHead(403).end(); return; }
     const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(file)];
     res.setHeader("Content-Type", type ?? "application/octet-stream");
-    res.end(fs.readFileSync(file));
+    const data = fs.readFileSync(file);
+    res.end(process.argv.includes("--serve") && path.extname(file) === ".html" ? data.toString().replace("<head>", '<head><script src="/fixture-bootstrap.js"></script>') : data);
   } catch { res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "Fixture request failed" })); }
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+console.log("Popup fixture ready at", server.address().port);
+if (process.argv.includes("--serve")) {
+  versionStatus.nativeHostVersion = "1.9.1"; versionStatus.clientVersions = ["1.9.1"];
+  console.log("Live review URL: http://127.0.0.1:" + server.address().port + "/popup.html");
+  process.on("SIGINT", () => { server.closeAllConnections(); server.close(); for (const item of stores) item.close(); fs.rmSync(fixture, { recursive: true, force: true }); process.exit(0); });
+  await new Promise(() => {});
+}
 let browser;
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, timeout: 30000 });
+  console.log("Popup browser ready");
   const page = await browser.newPage({ viewport: { width: 380, height: 800 } });
   page.setDefaultTimeout(15000);
   const errors = [];
@@ -90,12 +100,13 @@ try {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { globalThis.fixtureCopiedText = text; } } });
     globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
       id: "fixture",
-      getManifest: () => ({ version: "1.7.1" }),
+      getManifest: () => ({ version: "1.9.1" }),
       connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }),
       sendMessage: (message) => fetch("/rpc", { method: "POST", body: JSON.stringify(message) }).then((response) => response.json()),
     } };
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
+  console.log("Popup loaded");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
   assert.equal(await page.locator("#memory-replays").textContent(), "0");
   assert.equal(await page.locator("#memory-success").textContent(), "—");
@@ -105,16 +116,17 @@ try {
   );
   await page.screenshot({ path: path.join(root, "reports", "popup-replay-note.png"), fullPage: true });
   await page.getByRole("heading", { name: "Update your local browser tools" }).waitFor();
-  assert.match(await page.locator(".update-command").textContent(), /opencode-chromium@1.7.1/);
+  assert.match(await page.locator(".update-command").textContent(), /opencode-chromium@1.9.1/);
   await page.screenshot({ path: path.join(root, "reports", "popup-version-notice.png"), fullPage: true });
   await page.getByText("How to update", { exact: true }).click();
   await page.getByRole("button", { name: "Copy update command" }).click();
-  assert.equal(await page.evaluate(() => globalThis.fixtureCopiedText), "npm install -g opencode-chromium@1.7.1");
+  assert.equal(await page.evaluate(() => globalThis.fixtureCopiedText), "npm install -g opencode-chromium@1.9.1");
   await page.getByRole("button", { name: "Remind me in a week" }).click();
   await page.waitForFunction(() => !document.querySelector(".version-notice"));
   await page.reload();
   await page.waitForFunction(() => document.querySelector("#status")?.textContent === "connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "snooze persists across popup reopen");
+  await page.getByText("Activity and memory statistics", { exact: true }).click();
   await page.selectOption("#statistics-scope", "all");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "3");
   assert.equal(await page.locator("#memory-actions").textContent(), "2");
@@ -167,6 +179,13 @@ try {
   assert.match(await page.locator(".provider-timing").textContent(), /Key check \d+ ms · Decision \d+ ms/);
   assert.equal(decisionSettings.shareText, true, "enabling Jev authorizes the documented bounded context");
   await page.locator(".provider-settings").screenshot({ path: path.join(root, "reports", "popup-provider-success.png"), animations: "disabled" });
+  await page.selectOption("#decision-provider", "openai-decisions");
+  const images = page.getByLabel("Allow screenshots for ambiguous visual targets", { exact: false });
+  await images.waitFor(); assert.equal(await images.isChecked(), false);
+  await images.check();
+  await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
+  await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
+  assert.equal(decisionSettings.shareImages, true);
   await page.selectOption("#decision-provider", "jev-typesafe");
   await page.getByText("Advanced · Environment variable", { exact: true }).click();
   assert.equal(await page.locator("#decision-key-env").inputValue(), "TYPESAFE_API_KEY");
@@ -180,21 +199,22 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "popup must fit narrow windows");
   await page.screenshot({ path: path.join(root, "reports", "popup-settings-narrow.png"), fullPage: true, animations: "disabled" });
   await page.getByRole("tab", { name: "Overview", exact: true }).click();
-  await page.getByRole("heading", { name: "Jev usage", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Decision assistance", exact: true }).waitFor();
   await page.screenshot({ path: path.join(root, "reports", "popup-overview-dark.png"), fullPage: true, animations: "disabled" });
-  versionStatus.nativeHostVersion = "1.8.0";
-  versionStatus.clientVersions = ["1.8.0"];
+  versionStatus.nativeHostVersion = "1.10.0";
+  versionStatus.clientVersions = ["1.10.0"];
   await page.reload();
   await page.getByRole("heading", { name: "Your extension is behind your local tools" }).waitFor();
   assert.equal(await page.locator(".update-command").count(), 0, "do not recommend downgrading newer local tools");
-  versionStatus.nativeHostVersion = "1.7.1";
-  versionStatus.clientVersions = ["1.7.1"];
+  versionStatus.nativeHostVersion = "1.9.1";
+  versionStatus.clientVersions = ["1.9.1"];
   await page.reload();
   await page.waitForFunction(() => document.querySelector("#status")?.textContent === "connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "matching versions clear the notice");
   assert.deepEqual(errors, []);
   console.log("Popup verified: scoped SQLite totals, shared-action deduplication, profile dropdown, preserved edits, collapsed model settings, no page errors.");
-} finally {
+} catch (error) { console.error("Popup verification failed:", error); throw error; } finally {
+  server.closeAllConnections();
   if (previousProviderDir === undefined) delete process.env.AGENT_BROWSER_PROVIDER_DIR;
   else process.env.AGENT_BROWSER_PROVIDER_DIR = previousProviderDir;
   await browser?.close();

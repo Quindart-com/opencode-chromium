@@ -16,7 +16,8 @@ export default function ProviderSettings() {
   const [busy, setBusy] = useState(false);
   const [test, setTest] = useState<TestResult | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const enabled = settings.provider === "jev";
+  const enabled = settings.provider !== "off";
+  const luna = settings.provider === "openai-decisions";
   useEffect(() => {
     let disposed = false;
     void sendMessage<{ result?: DecisionSettings; error?: string }>({ type: "GET_DECISION_SETTINGS" }).then(response => {
@@ -34,7 +35,7 @@ export default function ProviderSettings() {
   }, []);
   function choose(value: string) {
     const route = value === "jev-typesafe" ? "typesafe" : "openrouter";
-    setSettings({ ...settings, provider: value === "off" ? "off" : "jev", route,
+    setSettings({ ...settings, provider: value === "off" ? "off" : value === "openai-decisions" ? "openai-decisions" : "jev", route,
       keyEnv: route === "openrouter" ? "OPENROUTER_API_KEY" : "TYPESAFE_API_KEY", shareImages: false,
       credentialConfigured: route === settings.route && settings.credentialConfigured });
     setApiKey(""); setMessage(""); setTest(null); setError(false);
@@ -42,7 +43,7 @@ export default function ProviderSettings() {
   async function save() {
     setBusy(true); setError(false); setMessage(""); setTest(null);
     try {
-      const next = { ...settings, shareText: enabled, shareImages: false };
+      const next = { ...settings, shareText: enabled, shareImages: luna && settings.shareImages };
       if (enabled) {
         const response = await sendMessage<{ result?: TestResult }>({ type: "TEST_DECISION_CONNECTION", settings: next, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) });
         if (!response.result) throw new Error("Could not connect to the native host. Reconnect and try again.");
@@ -52,7 +53,7 @@ export default function ProviderSettings() {
       } else {
         const response = await sendMessage<{ result?: DecisionSettings }>({ type: "SET_DECISION_SETTINGS", settings: next });
         if (!response.result) throw new Error("Could not save. Reconnect the native host and try again.");
-        setSettings(response.result); setApiKey(""); setMessage("Jev is off. Local search and replay stay available.");
+        setSettings(response.result); setApiKey(""); setMessage("Decision assistance is off. Local search and replay stay available.");
       }
     } catch (cause) { setError(true); setMessage(cause instanceof Error ? cause.message : "Could not save settings."); }
     finally { setBusy(false); }
@@ -72,16 +73,16 @@ export default function ProviderSettings() {
     await browser.storage.local.set({ localModelDeprecationDismissed: true }); setDismissed(true);
   }
   return <section className="provider-settings" aria-labelledby="decision-heading">
-    <h2 id="decision-heading">Jev decisions</h2>
+    <h2 id="decision-heading">Decision assistance</h2>
     <p className="provider-intro">Find relevant targets and choose saved recipes. Your agent controls the actions; replay keeps its safety checks.</p>
     <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <div className="provider-field">
         <label htmlFor="decision-provider">Service</label>
         <select id="decision-provider" value={selection(settings)} disabled={!loaded || busy} onChange={event => choose(event.target.value)}>
           <option value="off">Off · Local search and replay</option>
-          <option value="jev-openrouter">OpenRouter</option>
-          <option value="jev-typesafe">TypeSafe</option>
-          <option value="openai-decisions" disabled>OpenAI Luna · Not available yet</option>
+          <option value="jev-openrouter">Jev · OpenRouter</option>
+          <option value="jev-typesafe">Jev · TypeSafe</option>
+          <option value="openai-decisions">OpenAI Luna · OpenRouter</option>
         </select>
       </div>
       {enabled && <>
@@ -92,7 +93,8 @@ export default function ProviderSettings() {
             disabled={busy} onChange={event => { setApiKey(event.target.value); setTest(null); setMessage(""); }} aria-describedby="decision-key-help" />
           <p id="decision-key-help">Saved privately by the native host. Never stored in browser storage or returned to your agent.</p>
         </div>
-        <p className="provider-consent">Enabling Jev sends your search or replay intent and candidate descriptions to {settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. It does not send screenshots or execute actions.</p>
+        <p className="provider-consent">Enabling assistance sends bounded search or replay intent and candidate descriptions to {settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. Your agent remains in control of actions.</p>
+        {luna && <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>Allow screenshots for ambiguous visual targets<small className="help-note">Off by default. One bounded screenshot may be sent to OpenRouter when local search is ambiguous.</small></span></label>}
         <details className="provider-advanced">
           <summary>Advanced · Environment variable</summary>
           <div className="provider-field">
@@ -107,9 +109,9 @@ export default function ProviderSettings() {
       <div className="provider-save-row">
         <button className="provider-save" type="submit" disabled={!loaded || busy}>{busy ? "Testing…" : enabled ? "Save & test connection" : "Save settings"}</button>
       </div>
-      {enabled && <p className="provider-test-help">Tests your key and makes one small, billable Jev decision using synthetic data.</p>}
+      {enabled && <p className="provider-test-help">Tests your key and selected model with one small, billable synthetic decision.</p>}
       <p className={`provider-feedback${error ? " provider-feedback-error" : test?.ok ? " provider-feedback-ok" : ""}`} role="status" aria-live="polite">
-        {message || (!loaded ? "Loading settings…" : settings.ready ? "Jev enabled" : enabled ? "Save and test to enable Jev." : "Jev is off")}
+        {message || (!loaded ? "Loading settings…" : settings.ready ? "Decision assistance enabled" : enabled ? "Save and test to enable assistance." : "Local search is active")}
         {test?.elapsedMs !== undefined && <span className="provider-timing">{test.authMs !== undefined ? `Key check ${Math.round(test.authMs)} ms · ` : ""}Decision {Math.round(test.elapsedMs)} ms
           {test.usage ? ` · ${test.usage.input_tokens} input tokens${test.usage.cost !== undefined ? ` · $${test.usage.cost.toFixed(6)}` : ""}` : ""}</span>}
       </p>

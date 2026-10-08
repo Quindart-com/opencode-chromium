@@ -24,3 +24,33 @@ export function createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInt
   });
   };
 }
+
+export function installChromiumEvents({ chrome, cdpEventTabId, traceBuffers, MAX_TRACE_CHUNKS, recordCdpEvent, attachedTabs }) {
+chrome.debugger.onEvent.addListener((source, method, params) => {
+  const tabId = cdpEventTabId(source);
+  if (Number.isInteger(tabId)) {
+    const buffer = traceBuffers.get(tabId);
+    if (buffer && method === "Tracing.dataCollected") {
+      if (Array.isArray(params.value)) {
+        for (const value of params.value) {
+          buffer.chunks.push(typeof value === "string" ? value : JSON.stringify(value));
+          buffer.eventCount += 1;
+          if (buffer.chunks.length >= MAX_TRACE_CHUNKS) buffer.overflowed = true;
+        }
+      }
+      return;
+    }
+    if (buffer && method === "Tracing.tracingComplete") {
+      buffer.complete = true;
+      buffer.endTime = params.timestamp ?? buffer.endTime;
+      return;
+    }
+  }
+  recordCdpEvent(source, method, params);
+});
+
+chrome.debugger.onDetach.addListener((source) => {
+  if (Number.isInteger(source.tabId)) attachedTabs.delete(source.tabId);
+});
+
+}
