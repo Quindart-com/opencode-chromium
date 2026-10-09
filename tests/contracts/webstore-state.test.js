@@ -1,22 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 import { fetchReleaseState, releaseDecision } from "../../scripts/webstore-state.js";
 import { chromeReleaseConfig } from "../../scripts/webstore-config.js";
 import { resolveConfig, validateConfig } from "publish-browser-extension";
 
 test("release configuration satisfies the installed publisher's v2 contract", () => {
-  const config = validateConfig(resolveConfig(chromeReleaseConfig({ dryRun: true, zip: "fixture.zip", extensionId: "a".repeat(32), publisherId: "fixture-publisher", accessToken: "fixture-token" })));
+  const accessToken = randomUUID();
+  const config = validateConfig(resolveConfig(chromeReleaseConfig({ dryRun: true, zip: "fixture.zip", extensionId: "a".repeat(32), publisherId: "fixture-publisher", accessToken })));
   assert.equal(config.chrome.apiVersion, "v2");
-  assert.equal(config.chrome.serviceAccountAccessToken, "fixture-token");
+  assert.equal(config.chrome.serviceAccountAccessToken, accessToken);
   assert.equal(config.chrome.cancelPending, false);
 });
 
 test("store status reuses the refreshed token without a second exchange", async () => {
+  const accessToken = randomUUID();
   let calls = 0;
-  await fetchReleaseState({ accessToken: "fixture-token", publisherId: "fixture", extensionId: "fixture", fetcher: async (url, options) => {
+  await fetchReleaseState({ accessToken, publisherId: "fixture", extensionId: "fixture", fetcher: async (url, options) => {
     calls++;
     assert.match(url, /:fetchStatus$/);
-    assert.equal(options.headers.Authorization, "Bearer fixture-token");
+    assert.equal(options.headers.Authorization, `Bearer ${accessToken}`);
     return Response.json({ itemId: "fixture" });
   } });
   assert.equal(calls, 1);
