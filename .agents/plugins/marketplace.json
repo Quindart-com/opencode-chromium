@@ -1,0 +1,12 @@
+{
+  "name": "quindart-browser",
+  "interface": { "displayName": "Quindart Browser" },
+  "plugins": [
+    {
+      "name": "opencode-browser-plugin",
+      "source": { "source": "local", "path": "./" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}
