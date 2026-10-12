@@ -27,7 +27,7 @@ Setup shows what changed and keeps transactional backups. Preview with `--dry-ru
 npx -y opencode-chromium@latest setup --targets codex
 ```
 
-Both use the shared Codex MCP configuration. [Codex guide](docs/codex.md).
+Both use the shared Codex MCP configuration. A native Codex plugin bundles the MCP server and browser skill; see the [Codex guide](docs/codex.md#native-plugin) for marketplace installation.
 </details>
 <details><summary><strong>Claude Code</strong></summary>
 
