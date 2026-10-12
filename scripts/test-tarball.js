@@ -24,7 +24,7 @@ try {
   for (const relative of ["src", "native-host/src", "scripts", "reports", "node_modules"]) {
     if (fs.existsSync(path.join(packageRoot, relative))) throw new Error(`Tarball contains excluded source/local directory: ${relative}`);
   }
-  for (const relative of ["native-host/dist/runtime.js", "extension/manifest.json", "skills/opencode-browser-plugin/SKILL.md", "dist/adapters/sdk/index.d.ts"]) {
+  for (const relative of ["native-host/dist/runtime.js", "extension/manifest.json", "skills/opencode-browser-plugin/SKILL.md", "dist/adapters/sdk/index.d.ts", ".codex-plugin/plugin.json", ".mcp.json", ".agents/plugins/marketplace.json", "assets/logo.svg"]) {
     if (!fs.existsSync(path.join(packageRoot, relative))) throw new Error(`Tarball is missing ${relative}`);
   }
   execFileSync("bun", ["install", "--production", "--ignore-scripts"], { cwd: packageRoot, stdio: "pipe", windowsHide: true });

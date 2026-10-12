@@ -1,0 +1,27 @@
+{
+  "name": "opencode-browser-plugin",
+  "version": "1.9.2",
+  "description": "Automate Chromium and Firefox browsers through named profiles with four compact browser tools.",
+  "author": { "name": "Quindart", "url": "https://github.com/Quindart-com" },
+  "repository": "https://github.com/Quindart-com/opencode-chromium",
+  "homepage": "https://github.com/Quindart-com/opencode-chromium#readme",
+  "license": "MIT",
+  "keywords": ["browser", "chromium", "firefox", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "OpenCode Browser Plugin",
+    "shortDescription": "Browse Chromium and Firefox with named profiles",
+    "longDescription": "Control local Chromium and Firefox browsers through the shared MCP runtime. Includes the browser workflow skill, named profile selection, session ownership, and approval handling.",
+    "developerName": "Quindart",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/Quindart-com/opencode-chromium",
+    "privacyPolicyURL": "https://github.com/Quindart-com/opencode-chromium/blob/master/docs/PRIVACY.md",
+    "termsOfServiceURL": "https://github.com/Quindart-com/opencode-chromium/blob/master/LICENSE",
+    "composerIcon": "./assets/logo.svg",
+    "logo": "./assets/logo.svg",
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

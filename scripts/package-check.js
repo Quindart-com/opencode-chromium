@@ -9,6 +9,14 @@ import { createBrowserAgent } from "../src/adapters/sdk/index.js";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const metadataErrors = [];
+const plugin = JSON.parse(fs.readFileSync(path.join(root, ".codex-plugin/plugin.json"), "utf8"));
+const mcp = JSON.parse(fs.readFileSync(path.join(root, plugin.mcpServers), "utf8"));
+if (plugin.version !== packageJson.version) metadataErrors.push("Native Codex plugin version must match package version");
+if (!mcp.mcpServers?.[plugin.name]?.args?.includes(`${packageJson.name}@${packageJson.version}`)) metadataErrors.push("Native Codex MCP launcher must use the matching published runtime");
+for (const relative of [plugin.skills, plugin.mcpServers, plugin.interface.logo]) {
+  const resolved = path.resolve(root, relative);
+  if (!resolved.startsWith(root + path.sep) || !fs.existsSync(resolved)) metadataErrors.push(`Native Codex plugin resource is missing or outside the package: ${relative}`);
+}
 if (packageJson.name !== "opencode-chromium") metadataErrors.push(`Unexpected package name: ${packageJson.name}`);
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) metadataErrors.push(`Invalid package version: ${packageJson.version}`);
 if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium.git") metadataErrors.push("Repository metadata must point to the canonical GitHub repository");
@@ -20,6 +28,10 @@ if (packageJson.bin?.["opencode-browser-plugin-mcp"] !== "./dist/adapters/mcp/se
 if ((packageJson.exports?.["./server"]?.import ?? packageJson.exports?.["./server"]) !== "./dist/adapters/opencode/index.js") metadataErrors.push("opencode ./server export is missing");
 if (metadataErrors.length > 0) throw new Error(metadataErrors.join("\n"));
 const required = [
+  ".codex-plugin/plugin.json",
+  ".mcp.json",
+  ".agents/plugins/marketplace.json",
+  "assets/logo.svg",
   "dist/core/index.js",
   "dist/adapters/mcp/server.js",
   "dist/adapters/opencode/index.js",

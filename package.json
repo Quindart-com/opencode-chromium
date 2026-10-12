@@ -29,6 +29,11 @@
     "native-messaging"
   ],
   "files": [
+    ".codex-plugin",
+    ".codexignore",
+    ".mcp.json",
+    ".agents/plugins/marketplace.json",
+    "assets/logo.svg",
     "dist",
     "native-host/dist",
     "extension",
