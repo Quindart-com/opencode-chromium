@@ -144,7 +144,7 @@
     "verify:popup": "node scripts/verify-popup.js",
     "verify:uploads": "node scripts/verify-uploads.js",
     "verify:cursor": "node scripts/verify-cursor.js",
-    "lint": "eslint src/management src/cli/providers.ts native-host/src/decisions src/core src/browser extension-src/entrypoints/popup extension-src/entrypoints/welcome extension-src/entrypoints/background/{navigation-policy,onboarding,download-events,tab-ownership}.js",
+    "lint": "eslint src/management src/cli/providers.ts native-host/src/decisions native-host/src/firefox/frames.js src/core src/browser extension-src/entrypoints/popup extension-src/entrypoints/welcome extension-src/entrypoints/background/{navigation-policy,onboarding,download-events,tab-ownership}.js",
     "check:unused": "knip --no-progress --include files,dependencies",
     "benchmark:decisions": "bun scripts/benchmark-decision-pipeline.ts",
     "benchmark:flow": "bun scripts/benchmark-agent-flow.js",
