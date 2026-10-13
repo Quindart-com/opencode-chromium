@@ -154,7 +154,7 @@ export class BrowserHostClient {
   }
 }
 
-function pooledBrowserClient(ipcPath, options = {}) {
+function pooledBrowserClient(ipcPath, _options = {}) {
   let client = browserClients.get(ipcPath);
   if (!client) {
     client = new BrowserHostClient({ ipcPath, timeoutMs: DEFAULT_TIMEOUT_MS });

@@ -1,10 +1,10 @@
 {
   "src/browser/operations/index.js": {
-    "maxLines": 3312,
+    "maxLines": 2300,
     "reason": "Existing module retained during staged responsibility extraction; ceiling may only decrease without review"
   },
   "src/core/runtime.js": {
-    "maxLines": 1372,
+    "maxLines": 1250,
     "reason": "Existing module retained during staged responsibility extraction; ceiling may only decrease without review"
   },
   "native-host/src/memory/store.js": {

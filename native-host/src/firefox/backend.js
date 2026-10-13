@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
+import { bridgedFrameTree } from "./frames.js";
 
 export function firefoxConfigPath(profileId) {
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(profileId ?? "")) throw new Error("Invalid Firefox profile ID");
@@ -133,7 +134,14 @@ export class FirefoxBackend {
     const reference = () => { const r = this.objects.get(p.objectId); if (!r || r.context !== context) throw new Error("Stale Firefox object"); return r.handle ? { handle: r.handle } : { sharedId: r.sharedId }; };
     if (/^(Page|Runtime|Log|Network|Performance|DOM|Accessibility)\.enable$/.test(method)) return {};
     if (method === "Page.setInterceptFileChooserDialog") return {};
-    if (method === "Runtime.evaluate") return evaluate(p.expression, p.returnByValue === false);
+    if (method === "Runtime.evaluate") {
+      if (!p.contextId) return evaluate(p.expression, p.returnByValue === false);
+      const tree = await run("browsingContext.getTree", { root: context, maxDepth: 8 });
+      const pending = [...tree.contexts]; let found = false, visited = 0;
+      while (pending.length && visited++ < 100) { const frame = pending.shift(); if (frame.context === p.contextId) { found = true; break; } pending.push(...(frame.children ?? []).slice(0, 50)); }
+      if (!found) throw new Error("Stale or unowned Firefox frame context");
+      return this.normalize(await run("script.evaluate", { expression: p.expression, target: { context: p.contextId }, awaitPromise: true, resultOwnership: "none", serializationOptions: { maxObjectDepth: 20 } }), p.contextId, false);
+    }
     if (method === "Runtime.callFunctionOn") return this.normalize(await run("script.callFunction", { functionDeclaration: p.functionDeclaration, target: { context }, this: reference(), arguments: (p.arguments ?? []).map(a => ({ type: typeof a.value, value: a.value })), awaitPromise: true }), context, false);
     if (method === "Runtime.releaseObject") { const r = this.objects.get(p.objectId); this.objects.delete(p.objectId); if (r?.handle) await run("script.disown", { target: { context }, handles: [r.handle] }); return {}; }
     if (method === "DOM.describeNode") {
@@ -141,7 +149,13 @@ export class FirefoxBackend {
     }
     if (method === "DOM.setFileInputFiles") { reference(); const r = this.objects.get(p.objectId); if (!r.sharedId) throw new Error("Upload requires a live Firefox node"); return run("input.setFiles", { context, element: { sharedId: r.sharedId }, files: p.files }); }
     if (method === "Page.navigate") return run("browsingContext.navigate", { context, url: p.url, wait: "interactive" });
-    if (method === "Page.getFrameTree") return { frameTree: { frame: { id: context, url: await value("location.href") } } };
+    if (method === "Page.getFrameTree" || method === "Page.createIsolatedWorld") {
+      const { frameTree, contexts } = await bridgedFrameTree({ send: run, root: context, maxDepth: p.maxDepth ?? 8, maxFrames: p.maxFrames ?? 50 });
+      if (method === "Page.getFrameTree") return { frameTree };
+      if (contexts.has(p.frameId)) return { executionContextId: contexts.get(p.frameId) };
+      throw new Error("Stale or unowned Firefox frame context");
+    }
+    if (method === "Page.stopLoading") { await value("window.stop()"); return {}; }
     if (method === "Page.setDocumentContent") { await value(`document.open();document.write(${JSON.stringify(p.html)});document.close()`); return {}; }
     if (method === "Page.getLayoutMetrics") { const size = await value("({x:0,y:0,width:Math.max(innerWidth,document.documentElement.scrollWidth),height:Math.max(innerHeight,document.documentElement.scrollHeight)})"); return { contentSize: size, cssContentSize: size }; }
     if (method === "Page.captureScreenshot") {
