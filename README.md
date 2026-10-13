@@ -19,7 +19,7 @@ Install the matching browser extension, then connect all detected supported harn
 npx -y opencode-chromium@latest setup --all
 ```
 
-Setup shows what changed and keeps transactional backups. Preview with `--dry-run --json`. Quit and reopen desktop harnesses, or reconnect MCP in terminal clients. For Firefox and LibreWolf, complete the [guided loopback setup](docs/firefox.md). The AMO install button becomes available after Mozilla approves the initial submission.
+Setup shows what changed and keeps transactional backups. Preview with `--dry-run --json`. Quit and reopen desktop harnesses, or reconnect MCP in terminal clients. **Firefox and LibreWolf also require launching with remote debugging enabled**; see the [Firefox launch instructions](#firefox-agent-setup). The AMO install button becomes available after Mozilla approves the initial submission.
 
 <details><summary><strong>Codex CLI and Codex Desktop</strong></summary>
 
@@ -103,11 +103,61 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 | Browser family | Connection | Setup |
 | --- | --- | --- |
 | Chrome, Edge, Brave, Chromium | Chromium extension and CDP | Store extension + native host |
-| Firefox, LibreWolf | Firefox extension and WebDriver BiDi | Signed add-on + native host + guided loopback setup |
+| Firefox, LibreWolf | Firefox extension and WebDriver BiDi | Signed add-on + native host + Remote Agent enabled at launch |
 
 Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later; LibreWolf must expose the matching Remote Agent. Compatible derivatives need individual validation; this does not claim support for every fork. See [Firefox capabilities](docs/firefox.md) and [compatibility](docs/compatibility.md) for transport differences and verification limits.
 
 Named profiles choose the browser. Agents keep the same four tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Sessions own their tabs, targets are checked against the live page, and uploads require confirmation by default. [Profiles](docs/profiles.md) · [Security](docs/security.md).
+
+<a id="firefox-agent-setup"></a>
+<details><summary><strong>Firefox and LibreWolf: enable remote debugging for agent control</strong></summary>
+
+**Firefox-based browsers require the Remote Agent to be enabled at launch.** The add-on alone cannot provide the browser-level control used by this plugin: Firefox does not expose Chromium's debugger extension API. The plugin therefore uses WebDriver BiDi for trusted clicks, keyboard input, and native dialogs. Installing the add-on or opening Developer Tools does not enable this connection.
+
+1. Install the Firefox add-on, run the setup command above, and connect the extension. Copy the Firefox/LibreWolf **profile ID** from the extension's **Profiles** section.
+2. Replace `PROFILE_ID` below with that ID and configure the local connection:
+
+   ```sh
+   npx -y opencode-chromium@latest firefox configure --profile PROFILE_ID --port 9223
+   ```
+
+3. Finish active agent sessions and fully exit the selected browser. Relaunch it with `--remote-debugging-port 9223`, using the same browser profile that registered the extension. Adding the flag while the browser is already running does not enable the Remote Agent.
+
+   **Windows — PowerShell** (adjust the executable path if installed elsewhere):
+
+   ```powershell
+   & "C:\Program Files\Mozilla Firefox\firefox.exe" --remote-debugging-port 9223
+   # Or LibreWolf:
+   & "C:\Program Files\LibreWolf\librewolf.exe" --remote-debugging-port 9223
+   ```
+
+   **macOS — Terminal:**
+
+   ```sh
+   /Applications/Firefox.app/Contents/MacOS/firefox --remote-debugging-port 9223
+   # Or LibreWolf:
+   /Applications/LibreWolf.app/Contents/MacOS/librewolf --remote-debugging-port 9223
+   ```
+
+   **Linux — Terminal:**
+
+   ```sh
+   firefox --remote-debugging-port 9223
+   # Or LibreWolf:
+   librewolf --remote-debugging-port 9223
+   ```
+
+4. Check that the configured port is reachable, then select the matching named profile in your agent:
+
+   ```sh
+   npx -y opencode-chromium@latest firefox status --profile PROFILE_ID
+   ```
+
+The status command checks port reachability; the extension verifies the browser/tab identity when automation attaches. Repeat the launch flag whenever you start the browser for agent use. For multiple profiles, use a separate port per running browser instance and configure each extension profile accordingly.
+
+Keep remote debugging bound to loopback; do not expose its port to your network. Other local programs can access the Remote Agent, so a dedicated automation profile is recommended. To stop remote debugging, fully exit the browser and relaunch without the flag. See [Firefox setup and troubleshooting](docs/firefox.md) and [Mozilla's Remote Agent security documentation](https://firefox-source-docs.mozilla.org/remote/Security.html).
+
+</details>
 
 ## A calmer operating panel
 
