@@ -21,10 +21,12 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
   const efficiency = status?.efficiency;
   const number = (value?: number) => value === undefined ? "—" : value.toLocaleString();
   const avoided = efficiency ? efficiency.skipped + efficiency.cacheHits + efficiency.coalesced + efficiency.budgetSkipped : undefined;
+  const providerSelected = status && status.provider !== "off";
+  const model = status?.provider === "openai-decisions" ? "OpenAI Luna" : "Jev";
   return <section className="decision-overview" aria-labelledby="jev-usage-heading">
     <div className="decision-overview-heading"><h2 id="jev-usage-heading">Decision assistance</h2><button type="button" className="button-mini" onClick={onConfigure}>Configure</button></div>
-    <p className="decision-model">{!status ? error ? "Not connected" : "Loading…" : status.ready ? status.provider === "openai-decisions" ? "OpenAI Luna" : "Jev" : "Local search"}</p>
-    <p className="help-note">{error || (!status ? "Checking your configuration…" : status.ready ? `Connected through ${status.route === "openrouter" ? "OpenRouter" : "TypeSafe"}` : "Cloud assistance is off. Search and replay remain available.")}</p>
+    <p className="decision-model">{!status ? error ? "Not connected" : "Loading…" : providerSelected ? model : "Local search"}</p>
+    <p className="help-note">{error || (!status ? "Checking your configuration…" : status.ready ? `Connected through ${status.route === "openrouter" ? "OpenRouter" : "TypeSafe"}` : providerSelected && status.shareText ? "Connection needed. Configure the service to enable assistance; local search stays available." : "Cloud assistance is off. Search and replay remain available.")}</p>
     <details className="usage-details"><summary>Usage and performance</summary>
     <dl className="decision-usage">
       <div><dt>Call attempts</dt><dd>{number(usage?.calls)}</dd></div>

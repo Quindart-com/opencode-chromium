@@ -40,7 +40,6 @@ const required = [
   "extension/manifest.json",
   "extension-firefox/manifest.json",
   "native-host/dist/runtime.js",
-  "native-host/dist/runtime.js",
   "native-host/dist/memory/profile-stats.js",
   "skills/opencode-browser-plugin/SKILL.md",
   "skills/opencode-browser-plugin/agents/openai.yaml",

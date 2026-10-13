@@ -208,7 +208,8 @@ export function readRegistration(browser, targetDir = runtimeDir()) {
   const browserDir = nativeMessagingDir(browser);
   const browserManifestPath = browserDir ? path.join(browserDir, `${HOST_NAME}.json`) : null;
   const useBrowserDirectory = process.platform !== "win32" && samePath(targetDir, runtimeDir()) && browserManifestPath && fs.existsSync(browserManifestPath);
-  const manifestPath = useBrowserDirectory ? browserManifestPath : path.join(targetDir, `${HOST_NAME}.${browser}.json`);
+  const manifestId = process.platform === "win32" && BROWSERS[browser]?.engine === "gecko" ? "firefox" : browser;
+  const manifestPath = useBrowserDirectory ? browserManifestPath : path.join(targetDir, `${HOST_NAME}.${manifestId}.json`);
   const manifest = readJsonIfPresent(manifestPath);
   const valid = Boolean(manifest) && manifest.name === HOST_NAME && typeof manifest.path === "string" && originIds(manifest).length > 0;
   const registered = valid && (process.platform === "win32" ? samePath(registryManifestPath(browser), manifestPath) : Boolean(useBrowserDirectory));

@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 const probe = net.createServer(); await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve)); const port = probe.address().port; await new Promise(resolve => probe.close(resolve));
-const report = { browser, version: '1.9.1', checks: [] };
+const report = { browser, version: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version, checks: [] };
 try {
   if (process.platform === 'win32') {
     nativeKey = 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\' + host;
@@ -81,8 +81,22 @@ try {
   await call('browser_run', { tabId, steps: [{ action: 'drag', path: [{ x: 20, y: 110 }, { x: 35, y: 125 }] }] }); report.checks.push('drag through runtime');
   await call('browser_run', { tabId, steps: [{ action: 'click', target: { selector: '#download' } }] });
   let downloads;
-  for (let i = 0; i < 30; i++) { downloads = await call('browser_observe', { tabId, mode: 'downloads' }); if (JSON.stringify(downloads).includes('fixture.txt')) break; await new Promise(resolve => setTimeout(resolve, 100)); }
-  assert.match(JSON.stringify(downloads), /fixture.txt/); report.checks.push('download events through runtime');
+  for (let i = 0; i < 30; i++) {
+    downloads = (await call('browser_observe', { tabId, mode: 'downloads' })).result;
+    const unsupported = downloads.unsupported ?? [];
+    if (unsupported.includes('downloads.started') || downloads.events.some(event => event.filename === 'fixture.txt' && (event.status === 'complete' || unsupported.includes('downloads.complete')))) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  if (downloads.unsupported?.includes('downloads.started')) {
+    assert.equal(downloads.events.length, 0);
+    report.checks.push('unsupported download lifecycle explicitly reported');
+  } else {
+    const started = downloads.events.find(event => event.filename === 'fixture.txt' && event.status === 'started');
+    assert.ok(started, 'controlled-tab download start was captured');
+    if (!downloads.unsupported?.includes('downloads.complete')) assert.ok(downloads.events.some(event => event.id === started.id && event.status === 'complete'), 'same download reaches completion');
+    assert.ok(downloads.events.every(event => event.tabId === tabId && !/[\\/]/.test(event.filename ?? '')));
+    report.checks.push('attributed download events through runtime');
+  }
   await call('browser_run', { tabId, steps: [{ action: 'click', target: { selector: '#next' } }, { action: 'back' }], postObserve: { mode: 'inspect', target: { selector: '#choose' } } }); report.checks.push('history and navigation target renewal');
   const remembered = { tabId, steps: [{ action: 'hover', target: { selector: '#choose' } }, { action: 'click', target: { selector: '#choose' } }] };
   await call('browser_run', remembered);
@@ -91,6 +105,8 @@ try {
   await call('browser_session', { action: 'configure', tabId, environment: { viewport: { width: 800, height: 600 } } }); await call('browser_session', { action: 'configure', tabId, environment: { reset: true } }); report.checks.push('viewport configuration and reset');
   const second = await call('browser_session', { action: 'new-tab', sessionId: 'firefox-second-session' });
   await call('browser_run', { sessionId: 'firefox-second-session', tabId: second.activeTabId, steps: [{ action: 'navigate', url: origin }] });
+  const secondDownloads = await call('browser_observe', { sessionId: 'firefox-second-session', tabId: second.activeTabId, mode: 'downloads' });
+  assert.equal(secondDownloads.result.events.length, 0); report.checks.push('download observations exclude another session');
   const finalized = await call('browser_finalize', {}); assert.equal(finalized.status, 'finalized'); report.checks.push('session finalization');
   await call('browser_observe', { sessionId: 'firefox-second-session', tabId: second.activeTabId, mode: 'inspect', target: { selector: '#choose' } });
   report.checks.push('another concurrent session survives finalization');

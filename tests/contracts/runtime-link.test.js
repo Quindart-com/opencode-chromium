@@ -311,6 +311,20 @@ test("registration requires a real manifest, not just a file on disk", () => {
   }
 });
 
+test("Windows Firefox and LibreWolf read the same native host manifest", () => {
+  if (process.platform !== "win32") return;
+  const dir = tempDir("runtime-link-firefox-registration-");
+  try {
+    const manifestPath = path.join(dir, "com.opencode.browser.plugin.firefox.json");
+    fs.writeFileSync(manifestPath, JSON.stringify({ name: HOST_NAME, path: "launcher.cmd", allowed_extensions: ["opencode-browser-plugin@quindart.com"] }));
+    const firefox = readRegistration("firefox", dir);
+    const librewolf = readRegistration("librewolf", dir);
+    assert.equal(librewolf.manifestPath, manifestPath);
+    assert.equal(librewolf.hostPath, "launcher.cmd");
+    assert.deepEqual(librewolf.extensionIds, firefox.extensionIds);
+  } finally { removeDir(dir); }
+});
+
 // Each id source can be incomplete on its own, so they are merged rather than
 // letting whichever answered first lock out an extension that is also allowed.
 test("extension id sources are merged, not narrowed", () => {

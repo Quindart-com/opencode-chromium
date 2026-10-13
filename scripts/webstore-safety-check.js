@@ -14,7 +14,6 @@ const NOJOB_EXTENSION_ID = "piojnjijlmddhnnamahoopgbjcbcobaa";
 const EXPECTED_PERMISSIONS = [
   "alarms",
   "debugger",
-  "downloads",
   "history",
   "nativeMessaging",
   "scripting",

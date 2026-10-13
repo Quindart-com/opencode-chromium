@@ -1,13 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import { createBrowserAgent } from "../adapters/sdk/index.js";
-import { createCapabilityRegistry } from "../core/capabilities.js";
 import { packageInfo } from "./version.js";
 import { firefoxHealth } from "./firefox.js";
 import { readProfileRegistrations } from "../../native-host/src/profile-registry.js";
-import { codexConfigPath, directoryHash, skillSourceDirectory, skillTargets, STALE_SKILL_MARKER } from "./skills.js";
+import { codexConfigPath, inspectHarnessSkills, STALE_SKILL_MARKER } from "./skills.js";
 
 const MAX_SCHEMA_BYTES = 13000;
 
@@ -40,32 +38,21 @@ export async function runDoctor({ json = false } = {}) {
     check("schema-budget", Buffer.byteLength(JSON.stringify(tools)) < MAX_SCHEMA_BYTES, { bytes: Buffer.byteLength(JSON.stringify(tools)), maxBytes: MAX_SCHEMA_BYTES }),
     check("stale-client-paths", !fs.existsSync(path.join(info.root, ["opencode", "plugin"].join("-"))) && !fs.existsSync(path.join(info.root, ["codex", "adapter"].join("-"))), {}),
   ];
-  const skillSource = skillSourceDirectory();
   for (const profile of readProfileRegistrations().filter(item => /Firefox|LibreWolf/i.test(item.browserName ?? ""))) {
     try {
       const health = await firefoxHealth(profile.profileId);
       checks.push(check("firefox-remote-agent", health.configured && health.reachable, health));
     } catch (error) { checks.push(check("firefox-remote-agent", false, { profileId: profile.profileId, message: error.message })); }
   }
-  const canonicalHash = fs.existsSync(path.join(skillSource, "SKILL.md")) ? directoryHash(skillSource) : null;
-  const skillTargetsList = skillTargets();
-  const skillInstallCommand = "opencode-chromium install --client=skills";
-  // A stale installed skill is silent: the agent keeps following older guidance,
-  // which is how action-memory replay stayed disabled for a released version.
-  const staleSkillTargets = skillTargetsList.filter((target) => {
-    if (!fs.existsSync(path.join(target, "SKILL.md"))) return true;
-    return Boolean(canonicalHash) && directoryHash(target).sha256 !== canonicalHash.sha256;
-  });
+  const skillHealth = inspectHarnessSkills();
+  const skillInstallCommand = skillHealth.clients.length ? "opencode-chromium setup --targets " + skillHealth.clients.join(",") : "opencode-chromium setup --all";
+  const staleSkillTargets = skillHealth.skills.filter(skill => !skill.parity).map(skill => skill.path);
   checks.push(
-    check("skill-source", Boolean(canonicalHash), { path: "skills/opencode-browser-plugin" }),
-    check("skill-installed", Boolean(canonicalHash) && skillTargetsList.every((target) => fs.existsSync(path.join(target, "SKILL.md"))), { locations: skillTargetsList, installCommand: skillInstallCommand }),
+    check("client-configuration", skillHealth.clients.length > 0, { clients: skillHealth.clients, installCommand: skillInstallCommand }),
+    check("skill-source", skillHealth.source, { path: "skills/opencode-browser-plugin" }),
+    check("skill-installed", skillHealth.source && skillHealth.skills.every(skill => skill.installed), { locations: skillHealth.skills.map(skill => skill.path), nativePlugins: skillHealth.nativePlugins, installCommand: skillInstallCommand }),
     check("skill-parity", staleSkillTargets.length === 0, { stale: staleSkillTargets, installCommand: skillInstallCommand }),
-    check("skill-codex-config", (() => {
-      const config = codexConfigPath();
-      if (!fs.existsSync(config)) return false;
-      const text = fs.readFileSync(config, "utf8");
-      return /\[\[skills\.config\]\]/.test(text) && /path\s*=.*opencode-browser-plugin.*SKILL\.md/s.test(text) && /enabled\s*=\s*true/.test(text);
-    })(), { path: codexConfigPath() }),
+    check("skill-codex-config", skillHealth.codexEnabled, { path: codexConfigPath(), installCommand: skillInstallCommand }),
     check("skill-stale-entry", (() => {
       const config = codexConfigPath();
       if (!fs.existsSync(config)) return true;

@@ -2,8 +2,7 @@
 
 import process from "node:process";
 import path from "node:path";
-import { main as mcpMain } from "../adapters/mcp/server.js";
-import { manageSetup } from "../management/setup.ts";
+import { manageSetup, formatSetupResult } from "../management/setup.ts";
 import { runProviderCommand } from "./providers.ts";
 import { runFirefoxCommand } from "./firefox.js";
 import { activateChannel, readActivation } from "../management/channels.ts";
@@ -29,12 +28,10 @@ async function runtimeBusy() {
   return false;
 }
 import { configureClient } from "./configure.js";
-import { runDoctor } from "./doctor.js";
 import { installClient } from "./install.js";
 import { runMemoryCommand } from "./memory.js";
 import { linkClientSurfaces, linkRuntime, runtimeStatus, syncRuntime } from "./runtime-link.js";
 import { uninstallClient } from "./uninstall.js";
-import { verify } from "./verify.js";
 import { packageInfo } from "./version.js";
 
 function valueAfter(argv, flag) {
@@ -80,23 +77,28 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === "firefox") { console.log(JSON.stringify(await runFirefoxCommand(rest), null, 2)); return; }
   if (["setup", "manage", "update"].includes(command) || command === "uninstall" && !has(rest, "--client")) {
-    console.log(JSON.stringify(await manageSetup(rest, command === "uninstall"), null, 2));
+    if (has(rest, "--help") || has(rest, "-h")) {
+      console.log("Connect your browser to agent apps:\n  opencode-chromium setup --all\n  opencode-chromium setup --targets codex,opencode\n  opencode-chromium setup --all --dry-run --json\n\nOptions:\n  --all           Connect all detected, supported apps\n  --targets       Choose apps: codex,opencode,claude-code,claude-desktop,dsh\n  --config        Override a file: harness-id=/absolute/path\n  --dry-run       Preview changes without writing files\n  --json          Print a machine-readable result\n  --production    Switch from a linked development runtime to this release\n  --restart       Gracefully restart selected desktop apps");
+      return;
+    }
+    const result = await manageSetup(rest, command === "uninstall");
+    console.log(has(rest, "--json") ? JSON.stringify(result, null, 2) : formatSetupResult(result));
     return;
   }
-  if (command === "mcp") return mcpMain(rest);
+  if (command === "mcp") return (await import("../adapters/mcp/server.js")).main(rest);
   if (command === "memory" || command === "history") return runMemoryCommand(rest);
   if (command === "version" || command === "--version" || command === "-v") {
     console.log(JSON.stringify(packageInfo(), null, 2));
     return;
   }
   if (command === "doctor") {
-    const result = await runDoctor({ json: has(rest, "--json") });
+    const result = await (await import("./doctor.js")).runDoctor({ json: has(rest, "--json") });
     console.log(JSON.stringify(result, null, 2));
     if (!result.ok) process.exitCode = 1;
     return;
   }
   if (command === "verify") {
-    console.log(JSON.stringify(await verify(), null, 2));
+    console.log(JSON.stringify(await (await import("./verify.js")).verify(), null, 2));
     return;
   }
   if (command === "link") {
@@ -131,7 +133,7 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "help" || command === "--help") {
-    console.log("Usage: opencode-chromium <setup|manage|update|link|status|sync|install|configure|uninstall|doctor|verify|mcp|version>");
+    console.log("Usage: opencode-chromium <setup|manage|update|link|status|sync|install|configure|uninstall|doctor|verify|mcp|version>\n\nGet started: opencode-chromium setup --all\nChoose an app: opencode-chromium setup --targets codex\nPreview changes: opencode-chromium setup --all --dry-run --json\nConnection checks: opencode-chromium doctor\nMore setup options: opencode-chromium setup --help");
     return;
   }
   throw new Error(`Unknown command: ${command}`);
