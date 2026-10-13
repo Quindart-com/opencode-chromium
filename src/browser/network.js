@@ -4,7 +4,7 @@ const REDACTION_MARKER = "[REDACTED]";
 
 const SENSITIVE_QUERY_KEY = /^(?:token|access[_-]?token|refresh[_-]?token|api[_-]?key|key|secret|password|passcode|auth|authorization|code|signature|sig)$/i;
 const SENSITIVE_HEADER_KEY = /(?:authorization|cookie|set-cookie|token|secret|password|passcode|api[-_]?key|proxy-authorization|x-auth)/i;
-const SENSITIVE_TEXT_FIELD = /((?:access[_-]?token|refresh[_-]?token|api[_-]?key|token|secret|password|passcode|authorization|cookie|signature|sig)\s*[=:]\s*["']?)([^&\s,;}'\"]+)/gi;
+const SENSITIVE_TEXT_FIELD = /((?:access[_-]?token|refresh[_-]?token|api[_-]?key|token|secret|password|passcode|authorization|cookie|signature|sig)\s*[=:]\s*["']?)([^&\s,;}'"]+)/gi;
 const BINARY_MIME = /^(?:image\/|audio\/|video\/|font\/|application\/(?:pdf|zip|gzip|octet-stream|wasm|x-rar-compressed))/i;
 const MAX_HEADERS = 80;
 const MAX_HEADER_VALUE = 1200;

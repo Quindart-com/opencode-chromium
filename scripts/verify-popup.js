@@ -36,7 +36,7 @@ const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
+    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getURL: value => value, getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
     if (req.url === "/rpc") {
       let text = "";
       for await (const chunk of req) text += chunk;
@@ -104,6 +104,7 @@ try {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { globalThis.fixtureCopiedText = text; } } });
     globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
       id: "fixture",
+        getURL: value => value,
       getManifest: () => ({ version: "1.9.1" }),
       connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }),
       sendMessage: (message) => fetch("/rpc", { method: "POST", body: JSON.stringify(message) }).then((response) => response.json()),
@@ -216,7 +217,7 @@ try {
   await page.reload();
   await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "matching versions clear the notice");
-  const reviewDirectory = path.join(root, ".impeccable", "review");
+  const reviewDirectory = path.join(root, "reports", "popup-review");
   fs.mkdirSync(reviewDirectory, { recursive: true });
   for (const width of [320, 420]) {
     await page.setViewportSize({ width, height: 600 });

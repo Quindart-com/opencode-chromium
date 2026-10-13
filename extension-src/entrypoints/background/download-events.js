@@ -25,7 +25,7 @@ function safeUrl(value) {
 
 function basename(value) {
   if (typeof value !== "string") return null;
-  return value.split(/[\\/]/).at(-1)?.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 255) || null;
+  return [...(value.split(/[\\/]/).at(-1) ?? "")].filter(char => char.charCodeAt(0) > 31 && char.charCodeAt(0) !== 127).join("").slice(0, 255) || null;
 }
 
 function byteCount(value) {

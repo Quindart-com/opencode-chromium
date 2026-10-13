@@ -9,7 +9,7 @@ import { submit } from "publish-browser-extension";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-const NOJOB_EXTENSION_ID = "piojnjijlmddhnnamahoopgbjcbcobaa";
+const EXPECTED_EXTENSION_ID = "hdljmmpfnhojebplbbgdgejoobmjcbml";
 
 const args = process.argv.slice(2);
 function flagValue(name, fallback) {
@@ -35,8 +35,8 @@ if (!fs.existsSync(zip)) throw new Error(`Extension zip not found: ${zip}`);
 if (!clientId || !clientSecret || !refreshToken) {
   throw new Error("Missing Chrome Web Store credentials (CHROME_CLIENT_ID / CHROME_CLIENT_SECRET / CHROME_REFRESH_TOKEN)");
 }
-if (extensionId === NOJOB_EXTENSION_ID) {
-  throw new Error("Refusing to submit: target extension ID is the nojob extension");
+if (extensionId && extensionId !== EXPECTED_EXTENSION_ID) {
+  throw new Error("Refusing to submit: target extension ID does not match this project");
 }
 if (extensionId && !/^[a-p]{32}$/.test(extensionId)) {
   throw new Error(`Invalid extension ID: ${extensionId}`);

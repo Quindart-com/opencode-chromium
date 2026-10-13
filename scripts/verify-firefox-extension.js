@@ -43,10 +43,14 @@ const manifest = path.join(fixture, 'native.json');
 fs.writeFileSync(manifest, JSON.stringify({ name: host, description: 'Disposable extension verification host', path: launcher, type: 'stdio', allowed_extensions: ['opencode-browser-plugin@quindart.com'] }));
 let nativeKey, nativeFile, child, agent, profileId;
 const server = http.createServer((req, res) => {
+  if (req.url === '/frame') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Frame fixture</p><iframe src="/leaf"></iframe>'); return; }
+  if (req.url === '/leaf') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Nested frame fixture</p>'); return; }
   if (req.url === '/download') { res.setHeader('Content-Type', 'text/plain'); res.setHeader('Content-Disposition', 'attachment; filename="fixture.txt"'); res.end('owned fixture'); return; }
   res.setHeader('Content-Type', 'text/html');
-  res.end(req.url === '/next' ? '<h1>Next page</h1>' : '<title>Extension parity fixture</title><button id="choose" onclick="document.querySelector(\'#result\').textContent=event.isTrusted?\'Trusted choice\':\'Synthetic choice\'">Choose blue</button><p id="result">Ready</p><input id="name" aria-label="Your name"><button id="dialog" onclick="alert(\'Owned fixture dialog\')">Open dialog</button><div id="drag" style="width:60px;height:60px;background:blue" onpointerdown="window.dragged=event.isTrusted" onpointerup="window.released=event.isTrusted"></div><a id="next" href="/next">Next</a><a id="download" href="/download">Download fixture</a>');
+  res.end(req.url === '/next' ? '<h1>Next page</h1>' : '<title>Extension parity fixture</title><button id="choose" onclick="document.querySelector(\'#result\').textContent=event.isTrusted?\'Trusted choice\':\'Synthetic choice\'">Choose blue</button><p id="result">Ready</p><input id="name" aria-label="Your name"><button id="dialog" onclick="alert(\'Owned fixture dialog\')">Open dialog</button><div id="drag" style="width:60px;height:60px;background:blue" onpointerdown="window.dragged=event.isTrusted" onpointerup="window.released=event.isTrusted"></div><a id="next" href="/next">Next</a><a id="download" href="/download">Download fixture</a><iframe src="/frame"></iframe><iframe src="http://127.0.0.1:' + frameServer.address().port + '/frame"></iframe>');
 });
+const frameServer = http.createServer((req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(req.url === '/leaf' ? '<p>Nested frame fixture</p>' : '<p>Frame fixture</p><iframe src="/leaf"></iframe>'); });
+await new Promise(resolve => frameServer.listen(0, '127.0.0.1', resolve));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 const probe = net.createServer(); await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve)); const port = probe.address().port; await new Promise(resolve => probe.close(resolve));
@@ -78,6 +82,26 @@ try {
   await call('browser_run', { tabId, steps: [{ id: 'choice', action: 'find', target: { query: 'Choose blue' } }, { action: 'click', target: { fromStep: 'choice' }, settle: { condition: 'contains', target: { selector: '#result' }, value: 'Trusted choice' } }] }); report.checks.push('find action and settle');
   await call('browser_run', { tabId, steps: [{ action: 'fill', target: { selector: '#name' }, value: 'Luna fixture' }, { action: 'press', target: { selector: '#name' }, key: 'End' }, { action: 'type', target: { selector: '#name' }, value: ' complete' }, { action: 'hover', target: { selector: '#choose' } }] }); report.checks.push('forms keyboard and hover');
   const shot = await call('browser_observe', { tabId, mode: 'screenshot', format: 'jpeg', quality: 45, delivery: 'artifact' }); assert.ok(shot); report.checks.push('screenshot through runtime');
+  const captured = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'visual.capture', input: { kind: 'both', clip: { x: 0, y: 0, width: 600, height: 400 } } }] });
+  const baseline = captured.results[0].result.baseline;
+  await call('browser_run', { tabId, steps: [{ action: 'fill', target: { selector: '#name' }, value: 'Diff fixture' }] });
+  const diff = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'visual.diff', input: { baseline } }] });
+  assert.ok(diff.results[0].result.snapshot.counts.changed > 0); assert.ok(diff.results[0].result.pixels.changedPixels > 0); report.checks.push('session-scoped semantic and pixel diffs');
+  const frames = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'frames.list', input: { maxDepth: 3, maxFrames: 10 } }] });
+  const frameId = frames.results[0].result.frames[0].frameId;
+  assert.equal(typeof frameId, 'string', 'frame discovery must return an actionable frame ID');
+  const inspectedFrame = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'frames.inspect', input: { frameId } }] });
+  assert.match(inspectedFrame.results[0].result.text, /Choose blue/); report.checks.push('bounded frame discovery and inspection');
+  assert.equal(frames.results[0].result.frames.length, 5);
+  for (const frame of frames.results[0].result.frames.filter(item => item.depth === 1)) {
+    const inspected = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'frames.inspect', input: { frameId: frame.frameId } }] });
+    assert.match(inspected.results[0].result.text, /Frame fixture/);
+  }
+  const bounded = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'frames.list', input: { maxDepth: 0, maxFrames: 1 } }] });
+  assert.equal(bounded.results[0].result.frames.length, 1); report.checks.push('nested and cross-origin frames across reconnects');
+  const webmcp = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'webmcp.discover', input: { limit: 3 } }] });
+  assert.equal(webmcp.results[0].result.supported, false); report.checks.push('unavailable WebMCP reports its support accurately');
+  await call('browser_session', { action: 'name', name: 'Extension parity' }); report.checks.push('custom session group name');
   await call('browser_run', { tabId, steps: [{ action: 'drag', path: [{ x: 20, y: 110 }, { x: 35, y: 125 }] }] }); report.checks.push('drag through runtime');
   await call('browser_run', { tabId, steps: [{ action: 'click', target: { selector: '#download' } }] });
   let downloads;
@@ -136,6 +160,7 @@ try {
   if (nativeKey) { try { execFileSync('reg', ['delete', nativeKey, '/f'], { stdio: 'ignore', windowsHide: true }); } catch {} }
   if (nativeFile) fs.rmSync(nativeFile, { force: true });
   await new Promise(resolve => server.close(resolve));
+  await new Promise(resolve => frameServer.close(resolve));
   assert.equal(path.dirname(path.resolve(fixture)), path.resolve(os.tmpdir()));
   try { fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 15, retryDelay: 200 }); } catch { console.error('Owned temporary fixture cleanup pending:', fixture); }
 }

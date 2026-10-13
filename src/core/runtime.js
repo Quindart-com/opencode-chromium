@@ -1,10 +1,11 @@
+import { requiresApproval, validateSteps } from './run-validation.js';
+import { fitInlinePreview, summarizeAccessibilitySnapshot, summarizeNetworkEvents } from './observation-projection.js';
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
-import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
+import { assertNavigationAllowed, combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
-import { safeNetworkUrl } from "../browser/network.js";
 import { replayGateRejection } from "./replay-gate.ts";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
@@ -13,9 +14,9 @@ import { createLogger } from "./logging.js";
 import { selectProfile as selectConnectedProfile } from "./profiles.js";
 import { errorDetails, shouldReobservePage } from "./failure-context.js";
 import { cleanupSessionEnvironment } from "./environment-cleanup.js";
+import { createObservationOperations } from "./observation-diffs.js";
 
 const APPROVAL_TTL_MS = 5 * 60 * 1000;
-const RISK_WORDS = /\b(delete|remove|send|submit|publish|post|buy|purchase|pay|checkout|confirm|approve|permission|save|sign[ -]?in|log[ -]?in)\b/i;
 const READ_ACTIONS = new Set(["find", "hover", "assert", "screenshot", "clipboardRead"]);
 const READ_LEGACY_TOOLS = new Set([
   "browser_page_search", "browser_page_inspect", "browser_visual_map", "browser_dom_snapshot",
@@ -23,14 +24,6 @@ const READ_LEGACY_TOOLS = new Set([
   "browser_network_inspect", "browser_download_events", "browser_snapshot", "browser_selected_tab", "browser_list_tabs",
 ]);
 const AUTO_SETTLE_ACTIONS = new Set(["navigate", "reload", "back", "forward", "click", "doubleClick"]);
-const PREVIEW_KEY_PRIORITY = [
-  "ok", "status", "sessionId", "profileId", "tabId", "url", "title", "query", "scope",
-  "totalCandidates", "totalUnits", "totalNodes", "totalEvents", "returned", "truncated", "mode",
-  "result", "results", "elements", "nodes", "events", "console", "network", "node_id", "axNodeId",
-  "kind", "role", "name", "label", "value", "text", "method", "type", "statusCode", "requestId",
-  "timestamp", "error", "summary", "settle", "observation", "target", "contextRoot", "ancestors",
-  "siblings", "nearbyInteractives", "children", "requested", "screenshotClip",
-];
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
@@ -128,161 +121,6 @@ function publicProfiles(profiles) {
   }));
 }
 
-function clippedText(value, limit) {
-  const text = String(value ?? "");
-  return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1))}…`;
-}
-
-function projectValue(value, options, depth = 0) {
-  if (value === null || value === undefined || typeof value === "number" || typeof value === "boolean") return value;
-  if (typeof value === "string") return clippedText(value, options.stringLimit);
-  if (depth >= options.depthLimit) {
-    if (Array.isArray(value)) return `[${value.length} items omitted]`;
-    return "[nested value omitted]";
-  }
-  if (Array.isArray(value)) {
-    return value.slice(0, options.arrayLimit).map((item) => projectValue(item, options, depth + 1));
-  }
-  if (typeof value !== "object") return String(value);
-  const keys = Object.keys(value);
-  const ordered = [
-    ...PREVIEW_KEY_PRIORITY.filter((key) => Object.hasOwn(value, key)),
-    ...keys.filter((key) => !PREVIEW_KEY_PRIORITY.includes(key)).sort(),
-  ].slice(0, options.objectLimit);
-  return Object.fromEntries(ordered.map((key) => {
-    const child = value[key];
-    if (["base64", "data", "body", "postData"].includes(key) && typeof child === "string" && child.length > options.stringLimit) {
-      return [key, `[${child.length} characters omitted]`];
-    }
-    return [key, projectValue(child, options, depth + 1)];
-  }));
-}
-
-function fitInlinePreview(payload, maxChars) {
-  const configurations = [
-    { arrayLimit: 20, objectLimit: 30, stringLimit: 500, depthLimit: 7 },
-    { arrayLimit: 10, objectLimit: 24, stringLimit: 280, depthLimit: 6 },
-    { arrayLimit: 5, objectLimit: 18, stringLimit: 180, depthLimit: 5 },
-    { arrayLimit: 2, objectLimit: 14, stringLimit: 120, depthLimit: 4 },
-  ];
-  for (const options of configurations) {
-    const projected = projectValue(payload, options);
-    if (JSON.stringify(projected).length <= maxChars) return projected;
-  }
-  const result = projectValue(payload.result, { arrayLimit: 1, objectLimit: 10, stringLimit: 100, depthLimit: 3 });
-  return {
-    ok: payload.ok,
-    status: payload.status,
-    sessionId: payload.sessionId,
-    ...(payload.profileId ? { profileId: payload.profileId } : {}),
-    ...(payload.tabId ? { tabId: payload.tabId } : {}),
-    result,
-  };
-}
-
-function axValue(field) {
-  return field && typeof field === "object" && "value" in field ? field.value : field ?? null;
-}
-
-function summarizeAccessibilitySnapshot(snapshot, limit = 40) {
-  const nodes = Array.isArray(snapshot?.nodes) ? snapshot.nodes : [];
-  const usefulRoles = new Set([
-    "RootWebArea", "WebArea", "heading", "link", "button", "textbox", "searchbox", "combobox",
-    "checkbox", "radio", "switch", "tab", "menuitem", "dialog", "alert", "status", "listbox", "option",
-  ]);
-  const useful = nodes.filter((node) => {
-    if (node?.ignored === true) return false;
-    const role = String(axValue(node?.role) ?? "");
-    return usefulRoles.has(role) || Boolean(axValue(node?.name)) || Boolean(axValue(node?.value));
-  });
-  const selected = useful.slice(0, limit).map((node) => ({
-    axNodeId: node.nodeId ?? null,
-    backendDOMNodeId: node.backendDOMNodeId ?? null,
-    role: axValue(node.role),
-    name: clippedText(axValue(node.name), 180) || null,
-    value: clippedText(axValue(node.value), 180) || null,
-    description: clippedText(axValue(node.description), 180) || null,
-  }));
-  return { totalNodes: nodes.length, usefulNodes: useful.length, returned: selected.length, truncated: useful.length > selected.length, nodes: selected };
-}
-
-function summarizeNetworkEvents(response, limit = 30) {
-  const events = Array.isArray(response?.events) ? response.events : [];
-  const meaningful = events.map((event) => {
-    const params = event?.params ?? {};
-    const request = params.request ?? {};
-    const responseValue = params.response ?? {};
-    return {
-      method: event.method ?? null,
-      timestamp: event.time ?? params.timestamp ?? null,
-      requestId: params.requestId ?? null,
-      type: params.type ?? null,
-      url: clippedText(safeNetworkUrl(responseValue.url ?? request.url ?? params.documentURL), 300) || null,
-      httpMethod: request.method ?? null,
-      statusCode: responseValue.status ?? null,
-      mimeType: responseValue.mimeType ?? null,
-      error: clippedText(params.errorText ?? params.blockedReason, 240) || null,
-    };
-  });
-  const selected = meaningful.slice(-limit);
-  return { totalEvents: events.length, returned: selected.length, truncated: events.length > selected.length, events: selected };
-}
-
-function requiresApproval(steps = []) {
-  const reasons = [];
-  const named = new Map(steps.filter((step) => step.id).map((step) => [step.id, step]));
-  for (const step of steps) {
-    const referenced = step.target?.fromStep ? named.get(step.target.fromStep) : null;
-    const targetText = JSON.stringify([step.target ?? {}, referenced?.target ?? {}, referenced?.value]);
-    if (["upload", "clipboardRead", "clipboardWrite", "close"].includes(step.action)) reasons.push(step.action);
-    if (step.action === "handleDialog" && step.value === "accept") reasons.push("dialog accept");
-    if (step.action === "press" && /^(enter|return)$/i.test(step.key ?? "")) reasons.push("submit-capable key press");
-    if (["click", "doubleClick"].includes(step.action) && RISK_WORDS.test(targetText)) reasons.push("consequential click target");
-    if (["fill", "replaceText", "fillForm", "type"].includes(step.action) && /password|passcode|otp|credit.?card|cvv/i.test(`${targetText} ${JSON.stringify(step.fields ?? {})}`)) {
-      reasons.push("sensitive form input");
-    }
-    if (step.action === "capability" && /clipboard\.write|uploads\.|forms\.|advanced\.(drag|locator)/i.test(step.capability ?? "")) reasons.push(`capability ${step.capability}`);
-    if (step.action === "capability" && step.capability === "network.inspect" && ["request", "response", "both"].includes(step.input?.includeBody)) {
-      reasons.push("network body inspection");
-    }
-  }
-  return [...new Set(reasons)];
-}
-
-function validateSteps(steps) {
-  if (!Array.isArray(steps) || steps.length === 0) throw new Error("browser_run requires steps, or approvalToken by itself");
-  const ids = new Set();
-  const required = (step, field) => {
-    if (step[field] === undefined) throw new Error(`${step.action} requires ${field}`);
-  };
-  for (const [index, step] of steps.entries()) {
-    if (step.id) {
-      if (ids.has(step.id)) throw new Error(`Duplicate step id: ${step.id}`);
-      ids.add(step.id);
-    }
-    if (step.target?.fromStep && !ids.has(step.target.fromStep)) {
-      throw new Error(`steps[${index}].target.fromStep must reference an earlier named step`);
-    }
-    if (step.action === "navigate") required(step, "url");
-    if (step.action === "navigate" && !(/^https?:\/\//i.test(step.url ?? "") || step.url === "about:blank")) {
-      throw new Error("navigate supports http://, https://, and about:blank URLs only");
-    }
-    if (["fill", "replaceText", "select", "type", "clipboardWrite"].includes(step.action)) required(step, "value");
-    if (step.action === "fillForm") required(step, "fields");
-    if (step.action === "press") required(step, "key");
-    if (step.action === "drag") required(step, "path");
-    if (step.action === "upload") required(step, "files");
-    if (step.action === "capability") required(step, "capability");
-    if (step.action === "handleDialog") {
-      required(step, "value");
-      if (!["accept", "dismiss"].includes(step.value)) throw new Error("handleDialog value must be accept or dismiss");
-    }
-    if (["click", "doubleClick", "hover", "focus", "fill", "replaceText", "select", "upload", "assert"].includes(step.action) && !step.target) {
-      throw new Error(`${step.action} requires target`);
-    }
-  }
-}
-
 export class AgentBrowserRuntime {
   constructor({ artifactStore = new ArtifactStore(), approvalTtlMs = APPROVAL_TTL_MS, operationFactory = createBrowserOperations, hostRequest = browserRequest, urlPolicy, urlPolicyConfig, filePolicy, filePolicyConfig, logger } = {}) {
     this.artifacts = artifactStore;
@@ -303,6 +141,7 @@ export class AgentBrowserRuntime {
     this.legacyToolsPromise = operationFactory().then((hooks) => hooks.tool);
     this.hostRequest = hostRequest;
     this.capabilityRegistry = null;
+    this.observationOperations = createObservationOperations(this);
     this.searchPrefsCache = new Map();
     this.memoryChainSequence = 0;
   }
@@ -322,19 +161,25 @@ export class AgentBrowserRuntime {
 
   async invoke(name, args, sessionId) {
     const tools = await this.legacyToolsPromise;
-    const definition = tools[name];
+    const definition = this.observationOperations[name] ?? tools[name];
     if (!definition) throw new Error(`Legacy operation is unavailable: ${name}`);
     const parsed = z.object(definition.args).parse(args ?? {});
+    const context = { sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy };
+    const checkTab = async (after = false) => {
+      if (this.urlPolicy.allowedOrigins?.length === 0 && this.urlPolicy.blockedOrigins?.length === 0) return;
+      if (!parsed.tabId || !tools.browser_get_tab || ["browser_claim_tab", "browser_close_tab", "browser_configure"].includes(name)) return;
+      if (!after && name === "browser_navigate") { assertNavigationAllowed(parsed.url, this.urlPolicy); return; }
+      const tab = parseLegacyResult(await tools.browser_get_tab.execute({ tabId: parsed.tabId }, context));
+      assertNavigationAllowed(tab?.url, this.urlPolicy);
+    };
+    await checkTab();
     const attempts = READ_LEGACY_TOOLS.has(name) ? 2 : 1;
     let lastError;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        return parseLegacyResult(await definition.execute(parsed, {
-          sessionID: sessionId,
-          agent: "agent-browser-core",
-          urlPolicy: this.urlPolicy,
-          filePolicy: this.filePolicy,
-        }));
+        const value = parseLegacyResult(await definition.execute(parsed, context));
+        await checkTab(true);
+        return value;
       } catch (error) {
         lastError = error;
         if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 40));
@@ -347,7 +192,7 @@ export class AgentBrowserRuntime {
     if (!this.capabilityRegistry) {
       const operations = await this.legacyToolsPromise;
       this.capabilityRegistry = createCapabilityRegistry({
-        operations,
+        operations: Object.defineProperties({ ...this.observationOperations }, Object.getOwnPropertyDescriptors(operations)),
         invoke: (name, args, context = {}) => this.invoke(name, args, context.sessionID ?? context.sessionId ?? context.session_id),
       });
     }
@@ -660,7 +505,7 @@ export class AgentBrowserRuntime {
     // Deterministic recall first: repeating a chain on the same host is an exact
     // recipe match and needs no embedding call. The semantic path stays an
     // explicit, bounded fallback for a caller-supplied transient intent.
-    let match = null;
+    let match;
     try {
       const found = await this.requestHost("memory.recipe", { steps: request.steps, hostname }, session);
       match = found?.match ?? null;
@@ -833,14 +678,14 @@ export class AgentBrowserRuntime {
       : { ok: true, executionState, value, settled };
   }
 
-  async editTarget(target, tabId, mode, value, sessionId, chainId = null, stepIndex = null) {
+  async editTarget(target, tabId, mode, value, sessionId, _chainId = null, _stepIndex = null) {
     const mem = (params) => params;
     if (target.nodeId) return this.invoke("browser_dom_type", mem({ tabId, nodeId: target.nodeId, text: value, mode }), sessionId);
     if (target.selector) return this.invoke("browser_locator_fill", mem({ tabId, selector: target.selector, value, mode }), sessionId);
     throw new Error("Editable target needs nodeId, selector, or query");
   }
 
-  async clickTarget(toolName, target, tabId, step, sessionId, chainId = null, stepIndex = null) {
+  async clickTarget(toolName, target, tabId, step, sessionId, _chainId = null, _stepIndex = null) {
     const mem = (params) => params;
     if (target.nodeId) {
       if (toolName === "browser_double_click") throw new Error("doubleClick requires selector or coordinates");
@@ -856,7 +701,7 @@ export class AgentBrowserRuntime {
     throw new Error(`${step.action} target needs nodeId, selector, query, or coordinates`);
   }
 
-  async hoverTarget(target, tabId, sessionId, chainId = null, stepIndex = null) {
+  async hoverTarget(target, tabId, sessionId, _chainId = null, _stepIndex = null) {
     const mem = (params) => params;
     if (target.nodeId) return this.invoke("browser_hover", mem({ tabId, nodeId: target.nodeId }), sessionId);
     if (target.selector) return this.invoke("browser_hover", mem({ tabId, selector: target.selector }), sessionId);
@@ -866,7 +711,7 @@ export class AgentBrowserRuntime {
     throw new Error("hover target needs nodeId, selector, query, or coordinates");
   }
 
-  async assertTarget(target, tabId, step, sessionId, chainId = null, stepIndex = null) {
+  async assertTarget(target, tabId, step, sessionId, _chainId = null, _stepIndex = null) {
     const mem = (params) => params;
     const condition = step.condition ?? "exists";
     if (!target.selector && target.nodeId && condition === "exists") {
@@ -900,7 +745,7 @@ export class AgentBrowserRuntime {
         const snapshot = await this.invoke("browser_dom_snapshot", { tabId }, session.sessionId);
         // Snapshot handles are allocated afresh even when the page is unchanged.
         // Compare visible content and geometry, retaining live handles elsewhere.
-        const current = digest({ ...snapshot, nodes: snapshot.nodes?.map(({ node_id, ...node }) => node) });
+        const current = digest({ ...snapshot, nodes: snapshot.nodes?.map(({ node_id: _nodeId, ...node }) => node) });
         stableCount = current === previous ? stableCount + 1 : 0;
         if (stableCount >= 1) return { condition: "dom-quiet", settled: true };
         previous = current;
@@ -1027,7 +872,7 @@ export class AgentBrowserRuntime {
           data: recorded.trace,
           label: "performance-trace",
         });
-        const { trace, ...rest } = recorded;
+        const { trace: _trace, ...rest } = recorded;
         return { ...rest, traceArtifact: artifact.uri, traceEventCount: recorded.traceEventCount };
       }
       return recorded;
@@ -1044,7 +889,7 @@ export class AgentBrowserRuntime {
     throw new Error(`Unsupported performance action: ${diagnostic.action}`);
   }
 
-  async screenshot(tabId, options, sessionId, chainId = null, stepIndex = null) {
+  async screenshot(tabId, options, sessionId, _chainId = null, _stepIndex = null) {
     const shot = await this.invoke("browser_screenshot", {
       tabId,
       fullPage: options.fullPage ?? false,
@@ -1245,6 +1090,7 @@ export class AgentBrowserRuntime {
       const profile = await this.selectProfile(session, args.profile);
       let value = null;
       if (args.action === "open") {
+        if (args.name) await this.invoke("browser_name_session", { name: args.name }, sessionId);
         value = await this.invoke("browser_list_tabs", { scope: args.scope ?? "session" }, sessionId);
       } else if (args.action === "configure") {
         const tabId = args.tabId ?? session.activeTabId ?? (await this.invoke("browser_selected_tab", {}, sessionId))?.id;

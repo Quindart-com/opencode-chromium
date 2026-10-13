@@ -34,6 +34,11 @@ in Settings.
 
 ## Content boundaries
 
+Snapshot and pixel-diff baselines are temporary local artifacts. When requested,
+their page text or images are delivered to your connected agent, whose model
+provider may receive that content. The setup guide is bundled locally; it has
+no analytics. Help and release-note links open GitHub only when you select them.
+
 - **Local extension communication.** The extension
   talks to a native messaging host installed on your computer over the
   browser's native messaging channel. The native host calls TypeSafe or
