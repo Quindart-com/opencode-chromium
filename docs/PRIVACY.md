@@ -1,9 +1,10 @@
 # Privacy Policy
 
-**Effective date:** October 1, 2026
+**Effective date:** October 13, 2026
 
-This privacy policy applies to the **opencode-chromium** extension for Chromium-based
-browsers (Chrome, Edge, Brave), published by Quindart.
+This privacy policy applies to the **OpenCode Browser Plugin** extensions for
+Chromium-based browsers (Chrome, Edge, Brave, Chromium) and Firefox-based browsers
+(Firefox, LibreWolf), published by Quindart as part of `opencode-chromium`.
 
 ## In short
 
@@ -13,6 +14,12 @@ Cloud decision assistance is off by default. The extension communicates with a
 local native host. If you explicitly enable a decision provider,
 the native host sends bounded search/replay intent and candidate descriptions to
 the service you selected. Page text may contain personal information.
+If you separately enable screenshot sharing for OpenAI Luna, an ambiguous visual
+decision may also send one bounded, compressed screenshot of the controlled tab
+to OpenRouter. Screenshots may contain personal information. Screenshot sharing
+is off by default; Jev uses text only, and ordinary exact matches do not trigger
+decision screenshots. You can turn off cloud assistance or screenshot sharing
+in Settings.
 
 ## What the extension does
 
@@ -88,6 +95,13 @@ automation bridge:
   when a tool call from a session you started asks for it.
 - `nativeMessaging`, `alarms`: communicate with the locally installed native
   host and keep the service worker responsive during active sessions.
+
+`debugger` and `tabGroups` are requested only by the Chromium extension. Firefox
+and LibreWolf instead use a locally enabled Remote Agent through WebDriver BiDi
+for browser-level automation. The plugin accepts only a loopback connection;
+other local programs can also access an enabled Remote Agent. Fully exit and
+relaunch the browser without the debugging flag to disable that listener. See
+[Firefox setup](firefox.md) for launch instructions and connection checks.
 
 You grant or deny these permissions at load time, and you can remove the
 extension at any time.
