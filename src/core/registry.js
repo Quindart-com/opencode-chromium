@@ -130,7 +130,7 @@ const resultSchema = z.object({
   error: errorSchema.optional(),
 }).passthrough();
 
-export function createCoreRegistry(runtime, { memory = false } = {}) {
+export function createCoreRegistry(runtime, { memory: _memory = false } = {}) {
   return {
     browser_run: {
       description: "Run an action chain with settle and post-observation.",
@@ -177,7 +177,7 @@ export function createCoreRegistry(runtime, { memory = false } = {}) {
       execute: (args, context) => runtime.observe(args, context),
     },
     browser_session: {
-      description: "Manage a named-profile browser session.",
+      description: "Manage a named-profile session. Pass name on open or name to label its tab group.",
       inputSchema: z.object({
         ...sessionFields,
         action: z.enum(["open", "new-tab", "claim-tab", "release-tab", "name", "configure"]),

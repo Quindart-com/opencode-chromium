@@ -53,6 +53,7 @@ export class ArtifactStore {
       sessionId: String(sessionId),
       uri: `${URI_PREFIX}${encodeURIComponent(String(sessionId))}/artifacts/${id}`,
       mimeType,
+      label: safeSegment(label),
       size: buffer.length,
       sha256: createHash("sha256").update(buffer).digest("hex"),
       createdAt: new Date(createdAt).toISOString(),

@@ -146,6 +146,7 @@ export default function App(): React.JSX.Element {
         {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><ConnectionView status={nativeStatus} view="settings" /></>}
       </div>
       <footer id="app-footer">
+        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">Setup guide</a>
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
           Source on GitHub
         </a>

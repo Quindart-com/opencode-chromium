@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { checkTagVersion } from "../../scripts/check-tag-version.js";

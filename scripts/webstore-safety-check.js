@@ -10,7 +10,7 @@ const extensionDir = path.join(root, "extension");
 const outDir = path.join(root, "dist-extension");
 const errors = [];
 
-const NOJOB_EXTENSION_ID = "piojnjijlmddhnnamahoopgbjcbcobaa";
+const EXPECTED_EXTENSION_ID = "hdljmmpfnhojebplbbgdgejoobmjcbml";
 const EXPECTED_PERMISSIONS = [
   "alarms",
   "debugger",
@@ -100,7 +100,7 @@ if (!fs.existsSync(zipPath)) errors.push(`Extension zip not found: ${zipName} (r
 
 const expectedId = process.env.CHROME_EXTENSION_ID ?? "";
 if (expectedId) {
-  if (expectedId === NOJOB_EXTENSION_ID) errors.push("Refusing: CHROME_EXTENSION_ID is the nojob extension ID");
+  if (expectedId !== EXPECTED_EXTENSION_ID) errors.push("Refusing: CHROME_EXTENSION_ID does not match this project");
   if (!/^[a-p]{32}$/.test(expectedId)) errors.push(`CHROME_EXTENSION_ID is not a valid Chrome extension ID: ${expectedId}`);
   console.log(JSON.stringify({ ok: errors.length === 0, checks: [...errors], extensionId: expectedId, zip: zipName }, null, 2));
 } else {
