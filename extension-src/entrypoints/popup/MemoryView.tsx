@@ -229,12 +229,13 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         </div>
         <span id="memory-state-line" className="visually-hidden" aria-live="polite">{stateLine}</span>
         <div className="memory-actions memory-toggle-actions">
-          <button id="memory-enable" className="button button-success" type="button" disabled={!status || memoryBusy || enabled} onClick={() => void runMemoryAction("memory.enable", "Action memory enabled.")}>Enable</button>
-          <button id="memory-disable" className="button button-danger" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.disable", "Action memory disabled.")}>Disable</button>
+          <button id="memory-enable" className="button button-primary" type="button" disabled={!status || memoryBusy || enabled} onClick={() => void runMemoryAction("memory.enable", "Action memory enabled.")}>Enable memory</button>
+          <button id="memory-disable" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.disable", "Action memory disabled.")}>Disable memory</button>
         </div>
       </div>
 
-      <div className="card memory-card">
+      <details className="card memory-card memory-settings-details">
+        <summary>Storage limit</summary>
         <div className="memory-head">
           <div>
             <h2 id="quota-heading">Storage limit</h2>
@@ -265,9 +266,10 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         {powerUser && <p id="power-note" className="help-note">Expanded storage can use more disk space.</p>}
         <div className="quota-track"><div id="quota-fill" className="quota-fill" style={{ width: `${quotaFill}%` }} /></div>
         <p id="quota-usage" className="help-note">{formatBytes(bytesUsed)} of {formatBytes(quotaBytes)} used</p>
-      </div>
+      </details>
 
-      <div className="card memory-card">
+      <details className="card memory-card memory-settings-details">
+        <summary>Cleanup</summary>
         <div className="memory-head">
           <div>
             <h2>Cleanup</h2>
@@ -283,7 +285,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
           <span className="purge-unit">days</span>
           <button id="prune-now" className="button" type="button" disabled={!status || memoryBusy} onClick={() => void runMemoryAction("memory.prune", "Cleanup complete.")}>Clean up now</button>
         </div>
-      </div>
+      </details>
 
       </> : <div className="card memory-card">
         <div className="memory-head">

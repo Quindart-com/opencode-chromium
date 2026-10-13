@@ -12,6 +12,8 @@ import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js
 import { decisionUsage } from "../native-host/dist/decisions/usage.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const storeFixture = process.argv.includes("--store-fixture");
+const fixtureVersion = storeFixture ? JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version : "1.9.1";
 fs.mkdirSync(path.join(root, "reports"), { recursive: true });
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "popup-verification-"));
 const stores = [new MemoryStore({ root: fixture }), new MemoryStore({ root: fixture })];
@@ -28,12 +30,13 @@ store.usageEvent({ eventType: "replay_rejected", reason: "below_similarity", pro
 store.usageEvent({ eventType: "replay_rejected", reason: "step_count_mismatch", profileId: "primary" });
 const versionStatus = { state: "connected", versionChecked: true, nativeHostVersion: "1.6.5", clientVersions: ["1.6.5"] };
 let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUTER_API_KEY", shareText: true, shareImages: false, ready: true };
+if (storeFixture) decisionSettings = { ...decisionSettings, provider: "off", shareText: false, ready: false };
 let uploadSettings = { allowWithoutConfirmation: false };
 const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end("globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: { id: \"fixture\", getManifest: () => ({version:\"1.9.1\"}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch(\"/rpc\", {method:\"POST\",body:JSON.stringify(message)}).then(r=>r.json()) } };"); return; }
+    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
     if (req.url === "/rpc") {
       let text = "";
       for await (const chunk of req) text += chunk;
@@ -47,7 +50,7 @@ const server = http.createServer(async (req, res) => {
         else if (message.method === "memory.configure") result = store.configure(message.params);
         else throw new Error("Unexpected fixture method");
         result = { ok: true, result };
-      } else if (message.type === "GET_PROFILE" || message.type === "GET_PROFILE_DETAILS") result = { profile: { profileId: "primary", profileLabel: "Primary" } };
+      } else if (message.type === "GET_PROFILE" || message.type === "GET_PROFILE_DETAILS") result = { profile: { profileId: "primary", profileLabel: storeFixture ? "Example browser" : "Primary" } };
       else if (message.type === "GET_DECISION_SETTINGS") result = { result: { ...decisionSettings, usage: decisionUsage() } };
       else if (message.type === "SET_DECISION_SETTINGS") {
         decisionSettings = { ...message.settings, ready: message.settings.shareText };
@@ -84,14 +87,14 @@ const server = http.createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 console.log("Popup fixture ready at", server.address().port);
 if (process.argv.includes("--serve")) {
-  versionStatus.nativeHostVersion = "1.9.1"; versionStatus.clientVersions = ["1.9.1"];
+  versionStatus.nativeHostVersion = fixtureVersion; versionStatus.clientVersions = [fixtureVersion];
   console.log("Live review URL: http://127.0.0.1:" + server.address().port + "/popup.html");
   process.on("SIGINT", () => { server.closeAllConnections(); server.close(); for (const item of stores) item.close(); fs.rmSync(fixture, { recursive: true, force: true }); process.exit(0); });
   await new Promise(() => {});
 }
 let browser;
 try {
-  browser = await chromium.launch({ headless: true, timeout: 30000, channel: process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
+  browser = await chromium.launch({ headless: true, timeout: 30000, executablePath: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE || undefined, channel: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE ? undefined : process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
   console.log("Popup browser ready");
   const page = await browser.newPage({ viewport: { width: 380, height: 800 } });
   page.setDefaultTimeout(15000);
@@ -125,7 +128,7 @@ try {
   await page.getByRole("button", { name: "Remind me in a week" }).click();
   await page.waitForFunction(() => !document.querySelector(".version-notice"));
   await page.reload();
-  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "connected");
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "snooze persists across popup reopen");
   await page.getByText("Activity and memory statistics", { exact: true }).click();
   await page.selectOption("#statistics-scope", "all");
@@ -153,6 +156,7 @@ try {
   await uploadPreference.uncheck();
   await page.waitForFunction(() => !document.querySelector('.upload-preference input')?.checked && !document.querySelector('.upload-preference input')?.disabled);
   assert.equal(uploadSettings.allowWithoutConfirmation, false);
+  await page.locator(".memory-settings-details > summary").filter({ hasText: "Cleanup" }).click();
   await page.waitForSelector("#purge-days:not(:disabled)");
   assert.equal(await page.locator(".version-notice").isVisible(), true, "instructions stay available in Settings");
   await page.locator("#purge-days").fill("21");
@@ -210,8 +214,39 @@ try {
   versionStatus.nativeHostVersion = "1.9.1";
   versionStatus.clientVersions = ["1.9.1"];
   await page.reload();
-  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "connected");
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "matching versions clear the notice");
+  const reviewDirectory = path.join(root, ".impeccable", "review");
+  fs.mkdirSync(reviewDirectory, { recursive: true });
+  for (const width of [320, 420]) {
+    await page.setViewportSize({ width, height: 600 });
+    for (const theme of ["light", "dark"]) {
+      await page.emulateMedia({ colorScheme: theme });
+      const measuredWidths = [];
+      for (const view of ["Overview", "Profiles", "Settings"]) {
+        await page.getByRole("tab", { name: view, exact: true }).click();
+        await page.waitForFunction(() => !document.querySelector('.view-panel:not([hidden]) button[disabled]#decision-provider'));
+        measuredWidths.push(await page.locator('main').evaluate(element => element.getBoundingClientRect().width));
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} fits ${width}px ${theme}`);
+        await page.screenshot({ path: path.join(reviewDirectory, `${view.toLowerCase()}-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
+      }
+      assert.ok(Math.max(...measuredWidths) - Math.min(...measuredWidths) < 1, `all views share a stable width at ${width}px ${theme}`);
+    }
+  }
+  decisionSettings = { ...decisionSettings, provider: "openai-decisions", shareText: true, ready: false };
+  await page.reload();
+  await page.getByText("OpenAI Luna", { exact: true }).waitFor();
+  await page.getByText("Connection needed.", { exact: false }).waitFor();
+  versionStatus.state = "disconnected";
+  versionStatus.error = "Native bridge unavailable.";
+  await page.setViewportSize({ width: 320, height: 600 });
+  await page.reload();
+  await page.getByRole("heading", { name: "Connect your browser", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Copy setup command", exact: true }).click();
+  assert.equal(await page.evaluate(() => globalThis.fixtureCopiedText), "npx -y opencode-chromium@latest setup --all");
+  await page.screenshot({ path: path.join(reviewDirectory, "disconnected-320-dark.png"), fullPage: true, animations: "disabled" });
+  await page.getByText("Connection details", { exact: true }).click();
+  await page.getByText("Native bridge unavailable.", { exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log("Popup verified: scoped SQLite totals, shared-action deduplication, profile dropdown, preserved edits, collapsed model settings, no page errors.");
 } catch (error) { console.error("Popup verification failed:", error); throw error; } finally {

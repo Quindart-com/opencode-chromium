@@ -1,4 +1,5 @@
 import { createPageBackend } from "../page-backend.js";
+import { createEnvironmentController } from "../environment.js";
 import fs from "node:fs";
 import { createFileInputOperation } from "../uploads.js";
 import path from "node:path";
@@ -990,6 +991,12 @@ function interactionHelpersSource() {
 }
 
 const pageBackend = createPageBackend({ request: extensionRequest, evaluate: runtimeEvaluate, command: cdp, ready: waitForPageReady });
+const environmentController = createEnvironmentController({
+  command: cdp,
+  backend: pageBackend,
+  enableNetwork: (context, tabId) => enableCdpDomains(context, tabId, ["Network"]),
+  keyFor: async (context, tabId) => tabCacheKey(context, await resolveSessionProfileId(context), tabId),
+});
 async function navigateHistory(context, tabId, delta) {
   const alternate = await pageBackend.history(context, tabId, delta);
   if (alternate) return alternate;
@@ -2123,76 +2130,12 @@ async function waitForPageReady(context, tabId, waitUntil = "domcontentloaded", 
   throw new Error(`Timed out waiting for page ${waitUntil}; last readyState was ${lastState ?? "unknown"}.${suffix}`);
 }
 
-const NETWORK_PRESETS = Object.freeze({
-  offline: { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 },
-  "slow-2g": { offline: false, latency: 2000, downloadThroughput: 250 * 1024 / 8, uploadThroughput: 50 * 1024 / 8 },
-  "slow-3g": { offline: false, latency: 1500, downloadThroughput: 400 * 1024 / 8, uploadThroughput: 400 * 1024 / 8 },
-  "fast-3g": { offline: false, latency: 560, downloadThroughput: 1.6 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8 },
-  "slow-4g": { offline: false, latency: 170, downloadThroughput: 1.6 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8 },
-  online: { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
-});
-
-function networkConditions(value) {
-  if (typeof value === "string") return NETWORK_PRESETS[value] ?? NETWORK_PRESETS.online;
-  return {
-    offline: value.offline ?? false,
-    latency: value.latency ?? 0,
-    downloadThroughput: value.downloadThroughput ?? -1,
-    uploadThroughput: value.uploadThroughput ?? -1,
-  };
-}
-
 async function applyEnvironment(context, tabId, env) {
-  if (await pageBackend.configure(context, tabId, env)) return;
-  if (env.viewport) {
-    await cdp(context, tabId, "Emulation.setDeviceMetricsOverride", {
-      width: env.viewport.width,
-      height: env.viewport.height,
-      deviceScaleFactor: env.viewport.deviceScaleFactor ?? 1,
-      mobile: env.viewport.mobile ?? false,
-    }).catch(() => {});
-    if (env.viewport.touch !== undefined) {
-      await cdp(context, tabId, "Emulation.setTouchEmulationEnabled", { enabled: env.viewport.touch }).catch(() => {});
-    }
-  }
-  if (env.cpuThrottling !== undefined) {
-    await cdp(context, tabId, "Emulation.setCPUThrottlingRate", { rate: env.cpuThrottling }).catch(() => {});
-  }
-  if (env.network !== undefined) {
-    await cdp(context, tabId, "Network.emulateNetworkConditions", networkConditions(env.network)).catch(() => {});
-  }
-  if (env.geolocation) {
-    await cdp(context, tabId, "Emulation.setGeolocationOverride", {
-      latitude: env.geolocation.latitude,
-      longitude: env.geolocation.longitude,
-      accuracy: env.geolocation.accuracy ?? 0,
-    }).catch(() => {});
-  }
-  if (env.colorScheme) {
-    await cdp(context, tabId, "Emulation.setEmulatedMedia", {
-      features: [{ name: "prefers-color-scheme", value: env.colorScheme }],
-    }).catch(() => {});
-  }
-  if (env.userAgent !== undefined) {
-    await cdp(context, tabId, "Emulation.setUserAgentOverride", { userAgent: env.userAgent }).catch(() => {});
-  }
-  if (env.headers && Object.keys(env.headers).length > 0) {
-    await cdp(context, tabId, "Network.setExtraHTTPHeaders", { headers: env.headers }).catch(() => {});
-  }
-  if (Array.isArray(env.initScripts) && env.initScripts.length > 0) {
-    await cdp(context, tabId, "Page.addScriptToEvaluateOnNewDocument", { source: env.initScripts.join("\n") }).catch(() => {});
-  }
+  await environmentController.apply(context, tabId, env);
 }
 
 async function resetEnvironment(context, tabId) {
-  if (await pageBackend.reset(context, tabId)) return;
-  await cdp(context, tabId, "Emulation.clearDeviceMetricsOverride").catch(() => {});
-  await cdp(context, tabId, "Emulation.setTouchEmulationEnabled", { enabled: false }).catch(() => {});
-  await cdp(context, tabId, "Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => {});
-  await cdp(context, tabId, "Network.emulateNetworkConditions", NETWORK_PRESETS.online).catch(() => {});
-  await cdp(context, tabId, "Emulation.setEmulatedMedia", {}).catch(() => {});
-  await cdp(context, tabId, "Emulation.setGeolocationOverride", {}).catch(() => {});
-  await cdp(context, tabId, "Network.setExtraHTTPHeaders", { headers: {} }).catch(() => {});
+  await environmentController.reset(context, tabId);
 }
 
 function fetchSourceMapFromPageExpression(scriptUrl) {
@@ -3026,19 +2969,22 @@ browser_console_logs: tool({
         },
       }),
       browser_download_events: tool({
-        description: "Read captured Chromium download lifecycle events.",
+        description: "Read download lifecycle events attributed to this browser session, optionally limited to one controlled tab.",
         args: {
+          tabId: tool.schema.number().int().positive().optional(),
           limit: tool.schema.number().int().positive().default(100),
         },
         async execute(args, context) {
-          return stringify(await extensionRequest(context, "getDownloadEvents", { limit: args.limit }));
+          return stringify(await extensionRequest(context, "getDownloadEvents", { tabId: args.tabId, limit: args.limit }));
         },
       }),
       browser_clear_download_events: tool({
-        description: "Clear captured Chromium download lifecycle events.",
-        args: {},
-        async execute(_args, context) {
-          return stringify(await extensionRequest(context, "clearDownloadEvents"));
+        description: "Clear only this browser session's attributed download events, optionally limited to one controlled tab.",
+        args: {
+          tabId: tool.schema.number().int().positive().optional(),
+        },
+        async execute(args, context) {
+          return stringify(await extensionRequest(context, "clearDownloadEvents", { tabId: args.tabId }));
         },
       }),
       browser_cdp: tool({
@@ -3184,6 +3130,7 @@ browser_console_logs: tool({
         },
         async execute(args, context) {
           const environment = args.environment ?? {};
+          await extensionRequest(context, "getTab", { tabId: args.tabId });
           if (environment.reset === true) await resetEnvironment(context, args.tabId);
           else await applyEnvironment(context, args.tabId, environment);
           return stringify({ configured: true, tabId: args.tabId, reset: environment.reset === true });
@@ -3219,6 +3166,7 @@ browser_finalize: tool({
             results[profileId] = await browserRequest("finalizeTabs", sessionParams(context, { profile_id: profileId, keep: profileKeep }), { profileId });
             clearSessionCache(context, profileId);
           }
+          environmentController.forgetSession(`${sessionKey(context)}:`);
           usedProfilesBySession.delete(sessionKey(context));
           return stringify({ profiles: results });
         },

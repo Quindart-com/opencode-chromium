@@ -7,6 +7,7 @@ import VersionNotice from "./VersionNotice";
 import ProviderSettings from "./ProviderSettings";
 import DecisionOverview from "./DecisionOverview";
 import UploadSettings from "./UploadSettings";
+import ConnectionSummary from "./ConnectionSummary";
 
 type ViewName = "overview" | "profiles" | "settings";
 
@@ -70,7 +71,7 @@ function useNativeStatus(): NativeStatus {
 
 function Header({ status }: { status: NativeStatus }): React.JSX.Element {
   const state = status.state ?? "unknown";
-  const statusText = status.error ? `${state}: ${status.error}` : state;
+  const statusText = state === "connected" ? "Connected" : state === "unknown" ? "Checking" : state === "reconnecting" ? "Reconnecting" : "Not connected";
 
   return (
     <header id="app-header">
@@ -125,20 +126,24 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
 export default function App(): React.JSX.Element {
   const [activeView, setActiveView] = useState<ViewName>("overview");
   const nativeStatus = useNativeStatus();
+  const changeView = (view: ViewName) => {
+    setActiveView(view);
+    document.getElementById(`tab-${view}`)?.focus();
+  };
 
   return (
     <main>
       <Header status={nativeStatus} />
       <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
-      <ViewTabs active={activeView} onChange={setActiveView} />
+      <ViewTabs active={activeView} onChange={changeView} />
       <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={activeView !== "overview"}>
-        {activeView === "overview" && <><DecisionOverview onConfigure={() => setActiveView("settings")} /><MemoryView /></>}
+        {activeView === "overview" && <><ConnectionSummary status={nativeStatus} onProfiles={() => changeView("profiles")} /><DecisionOverview onConfigure={() => changeView("settings")} /><MemoryView /></>}
       </div>
       <div className="view-panel" role="tabpanel" id="panel-profiles" aria-labelledby="tab-profiles" hidden={activeView !== "profiles"}>
         {activeView === "profiles" && <ConnectionView status={nativeStatus} view="profiles" />}
       </div>
       <div className="view-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden={activeView !== "settings"}>
-        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><details className="settings-advanced"><summary>Advanced · Local search and models</summary><ConnectionView status={nativeStatus} view="settings" /></details></>}
+        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><ConnectionView status={nativeStatus} view="settings" /></>}
       </div>
       <footer id="app-footer">
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">

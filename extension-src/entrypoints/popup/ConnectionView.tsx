@@ -64,7 +64,9 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
 
   async function copyProfileId() {
     const id = await revealProfileId();
-    if (id) await navigator.clipboard.writeText(id).catch(() => {});
+    if (!id) { setProfileHelp("Profile ID unavailable. Reconnect the browser and try again."); return; }
+    try { await navigator.clipboard.writeText(id); setProfileHelp("Profile ID copied."); }
+    catch { setProfileHelp("Copy unavailable. Reveal the profile ID and copy it manually."); }
   }
 
   async function copyCachePath() {
@@ -305,8 +307,8 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
   return (
     <section id="view-connection" className="view">
       {view === "profiles" ? <>
-      <div className="card" aria-labelledby="connection-title">
-        <h2 id="connection-title">Connection</h2>
+      <details className="card connection-details" aria-labelledby="connection-title">
+        <summary><h2 id="connection-title">Connection details</h2></summary>
         <dl id="connection-list">
           <div>
             <dt>Status</dt>
@@ -338,15 +340,15 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             </dd>
           </div>
         </dl>
-      </div>
+      </details>
 
       <div className="card" aria-labelledby="profile-title">
-        <h2 id="profile-title">Profile</h2>
+        <h2 id="profile-title">Choose a browser profile</h2>
         <label htmlFor="connected-profile">Connected browser profiles</label>
         <select id="connected-profile" value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)}>
           {connectedProfiles?.profiles.filter((item) => item.connected).map((item, index) => <option key={item.profileId} value={item.profileId}>{item.profileLabel || item.browserName || "Profile " + (index + 1)}{item.profileId === connectedProfiles.currentProfileId ? " (this profile)" : ""}</option>)}
         </select>
-        <p className="help-note">Choose a profile and copy its selector for your agent. This does not switch the browser window.</p>
+        <p className="help-note">Copy a profile selector and give it to your agent. This keeps automation in the browser you choose.</p>
         <button className="button" type="button" disabled={!selectedProfile} onClick={() => { void navigator.clipboard.writeText(JSON.stringify({ profile: selectedProfile })).then(() => setProfileHelp("Profile selector copied."), () => setProfileHelp("Clipboard unavailable.")); }}>Copy agent selector</button>
         <details className="advanced-details"><summary>Rename this profile (optional)</summary>
         <form id="profile-form" onSubmit={saveProfile}>
