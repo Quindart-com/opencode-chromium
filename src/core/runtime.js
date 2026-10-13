@@ -895,7 +895,9 @@ export class AgentBrowserRuntime {
       let stableCount = 0;
       do {
         const snapshot = await this.invoke("browser_dom_snapshot", { tabId }, session.sessionId);
-        const current = digest(snapshot);
+        // Snapshot handles are allocated afresh even when the page is unchanged.
+        // Compare visible content and geometry, retaining live handles elsewhere.
+        const current = digest({ ...snapshot, nodes: snapshot.nodes?.map(({ node_id, ...node }) => node) });
         stableCount = current === previous ? stableCount + 1 : 0;
         if (stableCount >= 1) return { condition: "dom-quiet", settled: true };
         previous = current;
