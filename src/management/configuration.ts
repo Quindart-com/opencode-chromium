@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
-import { parse as parseToml } from "smol-toml";
-import { planDeepSeek } from "./deepseek.js";
+import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
+import { planDeepSeek, deepSeekManaged } from "./deepseek.js";
 
 export const SERVER_ID = "opencode-browser-plugin";
 export type HarnessId = "codex" | "opencode" | "opencode-mcp" | "claude-code" | "claude-desktop" | "dsh";
@@ -42,23 +42,58 @@ function set(text: string, keys: string[], value: unknown): string {
     formattingOptions: { insertSpaces: true, tabSize: 2, eol: text.includes("\r\n") ? "\r\n" : "\n" },
   }));
 }
+export function nativeCodexPluginEnabled(before: string): boolean {
+  const plugins = object(parseToml(before).plugins);
+  return Object.entries(plugins).some(([name, settings]) =>
+    name.startsWith(`${SERVER_ID}@`) && object(settings).enabled === true);
+}
+
+export function managedConfiguration(before: string, client: HarnessId, serverPath = ""): boolean {
+  try {
+    if (client === "dsh") return deepSeekManaged(before);
+    if (client === "codex") return nativeCodexPluginEnabled(before) || object(parseToml(before).mcp_servers)[SERVER_ID] !== undefined;
+    const config = jsonConfig(before);
+    if (client.startsWith("claude")) return object(config.mcpServers)[SERVER_ID] !== undefined;
+    const plugins = [...(Array.isArray(config.plugin) ? config.plugin : []), ...(Array.isArray(config.plugins) ? config.plugins : [])];
+    const mcp = object(config.mcp);
+    return plugins.some(entry => ownPlugin(entry, serverPath)) || mcp[SERVER_ID] !== undefined || object(mcp.servers)[SERVER_ID] !== undefined;
+  } catch { return false; }
+}
+
+/** Locate tables without treating a header inside a multiline TOML value as one. */
+function codexTables(before: string): Array<{ start: number; end: number; owned: boolean }> {
+  const headers: Array<{ start: number; owned: boolean }> = [];
+  for (const match of before.matchAll(/^[ \t]*\[[^\r\n]*\][ \t]*(?:#[^\r\n]*)?(?:\r?\n|$)/gm)) {
+    try {
+      parseToml(before.slice(0, match.index));
+      const table = parseToml(match[0]);
+      const servers = table.mcp_servers;
+      headers.push({ start: match.index, owned: Boolean(servers && typeof servers === "object" && SERVER_ID in servers) });
+    } catch { /* incomplete multiline values are not table boundaries */ }
+  }
+  return headers.map((header, index) => ({ ...header, end: headers[index + 1]?.start ?? before.length }));
+}
+
 function codexConfig(before: string, options: ConfigOptions): string {
   const parsed = parseToml(before);
   const existing = object(object(parsed.mcp_servers)[SERVER_ID]);
+  const owned = codexTables(before).filter(table => table.owned);
+  const removing = options.action === "uninstall" || nativeCodexPluginEnabled(before);
+  if (removing) {
+    if (!owned.length && Object.keys(existing).length) throw new Error("Inline Codex browser settings require manual removal; no files changed");
+    return owned.reverse().reduce((text, table) => text.slice(0, table.start) + text.slice(table.end), before);
+  }
   const fields = { ...existing, command: options.interpreter ?? process.execPath,
     args: [options.serverPath], startup_timeout_sec: existing.startup_timeout_sec ?? 20,
     tool_timeout_sec: existing.tool_timeout_sec ?? 120 };
-  const block = `[mcp_servers.${SERVER_ID}]\n${Object.entries(fields).map(([key, value]) => {
-    if (!/^[\w-]+$/.test(key) || (value !== null && typeof value === "object" && !Array.isArray(value))) {
-      throw new Error("Complex existing MCP settings require manual migration; no files changed");
-    }
-    return `${key} = ${JSON.stringify(value)}`;
-  }).join("\n")}\n`;
-  const expression = /(^|\n)\[mcp_servers\.opencode-browser-plugin\][^\n]*\n[\s\S]*?(?=\n\[|$)/;
-  const current = before.match(expression);
-  if (options.action === "uninstall") return current ? before.replace(expression, "$1") : before;
-  if (current && existing.command === fields.command && JSON.stringify(existing.args) === JSON.stringify(fields.args)) return before;
-  const after = current ? before.replace(expression, `${current[1]}${block}`) : `${before}${before && !before.endsWith("\n") ? "\n" : ""}${block}`;
+  if (owned.length && existing.command === fields.command && JSON.stringify(existing.args) === JSON.stringify(fields.args)) return before;
+  if (!owned.length && Object.keys(existing).length) throw new Error("Inline Codex browser settings require manual migration; no files changed");
+  const eol = before.includes("\r\n") ? "\r\n" : "\n";
+  const block = stringifyToml({ mcp_servers: { [SERVER_ID]: fields } }).replaceAll("\n", eol);
+  const first = owned[0];
+  const after = first ? owned.reverse().reduce((text, table) =>
+    text.slice(0, table.start) + (table.start === first.start ? block : "") + text.slice(table.end), before) :
+    `${before}${before && !before.endsWith("\n") ? eol : ""}${block}`;
   parseToml(after);
   return after;
 }

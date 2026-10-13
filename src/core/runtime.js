@@ -4,6 +4,7 @@ import { createBrowserOperations } from "../browser/operations/index.js";
 import { browserRequest, closeBrowserClients, listBrowserProfiles } from "../browser/client.js";
 import { combineUrlPolicyConfig, createUrlPolicy, urlPolicyFromEnv } from "../browser/url-policy.js";
 import { createFilePolicy, filePolicyFromEnv } from "../browser/file-policy.js";
+import { safeNetworkUrl } from "../browser/network.js";
 import { replayGateRejection } from "./replay-gate.ts";
 import { ArtifactStore } from "./artifacts.js";
 import { createCapabilityRegistry } from "./capabilities.js";
@@ -11,6 +12,7 @@ import { responseMetadata as contractMetadata } from "./versions.js";
 import { createLogger } from "./logging.js";
 import { selectProfile as selectConnectedProfile } from "./profiles.js";
 import { errorDetails, shouldReobservePage } from "./failure-context.js";
+import { cleanupSessionEnvironment } from "./environment-cleanup.js";
 
 const APPROVAL_TTL_MS = 5 * 60 * 1000;
 const RISK_WORDS = /\b(delete|remove|send|submit|publish|post|buy|purchase|pay|checkout|confirm|approve|permission|save|sign[ -]?in|log[ -]?in)\b/i;
@@ -215,7 +217,7 @@ function summarizeNetworkEvents(response, limit = 30) {
       timestamp: event.time ?? params.timestamp ?? null,
       requestId: params.requestId ?? null,
       type: params.type ?? null,
-      url: clippedText(responseValue.url ?? request.url ?? params.documentURL, 300) || null,
+      url: clippedText(safeNetworkUrl(responseValue.url ?? request.url ?? params.documentURL), 300) || null,
       httpMethod: request.method ?? null,
       statusCode: responseValue.status ?? null,
       mimeType: responseValue.mimeType ?? null,
@@ -312,7 +314,7 @@ export class AgentBrowserRuntime {
   getSession(sessionId) {
     let session = this.sessions.get(sessionId);
     if (!session) {
-      session = { sessionId, profileId: null, activeTabId: null, createdAt: new Date().toISOString() };
+      session = { sessionId, profileId: null, activeTabId: null, configuredTabs: new Map(), createdAt: new Date().toISOString() };
       this.sessions.set(sessionId, session);
     }
     return session;
@@ -596,6 +598,7 @@ export class AgentBrowserRuntime {
         }
         case "close": {
           const result = await this.invoke("browser_close_tab", mem({ tabId }), session.sessionId);
+          session.configuredTabs?.delete(`${session.profileId}:${tabId}`);
           session.activeTabId = null;
           return result;
         }
@@ -998,7 +1001,7 @@ export class AgentBrowserRuntime {
       dialogs: await this.invoke("browser_dialog_events", { tabId, limit: clamp(args.limit, 20, 1, 100) }, session.sessionId),
     };
     if (args.mode === "diagnostic") return this.diagnostic(args, tabId, session);
-    if (args.mode === "downloads") return this.invoke("browser_download_events", { limit: clamp(args.limit, 100, 1, 200) }, session.sessionId);
+    if (args.mode === "downloads") return this.invoke("browser_download_events", { tabId, limit: clamp(args.limit, 100, 1, 200) }, session.sessionId);
     if (args.mode === "screenshot") return this.screenshot(tabId, args, session.sessionId);
     if (args.mode === "raw-snapshot") return this.invoke("browser_snapshot", { tabId }, session.sessionId);
     throw new Error(`Unsupported observation mode: ${args.mode}`);
@@ -1248,7 +1251,14 @@ export class AgentBrowserRuntime {
         if (!tabId) throw new Error("configure requires an active tab or an explicit tabId");
         session.activeTabId = tabId;
         const environment = args.environment ?? {};
+        const configuredTabKey = `${session.profileId}:${tabId}`;
+        // Track before dispatch so a partially applied or timed-out configure
+        // still has a cleanup path. Public state changes only after success.
+        if (environment.reset !== true && Object.keys(environment).length) {
+          session.configuredTabs.set(configuredTabKey, { tabId, profileId: session.profileId });
+        }
         const configured = await this.invoke("browser_configure", { tabId, environment }, sessionId);
+        if (environment.reset === true) session.configuredTabs.delete(configuredTabKey);
         session.environment = environment.reset === true ? {} : { ...(session.environment ?? {}), ...environment };
         value = { tabId, environment: session.environment, configured };
       } else if (args.action === "new-tab") {
@@ -1262,6 +1272,11 @@ export class AgentBrowserRuntime {
         value = tab;
       } else if (args.action === "release-tab") {
         if (!args.tabId) throw new Error("release-tab requires tabId");
+        const configuredTabKey = `${session.profileId}:${args.tabId}`;
+        if (session.configuredTabs.has(configuredTabKey)) {
+          await this.invoke("browser_configure", { tabId: args.tabId, environment: { reset: true } }, sessionId);
+          session.configuredTabs.delete(configuredTabKey);
+        }
         value = await browserRequest("releaseTab", { session_id: sessionId, profile_id: profile.profileId, tabId: args.tabId }, { profileId: profile.profileId });
         if (session.activeTabId === args.tabId) session.activeTabId = null;
       } else if (args.action === "name") {
@@ -1279,9 +1294,7 @@ export class AgentBrowserRuntime {
     try {
       const session = this.getSession(sessionId);
       await this.selectProfile(session, args.profile);
-      if (args.keepEnvironment !== true && session.environment && Object.keys(session.environment).length > 0 && session.activeTabId) {
-        await this.invoke("browser_configure", { tabId: session.activeTabId, environment: { reset: true } }, sessionId).catch(() => {});
-      }
+      if (args.keepEnvironment !== true) await cleanupSessionEnvironment(this, session);
       const result = await this.invoke("browser_finalize", { keep: args.keep ?? [] }, sessionId);
       this.sessions.delete(sessionId);
       this.artifacts.cleanupSession(sessionId);
