@@ -156,7 +156,7 @@
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
     "@opencode-ai/plugin": "1.19.3",
-    "effect": "3.22.1",
+    "effect": "4.0.2",
     "jsonc-parser": "^3.3.1",
     "pngjs": "7.0.0",
     "react": "19.3.1",
