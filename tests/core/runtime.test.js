@@ -364,6 +364,29 @@ test("settle contains with a selector passes when the text matches", async () =>
   }
 });
 
+test("dom-quiet settles unchanged content despite fresh snapshot handles", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.settleStep;
+  let calls = 0;
+  runtime.invoke = async () => ({ url: "https://example.com", title: "Fixture", nodes: [{ node_id: `node-${++calls}`, text: "Ready", boundingBox: { x: 1, y: 2, width: 80, height: 20 } }] });
+  try {
+    const result = await runtime.settleStep({ action: "navigate", settle: { condition: "dom-quiet", timeoutMs: 500 } }, 42, new Map(), runtime.getSession("quiet-handles"));
+    assert.deepEqual(result, { condition: "dom-quiet", settled: true });
+    assert.equal(calls, 2);
+  } finally { runtime.close(); }
+});
+
+test("dom-quiet still times out when visible content keeps changing", async () => {
+  const runtime = fakeRuntime();
+  delete runtime.settleStep;
+  let calls = 0;
+  runtime.invoke = async () => ({ url: "https://example.com", title: "Fixture", nodes: [{ node_id: `node-${++calls}`, text: `Progress ${calls}`, boundingBox: { x: calls, y: 2, width: 80, height: 20 } }] });
+  try {
+    const result = await runtime.settleStep({ action: "navigate", settle: { condition: "dom-quiet", timeoutMs: 250 } }, 42, new Map(), runtime.getSession("quiet-changing"));
+    assert.deepEqual(result, { condition: "dom-quiet", settled: false, timedOut: true });
+  } finally { runtime.close(); }
+});
+
 test("large accessibility observations include a useful inline preview", async () => {
   const runtime = fakeRuntime();
   const nodes = Array.from({ length: 1200 }, (_, index) => ({
