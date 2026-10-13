@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "description": "Provider-neutral Chromium and Firefox browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -144,10 +144,11 @@
     "verify:popup": "node scripts/verify-popup.js",
     "verify:uploads": "node scripts/verify-uploads.js",
     "verify:cursor": "node scripts/verify-cursor.js",
-    "lint": "eslint src/management src/cli/providers.ts native-host/src/decisions extension-src/entrypoints/popup/ProviderSettings.tsx",
+    "lint": "eslint src/management src/cli/providers.ts native-host/src/decisions native-host/src/firefox/frames.js src/core src/browser extension-src/entrypoints/popup extension-src/entrypoints/welcome extension-src/entrypoints/background/{navigation-policy,onboarding,download-events,tab-ownership}.js",
     "check:unused": "knip --no-progress --include files,dependencies",
     "benchmark:decisions": "bun scripts/benchmark-decision-pipeline.ts",
-    "benchmark:flow": "bun scripts/benchmark-agent-flow.js"
+    "benchmark:flow": "bun scripts/benchmark-agent-flow.js",
+    "benchmark:accuracy": "bun scripts/benchmark-accuracy.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -157,6 +158,7 @@
     "@opencode-ai/plugin": "1.18.34",
     "effect": "3.22.1",
     "jsonc-parser": "^3.3.1",
+    "pngjs": "7.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "smol-toml": "^1.9.0",

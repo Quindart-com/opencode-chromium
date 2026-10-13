@@ -34,6 +34,11 @@ in Settings.
 
 ## Content boundaries
 
+Snapshot and pixel-diff baselines are temporary local artifacts. When requested,
+their page text or images are delivered to your connected agent, whose model
+provider may receive that content. The setup guide is bundled locally; it has
+no analytics. Help and release-note links open GitHub only when you select them.
+
 - **Local extension communication.** The extension
   talks to a native messaging host installed on your computer over the
   browser's native messaging channel. The native host calls TypeSafe or
@@ -54,7 +59,11 @@ in Settings.
   read machine IDs, hostnames, usernames, MAC addresses, hardware serials, or
   install IDs, and never compute device fingerprints. The only persistent
   identifier is a random per-profile UUID generated locally for routing
-  requests to the browser profile you selected; it never leaves your device.
+  requests to the browser profile you selected. Profile IDs and labels can
+  appear in agent tool responses or copied profile selectors; your connected
+  agent or harness handles those responses under its own data policy. The
+  routing ID is not used as a device fingerprint or silently sent to a decision
+  provider as a device identifier.
   The extension popup shows this identifier **masked** by default (first and
   last four characters only); the full value is revealed or copied only through
   an explicit "Developer details" action. Cache locations are shown as "Local
@@ -62,6 +71,14 @@ in Settings.
   rendered. Behavioral privacy tests verify these
   guarantees, and store-listing images are generated from deterministic demo
   fixtures rather than live popups.
+- **Controlled download observations.** Bounded in-memory download events are
+  captured only when the browser attributes a download to a session's controlled
+  tab. Unrelated downloads are ignored, and sessions can read or clear only
+  their own events. Observed URLs omit credentials, query strings, and fragments;
+  filenames contain only the basename, without local directory paths. Download
+  observations are returned through agent tool calls and are not broadcast to
+  other connected clients. The extension does not request the browser's global
+  `downloads` permission.
 
 ## Action Memory
 
@@ -88,7 +105,7 @@ Memory dashboard (extension popup → Action Memory).
 The extension requests the permissions it needs to operate as a general-purpose
 automation bridge:
 
-- `tabs`, `tabGroups`, `history`, `downloads`, `storage`: read and manage the
+- `tabs`, `tabGroups`, `history`, `storage`: read and manage the
   parts of the browser you explicitly ask an agent to work with.
 - `scripting`, `<all_urls>`, `debugger`: inspect page structure, run input
   automation, and capture what the agent needs to see. Pages are only touched

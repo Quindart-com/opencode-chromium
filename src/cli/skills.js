@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { backup, packageRoot } from "./config.js";
+import { detectHarnesses } from "../management/harnesses.ts";
+import { nativeCodexPluginEnabled } from "../management/configuration.ts";
+import { skillDirectories } from "../management/skills.ts";
+import { parse as parseToml } from "smol-toml";
 
 export const SKILL_NAME = "opencode-browser-plugin";
 export const SKILL_CONFIG_MARKER = SKILL_NAME;
@@ -53,6 +57,24 @@ export function directoryHash(directory) {
     hash.update(fs.readFileSync(path.join(directory, file)));
   }
   return { files: files.length, sha256: hash.digest("hex") };
+}
+
+/** Health follows configured clients; a targeted install need not copy every skill home. */
+export function inspectHarnessSkills({ harnesses = detectHarnesses(), homedir, source = skillSourceDirectory() } = {}) {
+  const configured = harnesses.filter(row => row.managed && row.supported);
+  const nativePlugins = configured.filter(row => row.id === "codex" && nativeCodexPluginEnabled(fs.readFileSync(row.configPath, "utf8"))).map(row => row.id);
+  const directories = skillDirectories(configured.filter(row => !nativePlugins.includes(row.id)).map(row => row.id), homedir);
+  const canonical = fs.existsSync(path.join(source, "SKILL.md")) ? directoryHash(source).sha256 : null;
+  const skills = directories.map(directory => {
+    const target = path.join(directory, SKILL_NAME);
+    const installed = fs.existsSync(path.join(target, "SKILL.md"));
+    return { path: target, installed, parity: installed && Boolean(canonical) && directoryHash(target).sha256 === canonical };
+  });
+  const codex = configured.find(row => row.id === "codex");
+  const codexSettings = codex ? parseToml(fs.readFileSync(codex.configPath, "utf8")).skills?.config ?? [] : [];
+  const codexEnabled = !codex || nativePlugins.includes("codex") || !Array.isArray(codexSettings) ||
+    !codexSettings.some(entry => entry?.enabled === false && typeof entry.path === "string" && entry.path.includes(SKILL_NAME));
+  return { source: Boolean(canonical), clients: configured.map(row => row.id), nativePlugins, skills, codexEnabled };
 }
 
 function removeSkillsConfigBlocks(text, marker) {

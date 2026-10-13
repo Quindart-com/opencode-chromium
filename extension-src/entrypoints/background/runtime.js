@@ -5,6 +5,10 @@ import { createFirefoxAttacher, registerDecisionImageCapture } from "./firefox-b
 import { guardedCdp, uploadTargetUrl } from "./upload-gate.js";
 import { CURSOR_SCRIPTS, cursorIdFromParams, cursorState, gestureAction } from "./cursor-state.js";
 import { validVersion, versionNotice } from "../../version-status.ts";
+import { createDownloadEvents, registerDownloadHandlers } from "./download-events.js";
+import { assertTabAccess } from "./tab-ownership.js";
+import { assertSessionUrl, installNavigationPolicy, updateSessionPolicy } from "./navigation-policy.js";
+import { openInstallGuide } from "./onboarding.js";
 
 const HOST_NAME = "com.opencode.browser.plugin";
 const IS_FIREFOX = import.meta.env.BROWSER === "firefox";
@@ -34,7 +38,7 @@ const traceBuffers = new Map();
 const cursorStateByTabId = new Map();
 const cursorArrivalWaiters = new Map();
 const cursorInjectedTabs = new Set();
-const downloadEvents = [];
+const downloadEvents = createDownloadEvents({ ownerForTab: tabId => findTabOwner(tabId)?.sessionId ?? null, maxEvents: MAX_DOWNLOAD_EVENTS });
 const inlineResponseEventKeys = new Set();
 let deliverableGroupId = null;
 let profileStatePromise = null;
@@ -373,6 +377,7 @@ function sessionState(id) {
 }
 
 function updateTurn(session, params) {
+  updateSessionPolicy(session, params);
   const id = turnId(params);
   if (id) session.currentTurnId = id;
 }
@@ -388,17 +393,9 @@ function findTabOwner(tabId) {
 
 function ensureControlledTab(params, tabId) {
   const sessionId = requiredSessionId(params);
+  assertTabAccess({ owner: findTabOwner(tabId), sessionId, tabId });
   const session = sessionState(sessionId);
   updateTurn(session, params);
-  if (!session.tabIds.has(tabId)) {
-    const owner = findTabOwner(tabId);
-    if (!owner) throw new Error(`Tab ${tabId} is not controlled by this session`);
-    owner.session.tabIds.delete(tabId);
-    owner.session.tabOrigins.delete(tabId);
-    if (owner.session.activeTabId === tabId) owner.session.activeTabId = [...owner.session.tabIds].at(-1) ?? null;
-    session.tabIds.add(tabId);
-    session.tabOrigins.set(tabId, owner.origin ?? "user");
-  }
   session.activeTabId = tabId;
   void persistSessions().catch(() => {});
   return { sessionId, session, origin: session.tabOrigins.get(tabId) ?? "agent" };
@@ -457,7 +454,11 @@ function cdpEventTabId(source) {
 
 function recordCdpEvent(source, method, params) {
   const tabId = cdpEventTabId(source);
-  if (!Number.isInteger(tabId)) return;
+  if (!Number.isInteger(tabId) || !attachedTabs.has(tabId)) return;
+  if (/^(?:Page|Browser)\.download(?:WillBegin|Progress)$/.test(method)) {
+    downloadEvents.capture(tabId, method, params);
+    return;
+  }
   const events = cdpEventsByTabId.get(tabId) ?? [];
   events.push({
     time: nowIso(),
@@ -499,6 +500,7 @@ async function persistSessions() {
       tabIds: [...session.tabIds],
       tabOrigins: Object.fromEntries(session.tabOrigins.entries()),
       name: session.name,
+      urlPolicy: session.urlPolicy ?? null,
       groupId: session.groupId,
       activeTabId: session.activeTabId,
       currentTurnId: session.currentTurnId,
@@ -514,6 +516,7 @@ async function restoreSessions() {
   for (const [id, serialized] of Object.entries(stored)) {
     const session = sessionState(id);
     session.name = typeof serialized.name === "string" ? serialized.name : null;
+    if (serialized.urlPolicy) updateSessionPolicy(session, { url_policy: serialized.urlPolicy });
     session.groupId = Number.isInteger(serialized.groupId) ? serialized.groupId : null;
     session.activeTabId = Number.isInteger(serialized.activeTabId) ? serialized.activeTabId : null;
     session.currentTurnId = typeof serialized.currentTurnId === "string" ? serialized.currentTurnId : null;
@@ -633,15 +636,11 @@ async function ungroupTab(tabId) {
 
 async function trackTab(sessionId, tabId, origin) {
   const existing = findTabOwner(tabId);
-  if (existing && existing.sessionId !== sessionId) {
-    existing.session.tabIds.delete(tabId);
-    existing.session.tabOrigins.delete(tabId);
-    if (existing.session.activeTabId === tabId) existing.session.activeTabId = [...existing.session.tabIds].at(-1) ?? null;
-  }
+  assertTabAccess({ owner: existing, sessionId, tabId, allowUnowned: true });
 
   const session = sessionState(sessionId);
   session.tabIds.add(tabId);
-  session.tabOrigins.set(tabId, origin);
+  session.tabOrigins.set(tabId, existing?.origin ?? origin);
   session.activeTabId = tabId;
   await ensureSessionGroup(sessionId, tabId).catch(() => {});
   await persistSessions().catch(() => {});
@@ -839,7 +838,9 @@ async function executeCdp(params) {
   }
 
   const tabId = tabIdFromParams(params);
-  ensureControlledTab(params, tabId);
+  const { session } = ensureControlledTab(params, tabId);
+  if (method === "Page.navigate") assertSessionUrl(session, params.commandParams?.url ?? params.command_params?.url);
+  else if ((session.urlPolicy?.allowedOrigins?.length || session.urlPolicy?.blockedOrigins?.length) && !/^(Page.stopLoading|Emulation.clear|Network.setExtraHTTPHeaders|Page.removeScriptToEvaluateOnNewDocument)/.test(method)) assertSessionUrl(session, (await getTab(tabId)).url);
   if (!attachedTabs.has(tabId)) throw new Error("Debugger unattached");
 
   return withTabLock(tabId, () => guardedCdp({ method, tabId, consent: uploadConsent, getTab,
@@ -917,28 +918,6 @@ async function executeInputGesture(params) {
   });
 }
 
-function recordDownloadEvent(event) {
-  const normalized = { time: nowIso(), ...event };
-  downloadEvents.push(normalized);
-  if (downloadEvents.length > MAX_DOWNLOAD_EVENTS) downloadEvents.splice(0, downloadEvents.length - MAX_DOWNLOAD_EVENTS);
-  void rpc.notify("onDownloadChange", normalized).catch(() => {});
-}
-
-function normalizeDownloadItem(item, status) {
-  return {
-    id: item.id,
-    status,
-    url: item.url ?? null,
-    finalUrl: item.finalUrl ?? null,
-    filename: item.filename ?? null,
-    mime: item.mime ?? null,
-    totalBytes: item.totalBytes ?? null,
-    bytesReceived: item.bytesReceived ?? null,
-    danger: item.danger ?? null,
-    error: item.error ?? null,
-  };
-}
-
 function headerValue(headers, name) {
   if (!headers || typeof headers !== "object") return null;
   const expected = name.toLowerCase();
@@ -968,17 +947,13 @@ function recordInlineBrowserResponse(tabId, method, params) {
   if (!mime.includes("application/pdf")) return;
 
   const url = response?.url ?? params?.documentURL ?? null;
-  const key = `${tabId}:${params?.requestId ?? url ?? inlineResponseEventKeys.size}`;
+  const key = `${tabId}:${params?.requestId ?? inlineResponseEventKeys.size}`;
   if (inlineResponseEventKeys.has(key)) return;
   inlineResponseEventKeys.add(key);
   if (inlineResponseEventKeys.size > MAX_INLINE_RESPONSE_KEYS) inlineResponseEventKeys.delete(inlineResponseEventKeys.values().next().value);
 
   const totalBytes = Number(headerValue(response?.headers, "content-length"));
-  recordDownloadEvent({
-    id: `inline:${key}`,
-    status: "opened_inline",
-    source: "browser",
-    tabId,
+  downloadEvents.recordInline(tabId, `inline:${key}`, {
     url,
     finalUrl: url,
     filename: filenameFromDisposition(headerValue(response?.headers, "content-disposition")),
@@ -987,29 +962,6 @@ function recordInlineBrowserResponse(tabId, method, params) {
     bytesReceived: null,
     danger: null,
     error: null,
-  });
-}
-
-function registerDownloadListeners() {
-  if (!chrome.downloads?.onCreated || !chrome.downloads?.onChanged) return;
-
-  chrome.downloads.onCreated.addListener((item) => {
-    recordDownloadEvent(normalizeDownloadItem(item, "started"));
-  });
-
-  chrome.downloads.onChanged.addListener((delta) => {
-    let status = "in_progress";
-    if (delta.state?.current === "complete") status = "complete";
-    if (delta.state?.current === "interrupted") status = delta.error?.current === "USER_CANCELED" ? "canceled" : "failed";
-    recordDownloadEvent({
-      id: delta.id,
-      status,
-      filename: delta.filename?.current ?? null,
-      error: delta.error?.current ?? null,
-      bytesReceived: delta.bytesReceived?.current ?? null,
-      totalBytes: delta.totalBytes?.current ?? null,
-      delta,
-    });
   });
 }
 
@@ -1029,7 +981,7 @@ rpc.register("getInfo", async () => {
         { id: "profiles", description: "Select among currently open browser profiles without launching closed profiles." },
         { id: "tabs", description: "Create, claim, list, finalize, and navigate Chromium tabs." },
         { id: "history", description: "Read browser history through the extension history permission." },
-        { id: "downloads", description: "Observe browser download lifecycle events." },
+        { id: "downloads", description: "Observe attributed download events from this session's controlled tabs." },
         { id: "semantic", description: "Configure local semantic page retrieval models in the native host." },
         { id: "visual-map", description: "Return lean visible UI boxes and optionally use local screenshot detection in the native host." },
       ],
@@ -1160,8 +1112,10 @@ rpc.register("claimUserTab", async (params) => {
   const session = sessionState(id);
   updateTurn(session, params);
   const tabId = tabIdFromParams(params);
+  assertTabAccess({ owner: findTabOwner(tabId), sessionId: id, tabId, allowUnowned: true });
   const tab = await getTab(tabId);
   if (isBrowserInternalUrl(tab.url)) throw new Error(`Cannot claim internal browser tab: ${tab.url}`);
+  assertSessionUrl(session, tab.url);
   await trackTab(id, tabId, "user");
   return normalizeTab(tab);
 });
@@ -1175,6 +1129,7 @@ rpc.register("getTabs", async (params) => {
     try {
       const tab = await getTab(tabId);
       if (isBrowserInternalUrl(tab.url)) continue;
+      try { assertSessionUrl(session, tab.url); } catch { continue; }
       tabs.push(normalizeTab(tab, {
         selected: session.activeTabId === tabId,
         origin: session.tabOrigins.get(tabId) ?? "agent",
@@ -1202,7 +1157,9 @@ rpc.register("getSelectedTab", async (params) => {
 rpc.register("getTab", async (params) => {
   const tabId = tabIdFromParams(params);
   ensureControlledTab(params, tabId);
-  return normalizeTab(await getTab(tabId));
+  const tab = await getTab(tabId);
+  assertSessionUrl(sessionState(requiredSessionId(params)), tab.url);
+  return normalizeTab(tab);
 });
 
 rpc.register("getUserTabs", async () => {
@@ -1215,7 +1172,7 @@ rpc.register("getUserTabs", async () => {
       if (!groupTitles.has(tab.groupId)) groupTitles.set(tab.groupId, await groupTitle(tab.groupId));
       tabGroup = groupTitles.get(tab.groupId);
     }
-    normalized.push(normalizeTab(tab, { tabGroup, claimable: !isBrowserInternalUrl(tab.url) }));
+    normalized.push(normalizeTab(tab, { tabGroup, claimable: !findTabOwner(tab.id) && !isBrowserInternalUrl(tab.url) }));
   }
   return { tabs: normalized };
 });
@@ -1324,7 +1281,8 @@ rpc.register("turnEnded", async (params) => {
 rpc.register("nameSession", async (params) => {
   const session = sessionState(requiredSessionId(params));
   updateTurn(session, params);
-  session.name = typeof params.name === "string" ? params.name : null;
+  if (typeof params.name !== "string" || !params.name.trim() || params.name.length > 120) throw new Error("Session name must contain 1 to 120 characters.");
+  session.name = params.name.trim();
   if (Number.isInteger(session.groupId) && chrome.tabGroups) {
     await chromeCall((done) => {
       chrome.tabGroups.update(
@@ -1332,21 +1290,13 @@ rpc.register("nameSession", async (params) => {
         { title: session.name ?? "OpenCode", color: SESSION_GROUP_COLOR },
         done,
       );
-    }).catch(() => {});
+    });
   }
   await persistSessions().catch(() => {});
   return {};
 });
 
-rpc.register("getDownloadEvents", async (params) => {
-  const limit = Number.isInteger(params.limit) ? params.limit : 100;
-  return { events: downloadEvents.slice(-limit) };
-});
-
-rpc.register("clearDownloadEvents", async () => {
-  downloadEvents.splice(0, downloadEvents.length);
-  return {};
-});
+registerDownloadHandlers({ rpc, downloads: downloadEvents, requiredSessionId, capabilities: IS_FIREFOX ? () => rpc.request("firefox.downloadCapabilities", {}) : null });
 
 rpc.register("executeUnhandledCommand", async (params) => ({ handled: false, command: params.command ?? null }));
 rpc.register("firefox.event", async ({ tabId, method, params }) => {
@@ -1356,6 +1306,7 @@ rpc.register("firefox.event", async ({ tabId, method, params }) => {
 registerDecisionImageCapture({ rpc, tabIdFromParams, ensureControlledTab, getTab, isBrowserInternalUrl, attachTab, requiredSessionId, sendCdpCommand });
 
 if (!IS_FIREFOX) installChromiumEvents({ chrome, cdpEventTabId, traceBuffers, MAX_TRACE_CHUNKS, recordCdpEvent, attachedTabs });
+installNavigationPolicy({ chrome, findOwner: findTabOwner, trackTab, getTab, stopLoading: tabId => sendCdpCommand(tabId, "Page.stopLoading", {}, 2000) });
 chrome.tabs.onRemoved.addListener((tabId) => {
   attachedTabs.delete(tabId);
   cdpEventsByTabId.delete(tabId);
@@ -1537,9 +1488,10 @@ function createAlarms() {
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(details => {
   createAlarms();
   rpc.connect();
+  void openInstallGuide(chrome, details).catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -1553,7 +1505,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === HEARTBEAT_ALARM) rpc.heartbeat();
 });
 
-registerDownloadListeners();
 createAlarms();
 void restoreSessions().catch(() => {});
 rpc.connect();

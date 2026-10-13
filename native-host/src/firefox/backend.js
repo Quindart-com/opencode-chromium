@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
+import { bridgedFrameTree } from "./frames.js";
 
 export function firefoxConfigPath(profileId) {
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(profileId ?? "")) throw new Error("Invalid Firefox profile ID");
@@ -28,6 +29,7 @@ export class FirefoxBackend {
   constructor({ endpoint, WebSocketImpl = WebSocket, onEvent = () => {} } = {}) {
     Object.assign(this, { endpoint, WebSocketImpl, onEvent });
     this.pending = new Map(); this.contexts = new Map(); this.objects = new Map(); this.preloads = new Map(); this.environmentPreloads = new Map(); this.nextId = 1;
+    this.downloadCapabilities = { started: false, completed: false };
   }
   async connect() {
     if (this.ready) return this.ready;
@@ -56,6 +58,17 @@ export class FirefoxBackend {
       if (version < 140) throw new Error("Firefox 140 or later is required; update the selected browser before configuring automation");
       this.browserVersion = session.capabilities.browserVersion;
       await this.send("session.subscribe", { events: ["log.entryAdded", "network.beforeRequestSent", "network.responseCompleted", "network.fetchError", "browsingContext.userPromptOpened", "browsingContext.userPromptClosed", "browsingContext.contextDestroyed"] });
+      // These events arrived after the minimum supported Firefox version. Probe
+      // individually so unavailable download completion never breaks browsing.
+      for (const [capability, event] of [["started", "browsingContext.downloadWillBegin"], ["completed", "browsingContext.downloadEnd"]]) {
+        try {
+          await this.send("session.subscribe", { events: [event] });
+          this.downloadCapabilities[capability] = true;
+        } catch (error) {
+          if (!/invalid argument|unknown command|unsupported operation/i.test(error.message)) throw error;
+          this.downloadCapabilities[capability] = false;
+        }
+      }
     })();
     try { await this.ready; } catch (e) { await this.close(); this.ready = null; throw e; }
   }
@@ -94,6 +107,8 @@ export class FirefoxBackend {
     const tabId = [...this.contexts].find(([, c]) => c === context)?.[0];
     if (tabId === undefined) return;
     if (m.method === "browsingContext.contextDestroyed") { this.contexts.delete(tabId); return; }
+    if (m.method === "browsingContext.downloadWillBegin") this.onEvent(tabId, "Page.downloadWillBegin", { guid: p.download ?? p.navigation, url: p.url, suggestedFilename: p.suggestedFilename });
+    if (m.method === "browsingContext.downloadEnd" && (p.status === "complete" || p.status === "canceled")) this.onEvent(tabId, "Page.downloadProgress", { guid: p.download ?? p.navigation, state: p.status === "complete" ? "completed" : "canceled", filePath: p.filepath });
     if (m.method === "log.entryAdded") this.onEvent(tabId, "Runtime.consoleAPICalled", { type: p.level, args: p.args?.map(v => ({ type: v.type, value: remoteValue(v) })) ?? [{ value: p.text }], timestamp: p.timestamp });
     if (m.method === "browsingContext.userPromptOpened") this.onEvent(tabId, "Page.javascriptDialogOpening", { type: p.type, message: p.message, url: p.url });
     if (m.method === "browsingContext.userPromptClosed") this.onEvent(tabId, "Page.javascriptDialogClosed", { result: p.accepted });
@@ -119,7 +134,14 @@ export class FirefoxBackend {
     const reference = () => { const r = this.objects.get(p.objectId); if (!r || r.context !== context) throw new Error("Stale Firefox object"); return r.handle ? { handle: r.handle } : { sharedId: r.sharedId }; };
     if (/^(Page|Runtime|Log|Network|Performance|DOM|Accessibility)\.enable$/.test(method)) return {};
     if (method === "Page.setInterceptFileChooserDialog") return {};
-    if (method === "Runtime.evaluate") return evaluate(p.expression, p.returnByValue === false);
+    if (method === "Runtime.evaluate") {
+      if (!p.contextId) return evaluate(p.expression, p.returnByValue === false);
+      const tree = await run("browsingContext.getTree", { root: context, maxDepth: 8 });
+      const pending = [...tree.contexts]; let found = false, visited = 0;
+      while (pending.length && visited++ < 100) { const frame = pending.shift(); if (frame.context === p.contextId) { found = true; break; } pending.push(...(frame.children ?? []).slice(0, 50)); }
+      if (!found) throw new Error("Stale or unowned Firefox frame context");
+      return this.normalize(await run("script.evaluate", { expression: p.expression, target: { context: p.contextId }, awaitPromise: true, resultOwnership: "none", serializationOptions: { maxObjectDepth: 20 } }), p.contextId, false);
+    }
     if (method === "Runtime.callFunctionOn") return this.normalize(await run("script.callFunction", { functionDeclaration: p.functionDeclaration, target: { context }, this: reference(), arguments: (p.arguments ?? []).map(a => ({ type: typeof a.value, value: a.value })), awaitPromise: true }), context, false);
     if (method === "Runtime.releaseObject") { const r = this.objects.get(p.objectId); this.objects.delete(p.objectId); if (r?.handle) await run("script.disown", { target: { context }, handles: [r.handle] }); return {}; }
     if (method === "DOM.describeNode") {
@@ -127,7 +149,13 @@ export class FirefoxBackend {
     }
     if (method === "DOM.setFileInputFiles") { reference(); const r = this.objects.get(p.objectId); if (!r.sharedId) throw new Error("Upload requires a live Firefox node"); return run("input.setFiles", { context, element: { sharedId: r.sharedId }, files: p.files }); }
     if (method === "Page.navigate") return run("browsingContext.navigate", { context, url: p.url, wait: "interactive" });
-    if (method === "Page.getFrameTree") return { frameTree: { frame: { id: context, url: await value("location.href") } } };
+    if (method === "Page.getFrameTree" || method === "Page.createIsolatedWorld") {
+      const { frameTree, contexts } = await bridgedFrameTree({ send: run, root: context, maxDepth: p.maxDepth ?? 8, maxFrames: p.maxFrames ?? 50 });
+      if (method === "Page.getFrameTree") return { frameTree };
+      if (contexts.has(p.frameId)) return { executionContextId: contexts.get(p.frameId) };
+      throw new Error("Stale or unowned Firefox frame context");
+    }
+    if (method === "Page.stopLoading") { await value("window.stop()"); return {}; }
     if (method === "Page.setDocumentContent") { await value(`document.open();document.write(${JSON.stringify(p.html)});document.close()`); return {}; }
     if (method === "Page.getLayoutMetrics") { const size = await value("({x:0,y:0,width:Math.max(innerWidth,document.documentElement.scrollWidth),height:Math.max(innerHeight,document.documentElement.scrollHeight)})"); return { contentSize: size, cssContentSize: size }; }
     if (method === "Page.captureScreenshot") {
@@ -178,6 +206,7 @@ export class FirefoxBackend {
   async close() {
     if (this.sessionId && this.socket?.readyState === 1) await this.send("session.end", {}, 1000).catch(() => {});
     this.sessionId = null;
+    this.downloadCapabilities = { started: false, completed: false };
     this.socket?.close(); this.ready = null;
     this.contexts.clear(); this.objects.clear(); this.preloads.clear(); this.environmentPreloads.clear();
   }
@@ -195,6 +224,7 @@ export function createFirefoxHost({ getProfile, onEvent }) {
     if (method === "firefox.attach") return backend.attach(params.tabId, params.marker);
     if (method === "firefox.detach") return backend.detach(params.tabId);
     if (method === "firefox.command") return backend.command(params.tabId, params.method, params.commandParams, Math.max(1, Math.min(params.timeoutMs ?? 10000, 120000)));
+    if (method === "firefox.downloadCapabilities") { await backend.connect(); return { ...backend.downloadCapabilities }; }
     throw new Error("Unsupported Firefox host method");
   };
   handle.close = () => backend?.close();

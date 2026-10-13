@@ -26,6 +26,7 @@ export function createUrlPolicy(config = {}) {
     allowedOrigins,
     blockedOrigins,
     evaluate(value) {
+      if (value === "about:blank") return { allowed: true, code: null, reason: null };
       const origin = urlFor(value)?.origin ?? String(value);
       if (blockedOrigins.some((pattern) => originMatchesRule(origin, pattern))) {
         return { allowed: false, code: "URL_POLICY_BLOCKED", reason: `Blocked by origin policy: ${origin}` };

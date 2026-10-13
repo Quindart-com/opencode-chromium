@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Synthetic settings benchmark</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #f1f4f8; color: #192231; font: 15px system-ui, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 24px; }
+  p { margin: 0 0 22px; color: #526077; }
+  main { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .unit { min-height: 76px; background: white; border: 1px solid #ccd4df; border-radius: 7px; padding: 12px; position: relative; }
+  .id { display: block; margin-bottom: 5px; color: #637088; font: bold 11px ui-monospace, monospace; }
+  button, select, input { font: inherit; }
+  button { border: 1px solid #99a7be; border-radius: 4px; padding: 6px 10px; color: #182c4e; background: #edf2fa; }
+  a { display: inline-block; color: #164d9b; padding: 6px 0; }
+  label { display: block; }
+  input[type=text], select { display: block; max-width: 100%; margin-top: 4px; }
+  h2 { margin: 6px 0; font-size: 17px; }
+</style>
+<h1>Workspace settings</h1>
+<p>Synthetic benchmark fixture. Node IDs identify controls; no real account is shown.</p>
+<main></main>
+<script type="module">
+  const { units } = await (await fetch('/fixture.json')).json();
+  for (const unit of units) {
+    const card = document.createElement('div');
+    card.className = 'unit';
+    const annotation = document.createElement('span');
+    annotation.className = 'id';
+    annotation.textContent = unit.node_id;
+    card.append(annotation);
+    let control;
+    if (unit.kind === 'checkbox' || unit.kind === 'input' || unit.kind === 'select') {
+      control = document.createElement('label');
+      const input = document.createElement(unit.kind === 'select' ? 'select' : 'input');
+      input.setAttribute('aria-label', unit.text);
+      if (unit.kind === 'select') input.add(new Option('30 days', '30'));
+      else input.type = unit.kind === 'checkbox' ? 'checkbox' : 'text';
+      if (unit.kind === 'checkbox') control.append(input, ' ' + unit.text);
+      else control.append(unit.text, input);
+    } else {
+      control = document.createElement(unit.kind === 'heading' ? 'h2' : unit.kind === 'link' ? 'a' : 'button');
+      control.textContent = unit.text;
+      if (unit.kind === 'link') control.href = '#';
+    }
+    control.dataset.nodeId = unit.node_id;
+    card.append(control);
+    document.querySelector('main').append(card);
+  }
+  document.documentElement.dataset.ready = 'true';
+</script>
+</html>

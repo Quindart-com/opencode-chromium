@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AgentBrowserRuntime } from "../../src/core/runtime.js";
 import { ArtifactStore } from "../../src/core/artifacts.js";
@@ -674,6 +675,50 @@ test("events observation includes a dialogs bucket", async () => {
   }
 });
 
+test("lean network observations redact credentials and query secrets before truncation", async () => {
+  const runtime = fakeRuntime();
+  const secret = randomUUID();
+  runtime.getSession("events-private").activeTabId = 42;
+  runtime.invoke = async (name) => {
+    if (name === "browser_console_logs" || name === "browser_dialog_events") return { events: [] };
+    if (name === "browser_network_events") return { events: [
+      { method: "Network.requestWillBeSent", params: { requestId: "one", request: { method: "GET", url: `https://user:${secret}@example.test/api?token=${secret}&page=2#${secret}` } } },
+      { method: "Network.responseReceived", params: { requestId: "two", response: { status: 200, url: `https://example.test/api?api_key=${secret}&page=3` } } },
+      { method: "Network.loadingFailed", params: { requestId: "three", documentURL: `https://example.test/?signature=${secret}&q=${"x".repeat(500)}` } },
+    ] };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "events-private", mode: "events" });
+    assert.equal(result.ok, true);
+    const events = result.result.network.events;
+    assert.equal(JSON.stringify(result).includes(secret), false);
+    assert.equal(events[0].httpMethod, "GET");
+    assert.match(events[0].url, /page=2/);
+    assert.equal(new URL(events[0].url).hash, "");
+    assert.equal(events[1].statusCode, 200);
+    assert.match(events[1].url, /page=3/);
+    assert.ok(events.every(event => event.url.length <= 301));
+  } finally { runtime.close(); }
+});
+
+test("downloads observation is limited to the controlled tab", async () => {
+  const runtime = fakeRuntime();
+  runtime.getSession("downloads-owned").activeTabId = 42;
+  runtime.invoke = async (name, args, sessionId) => {
+    assert.equal(name, "browser_download_events");
+    assert.equal(sessionId, "downloads-owned");
+    assert.equal(args.tabId, 42);
+    assert.equal(args.limit, 12);
+    return { events: [] };
+  };
+  try {
+    const result = await runtime.observe({ sessionId: "downloads-owned", mode: "downloads", limit: 12 });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.result.events, []);
+  } finally { runtime.close(); }
+});
+
 test("url policy is attached to operation invocation context", async () => {
   const runtime = new AgentBrowserRuntime({
     urlPolicyConfig: { blockedOrigins: ["https://blocked.example"] },
@@ -795,6 +840,7 @@ test("finalize clears applied environment overrides unless retained", async () =
   session.environment = { colorScheme: "dark" };
   let cleared = false;
   runtime.invoke = async (name, args) => {
+    if (name === "browser_list_tabs") return { tabs: [{ id: 7 }] };
     if (name === "browser_configure") { cleared = args.environment?.reset === true; return { configured: true }; }
     if (name === "browser_finalize") return { profiles: {} };
     throw new Error(`Unexpected operation: ${name}`);
@@ -806,6 +852,161 @@ test("finalize clears applied environment overrides unless retained", async () =
   } finally {
     runtime.close();
   }
+});
+
+test("finalize restores every configured tab before handing off kept tabs", async () => {
+  const runtime = fakeRuntime();
+  const resets = [];
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_list_tabs") return { tabs: [{ id: 7 }, { id: 8 }] };
+    if (name === "browser_configure") {
+      if (args.environment.reset) resets.push(args.tabId);
+      return { configured: true };
+    }
+    if (name === "browser_finalize") {
+      assert.deepEqual(resets, [7, 8]);
+      assert.equal(args.keep[0].tabId, 7);
+      return { profiles: {} };
+    }
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    await runtime.session({ sessionId: "env-many", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
+    await runtime.session({ sessionId: "env-many", action: "configure", tabId: 8, environment: { userAgent: "Example test agent" } });
+    const result = await runtime.finalize({ sessionId: "env-many", keep: [{ tabId: 7, status: "deliverable" }] });
+    assert.equal(result.ok, true);
+  } finally { runtime.close(); }
+});
+
+test("failed configuration remains tracked for finalization cleanup", async () => {
+  const runtime = fakeRuntime();
+  let reset = false;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_list_tabs") return { tabs: [{ id: 7 }] };
+    if (name === "browser_configure") {
+      if (!args.environment.reset) throw new Error("Configuration interrupted after partial dispatch");
+      reset = true;
+      return { configured: true };
+    }
+    if (name === "browser_finalize") return { profiles: {} };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    const configured = await runtime.session({ sessionId: "env-partial", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
+    assert.equal(configured.ok, false);
+    assert.equal(runtime.getSession("env-partial").environment, undefined);
+    const result = await runtime.finalize({ sessionId: "env-partial" });
+    assert.equal(result.ok, true);
+    assert.equal(reset, true);
+  } finally { runtime.close(); }
+});
+
+test("finalize reports failed cleanup and leaves the session available for retry", async () => {
+  const runtime = fakeRuntime();
+  let failReset = true;
+  let finalized = false;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_list_tabs") return { tabs: [{ id: 7 }] };
+    if (name === "browser_configure") {
+      if (args.environment.reset && failReset) throw new Error("Environment cleanup failed");
+      return { configured: true };
+    }
+    if (name === "browser_finalize") { finalized = true; return { profiles: {} }; }
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    await runtime.session({ sessionId: "env-retry", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
+    const failed = await runtime.finalize({ sessionId: "env-retry", keep: [7] });
+    assert.equal(failed.ok, false);
+    assert.equal(finalized, false);
+    assert.equal(runtime.sessions.has("env-retry"), true);
+    failReset = false;
+    const result = await runtime.finalize({ sessionId: "env-retry", keep: [7] });
+    assert.equal(result.ok, true);
+    assert.equal(finalized, true);
+  } finally { runtime.close(); }
+});
+
+test("explicit environment retention skips resetting all configured tabs", async () => {
+  const runtime = fakeRuntime();
+  let reset = false;
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_configure") { reset ||= args.environment.reset === true; return { configured: true }; }
+    if (name === "browser_finalize") return { profiles: {} };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    await runtime.session({ sessionId: "env-retain", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
+    await runtime.session({ sessionId: "env-retain", action: "configure", tabId: 8, environment: { colorScheme: "light" } });
+    const result = await runtime.finalize({ sessionId: "env-retain", keep: [7, 8], keepEnvironment: true });
+    assert.equal(result.ok, true);
+    assert.equal(reset, false);
+  } finally { runtime.close(); }
+});
+
+test("cleanup skips closed or no-longer-owned tabs without reclaiming them", async () => {
+  const runtime = fakeRuntime();
+  const resets = [];
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_list_tabs") { assert.equal(args.scope, "session"); return { tabs: [{ id: 8 }] }; }
+    if (name === "browser_configure") { if (args.environment.reset) resets.push(args.tabId); return { configured: true }; }
+    if (name === "browser_finalize") return { profiles: {} };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    await runtime.session({ sessionId: "env-closed", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
+    await runtime.session({ sessionId: "env-closed", action: "configure", tabId: 8, environment: { colorScheme: "dark" } });
+    const result = await runtime.finalize({ sessionId: "env-closed" });
+    assert.equal(result.ok, true);
+    assert.deepEqual(resets, [8]);
+  } finally { runtime.close(); }
+});
+
+test("cleanup resolves identical tab ids in their own profiles and restores selection", async () => {
+  const runtime = fakeRuntime();
+  runtime.selectProfile = async (session, requested) => {
+    session.profileId = requested ?? session.profileId ?? "profile-one";
+    return { profileId: session.profileId };
+  };
+  const resets = [];
+  runtime.invoke = async (name, args, sessionId) => {
+    if (name === "browser_list_tabs") return { tabs: [{ id: 7 }] };
+    if (name === "browser_configure") {
+      if (args.environment.reset) resets.push(runtime.getSession(sessionId).profileId);
+      return { configured: true };
+    }
+    if (name === "browser_finalize") {
+      assert.equal(runtime.getSession(sessionId).profileId, "profile-two");
+      return { profiles: {} };
+    }
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    await runtime.session({ sessionId: "env-profiles", profile: "profile-one", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
+    await runtime.session({ sessionId: "env-profiles", profile: "profile-two", action: "configure", tabId: 7, environment: { colorScheme: "light" } });
+    const result = await runtime.finalize({ sessionId: "env-profiles" });
+    assert.equal(result.ok, true);
+    assert.deepEqual(resets, ["profile-one", "profile-two"]);
+  } finally { runtime.close(); }
+});
+
+test("resetting one tab preserves other tabs' cleanup bookkeeping", async () => {
+  const runtime = fakeRuntime();
+  const resets = [];
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_list_tabs") return { tabs: [{ id: 7 }, { id: 8 }] };
+    if (name === "browser_configure") { if (args.environment.reset) resets.push(args.tabId); return { configured: true }; }
+    if (name === "browser_finalize") return { profiles: {} };
+    throw new Error(`Unexpected operation: ${name}`);
+  };
+  try {
+    await runtime.session({ sessionId: "env-one-reset", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
+    await runtime.session({ sessionId: "env-one-reset", action: "configure", tabId: 8, environment: { colorScheme: "light" } });
+    await runtime.session({ sessionId: "env-one-reset", action: "configure", tabId: 7, environment: { reset: true } });
+    const result = await runtime.finalize({ sessionId: "env-one-reset" });
+    assert.equal(result.ok, true);
+    assert.deepEqual(resets, [7, 8]);
+  } finally { runtime.close(); }
 });
 
 test("inspect observation with a request id drills into the network record", async () => {

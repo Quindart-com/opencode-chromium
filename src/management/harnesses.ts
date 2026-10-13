@@ -2,9 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { type HarnessId, planConfiguration } from "./configuration.js";
+import { type HarnessId, planConfiguration, managedConfiguration } from "./configuration.js";
 import type { FileChange } from "./transaction.js";
-import { deepSeekManaged } from "./deepseek.js";
+import { runtimeDir } from "../cli/native-host.js";
 
 export interface Harness {
   id: HarnessId;
@@ -56,7 +56,7 @@ export function detectHarnesses(home = os.homedir()): Harness[] {
     const guiPath = id === "claude-desktop" ? platform === "darwin" ? "/Applications/Claude.app" : path.join(process.env.LOCALAPPDATA ?? "", "AnthropicClaude") : id === "codex" ? platform === "darwin" ? "/Applications/Codex.app" : path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Codex") : "";
     return { id, label, configPath: filePath, supported, detected: Boolean(binary || config || guiPath && fs.existsSync(guiPath)),
       version: version(binary), executable: binary, restart: id === "claude-desktop" ? "desktop" : "terminal",
-      managed: config && (id === "dsh" ? deepSeekManaged(fs.readFileSync(filePath, "utf8")) : fs.readFileSync(filePath, "utf8").includes("opencode-browser-plugin")) };
+      managed: config && managedConfiguration(fs.readFileSync(filePath, "utf8"), id, path.join(runtimeDir(), "plugin.mjs")) };
   });
 }
 export function planHarness(harness: Harness, runtimeDir: string, action: "install" | "uninstall" = "install"): FileChange {

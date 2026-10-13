@@ -19,7 +19,7 @@ Install the matching browser extension, then connect all detected supported harn
 npx -y opencode-chromium@latest setup --all
 ```
 
-Setup shows what changed and keeps transactional backups. Preview with `--dry-run --json`. Quit and reopen desktop harnesses, or reconnect MCP in terminal clients. **Firefox and LibreWolf also require launching with remote debugging enabled**; see the [Firefox launch instructions](#firefox-agent-setup). The AMO install button becomes available after Mozilla approves the initial submission.
+Setup shows what changed and keeps transactional backups. Preview with `--dry-run --json`. Quit and reopen desktop harnesses, or reconnect MCP in terminal clients. **Firefox and LibreWolf also require launching with remote debugging enabled**; see the [Firefox launch instructions](#firefox-agent-setup).
 
 <details><summary><strong>Codex CLI and Codex Desktop</strong></summary>
 
@@ -92,12 +92,12 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 ## Choose your browser
 
 <p>
-<img alt="Chrome" src="https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=white">
-<img alt="Edge" src="https://img.shields.io/badge/Edge-0078D7?logo=microsoftedge&logoColor=white">
-<img alt="Brave" src="https://img.shields.io/badge/Brave-FB542B?logo=brave&logoColor=white">
-<img alt="Chromium" src="https://img.shields.io/badge/Chromium-3057A4?logo=googlechrome&logoColor=white">
-<img alt="Firefox" src="https://img.shields.io/badge/Firefox-FF7139?logo=firefoxbrowser&logoColor=white">
-<img alt="LibreWolf" src="https://img.shields.io/badge/LibreWolf-00ACFF?logo=librewolf&logoColor=white">
+<a href="https://www.google.com/chrome/"><img alt="Download Chrome" src="https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=white"></a>
+<a href="https://www.microsoft.com/edge/download"><img alt="Download Edge" src="https://img.shields.io/badge/Edge-0078D7?logo=microsoftedge&logoColor=white"></a>
+<a href="https://brave.com/download/"><img alt="Download Brave" src="https://img.shields.io/badge/Brave-FB542B?logo=brave&logoColor=white"></a>
+<a href="https://www.chromium.org/getting-involved/download-chromium/"><img alt="Download Chromium" src="https://img.shields.io/badge/Chromium-3057A4?logo=googlechrome&logoColor=white"></a>
+<a href="https://www.firefox.com/download/"><img alt="Download Firefox" src="https://img.shields.io/badge/Firefox-FF7139?logo=firefoxbrowser&logoColor=white"></a>
+<a href="https://librewolf.net/installation/"><img alt="Download LibreWolf" src="https://img.shields.io/badge/LibreWolf-00ACFF?logo=librewolf&logoColor=white"></a>
 </p>
 
 | Browser family | Connection | Setup |
@@ -108,6 +108,28 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later; LibreWolf must expose the matching Remote Agent. Compatible derivatives need individual validation; this does not claim support for every fork. See [Firefox capabilities](docs/firefox.md) and [compatibility](docs/compatibility.md) for transport differences and verification limits.
 
 Named profiles choose the browser. Agents keep the same four tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Sessions own their tabs, targets are checked against the live page, and uploads require confirmation by default. [Profiles](docs/profiles.md) · [Security](docs/security.md).
+
+<details><summary><strong>Visual checks, frames and debugging</strong></summary>
+
+Optional capability packs provide snapshot/pixel diffs, bounded frame inspection, experimental WebMCP discovery, detailed network and console inspection, and Chromium performance traces. Agents request these descriptions when needed, so the default tool list stays compact. Sessions can name their tab groups for the task. [Examples and limits](docs/mcp.md#optional-capabilities).
+
+</details>
+
+## Measured target selection
+
+![Target accuracy and selection latency on 12 synthetic queries](assets/benchmarks/accuracy-1.9.3.svg)
+
+On this small fixture, Jev selected 11/12 targets, Luna text 9/12 and lexical search 7/12. Luna image calls reached the existing 1.5-second deadline and fell back locally. These are component measurements on one synthetic page, not complete browser-agent task success or a ranking against Browser Use. Exact matches skipped paid calls; missing cost reports remain unknown. [Results and methodology](assets/benchmarks/accuracy-1.9.3.json).
+
+<details><summary><strong>Reproduce the benchmark</strong></summary>
+
+```sh
+bun run benchmark:accuracy
+```
+
+The default runs locally without paid requests. Add `--cloud` to compare Jev text, Luna text and Luna image using your configured OpenRouter key in isolated temporary settings. That experiment makes at most 18 requests and can incur charges. It does not change your saved provider choice. Candidate-pool misses, abstentions and timeouts remain in the score.
+
+</details>
 
 <a id="firefox-agent-setup"></a>
 <details><summary><strong>Firefox and LibreWolf: enable remote debugging for agent control</strong></summary>
@@ -161,7 +183,7 @@ Keep remote debugging bound to loopback; do not expose its port to your network.
 
 ## A calmer operating panel
 
-**Overview** brings connection health, decision assistance, and memory together. **Profiles** selects the browser connection. **Settings** holds uploads, memory retention, and advanced controls. Detailed usage and timings expand when you need them, with automatic light and dark themes.
+**Overview** shows the local connection, selected decision model, and memory status, with setup guidance when disconnected. **Profiles** lets you name and copy the profile for your agent. **Settings** holds decision assistance, uploads, memory retention, and advanced controls. Detailed usage, timings, and storage controls expand when you need them, with consistent widths and automatic light and dark themes.
 
 Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenRouter. Luna can rank ambiguous visual targets using one bounded screenshot when you separately opt in. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance guide](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
 
@@ -185,7 +207,7 @@ npx -y opencode-chromium@latest status --json
 npx -y opencode-chromium@latest uninstall --targets codex
 ```
 
-Use `--config harness-id=/absolute/path` for a custom configuration. Existing aliases, package names, profiles, and runtime data remain supported. [Runtime linking](docs/runtime-linking.md) · [Troubleshooting](docs/troubleshooting.md).
+Use `--config harness-id=/absolute/path` for a custom configuration. Existing aliases, package names, profiles, and runtime data remain supported. [Troubleshooting](docs/troubleshooting.md).
 </details>
 
 <details><summary><strong>Develop and release</strong></summary>
