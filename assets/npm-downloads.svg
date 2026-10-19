@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 220" role="img" aria-label="NPM downloads for opencode-chromium, weekly">
   <rect width="680" height="220" rx="12" fill="#ffffff"/>
   <text x="46" y="18" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1f2328">NPM downloads · weekly</text>
-  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">484 last week</text>
+  <text x="656" y="18" text-anchor="end" font-size="12" font-weight="600" fill="#0969da">80 last week</text>
   <path d="M46,180.0H656" stroke="#d1d9e0" stroke-width="1.2" stroke-dasharray="none" fill="none"/>
   <text x="38" y="184.0" text-anchor="end" font-size="10.5" fill="#59636e">0</text>
   <path d="M46,102.0H656" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 5" fill="none"/>
@@ -14,11 +14,11 @@
       <stop offset="1" stop-color="rgba(9,105,218,0.02)"/>
     </linearGradient>
   </defs>
-  <path d="M46.0,124.5 L122.3,155.9 L198.5,72.5 L274.8,160.2 L351.0,168.8 L427.3,169.0 L503.5,169.5 L579.8,133.3 L656.0,129.7 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
-  <path d="M46.0,124.5 L122.3,155.9 L198.5,72.5 L274.8,160.2 L351.0,168.8 L427.3,169.0 L503.5,169.5 L579.8,133.3 L656.0,129.7" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="656.0" cy="129.7" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
-  <text x="648.0" y="119.7" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">484</text>
+  <path d="M46.0,124.5 L113.8,155.9 L181.6,72.5 L249.3,160.2 L317.1,168.8 L384.9,169.0 L452.7,169.5 L520.4,133.3 L588.2,127.8 L656.0,171.7 L656.0,180.0 L46.0,180.0 Z" fill="url(#area)" stroke="none"/>
+  <path d="M46.0,124.5 L113.8,155.9 L181.6,72.5 L249.3,160.2 L317.1,168.8 L384.9,169.0 L452.7,169.5 L520.4,133.3 L588.2,127.8 L656.0,171.7" stroke="#0969da" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="656.0" cy="171.7" r="4" fill="#0969da" stroke="#ffffff" stroke-width="1.6"/>
+  <text x="648.0" y="161.7" text-anchor="end" font-size="10.5" font-weight="600" fill="#1f2328">80</text>
   <text x="46" y="210" font-size="10.5" fill="#59636e">Aug 10</text>
   <text x="351.0" y="210" text-anchor="middle" font-size="10.5" fill="#59636e">Sep 7</text>
-  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Oct 5</text>
+  <text x="656" y="210" text-anchor="end" font-size="10.5" fill="#59636e">Oct 12</text>
 </svg>
