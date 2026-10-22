@@ -1,5 +1,7 @@
 import { Data, Effect } from "effect";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { boundedJevImage } from "./jev-image.js";
 
 const candidateSchema = z.object({ id: z.string().min(1).max(100).refine(id => id !== "__abstain"), description: z.string().min(1).max(160) });
 export const decisionImageSchema = z.string().max(400000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/);
@@ -35,24 +37,38 @@ const responseSchema = z.object({
     probabilities: z.record(z.string(), z.number().min(0).max(1)), confidence: z.number().min(0).max(1) }) }),
   usage: z.object({ input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative(), cost: z.number().nonnegative().optional() }),
 });
+const semaphore = Effect.unsafeMakeSemaphore(2);
 export class JevProvider implements DecisionProvider {
-  private readonly semaphore = Effect.unsafeMakeSemaphore(2);
   constructor(private readonly key: string, private readonly fetcher: typeof fetch = fetch,
     private readonly model = "jev-1.13.0", private readonly timeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
-    private readonly route: "typesafe" | "openrouter" = "typesafe") {}
+    private readonly route: "typesafe" | "openrouter" = "typesafe", private readonly canSend: () => boolean = () => true) {}
   async decide(input: DecisionRequest, signal?: AbortSignal): Promise<DecisionResult> {
     const started = performance.now();
     const operation = Effect.tryPromise({
       try: async (effectSignal) => {
         const request = decisionSchema.parse(input);
-        if (request.image && this.model !== "openai/gpt-6-luna-decisions") throw new DecisionFailure({ code: "images_not_supported" });
+        const jevImage = !!request.image && ["jev-1.14.0", "typesafe/jev-1.14"].includes(this.model);
+        if (request.image && this.model !== "openai/gpt-6-luna-decisions" && !jevImage) throw new DecisionFailure({ code: "images_not_supported" });
+        if (jevImage && !boundedJevImage(request.image!)) throw new DecisionFailure({ code: "invalid_image" });
         const criteria = Object.fromEntries(request.candidates.map(candidate => [candidate.id, candidate.description]));
         criteria.__abstain = "None of the candidates can be selected reliably from this context.";
+        const assetId = randomUUID();
+        const nativeImage = jevImage && this.route === "typesafe";
+        const state = nativeImage ? { text: request.context, screenshot: assetId } : request.image ?
+          [request.context, { type: "image_url", image_url: { url: request.image, detail: "low" } }] : request.context;
+        const body = {
+          model: this.model, state,
+          ...(nativeImage ? { assets: { [assetId]: {
+            type: "image", format: request.image!.startsWith("data:image/png") ? "png" : "jpeg",
+            data_base64: request.image!.split(",")[1],
+          } } } : {}),
+          questions: { decision: { type: "choice", instructions: request.instructions, criteria } },
+        };
+        if (!this.canSend()) throw new DecisionFailure({ code: "settings_changed" });
+        if (effectSignal.aborted || signal?.aborted) throw new DecisionFailure({ code: "cancelled" });
         const response = await this.fetcher(this.route === "openrouter" ? "https://openrouter.ai/api/alpha/decisions" : "https://api.typesafe.ai/v1/systemone", {
-          method: "POST", signal: effectSignal, headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: this.model, state: request.image ? [request.context, { type: "image_url", image_url: { url: request.image, detail: "low" } }] : request.context, questions: {
-            decision: { type: "choice", instructions: request.instructions, criteria },
-          } }),
+          method: "POST", signal: effectSignal, headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json", ...(nativeImage ? { "TypeSafe-Danger-Zone-Images": "true" } : {}) },
+          body: JSON.stringify(body),
         });
         if (!response.ok) throw new DecisionFailure({ code: ({ 401: "invalid_key", 403: "access_denied", 402: "insufficient_credit", 429: "rate_limited" } as Record<number, string>)[response.status] ?? "provider_http_error" });
         const reader = response.body?.getReader();
@@ -77,6 +93,7 @@ export class JevProvider implements DecisionProvider {
         const ids = Object.keys(criteria);
         const modelMatches = result.model === this.model || (this.route === "openrouter" && (
           this.model === "typesafe/jev-1.13" && /^typesafe\/jev-1\.13-\d{8}$/.test(result.model) ||
+          this.model === "typesafe/jev-1.14" && /^typesafe\/jev-1\.14-\d{8}$/.test(result.model) ||
           this.model === "openai/gpt-6-luna-decisions" && /^openai\/gpt-6-luna-decisions-\d{8}$/.test(result.model)
         ));
         if (!modelMatches || !ids.includes(answer.choice) || answer.probabilities[answer.choice] !== Math.max(...Object.values(answer.probabilities)) || Object.keys(answer.probabilities).length !== ids.length ||
@@ -92,7 +109,7 @@ export class JevProvider implements DecisionProvider {
       catch: cause => cause instanceof DecisionFailure ? cause : new DecisionFailure({ code: "invalid_or_failed_response" }),
     });
     try {
-      const outcome = await Effect.runPromise(this.semaphore.withPermits(1)(operation).pipe(Effect.timeout(this.timeoutMs), Effect.either), { signal });
+      const outcome = await Effect.runPromise(semaphore.withPermits(1)(operation).pipe(Effect.timeout(this.timeoutMs), Effect.either), { signal });
       if (outcome._tag === "Right") return outcome.right;
       return { status: "abstained", elapsedMs: performance.now() - started,
         reason: outcome.left instanceof DecisionFailure ? outcome.left.code : "timeout" };

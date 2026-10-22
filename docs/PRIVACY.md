@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** October 13, 2026
+**Effective date:** October 22, 2026
 
 This privacy policy applies to the **OpenCode Browser Plugin** extensions for
 Chromium-based browsers (Chrome, Edge, Brave, Chromium) and Firefox-based browsers
@@ -14,10 +14,10 @@ Cloud decision assistance is off by default. The extension communicates with a
 local native host. If you explicitly enable a decision provider,
 the native host sends bounded search/replay intent and candidate descriptions to
 the service you selected. Page text may contain personal information.
-If you separately enable screenshot sharing for OpenAI Luna, an ambiguous visual
+If you separately enable screenshot sharing for Jev or OpenAI Luna, an ambiguous visual
 decision may also send one bounded, compressed screenshot of the controlled tab
-to OpenRouter. Screenshots may contain personal information. Screenshot sharing
-is off by default; Jev uses text only, and ordinary exact matches do not trigger
+to your selected service (OpenRouter or TypeSafe). Screenshots may contain personal information. Screenshot sharing
+is off by default; Jev uses images only after an unsure text decision, and ordinary exact matches do not trigger
 decision screenshots. You can turn off cloud assistance or screenshot sharing
 in Settings.
 

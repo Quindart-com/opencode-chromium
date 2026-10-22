@@ -37,7 +37,7 @@ test("cancellation and timeouts abort the paid request", async () => {
   aborted = false; const controller = new AbortController(); const pending = provider.decide(request, controller.signal); setTimeout(() => controller.abort(), 5);
   expect((await pending).reason).toBe("cancelled"); expect(aborted).toBe(true);
 });
-test("Jev remains text-only and rejects oversized or external images", async () => {
+test("legacy Jev text model rejects images; visual requests require the explicit image model", async () => {
   let calls = 0; const provider = new JevProvider("synthetic", (async () => { calls++; return response(); }) as typeof fetch);
   expect((await provider.decide({ ...request, image: "data:image/png;base64,YQ==" })).reason).toBe("images_not_supported");
   expect((await provider.decide({ ...request, image: "https://private.test/image" })).status).toBe("abstained"); expect(calls).toBe(0);
