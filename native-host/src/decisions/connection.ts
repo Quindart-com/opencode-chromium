@@ -16,7 +16,6 @@ export async function saveAndTestProvider(params: unknown, fetcher: typeof fetch
   const parsed = inputSchema.safeParse(params);
   if (!parsed.success) return { ok: false, message: "Check your provider settings and API key.", elapsedMs: 0 };
   const { settings, apiKey } = parsed.data;
-  if (settings.provider === "jev" && settings.shareImages) return { ok: false, message: "Jev supports text decisions only.", elapsedMs: 0 };
   if (settings.provider === "openai-decisions" && settings.route !== "openrouter") return { ok: false, message: "Luna requires OpenRouter.", elapsedMs: 0 };
   if (settings.provider === "off") { configureProvider(settings); return { ok: true, settings: providerStatus() }; }
   const key = apiKey ?? providerKey(settings);

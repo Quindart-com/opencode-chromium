@@ -12,7 +12,8 @@ export const providerSettingsSchema = z.object({
 });
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
 export const LUNA_MODEL = "openai/gpt-6-luna-decisions";
-export function providerModel(settings: ProviderSettings): string | null {
+export function providerModel(settings: ProviderSettings, image = false): string | null {
+  if (settings.provider === "jev" && image) return settings.route === "openrouter" ? "typesafe/jev-1.14" : "jev-1.14.0";
   return settings.provider === "openai-decisions" ? LUNA_MODEL : settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null;
 }
 export function providerSettingsPath(): string {
@@ -49,7 +50,6 @@ export function getProviderSettings(): ProviderSettings {
 }
 export function configureProvider(settings: unknown): ProviderSettings {
   const validated = providerSettingsSchema.parse(settings);
-  if (validated.provider === "jev" && validated.shareImages) throw new Error("Jev accepts text only");
   if (validated.provider === "openai-decisions" && validated.route !== "openrouter") throw new Error("Luna requires OpenRouter");
   const file = providerSettingsPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -64,6 +64,6 @@ export function providerStatus() {
   const settings = getProviderSettings();
   const credentialConfigured = Boolean(providerKey(settings));
   const ready = settings.provider !== "off" && (settings.provider !== "openai-decisions" || settings.route === "openrouter") && settings.shareText && credentialConfigured;
-  return { ...settings, ready, credentialConfigured, model: providerModel(settings),
+  return { ...settings, ready, credentialConfigured, model: providerModel(settings), imageModel: providerModel(settings, true),
     reason: ready ? null : "Disabled, text sharing not enabled, or credential environment variable missing" };
 }

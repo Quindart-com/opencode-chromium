@@ -185,7 +185,7 @@ Keep remote debugging bound to loopback; do not expose its port to your network.
 
 **Overview** shows the local connection, selected decision model, and memory status, with setup guidance when disconnected. **Profiles** lets you name and copy the profile for your agent. **Settings** holds decision assistance, uploads, memory retention, and advanced controls. Detailed usage, timings, and storage controls expand when you need them, with consistent widths and automatic light and dark themes.
 
-Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenRouter. Luna can rank ambiguous visual targets using one bounded screenshot when you separately opt in. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance guide](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
+Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenRouter. Separately opt in to bounded screenshots for visual decisions. Jev's experimental image fallback runs only after an unsure text answer, with persistent request caps. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance, costs and limits](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
 
 ## npm downloads
 

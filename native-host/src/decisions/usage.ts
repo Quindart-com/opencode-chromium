@@ -4,13 +4,13 @@ import { providerSettingsPath } from "./settings.js";
 import type { DecisionResult } from "./provider.js";
 
 const file = () => path.join(path.dirname(providerSettingsPath()), "usage.jsonl");
-export function recordDecision(result: DecisionResult, purpose: string): void {
+export function recordDecision(result: DecisionResult, purpose: string, image = false): void {
   // Append small records so independent profile hosts don't overwrite totals.
   // No key, query, page text, recipe, or candidate ID is retained.
   try {
     fs.mkdirSync(path.dirname(file()), { recursive: true, mode: 0o700 });
     fs.appendFileSync(file(), JSON.stringify({ at: Date.now(), purpose, status: result.status,
-      elapsedMs: result.elapsedMs, usage: result.usage }) + "\n", { mode: 0o600 });
+      elapsedMs: result.elapsedMs, image, model: result.model, usage: result.usage }) + "\n", { mode: 0o600 });
   } catch { /* Accounting failure must never retry a billed request. */ }
 }
 export function decisionUsage() {

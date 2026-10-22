@@ -166,6 +166,9 @@ try {
   assert.equal(await page.locator("#semantic-model-list").isVisible(), false);
   await page.locator("#decision-provider:not(:disabled)").waitFor();
   assert.equal(await page.locator("#decision-provider").inputValue(), "jev-openrouter");
+  const jevImages = page.getByRole("checkbox", { name: /Allow experimental image fallback/ });
+  assert.equal(await jevImages.isChecked(), false);
+  await jevImages.check();
   assert.equal(await page.locator("#decision-key-env").isVisible(), false, "connection details start collapsed");
   assert.equal(await page.getByText("Embedded models are deprecated", { exact: false }).isVisible(), false, "migration details start collapsed");
   await page.emulateMedia({ colorScheme: "light" });
@@ -184,6 +187,7 @@ try {
   assert.equal(await page.locator("#decision-api-key").inputValue(), "", "clear the key after saving");
   assert.match(await page.locator(".provider-timing").textContent(), /Key check \d+ ms · Decision \d+ ms/);
   assert.equal(decisionSettings.shareText, true, "enabling Jev authorizes the documented bounded context");
+  assert.equal(decisionSettings.shareImages, true, "Jev image sharing persists only after explicit opt-in and save");
   await page.locator(".provider-settings").screenshot({ path: path.join(root, "reports", "popup-provider-success.png"), animations: "disabled" });
   await page.selectOption("#decision-provider", "openai-decisions");
   const images = page.getByLabel("Allow screenshots for ambiguous visual targets", { exact: false });
@@ -193,6 +197,7 @@ try {
   await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
   assert.equal(decisionSettings.shareImages, true);
   await page.selectOption("#decision-provider", "jev-typesafe");
+  assert.equal(await jevImages.isChecked(), false, "switching service resets screenshot consent");
   await page.getByText("Advanced · Environment variable", { exact: true }).click();
   assert.equal(await page.locator("#decision-key-env").inputValue(), "TYPESAFE_API_KEY");
   await page.selectOption("#decision-provider", "off");
