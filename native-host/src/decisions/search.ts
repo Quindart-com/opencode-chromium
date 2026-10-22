@@ -90,7 +90,10 @@ export async function decisionSearch(params: unknown, local: (input: Record<stri
   const status = providerStatus();
   const visual = status.shareImages && !!capture;
   let viewport: number[] = [];
-  try { viewport = JSON.parse(String((params as Record<string, unknown>)?.decisionState ?? "[]")); } catch { /* No verified viewport: skip the Jev image fallback. */ }
+  try {
+    const value: unknown = JSON.parse(String((params as Record<string, unknown>)?.decisionState ?? "[]"));
+    if (Array.isArray(value) && typeof value[2] === "number" && typeof value[3] === "number") viewport = value;
+  } catch { /* No verified viewport: skip the Jev image fallback. */ }
   const width = Number(viewport[2]), height = Number(viewport[3]);
   const jevVisual = status.provider === "jev" && visual && width > 0 && height > 0 && Number.isFinite(width + height);
   const candidates: DecisionCandidate[] = pool.flatMap((unit) => {

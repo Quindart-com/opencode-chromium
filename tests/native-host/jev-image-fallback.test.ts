@@ -110,6 +110,15 @@ test("capture cannot extend the total decision deadline", async () => {
   expect(performance.now() - start).toBeLessThan(1900);
   expect(result?.decision).toMatchObject({ reason: "timeout" }); expect(calls.length).toBe(1);
 });
+test("missing or malformed viewport state preserves text fallback without capture", async () => {
+  network();
+  for (const decisionState of [undefined, "null", "{}", "broken", '[0,0,{"toString":1},800]']) {
+    query = randomUUID();
+    const result = await decisionSearch({ query, units, decisionState }, async () => ({ results: units }), async () => { captures++; return image; });
+    expect(result?.decision).toMatchObject({ status: "abstained", reason: "insufficient_confidence" });
+  }
+  expect(captures).toBe(0); expect(calls.length).toBe(5);
+});
 test("image quotas survive process-local cache resets and stop capture at the minute cap", async () => {
   network(); await search(); query = randomUUID(); const limited = await search();
   expect(captures).toBe(1); expect(calls.length).toBe(3);
