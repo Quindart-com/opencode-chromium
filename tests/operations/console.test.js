@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compactConsoleEvents } from "../../src/browser/operations/index.ts";
 import { SourceMapResolver } from "../../native-host/src/source-maps.ts";
+import { eventResponseSchema } from "../../src/browser/events.ts";
 
 function consoleEvents() {
   return {
@@ -42,4 +43,11 @@ test("compact console events emit source-mapped stacks when a resolver is presen
 test("compact console events omit stacks by default to stay small", () => {
   const result = compactConsoleEvents(consoleEvents(), {});
   assert.equal("stack" in result.events[0], false);
+});
+
+test("object and undefined console arguments do not require a by-value payload", () => {
+  const events = consoleEvents();
+  events.events[0].params.args = [{ type: "object", description: "Object" }, { type: "undefined" }];
+  const result = compactConsoleEvents(eventResponseSchema.parse(events), {});
+  assert.match(result.events[0].text, /Object/);
 });

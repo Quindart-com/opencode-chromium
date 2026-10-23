@@ -151,10 +151,16 @@ try {
   assert.equal(await page.locator("#connected-profile").inputValue(), "secondary");
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   const automaticUpdates = page.getByLabel("Keep local browser tools up to date", { exact: false });
+  await page.waitForFunction(() => {
+    const input = document.querySelector('[aria-labelledby="runtime-updates-title"] input');
+    return input && !input.disabled;
+  });
   await automaticUpdates.uncheck();
   await page.getByText("Update preference saved.", { exact: true }).waitFor();
   assert.equal(runtimeUpdates.enabled, false);
+  const enabledSaved = page.waitForResponse(response => response.url().endsWith("/rpc") && response.request().postDataJSON()?.type === "SET_RUNTIME_UPDATES");
   await automaticUpdates.check();
+  await enabledSaved;
   await page.getByText("Update preference saved.", { exact: true }).waitFor();
   assert.equal(runtimeUpdates.enabled, true);
   const uploadPreference = page.getByRole("checkbox", { name: "Allow uploads without confirmation", exact: true });
