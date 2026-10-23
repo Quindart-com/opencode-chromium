@@ -1,7 +1,7 @@
 import { z } from "zod";
 export const callFrameSchema = z.object({ functionName: z.string().optional(), url: z.string().optional(), lineNumber: z.number().optional(), columnNumber: z.number().optional() });
 export const stackTraceSchema = z.object({ callFrames: z.array(callFrameSchema).default([]) });
-const consoleArgumentSchema = z.object({ value: z.unknown(), description: z.string().optional(), preview: z.object({ description: z.string().optional() }).optional(), type: z.string().optional() });
+const consoleArgumentSchema = z.object({ value: z.unknown().optional(), description: z.string().optional(), preview: z.object({ description: z.string().optional() }).optional(), type: z.string().optional() });
 const entrySchema = z.object({ text: z.string().optional(), level: z.string().optional(), url: z.string().optional(), source: z.string().optional(), stackTrace: stackTraceSchema.optional() });
 export const eventSchema = z.looseObject({ method: z.string(), time: z.union([z.string(), z.number()]).optional(), tabId: z.number().optional(), params: z.looseObject({
   args: z.array(consoleArgumentSchema).optional(), entry: entrySchema.optional(), text: z.string().optional(), type: z.string().optional(), stackTrace: stackTraceSchema.optional(),
