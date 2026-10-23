@@ -1,4 +1,4 @@
-import { Data,Effect } from "effect";
+import { Data,Effect,Semaphore } from "effect";
 import { z } from "zod";
 
 export const embeddingResultSchema = z.object({
@@ -17,7 +17,7 @@ export class EmbeddingFailure extends Data.TaggedError("EmbeddingFailure")<{
 
 /** Serializes model access; the Promise boundary remains compatible with callers. */
 export class EmbeddingService {
-  private readonly semaphore = Effect.unsafeMakeSemaphore(1);
+  private readonly semaphore = Semaphore.makeUnsafe(1);
   private readonly controller = new AbortController();
   private readonly embedder: Embedder;
 
