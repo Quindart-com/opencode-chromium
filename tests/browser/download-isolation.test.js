@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
-import { createDownloadEvents, registerDownloadHandlers } from "../../extension-src/entrypoints/background/download-events.js";
-import { assertTabAccess } from "../../extension-src/entrypoints/background/tab-ownership.js";
-import { FirefoxBackend } from "../../native-host/src/firefox/backend.js";
+import { createDownloadEvents, registerDownloadHandlers } from "../../extension-src/entrypoints/background/download-events.ts";
+import { assertTabAccess } from "../../extension-src/entrypoints/background/tab-ownership.ts";
+import { FirefoxBackend } from "../../native-host/src/firefox/backend.ts";
 
 function fixture(options = {}) {
   const owners = new Map([[1, "first"], [2, "second"], [3, "first"]]);
@@ -147,7 +147,7 @@ test("Firefox separately probes optional download events and preserves ordinary 
 });
 
 test("extension download delivery never uses global listeners or broadcast notifications", () => {
-  const source = fs.readFileSync(new URL("../../extension-src/entrypoints/background/runtime.js", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("../../extension-src/entrypoints/background/runtime.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /downloads\.onCreated|downloads\.onChanged|onDownloadChange/);
   assert.match(source, /registerDownloadHandlers\(/);
 });

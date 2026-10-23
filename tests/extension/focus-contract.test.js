@@ -5,10 +5,10 @@ import test from "node:test";
 
 const root = path.resolve(process.cwd());
 const extensionSource = fs.readFileSync(
-  path.join(root, "extension-src", "entrypoints", "background", "runtime.js"),
+  path.join(root, "extension-src", "entrypoints", "background", "runtime.ts"),
   "utf8",
-);
-const operationsSource = fs.readFileSync(path.join(root, "src", "browser", "operations", "index.js"), "utf8");
+).replace(/\{\s+\}/g, "{}").replace(/^( +)/gm, spaces => " ".repeat(Math.ceil(spaces.length / 2)));
+const operationsSource = fs.readFileSync(path.join(root, "src", "browser", "operations", "index.ts"), "utf8");
 
 test("the extension only activates tabs through the explicit focus policy", () => {
   assert.match(extensionSource, /resolveTabActivation\(params\)/);
@@ -41,13 +41,13 @@ test("background operation activation requests are always passive", () => {
 
 test("finalized deliverables use the dedicated OpenCode group", () => {
   assert.match(extensionSource, /const DELIVERABLE_GROUP_TITLE = "OpenCode Deliverables";/);
-  assert.match(extensionSource, /chrome\.tabGroups\.query\(\{ windowId \}, done\)/);
+  assert.match(extensionSource, /chrome\.tabGroups\.query\(\{ windowId \}\)/);
   assert.match(extensionSource, /group\.title === DELIVERABLE_GROUP_TITLE && group\.windowId === windowId/);
   assert.match(extensionSource, /if \(status === "deliverable"\) \{\s*await ensureDeliverableGroup\(tabId\)/);
 });
 
 test("kept tabs default to handoff", () => {
-  assert.match(extensionSource, /Number\.isInteger\(item\) \? "handoff" : item\?\.status \?\? "handoff"/);
+  assert.match(extensionSource, /typeof item === "number" \? "handoff" : item\.status \?\? "handoff"/);
   assert.match(operationsSource, /status: tool\.schema\.enum\(\["handoff", "deliverable"\]\)\.default\("handoff"\)/);
 });
 
@@ -64,5 +64,5 @@ test("handoff keeps a tab tracked in the session; only deliverables are untracke
 });
 
 test("unkept agent tabs close tolerantly", () => {
-  assert.match(extensionSource, /await chromeCall\(\(done\) => chrome\.tabs\.remove\(tabId, done\)\)\.catch\(\(\) => \{\}\)/);
+  assert.match(extensionSource, /await chrome\.tabs\.remove\(tabId\)\.catch\(\(\) => \{\}\)/);
 });

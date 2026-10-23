@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { JevProvider } from "../native-host/src/decisions/provider.js";
-import { rankPageUnits } from "../native-host/src/semantic-search.js";
+import { rankPageUnits } from "../native-host/src/semantic-search.ts";
 
 // Synthetic labels only. This experiment never connects to a user's browser.
 const key = process.env.OPENROUTER_API_KEY;

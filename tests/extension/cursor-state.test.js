@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CURSOR_SCRIPTS, cursorIdFromParams, cursorLabel, cursorState, gestureAction } from "../../extension-src/entrypoints/background/cursor-state.js";
+import { CURSOR_SCRIPTS, cursorIdFromParams, cursorLabel, cursorState, gestureAction } from "../../extension-src/entrypoints/background/cursor-state.ts";
 
 test("the injected cursor scripts load the artwork before the renderer", () => {
-  assert.deepEqual(CURSOR_SCRIPTS, ["content-scripts/cursor-theme.js", "content-scripts/cursor.js"]);
+  assert.deepEqual(CURSOR_SCRIPTS, ["/cursor-theme.js", "/cursor.js"]);
 });
 
 test("a cursor belongs to its session unless one is named explicitly", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SourceMapResolver, mapCallFrames } from "../../native-host/src/source-maps.js";
+import { SourceMapResolver, mapCallFrames } from "../../native-host/src/source-maps.ts";
 
 const MINIFIED_MAP = {
   version: 3,

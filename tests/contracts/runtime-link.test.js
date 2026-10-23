@@ -5,10 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
-import { buildStatus, sourceFingerprint } from "../../src/cli/source-fingerprint.js";
-import { LAUNCHER_FINGERPRINT_SOURCE, launcherSource, linkTargets, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.js";
-import { BROWSERS, browserIds, executableCandidates, installedBrowsers, windowsRegistryKey } from "../../src/cli/browsers.js";
-import { HOST_NAME, readRegistration, resolveExtensionIds } from "../../src/cli/native-host.js";
+import { buildStatus, sourceFingerprint } from "../../src/cli/source-fingerprint.ts";
+import { LAUNCHER_FINGERPRINT_SOURCE, launcherSource, linkTargets, patchDshConfig, readRuntimeManifest, writeLaunchers, writeRuntimeManifest } from "../../src/cli/runtime-link.ts";
+import { BROWSERS, browserIds, executableCandidates, installedBrowsers, windowsRegistryKey } from "../../src/cli/browsers.ts";
+import { HOST_NAME, readRegistration, resolveExtensionIds } from "../../src/cli/native-host.ts";
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -55,7 +55,7 @@ function fakeTree() {
   const root = tempDir("runtime-link-tree-");
   fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "opencode-chromium", version: "1.7.2" }), "utf8");
   fs.mkdirSync(path.join(root, "src", "cli"), { recursive: true });
-  fs.writeFileSync(path.join(root, "src", "cli", "index.js"), "export const value = 1;\n", "utf8");
+  fs.writeFileSync(path.join(root, "src", "cli", "index.ts"), "export const value = 1;\n", "utf8");
   fs.mkdirSync(path.join(root, "native-host", "src"), { recursive: true });
   fs.writeFileSync(path.join(root, "native-host", "src", "host.js"), "// host\n", "utf8");
   return root;
@@ -67,7 +67,7 @@ test("the source fingerprint tracks every input to the bundle", () => {
     const first = sourceFingerprint(root);
     assert.equal(sourceFingerprint(root), first, "the same tree must hash identically");
 
-    fs.writeFileSync(path.join(root, "src", "cli", "index.js"), "export const value = 2;\n", "utf8");
+    fs.writeFileSync(path.join(root, "src", "cli", "index.ts"), "export const value = 2;\n", "utf8");
     assert.notEqual(sourceFingerprint(root), first, "a source edit must invalidate the build");
 
     const afterSourceEdit = sourceFingerprint(root);
@@ -142,7 +142,7 @@ test("the launcher's inline fingerprint matches the canonical implementation", a
     const { default: inline } = await import(pathToFileURL(modulePath).href);
     assert.equal(inline(root), sourceFingerprint(root));
 
-    fs.writeFileSync(path.join(root, "src", "cli", "index.js"), "export const value = 3;\n", "utf8");
+    fs.writeFileSync(path.join(root, "src", "cli", "index.ts"), "export const value = 3;\n", "utf8");
     assert.equal(inline(root), sourceFingerprint(root), "both must react to an edit the same way");
   } finally {
     removeDir(root);

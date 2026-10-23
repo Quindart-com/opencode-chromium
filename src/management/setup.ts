@@ -1,16 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
-import { detectHarnesses, planHarness, type Harness } from "./harnesses.js";
+import { parseRuntimeActivation,runtimeLifecycleSource,withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
+import { packagedRuntime } from "../../native-host/src/runtime-updates.ts";
+import { packageRoot } from "../cli/config.ts";
+import { applyRegistryChanges,planNativeHosts,runtimeDir } from "../cli/native-host.ts";
+import { launcherSource } from "../cli/runtime-link.ts";
+import { record } from "../shared/values.ts";
+import { managedConfiguration,nativeCodexPluginEnabled,type HarnessId } from "./configuration.js";
+import { detectHarnesses,planHarness,type Harness } from "./harnesses.js";
 import { selectHarnesses } from "./menu.js";
-import { applyTransaction, type FileChange } from "./transaction.js";
-import { runtimeDir, planNativeHosts, applyRegistryChanges } from "../cli/native-host.js";
-import { packageRoot } from "../cli/config.js";
-import { launcherSource } from "../cli/runtime-link.js";
 import { offerRestart } from "./restart.js";
 import { planSkills } from "./skills.js";
-import { nativeCodexPluginEnabled, managedConfiguration, type HarnessId } from "./configuration.js";
-import { packagedRuntime } from "../../native-host/src/runtime-updates.js";
-import { runtimeLifecycleSource, withRuntimeLock } from "../../native-host/src/runtime-lifecycle.js";
+import { applyTransaction,type FileChange } from "./transaction.js";
 
 interface SetupEnvironment {
   home?: string;
@@ -69,9 +70,9 @@ export async function manageSetup(argv: string[], remove = false, environment: S
       changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: launcherSource(kind) });
     }
     const filePath = path.join(dir, "runtime.json");
-    const existing = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, "utf8")) as { followBranch?: boolean; stateIsolation?: boolean; autoUpdate?: boolean } : null;
+    const existing = fs.existsSync(filePath) ? parseRuntimeActivation(JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown) : null;
     const production = argv.includes("--production");
-    const manifest = existing?.followBranch && !production ? existing : { ...existing, root, version: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version,
+    const manifest = existing?.followBranch && !production ? existing : { ...existing, root, version: record(JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as unknown).version,
       autoUpdate: argv.includes("--no-auto-update") ? false : argv.includes("--auto-update") ? true : existing?.autoUpdate ?? packagedRuntime(root),
       ...(production ? { channel: "production", followBranch: false, pendingReload: true } : {}) };
     changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: JSON.stringify(manifest, null, 2) + "\n" });

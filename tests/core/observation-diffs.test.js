@@ -4,9 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { PNG } from "pngjs";
-import { pixelDiff, snapshotDiff } from "../../src/core/observation-diffs.js";
-import { AgentBrowserRuntime } from "../../src/core/runtime.js";
-import { ArtifactStore } from "../../src/core/artifacts.js";
+import { pixelDiff, snapshotDiff } from "../../src/core/observation-diffs.ts";
+import { AgentBrowserRuntime } from "../../src/core/runtime.ts";
+import { ArtifactStore } from "../../src/core/artifacts.ts";
 
 function image(width = 2, height = 2, changed = false) {
   const png = new PNG({ width, height }); png.data.fill(255);

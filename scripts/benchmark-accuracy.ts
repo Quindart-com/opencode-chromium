@@ -4,7 +4,7 @@ import os from "node:os";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { rankPageUnits } from "../native-host/src/semantic-search.js";
+import { rankPageUnits } from "../native-host/src/semantic-search.ts";
 import { decisionSearch, decisionSearchStats } from "../native-host/src/decisions/search.js";
 import { decisionUsage } from "../native-host/src/decisions/usage.js";
 import { configureProvider, getProviderSettings, providerKey, providerModel, providerStatus, storeProviderKey } from "../native-host/src/decisions/settings.js";
@@ -171,7 +171,7 @@ async function main() {
       process.stderr.write(`Measured ${name}: ${result.accuracy.total.correct}/12 targets, ${result.decisions.paidCalls} requests\n`);
     }
     const imageFile = output.replace(/\.json$/, "-fixture.jpg");
-    const runtimeFiles = ["native-host/src/semantic-search.js", "native-host/src/decisions/search.ts", "native-host/src/decisions/provider.ts", "native-host/src/decisions/budget.ts"];
+    const runtimeFiles = ["native-host/src/semantic-search.ts", "native-host/src/decisions/search.ts", "native-host/src/decisions/provider.ts", "native-host/src/decisions/budget.ts"];
     const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), packageVersion: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version,
       scope: "In-process component target accuracy and selection latency over fixed synthetic page units; not end-to-end browser-agent task success",
       fixture: { sha256: fixtureHash, queries: 12, units: 30, rounds: 1, multipleAcceptedTargets: { emails: ["n12", "n26", "n28"] } },

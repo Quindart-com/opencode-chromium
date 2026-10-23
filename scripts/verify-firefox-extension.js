@@ -6,8 +6,8 @@ import http from 'node:http';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { executableCandidates } from '../src/cli/browsers.js';
-import { FirefoxBackend } from '../native-host/src/firefox/backend.js';
+import { executableCandidates } from '../src/cli/browsers.ts';
+import { FirefoxBackend } from '../native-host/src/firefox/backend.ts';
 
 // This test owns a disposable browser/profile and a unique native-host registration.
 // It cannot replace the installed host or connect to personal browser profiles.
@@ -73,7 +73,7 @@ try {
   profileId = registration.profileId; assert.match(registration.browserName, /Firefox|LibreWolf/); report.checks.push('real extension and native messaging handshake');
   fs.mkdirSync(path.join(runtimeDir, 'firefox'), { recursive: true }); fs.writeFileSync(path.join(runtimeDir, 'firefox', profileId + '.json'), JSON.stringify({ endpoint: 'ws://127.0.0.1:' + port + '/session' }));
   Object.assign(process.env, { OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: registry });
-  const { createBrowserAgent } = await import('../src/adapters/sdk/index.js'); agent = createBrowserAgent();
+  const { createBrowserAgent } = await import('../src/adapters/sdk/index.ts'); agent = createBrowserAgent();
   const sessionId = 'firefox-extension-verification';
   async function call(name, args) { const result = await agent.call(name, { profile: profileId, sessionId, ...args }); if (!result.ok) throw Error(name + ': ' + JSON.stringify(result)); return result; }
   const tab = await call('browser_session', { action: 'new-tab' }); const tabId = tab.activeTabId;

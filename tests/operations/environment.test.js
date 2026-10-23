@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createEnvironmentController } from "../../src/browser/environment.js";
+import { createEnvironmentController } from "../../src/browser/environment.ts";
 
 function fixture() {
   const calls = [];

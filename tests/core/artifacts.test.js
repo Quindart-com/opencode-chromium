@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ArtifactStore, artifactUriTemplate } from "../../src/core/artifacts.js";
+import { ArtifactStore, artifactUriTemplate } from "../../src/core/artifacts.ts";
 
 test("artifact store returns URI metadata and reads content", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-artifacts-test-"));

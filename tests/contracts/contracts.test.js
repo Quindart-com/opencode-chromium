@@ -3,15 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createBrowserOperations, GRANULAR_OPERATION_COUNT } from "../../src/browser/operations/index.js";
-import { createCapabilityRegistry } from "../../src/core/capabilities.js";
-import { ApprovalStore } from "../../src/core/approvals.js";
-import { createLogger, redact } from "../../src/core/logging.js";
-import { backoffDelay, classifyRetry, withRetries } from "../../src/core/retries.js";
-import { selectProfile } from "../../src/core/profiles.js";
-import { contractMetadata } from "../../src/core/versions.js";
-import { createCoreRegistry } from "../../src/core/registry.js";
-import { ArtifactStore } from "../../src/core/artifacts.js";
+import { createBrowserOperations, GRANULAR_OPERATION_COUNT } from "../../src/browser/operations/index.ts";
+import { createCapabilityRegistry } from "../../src/core/capabilities.ts";
+import { ApprovalStore } from "../../src/core/approvals.ts";
+import { createLogger, redact } from "../../src/core/logging.ts";
+import { backoffDelay, classifyRetry, withRetries } from "../../src/core/retries.ts";
+import { selectProfile } from "../../src/core/profiles.ts";
+import { contractMetadata } from "../../src/core/versions.ts";
+import { createCoreRegistry } from "../../src/core/registry.ts";
+import { ArtifactStore } from "../../src/core/artifacts.ts";
 
 test("the baseline operation inventory is preserved behind the provider-neutral engine", async () => {
   const hooks = await createBrowserOperations();

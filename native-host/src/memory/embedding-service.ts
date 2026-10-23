@@ -1,13 +1,13 @@
-import { Data, Effect } from "effect";
+import { Data,Effect } from "effect";
 import { z } from "zod";
 
-const resultSchema = z.object({
+export const embeddingResultSchema = z.object({
   vectors: z.array(z.array(z.number().finite()).min(1)).min(1),
   model: z.string().nullable().optional(),
   dims: z.number().int().positive(),
   embeddingProfile: z.string().nullable().optional(),
 });
-export type EmbeddingResult = z.infer<typeof resultSchema>;
+export type EmbeddingResult = z.infer<typeof embeddingResultSchema>;
 export type Embedder = (texts: string[], signal?: AbortSignal) => Promise<unknown>;
 
 export class EmbeddingFailure extends Data.TaggedError("EmbeddingFailure")<{
@@ -26,7 +26,7 @@ export class EmbeddingService {
   run(texts: string[]): Promise<EmbeddingResult> {
     const operation = Effect.tryPromise({
       try: async (signal) => {
-        const result = resultSchema.parse(await this.embedder(texts, signal));
+        const result = embeddingResultSchema.parse(await this.embedder(texts, signal));
         if (result.vectors.length !== texts.length || result.vectors.some((vector) => vector.length !== result.dims)) {
           throw new Error("Embedding batch shape does not match its inputs");
         }

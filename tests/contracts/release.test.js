@@ -56,7 +56,7 @@ describe("release metadata", () => {
 
 describe("popup privacy surface", () => {
   const popupDir = path.join(root, "extension-src", "entrypoints", "popup");
-  const backgroundRuntime = path.join(root, "extension-src", "entrypoints", "background", "runtime.js");
+  const backgroundRuntime = path.join(root, "extension-src", "entrypoints", "background", "runtime.ts");
 
   test("popup api never declares the raw model cache path", () => {
     const api = fs.readFileSync(path.join(popupDir, "api.ts"), "utf8");

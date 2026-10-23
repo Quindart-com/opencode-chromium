@@ -5,9 +5,9 @@ import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createBrowserOperations } from "../src/browser/operations/index.js";
-import { createAgentBrowserRuntime } from "../src/core/runtime.js";
-import { createCoreRegistry, createMemoryRegistry } from "../src/core/registry.js";
+import { createBrowserOperations } from "../src/browser/operations/index.ts";
+import { createAgentBrowserRuntime } from "../src/core/runtime.ts";
+import { createCoreRegistry, createMemoryRegistry } from "../src/core/registry.ts";
 
 const ADAPTER_SERVER_NAME = "opencode-browser-plugin";
 
@@ -30,7 +30,7 @@ function collectJsonLines(buffer) {
 }
 
 async function runServer(toolset, { exerciseCore = false, env = {} } = {}) {
-  const serverPath = path.join(adapterDir(), "src", "adapters", "mcp", "server.js");
+  const serverPath = path.join(adapterDir(), "src", "adapters", "mcp", "server.ts");
   if (!fs.existsSync(serverPath)) throw new Error(`Adapter not found: ${serverPath}`);
 
   const child = spawn(process.execPath, [serverPath, `--toolset=${toolset}`], { stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, ...env } });

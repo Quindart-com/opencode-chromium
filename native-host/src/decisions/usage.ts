@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { providerSettingsPath } from "./settings.js";
+import { record } from "../../../src/shared/values.ts";
 import type { DecisionResult } from "./provider.js";
+import { providerSettingsPath } from "./settings.js";
 
 const file = () => path.join(path.dirname(providerSettingsPath()), "usage.jsonl");
 export function recordDecision(result: DecisionResult, purpose: string, image = false): void {
@@ -30,15 +31,16 @@ export function decisionUsage() {
       for (const line of lines) {
         if (!line) continue;
         try {
-          const row = JSON.parse(line);
+          const row = record(JSON.parse(line) as unknown);
+          const usage = record(row.usage);
           totals.calls++; totals.tests += Number(row.purpose === "test");
           totals.selected += Number(row.status === "selected"); totals.abstained += Number(row.status !== "selected");
           totals.lastMs = Number(row.elapsedMs) || 0; time += totals.lastMs;
           if (row.usage) {
             totals.usageReportedCalls++;
-            totals.inputTokens += Number(row.usage.input_tokens) || 0;
-            totals.outputTokens += Number(row.usage.output_tokens) || 0;
-            if (typeof row.usage.cost === "number") { totals.reportedCost += row.usage.cost; totals.costReportedCalls++; }
+            totals.inputTokens += Number(usage.input_tokens) || 0;
+            totals.outputTokens += Number(usage.output_tokens) || 0;
+            if (typeof usage.cost === "number") { totals.reportedCost += usage.cost; totals.costReportedCalls++; }
           }
         } catch { /* Ignore incomplete records after an interrupted append. */ }
       }

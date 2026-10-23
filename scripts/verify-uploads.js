@@ -4,10 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { chromium } from "playwright";
-import { createUploadFiles } from "../native-host/src/uploads.js";
-import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.js";
-import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.js";
-import { createDebuggerAttacher } from "../extension-src/entrypoints/background/debugger-attach.js";
+import { createUploadFiles } from "../native-host/src/uploads.ts";
+import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.ts";
+import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.ts";
+import { createDebuggerAttacher } from "../extension-src/entrypoints/background/debugger-attach.ts";
 
 // Isolated browser, local website, real CDP and native file snapshots. No personal profile.
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "upload-verification-"));
@@ -47,7 +47,7 @@ try {
   await website.goto(`${origin}/website`);
   const session = await context.newCDPSession(website);
   const chrome = {
-    runtime: { id: "fixture-extension", getURL: page => `${origin}/${page}` },
+    runtime: { id: "fixture-extension", getURL: page => new URL(page, origin + "/").href },
     storage: { local: { get: async () => ({}) } },
     windows: {
       onRemoved: { addListener: callback => removed.push(callback) },
@@ -64,7 +64,7 @@ try {
     },
   };
   consent = createUploadConsent({ chrome, describe: files => native("uploads.describe", { files }), snapshot: token => native("uploads.snapshot", { token }), release: token => native("uploads.release", { token }) });
-  const attach = createDebuggerAttacher({ withTabLock: (_id, run) => run(), attachedTabs: new Map(), isBrowserInternalUrl: url => !url.startsWith(origin), getTab: async () => ({ url: website.url() }), chromeCall: async call => call(() => {}), chrome: { debugger: { attach: (_target, _version, done) => done(), detach: (_target, done) => done() } }, DEBUGGER_VERSION: "1.3", errorMessage: String, sendCdpCommand: (_id, method, params) => session.send(method, params), DEFAULT_CDP_TIMEOUT_MS: 30000 });
+  const attach = createDebuggerAttacher({ withTabLock: (_id, run) => run(), attachedTabs: new Map(), isBrowserInternalUrl: url => !url.startsWith(origin), getTab: async () => ({ url: website.url() }), chromeCall: async call => call(() => {}), chrome: { debugger: { attach: async () => {}, detach: async () => {} } }, DEBUGGER_VERSION: "1.3", errorMessage: String, sendCdpCommand: (_id, method, params) => session.send(method, params), DEFAULT_CDP_TIMEOUT_MS: 30000 });
   await attach(1, "fixture");
   const chooser = new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error("Chooser interception did not fire")), 10000); session.once("Page.fileChooserOpened", event => { clearTimeout(timer); resolve(event); }); });
   await website.locator("#document").click();

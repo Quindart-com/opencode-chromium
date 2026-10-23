@@ -15,7 +15,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1024, height: 768 }, deviceScaleFactor: 1 });
   await page.setContent('<style>body{margin:0;background:#f1f5f9;font:24px system-ui}button{position:absolute;top:280px;width:280px;height:100px;color:white;font:24px system-ui;border:0;border-radius:12px}.first{left:100px;background:#2563eb}.second{left:620px;background:#15803d}</style><button class="first">Apply</button><button class="second">Apply</button>');
   const raw = (await page.screenshot({ type: "jpeg", quality: 45 })).toString("base64");
-  const source = fs.readFileSync(new URL("../extension-src/entrypoints/background/decision-image.js", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("../extension-src/entrypoints/background/decision-image.ts", import.meta.url), "utf8");
   const image = await page.evaluate(async ({ source, raw }) => {
     const module = await import(`data:text/javascript,${encodeURIComponent(source)}`);
     return module.prepareJevScreenshot(raw);

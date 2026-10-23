@@ -5,10 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { AgentBrowserRuntime } from "../../src/core/runtime.js";
-import { ArtifactStore } from "../../src/core/artifacts.js";
-import { resultSchema, createCoreRegistry } from "../../src/core/registry.js";
-import { MemoryStore } from "../../native-host/src/memory/store.js";
+import { AgentBrowserRuntime } from "../../src/core/runtime.ts";
+import { ArtifactStore } from "../../src/core/artifacts.ts";
+import { resultSchema, createCoreRegistry } from "../../src/core/registry.ts";
+import { MemoryStore } from "../../native-host/src/memory/store.ts";
 
 function fakeRuntime() {
   const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-runtime-test-")) });

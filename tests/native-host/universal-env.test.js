@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { defaultIpcPath, instanceIpcPath } from "../../native-host/src/ipc-path.js";
-import { profileRegistryDir } from "../../native-host/src/profile-registry.js";
+import { defaultIpcPath, instanceIpcPath } from "../../native-host/src/ipc-path.ts";
+import { profileRegistryDir } from "../../native-host/src/profile-registry.ts";
 
 test("provider-neutral environment names take precedence over legacy aliases", () => {
   const keys = [

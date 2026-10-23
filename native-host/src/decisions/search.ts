@@ -1,17 +1,17 @@
-import { decide } from "./index.js";
-import { providerStatus } from "./settings.js";
-import {
-  decisionBudget,
-  decisionFingerprint,
-  describeCandidate,
-  leadingExactMatch,
-  rankingIsDecisive,
-  type DecisionCandidate,
-  type DecisionStats,
-} from "./budget.js";
 import { z } from "zod";
-import { decisionImageSchema, type DecisionResult } from "./provider.js";
+import {
+decisionBudget,
+decisionFingerprint,
+describeCandidate,
+leadingExactMatch,
+rankingIsDecisive,
+type DecisionCandidate,
+type DecisionStats,
+} from "./budget.js";
 import { imageRequestAvailable } from "./image-budget.js";
+import { decide } from "./index.js";
+import { decisionImageSchema,type DecisionResult } from "./provider.js";
+import { providerStatus } from "./settings.js";
 
 const pageSchema = z.object({
   query: z.string().min(1).max(500),
@@ -91,7 +91,7 @@ export async function decisionSearch(params: unknown, local: (input: Record<stri
   const visual = status.shareImages && !!capture;
   let viewport: number[] = [];
   try {
-    const value: unknown = JSON.parse(String((params as Record<string, unknown>)?.decisionState ?? "[]"));
+    const value: unknown = (JSON.parse(String((params as Record<string, unknown>)?.decisionState ?? "[]")) as unknown);
     if (Array.isArray(value) && typeof value[2] === "number" && typeof value[3] === "number") viewport = value;
   } catch { /* No verified viewport: skip the Jev image fallback. */ }
   const width = Number(viewport[2]), height = Number(viewport[3]);

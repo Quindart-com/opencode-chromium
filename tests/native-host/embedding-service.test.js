@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EmbeddingService } from "../../native-host/src/memory/embedding-service.ts";
-import { EmbedQueue } from "../../native-host/src/memory/embed.js";
+import { EmbedQueue } from "../../native-host/src/memory/embed.ts";
 
 test("embedding service serializes work and rejects malformed batches", async () => {
   let active = 0;

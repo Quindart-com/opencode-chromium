@@ -3,7 +3,7 @@
 // implementation lives in src/cli/native-host.js so the CLI can reuse it; this
 // stays as the documented `bun run install:native-host` entry point.
 
-import { installManifest, parseArgs } from "../src/cli/native-host.js";
+import { installManifest, parseArgs } from "../src/cli/native-host.ts";
 
 try {
   const result = installManifest(parseArgs(process.argv.slice(2)));

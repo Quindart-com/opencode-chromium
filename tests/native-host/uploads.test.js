@@ -3,9 +3,9 @@ import test from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createUploadFiles } from "../../native-host/src/uploads.js";
-import { RpcRelay } from "../../native-host/src/rpc-relay.js";
-import { FrameDecoder } from "../../native-host/src/framing.js";
+import { createUploadFiles } from "../../native-host/src/uploads.ts";
+import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
+import { FrameDecoder } from "../../native-host/src/framing.ts";
 
 test("approved snapshots preserve the exact bytes and file names; changed files fail closed", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "upload-files-test-"));
@@ -35,4 +35,13 @@ test("agent IPC cannot manufacture an upload snapshot or consume a consent reque
   assert.equal(invoked, false); assert.match(replies[0].error.message, /restricted to the extension/);
   await relay.handleClientMessage(socket, { id: 2, method: "executeCdp", params: { method: "DOM.setFileInputFiles", commandParams: { files: ["private.txt"] } } });
   assert.match(replies[1].error.message, /Reload the updated extension/);
+});
+
+test("input gestures cannot bypass upload confirmation on an older extension", async () => {
+  const replies = [];
+  const decoder = new FrameDecoder({ onMessage: message => replies.push(message) });
+  const socket = { write: (bytes, callback) => { decoder.push(bytes); callback?.(); return true; } };
+  const relay = new RpcRelay({ state: {}, extensionWriter: async () => assert.fail("must not relay an unconfirmed upload") });
+  await relay.handleClientMessage(socket, { id: 3, method: "inputGesture", params: { steps: [{ method: "Input.dispatchDragEvent", commandParams: { data: { files: ["private.txt"] } } }] } });
+  assert.match(replies[0].error.message, /Reload the updated extension/);
 });

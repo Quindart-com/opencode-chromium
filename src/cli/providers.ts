@@ -1,4 +1,4 @@
-import { configureProvider, providerStatus } from "../../native-host/src/decisions/settings.js";
+import { configureProvider,providerStatus } from "../../native-host/src/decisions/settings.js";
 
 export function runProviderCommand(argv: string[]) {
   if (argv[0] === "status" || argv.length === 0) return providerStatus();

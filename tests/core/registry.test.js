@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import { createCoreRegistry } from "../../src/core/registry.js";
-import { toolDefinitionsForDialect } from "../../src/core/schema-adapters.js";
+import { createCoreRegistry } from "../../src/core/registry.ts";
+import { toolDefinitionsForDialect } from "../../src/core/schema-adapters.ts";
 
 const runtime = {
   run() {}, observe() {}, session() {}, finalize() {},

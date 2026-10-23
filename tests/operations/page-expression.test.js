@@ -11,7 +11,7 @@ import {
   selectorEditableExpression,
   shapePageSearchRanking,
   visualMapExpression,
-} from "../../src/browser/operations/index.js";
+} from "../../src/browser/operations/index.ts";
 
 test("page search expression preserves whitespace regex escaping", () => {
   const expression = pageSearchUnitsExpression();

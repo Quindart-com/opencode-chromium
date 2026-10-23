@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { bridgedFrameTree } from "../../native-host/src/firefox/frames.js";
-import { FirefoxBackend } from "../../native-host/src/firefox/backend.js";
+import { bridgedFrameTree } from "../../native-host/src/firefox/frames.ts";
+import { FirefoxBackend } from "../../native-host/src/firefox/backend.ts";
 
 function frameFixture() {
   const documents = new Map();
@@ -24,7 +24,7 @@ function frameFixture() {
           setAttribute: (key, value) => attributes.set(key, value),
         } },
       });
-      return { result: { type: "string", value } };
+      return { type: "success", result: { type: "string", value } };
     },
   };
 }

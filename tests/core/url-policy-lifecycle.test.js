@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod";
-import { AgentBrowserRuntime } from "../../src/core/runtime.js";
+import { AgentBrowserRuntime } from "../../src/core/runtime.ts";
 
 test("redirect policy blocks subsequent reads and allows explicit recovery navigation", async () => {
   let url = "https://allowed.test", reads = 0;

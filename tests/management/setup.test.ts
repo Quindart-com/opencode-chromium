@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { parse as parseToml } from "smol-toml";
 import { manageSetup, formatSetupResult } from "../../src/management/setup.ts";
 import type { Harness } from "../../src/management/harnesses.ts";
-import { inspectHarnessSkills } from "../../src/cli/skills.js";
+import { inspectHarnessSkills } from "../../src/cli/skills.ts";
 import { managedConfiguration } from "../../src/management/configuration.ts";
 
 function fixture() {
@@ -151,7 +151,7 @@ test("setup help is noninteractive and never creates runtime or client files", (
   const f = fixture();
   try {
     const before = f.rows.map(row => fs.readFileSync(row.configPath, "utf8"));
-    const output = execFileSync(process.execPath, [path.join(process.cwd(), "src/cli/index.js"), "setup", "--help"], {
+    const output = execFileSync(process.execPath, [path.join(process.cwd(), "src/cli/index.ts"), "setup", "--help"], {
       encoding: "utf8", timeout: 15000, windowsHide: true,
       env: { ...process.env, OPENCODE_BROWSER_RUNTIME_DIR: f.dir, CODEX_HOME: path.join(f.home, ".codex") },
     });
