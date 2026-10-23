@@ -54,7 +54,7 @@ try {
   await backend.send("browsingContext.navigate", { context: website, url: origin + "/website", wait: "complete" });
   const marker = "a".repeat(32); await evaluate(website, `document.documentElement.setAttribute('data-opencode-bidi-bridge','${marker}')`); await backend.attach(1, marker);
   consent = createUploadConsent({ chrome: {
-    runtime: { id: "fixture-extension", getURL: page => origin + "/" + page }, storage: { local: { get: async () => ({}) } },
+    runtime: { id: "fixture-extension", getURL: page => new URL(page, origin + "/").href }, storage: { local: { get: async () => ({}) } },
     windows: { onRemoved: { addListener: callback => removed.push(callback) },
       create: async ({ url }) => { const context = (await backend.send("browsingContext.create", { type: "tab" })).context, windowId = ++id; windows.set(windowId, { id: windowId, context, token: new URL(url).searchParams.get("token") }); await backend.send("browsingContext.navigate", { context, url, wait: "complete" }); return { id: windowId, tabs: [{ id: windowId }] }; },
       remove: async windowId => { const window = windows.get(windowId); windows.delete(windowId); if (window) await backend.send("browsingContext.close", { context: window.context }).catch(() => {}); removed.forEach(callback => callback(windowId)); },
