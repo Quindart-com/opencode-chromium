@@ -74,7 +74,7 @@ jobs:
       - run: bun run build:extension:firefox
       - run: bun run check:firefox
       - run: bun test
-      - run: node --test tests/native-host/memory-reliability.test.js tests/native-host/memory-search.test.js tests/native-host/embedding-service.test.js tests/native-host/framing.test.js tests/core/reliability.test.js
+      - run: node --test tests/native-host/memory-reliability.test.js tests/native-host/memory-search.test.js tests/native-host/embedding-service.test.js tests/native-host/framing.test.js tests/core/reliability.test.js tests/native-host/runtime-updates.test.js
       - run: bun run check:package
       - run: bun run check:schemas
       - name: Cache Chromium headless shell

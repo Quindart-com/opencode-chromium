@@ -48,7 +48,7 @@ function Welcome() {
         <li><strong>Clearer setup.</strong> Connection guidance, a steadier panel layout and improved harness installation.</li>
         <li><strong>Safer sessions.</strong> Scoped downloads, URL policy checks and cleanup of browser overrides.</li>
       </ul>
-      <a className="text-link" href={`${repository}/blob/master/docs/releases/${version}.md`} target="_blank" rel="noreferrer">Read the release notes</a>
+      <a className="text-link" href={`https://quindart-com.github.io/opencode-chromium/updates/#v${version}`} target="_blank" rel="noreferrer">Read the release notes</a>
     </section> : <section aria-labelledby="setup-title">
       <h2 id="setup-title">Connect your coding agent</h2>
       <p>Run this in a terminal. Setup connects the supported harnesses it finds and registers the browser’s native host.</p>

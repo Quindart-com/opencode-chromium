@@ -3,6 +3,8 @@
 Browser automation for Chrome, Edge, Brave, Chromium, Firefox and LibreWolf
 through OpenCode, Codex and MCP clients.
 
+- What’s new: [Release notes](updates/)
+
 - Privacy Policy: [PRIVACY.html](PRIVACY.html)
 - Terms of Use: [TERMS.html](TERMS.html)
 - Get started: [README](https://github.com/Quindart-com/opencode-chromium#readme)

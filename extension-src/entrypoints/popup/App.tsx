@@ -8,6 +8,7 @@ import ProviderSettings from "./ProviderSettings";
 import DecisionOverview from "./DecisionOverview";
 import UploadSettings from "./UploadSettings";
 import ConnectionSummary from "./ConnectionSummary";
+import RuntimeUpdates from "./RuntimeUpdates";
 
 type ViewName = "overview" | "profiles" | "settings";
 
@@ -143,7 +144,7 @@ export default function App(): React.JSX.Element {
         {activeView === "profiles" && <ConnectionView status={nativeStatus} view="profiles" />}
       </div>
       <div className="view-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden={activeView !== "settings"}>
-        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><ConnectionView status={nativeStatus} view="settings" /></>}
+        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><RuntimeUpdates /><ConnectionView status={nativeStatus} view="settings" /></>}
       </div>
       <footer id="app-footer">
         <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">Setup guide</a>

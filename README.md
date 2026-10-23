@@ -187,6 +187,12 @@ Keep remote debugging bound to loopback; do not expose its port to your network.
 
 Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenRouter. Separately opt in to bounded screenshots for visual decisions. Jev's experimental image fallback runs only after an unsure text answer, with persistent request caps. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance, costs and limits](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
 
+## Updates
+
+Extension updates open [what’s new](https://quindart-com.github.io/opencode-chromium/updates/) once per version in a background tab. Turn this off in the extension’s setup guide.
+
+Published CLI installations set up with `setup --all` can keep their managed runtime aligned automatically. Updates wait for agent processes to exit, install into a separate versioned directory and leave running sessions alone. **Settings → Updates** shows progress and the automatic-update switch. Development checkouts and pinned commands stay manual. Existing installations need one run of `npx -y opencode-chromium@latest setup --all` to enable the new flow. CLI controls: `opencode-chromium updates status`, `updates on`, or `updates off`. Updates target the exact extension version; an npm release that is not available yet is retried after six hours. This updates the managed browser runtime, leaving global package-manager installations and explicit version pins unchanged.
+
 ## npm downloads
 
 <picture>

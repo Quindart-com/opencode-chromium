@@ -32,6 +32,7 @@ const versionStatus = { state: "connected", versionChecked: true, nativeHostVers
 let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUTER_API_KEY", shareText: true, shareImages: false, ready: true };
 if (storeFixture) decisionSettings = { ...decisionSettings, provider: "off", shareText: false, ready: false };
 let uploadSettings = { allowWithoutConfirmation: false };
+let runtimeUpdates = { supported: true, enabled: true, state: "waiting", targetVersion: "1.9.3", installedVersion: "1.9.2" };
 const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
@@ -43,6 +44,8 @@ const server = http.createServer(async (req, res) => {
       const message = JSON.parse(text);
       let result;
       if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
+      else if (message.type === "GET_RUNTIME_UPDATES") result = { result: runtimeUpdates };
+      else if (message.type === "SET_RUNTIME_UPDATES") { runtimeUpdates = { ...runtimeUpdates, enabled: message.enabled }; result = { result: runtimeUpdates }; }
       else if (message.type === "SET_UPLOAD_SETTINGS") { uploadSettings = { allowWithoutConfirmation: message.allowWithoutConfirmation === true }; result = { result: uploadSettings }; }
       else if (message.type === "MEMORY_CALL") {
         if (message.method === "memory.profiles") result = { currentProfileId: "primary", profiles: store.profiles.list().map((profile) => ({ ...profile, connected: true })) };
@@ -147,6 +150,13 @@ try {
   await page.selectOption("#connected-profile", "secondary");
   assert.equal(await page.locator("#connected-profile").inputValue(), "secondary");
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  const automaticUpdates = page.getByLabel("Keep local browser tools up to date", { exact: false });
+  await automaticUpdates.uncheck();
+  await page.getByText("Update preference saved.", { exact: true }).waitFor();
+  assert.equal(runtimeUpdates.enabled, false);
+  await automaticUpdates.check();
+  await page.getByText("Update preference saved.", { exact: true }).waitFor();
+  assert.equal(runtimeUpdates.enabled, true);
   const uploadPreference = page.getByRole("checkbox", { name: "Allow uploads without confirmation", exact: true });
   await uploadPreference.waitFor();
   await page.waitForFunction(() => !document.querySelector('.upload-preference input')?.disabled);

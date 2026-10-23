@@ -67,6 +67,8 @@ class NativeRpc {
     this.#handlers.set(method, handler);
   }
 
+  idle() { return this.#pending.size === 0; }
+
   connect() {
     if (this.#port) return;
 
@@ -335,6 +337,7 @@ function applyHostVersions(result) {
 }
 
 rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });
+rpc.register("runtime.canReconnect", async () => ({ idle: rpc.idle() && sessions.size === 0 && attachedTabs.size === 0 && tabLocks.size === 0 && traceBuffers.size === 0 }));
 
 async function updateVersionBadge() {
   const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
@@ -1357,6 +1360,12 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (["GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message?.type)) {
+    if (sender.tab || sender.id !== chrome.runtime.id) { sendResponse({ error: "Open update settings from the extension panel" }); return false; }
+    rpc.request(message.type === "GET_RUNTIME_UPDATES" ? "runtime.updateStatus" : "runtime.updateConfigure", { enabled: message.enabled })
+      .then(result => sendResponse({ result })).catch(() => sendResponse({ error: "Update settings unavailable. Update the local runtime once to enable automatic updates." }));
+    return true;
+  }
   if (["GET_UPLOAD_SETTINGS", "SET_UPLOAD_SETTINGS", "GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST"].includes(message?.type)) {
     uploadConsent.message(message, sender).then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));
     return true;

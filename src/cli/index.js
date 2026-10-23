@@ -11,6 +11,7 @@ import { packageRoot } from "./config.js";
 import { writeLaunchers } from "./runtime-link.js";
 import { BrowserHostClient } from "../browser/client.js";
 import { readProfileRegistrations } from "../../native-host/src/profile-registry.js";
+import { createRuntimeUpdater } from "../../native-host/src/runtime-updates.js";
 
 async function runtimeBusy() {
   const profiles = [...readProfileRegistrations(), ...["development", "production"].flatMap(channel =>
@@ -62,6 +63,12 @@ export function formatRuntimeStatus(status) {
 
 export async function main(argv = process.argv.slice(2)) {
   const [command = "doctor", ...rest] = argv;
+  if (command === "updates") {
+    const updater = createRuntimeUpdater({ dir: runtimeDir() });
+    if (![undefined, "status", "on", "off"].includes(rest[0])) throw new Error("Use updates status, updates on, or updates off");
+    console.log(JSON.stringify(["on", "off"].includes(rest[0]) ? await updater.configure(rest[0] === "on") : updater.status(), null, 2));
+    return;
+  }
   const activation = ["link", "sync"].includes(command) ? readActivation(runtimeDir()) : null;
   if (command === "link" && has(rest, "--follow-branch") || command === "sync" && activation?.followBranch) {
     const root = packageRoot();
@@ -78,7 +85,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === "firefox") { console.log(JSON.stringify(await runFirefoxCommand(rest), null, 2)); return; }
   if (["setup", "manage", "update"].includes(command) || command === "uninstall" && !has(rest, "--client")) {
     if (has(rest, "--help") || has(rest, "-h")) {
-      console.log("Connect your browser to agent apps:\n  opencode-chromium setup --all\n  opencode-chromium setup --targets codex,opencode\n  opencode-chromium setup --all --dry-run --json\n\nOptions:\n  --all           Connect all detected, supported apps\n  --targets       Choose apps: codex,opencode,claude-code,claude-desktop,dsh\n  --config        Override a file: harness-id=/absolute/path\n  --dry-run       Preview changes without writing files\n  --json          Print a machine-readable result\n  --production    Switch from a linked development runtime to this release\n  --restart       Gracefully restart selected desktop apps");
+      console.log("Connect your browser to agent apps:\n  opencode-chromium setup --all\n  opencode-chromium setup --targets codex,opencode\n  opencode-chromium setup --all --dry-run --json\n\nOptions:\n  --all           Connect all detected, supported apps\n  --targets       Choose apps: codex,opencode,claude-code,claude-desktop,dsh\n  --config        Override a file: harness-id=/absolute/path\n  --dry-run       Preview changes without writing files\n  --json          Print a machine-readable result\n  --production    Switch from a linked development runtime to this release\n  --restart       Gracefully restart selected desktop apps\n  --no-auto-update  Disable managed runtime updates\n  --auto-update     Enable managed runtime updates\n\nUpdate controls: opencode-chromium updates <status|on|off>");
       return;
     }
     const result = await manageSetup(rest, command === "uninstall");
@@ -133,7 +140,7 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "help" || command === "--help") {
-    console.log("Usage: opencode-chromium <setup|manage|update|link|status|sync|install|configure|uninstall|doctor|verify|mcp|version>\n\nGet started: opencode-chromium setup --all\nChoose an app: opencode-chromium setup --targets codex\nPreview changes: opencode-chromium setup --all --dry-run --json\nConnection checks: opencode-chromium doctor\nMore setup options: opencode-chromium setup --help");
+    console.log("Usage: opencode-chromium <setup|manage|update|updates|link|status|sync|install|configure|uninstall|doctor|verify|mcp|version>\n\nGet started: opencode-chromium setup --all\nChoose an app: opencode-chromium setup --targets codex\nPreview changes: opencode-chromium setup --all --dry-run --json\nConnection checks: opencode-chromium doctor\nMore setup options: opencode-chromium setup --help");
     return;
   }
   throw new Error(`Unknown command: ${command}`);

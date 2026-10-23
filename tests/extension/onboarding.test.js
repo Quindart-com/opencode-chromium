@@ -11,5 +11,6 @@ test("install guide opens once; updates respect opt-out and do not steal focus",
   await openInstallGuide(chrome, { reason: "update", previousVersion: "1.9.2" }); assert.equal(opened.length, 1);
   stored.showReleaseNotes = true;
   await openInstallGuide(chrome, { reason: "update", previousVersion: "1.9.2" }); assert.equal(opened.length, 2); assert.equal(opened[1].active, false);
+  assert.equal(opened[1].url, "https://quindart-com.github.io/opencode-chromium/updates/#v1.9.3");
   await openInstallGuide(chrome, { reason: "update", previousVersion: "1.9.3" }); assert.equal(opened.length, 2);
 });
