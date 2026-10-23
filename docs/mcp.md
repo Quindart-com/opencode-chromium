@@ -1,6 +1,6 @@
 # MCP integration
 
-The canonical MCP server is `opencode-browser-plugin` at `src/adapters/mcp/server.js`.
+The canonical MCP server is `opencode-browser-plugin` at `src/adapters/mcp/server.ts`.
 
 ```powershell
 bun run mcp

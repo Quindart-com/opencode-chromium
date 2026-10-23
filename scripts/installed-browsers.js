@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // List the Chromium-based browsers present on this machine. The inventory lives
-// in src/cli/browsers.js so the CLI and this script cannot disagree.
+// in src/cli/browsers.ts so the CLI and this script cannot disagree.
 
 import { describeInstalledBrowsers } from "../src/cli/browsers.ts";
 
