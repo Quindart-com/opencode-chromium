@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { EmbedQueue, MemoryStore, memoryReplayThreshold } from "../native-host/src/memory/index.js";
+import { EmbedQueue, MemoryStore, memoryReplayThreshold } from "../native-host/src/memory/index.ts";
 import { embedFixtureText } from "../tests/fixtures/memory-threshold-calibration.js";
 
 const HOSTNAME = "fixture.example";

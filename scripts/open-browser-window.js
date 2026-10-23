@@ -10,8 +10,8 @@ const ABOUT_BLANK_URL = "about:blank";
 const USER_DATA_ENV = "OPENCODE_BROWSER_USER_DATA_DIR";
 const PREFERENCES_ENV = "OPENCODE_BROWSER_PREFERENCES_PATH";
 
-import { BROWSERS, executableCandidates as browserExecutables, browserUserDataRoot } from "../src/cli/browsers.js";
-import { firefoxProfiles } from "../src/cli/firefox-profiles.js";
+import { BROWSERS, executableCandidates as browserExecutables, browserUserDataRoot } from "../src/cli/browsers.ts";
+import { firefoxProfiles } from "../src/cli/firefox-profiles.ts";
 
 function usage() {
   console.error("Usage: node scripts/open-browser-window.js [--browser chrome|edge|brave|chromium|firefox|librewolf] [--url <url>] [--dry-run] [--json]");

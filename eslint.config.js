@@ -1,12 +1,15 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-
 export default tseslint.config(
-  { ignores: ["node_modules/**", "dist/**", "native-host/dist/**", "extension/**", ".build/**", ".wxt/**"] },
+  { ignores: ["node_modules/**", "dist/**", "native-host/dist/**", "extension/**", "extension-firefox/**", ".build/**", ".wxt/**"] },
   {
-    files: ["src/management/**/*.ts", "src/cli/providers.ts", "native-host/src/decisions/**/*.ts", "extension-src/entrypoints/popup/ProviderSettings.tsx"],
+    files: ["src/**/*.ts", "native-host/src/**/*.ts", "extension-src/**/*.{ts,tsx}"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    languageOptions: { globals: { process: "readonly", Buffer: "readonly", fetch: "readonly", AbortSignal: "readonly", performance: "readonly" } },
-    rules: { "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }] },
+    rules: {
+      "no-undef": "off",
+      "no-empty": ["error", { allowEmptyCatch: true }],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+    },
   },
+  { files: ["native-host/src/host.js"], extends: [js.configs.recommended] },
 );

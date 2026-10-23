@@ -1,16 +1,18 @@
 {
   "entry": [
-    "src/cli/index.js",
-    "src/adapters/{sdk,opencode,mcp}/index.js",
-    "src/adapters/mcp/server.js",
-    "src/core/index.js",
-    "src/browser/operations/index.js",
-    "native-host/src/{host,runtime}.js",
-    "extension-src/entrypoints/background/index.js",
+    "src/cli/index.ts",
+    "src/adapters/{sdk,opencode,mcp}/index.ts",
+    "src/adapters/mcp/server.ts",
+    "src/core/index.ts",
+    "src/browser/operations/index.ts",
+    "native-host/src/host.js",
+    "native-host/src/runtime.ts",
+    "extension-src/entrypoints/background/index.ts",
     "extension-src/entrypoints/popup/main.tsx",
     "extension-src/entrypoints/upload-confirm/main.tsx",
-    "extension-src/public/content-scripts/cursor.js",
-    "extension-src/public/content-scripts/cursor-theme.js"
+    "extension-src/entrypoints/welcome/main.tsx",
+    "extension-src/entrypoints/cursor.ts",
+    "extension-src/entrypoints/cursor-theme.ts"
   ],
   "project": [
     "src/**/*.{js,ts}",

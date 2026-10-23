@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
-import { runFirefoxCommand, firefoxHealth } from "../../src/cli/firefox.js";
+import { runFirefoxCommand, firefoxHealth } from "../../src/cli/firefox.ts";
 
 test("Firefox setup verifies the registered browser and health distinguishes reachability from identity", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "firefox-cli-"));

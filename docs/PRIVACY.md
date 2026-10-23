@@ -1,6 +1,8 @@
 # Privacy Policy
 
-**Effective date:** October 13, 2026
+**Effective date:** October 23, 2026
+
+Extension updates can open the public release-notes page on GitHub Pages. This can be disabled in the setup guide. Published managed runtimes can download matching releases and dependencies from npm after agent processes exit; automatic updates can be disabled under Settings → Updates. These requests disclose normal connection information to the hosting service, but do not include browser content, profile identifiers or decision credentials.
 
 This privacy policy applies to the **OpenCode Browser Plugin** extensions for
 Chromium-based browsers (Chrome, Edge, Brave, Chromium) and Firefox-based browsers
@@ -14,10 +16,10 @@ Cloud decision assistance is off by default. The extension communicates with a
 local native host. If you explicitly enable a decision provider,
 the native host sends bounded search/replay intent and candidate descriptions to
 the service you selected. Page text may contain personal information.
-If you separately enable screenshot sharing for OpenAI Luna, an ambiguous visual
+If you separately enable screenshot sharing for Jev or OpenAI Luna, an ambiguous visual
 decision may also send one bounded, compressed screenshot of the controlled tab
-to OpenRouter. Screenshots may contain personal information. Screenshot sharing
-is off by default; Jev uses text only, and ordinary exact matches do not trigger
+to your selected service (OpenRouter or TypeSafe). Screenshots may contain personal information. Screenshot sharing
+is off by default; Jev uses images only after an unsure text decision, and ordinary exact matches do not trigger
 decision screenshots. You can turn off cloud assistance or screenshot sharing
 in Settings.
 
@@ -33,6 +35,11 @@ in Settings.
   call should use. You can clear it at any time from the extension popup.
 
 ## Content boundaries
+
+Snapshot and pixel-diff baselines are temporary local artifacts. When requested,
+their page text or images are delivered to your connected agent, whose model
+provider may receive that content. The setup guide is bundled locally; it has
+no analytics. Help and release-note links open GitHub only when you select them.
 
 - **Local extension communication.** The extension
   talks to a native messaging host installed on your computer over the
@@ -54,7 +61,11 @@ in Settings.
   read machine IDs, hostnames, usernames, MAC addresses, hardware serials, or
   install IDs, and never compute device fingerprints. The only persistent
   identifier is a random per-profile UUID generated locally for routing
-  requests to the browser profile you selected; it never leaves your device.
+  requests to the browser profile you selected. Profile IDs and labels can
+  appear in agent tool responses or copied profile selectors; your connected
+  agent or harness handles those responses under its own data policy. The
+  routing ID is not used as a device fingerprint or silently sent to a decision
+  provider as a device identifier.
   The extension popup shows this identifier **masked** by default (first and
   last four characters only); the full value is revealed or copied only through
   an explicit "Developer details" action. Cache locations are shown as "Local
@@ -62,6 +73,14 @@ in Settings.
   rendered. Behavioral privacy tests verify these
   guarantees, and store-listing images are generated from deterministic demo
   fixtures rather than live popups.
+- **Controlled download observations.** Bounded in-memory download events are
+  captured only when the browser attributes a download to a session's controlled
+  tab. Unrelated downloads are ignored, and sessions can read or clear only
+  their own events. Observed URLs omit credentials, query strings, and fragments;
+  filenames contain only the basename, without local directory paths. Download
+  observations are returned through agent tool calls and are not broadcast to
+  other connected clients. The extension does not request the browser's global
+  `downloads` permission.
 
 ## Action Memory
 
@@ -88,7 +107,7 @@ Memory dashboard (extension popup → Action Memory).
 The extension requests the permissions it needs to operate as a general-purpose
 automation bridge:
 
-- `tabs`, `tabGroups`, `history`, `downloads`, `storage`: read and manage the
+- `tabs`, `tabGroups`, `history`, `storage`: read and manage the
   parts of the browser you explicitly ask an agent to work with.
 - `scripting`, `<all_urls>`, `debugger`: inspect page structure, run input
   automation, and capture what the agent needs to see. Pages are only touched

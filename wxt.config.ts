@@ -10,7 +10,7 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: {
     name: "opencode-chromium",
-    description: "OpenCode browser automation. Readable extension, native messaging host, and OpenCode plugin for Chromium and Firefox.",
+    description: "Connect OpenCode, Codex and MCP agents to your browser for page search, forms, screenshots and local action memory.",
     action: {
       default_title: "opencode-chromium",
       default_icon: {
@@ -23,11 +23,10 @@ export default defineConfig({
     content_security_policy: {
       extension_pages: "script-src 'self'; object-src 'none'; connect-src 'self'; font-src 'self'",
     },
-    ...(firefox ? { browser_specific_settings: { gecko: { id: "opencode-browser-plugin@quindart.com", strict_min_version: "140.0", data_collection_permissions: { required: ["websiteContent", "browsingActivity"], optional: ["technicalAndInteraction"] } }, gecko_android: { strict_min_version: "142.0" } } } : {}),
+    ...(firefox ? { browser_specific_settings: { gecko: { id: "opencode-browser-plugin@quindart.com", strict_min_version: "140.0", data_collection_permissions: { required: ["websiteContent", "browsingActivity"], optional: ["technicalAndInteraction"] } } } } : {}),
     permissions: [
       "alarms",
       ...(firefox ? [] : ["debugger"]),
-      "downloads",
       "history",
       "nativeMessaging",
       "scripting",

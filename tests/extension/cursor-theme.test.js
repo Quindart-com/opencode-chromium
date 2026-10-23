@@ -8,7 +8,7 @@ import { test } from "node:test";
 // The cursor theme ships as a plain content script, so it is evaluated in a
 // bare context exactly the way chrome.scripting.executeScript would.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const source = readFileSync(path.join(root, "extension-src", "public", "content-scripts", "cursor-theme.js"), "utf8");
+const source = readFileSync(path.join(root, "extension", "cursor-theme.js"), "utf8");
 const context = vm.createContext({});
 vm.runInContext(source, context);
 const theme = context.__opencodeCursorTheme;

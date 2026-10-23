@@ -5,7 +5,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { activateChannel, branchChannel, readActivation } from "../../src/management/channels.ts";
-import { sourceFingerprint } from "../../src/cli/source-fingerprint.js";
+import { sourceFingerprint } from "../../src/cli/source-fingerprint.ts";
 
 function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "browser-channel-test-"));

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { FAILURE_MESSAGE_LIMIT, errorDetails, failureHint, shouldReobservePage } from "../../src/core/failure-context.js";
-import { createAgentBrowserRuntime, createCoreRegistry } from "../../src/core/index.js";
+import { FAILURE_MESSAGE_LIMIT, errorDetails, failureHint, shouldReobservePage } from "../../src/core/failure-context.ts";
+import { createAgentBrowserRuntime, createCoreRegistry } from "../../src/core/index.ts";
 
 // These cases all resolve without a browser: an invalid request is rejected
 // before any profile or tab is touched, so they hold on a machine with no

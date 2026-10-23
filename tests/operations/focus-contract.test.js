@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 const root = path.resolve(process.cwd());
-const operationsSource = fs.readFileSync(path.join(root, "src", "browser", "operations", "index.js"), "utf8");
+const operationsSource = fs.readFileSync(path.join(root, "src", "browser", "operations", "index.ts"), "utf8");
 
 test("ordinary pointer operations preserve Chromium page-local input through the backend", () => {
   assert.doesNotMatch(operationsSource, /async function dispatchMouse\(/);

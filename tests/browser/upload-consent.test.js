@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createUploadConsent } from "../../extension-src/entrypoints/background/upload-consent.js";
-import { guardedCdp } from "../../extension-src/entrypoints/background/upload-gate.js";
-import { createDebuggerAttacher } from "../../extension-src/entrypoints/background/debugger-attach.js";
+import { createUploadConsent } from "../../extension-src/entrypoints/background/upload-consent.ts";
+import { guardedCdp } from "../../extension-src/entrypoints/background/upload-gate.ts";
+import { createDebuggerAttacher } from "../../extension-src/entrypoints/background/debugger-attach.ts";
 
 function fixture(timeoutMs = 1000) {
   const settings = {}; let removed, navigated; const calls = [];
-  const chrome = { runtime: { id: "extension", getURL: page => `chrome-extension://extension/${page}` }, storage: { local: {
+  const chrome = { runtime: { id: "extension", getURL: page => new URL(page, "chrome-extension://extension/").href }, storage: { local: {
     get: async () => settings, set: async value => Object.assign(settings, value),
   } }, tabs: { onUpdated: { addListener: listener => { navigated = listener; } } }, windows: { onRemoved: { addListener: listener => { removed = listener; } },
     create: async () => ({ id: 7, tabs: [{ id: 9 }] }), remove: async id => { calls.push(["close", id]); },

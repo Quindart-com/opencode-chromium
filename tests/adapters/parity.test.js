@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createBrowserAgent } from "../../src/adapters/sdk/index.js";
-import { openAITools } from "../../src/adapters/sdk/openai.js";
-import { anthropicTools } from "../../src/adapters/sdk/anthropic.js";
-import { geminiTools } from "../../src/adapters/sdk/gemini.js";
-import { mcpTools } from "../../src/adapters/sdk/mcp.js";
-import plugin, { createOpenCodeSetup } from "../../src/adapters/opencode/index.js";
-import { SERVER_NAME, SERVER_INSTRUCTIONS, parseArgs } from "../../src/adapters/mcp/server.js";
+import { createBrowserAgent } from "../../src/adapters/sdk/index.ts";
+import { openAITools } from "../../src/adapters/sdk/openai.ts";
+import { anthropicTools } from "../../src/adapters/sdk/anthropic.ts";
+import { geminiTools } from "../../src/adapters/sdk/gemini.ts";
+import { mcpTools } from "../../src/adapters/sdk/mcp.ts";
+import plugin, { createOpenCodeSetup } from "../../src/adapters/opencode/index.ts";
+import { SERVER_NAME, SERVER_INSTRUCTIONS, parseArgs } from "../../src/adapters/mcp/server.ts";
 
 // Adapter surface tests must not depend on the host machine's action-memory state.
 process.env.OPENCODE_BROWSER_MEMORY = "0";

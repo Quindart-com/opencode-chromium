@@ -5,20 +5,36 @@
 Install the plugin from this repository's marketplace:
 
 ```sh
-codex plugin marketplace add Quindart-com/opencode-chromium --ref master
+codex plugin marketplace add Quindart-com/opencode-chromium --ref master --sparse .codex-plugin --sparse .agents/plugins --sparse skills --sparse docs --sparse assets
 codex plugin add opencode-browser-plugin@quindart-browser
 ```
 
 The native manifest at `.codex-plugin/plugin.json` bundles the browser skill
 and `.mcp.json`. The MCP configuration runs the published `opencode-chromium`
-runtime through `npx`; Node.js 20 or later is required. Install the browser
-extension and register its native host with `npx -y opencode-chromium@latest setup`
+runtime through `npx`; Node.js 20 or later is required. Sparse checkout includes
+the plugin resources and documentation without fetching the development source
+directories. Install the browser
+extension and register its native host with `npx -y opencode-chromium@latest setup --targets codex`
 before controlling a browser. See [Firefox setup](firefox.md) for Firefox profiles.
 
 If you already registered the same MCP server manually, remove that registration
 with `codex mcp remove opencode-browser-plugin` before enabling the native plugin
-to avoid duplicate tools. Choose either native plugin installation or manual MCP
-registration below.
+to avoid duplicate tools. Setup recognizes an enabled native plugin, removes a
+duplicate manual browser MCP registration, and does not copy a second browser
+skill. Choose either native plugin installation or manual MCP registration below.
+
+## One-command setup
+
+For a Codex MCP connection and browser skill without marketplace installation:
+
+```sh
+npx -y opencode-chromium@latest setup --targets codex
+```
+
+Setup registers the native messaging host for installed browsers, preserves other
+servers and settings, and keeps backups of changed files. Reconnect MCP or reopen
+Codex afterward. Preview the changes with `--dry-run --json`; use `setup --all`
+instead to connect every detected, supported agent app.
 
 ## Manual MCP registration
 

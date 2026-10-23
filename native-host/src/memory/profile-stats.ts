@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { integerField, type Database, type SqlValue } from "./database.ts";
+import { integerField,type Database,type SqlValue } from "./database.ts";
 
 const scopeSchema = z.object({
   profileIds: z.array(z.string().min(1).max(160)).max(50).nullable().optional(),

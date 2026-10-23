@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EventEmitter } from "node:events";
 import { versionNotice, validVersion } from "../../extension-src/version-status.ts";
-import { RpcRelay } from "../../native-host/src/rpc-relay.js";
+import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
 
 const connected = { state: "connected", versionChecked: true, nativeHostVersion: "1.7.1", clientVersions: ["1.7.1"] };
 

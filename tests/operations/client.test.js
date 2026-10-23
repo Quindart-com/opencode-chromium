@@ -4,9 +4,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { BrowserHostRpcError, browserRequest, chooseBrowserProfile, closeBrowserClients, listBrowserProfiles, validateJsonRpcResponse } from "../../src/browser/client.js";
-import { FrameDecoder, writeFrame } from "../../native-host/src/framing.js";
-import { writeProfileRegistration } from "../../native-host/src/profile-registry.js";
+import { BrowserHostRpcError, browserRequest, chooseBrowserProfile, closeBrowserClients, listBrowserProfiles, validateJsonRpcResponse } from "../../src/browser/client.ts";
+import { FrameDecoder, writeFrame } from "../../native-host/src/framing.ts";
+import { writeProfileRegistration } from "../../native-host/src/profile-registry.ts";
 
 test("validates successful JSON-RPC responses", () => {
   const result = validateJsonRpcResponse({ jsonrpc: "2.0", id: 1, result: { ok: true } }, 1, "ping");

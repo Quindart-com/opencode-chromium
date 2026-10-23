@@ -17,7 +17,7 @@ export default function ProviderSettings() {
   const [test, setTest] = useState<TestResult | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const enabled = settings.provider !== "off";
-  const luna = settings.provider === "openai-decisions";
+  const jev = settings.provider === "jev";
   useEffect(() => {
     let disposed = false;
     void sendMessage<{ result?: DecisionSettings; error?: string }>({ type: "GET_DECISION_SETTINGS" }).then(response => {
@@ -43,7 +43,7 @@ export default function ProviderSettings() {
   async function save() {
     setBusy(true); setError(false); setMessage(""); setTest(null);
     try {
-      const next = { ...settings, shareText: enabled, shareImages: luna && settings.shareImages };
+      const next = { ...settings, shareText: enabled, shareImages: enabled && settings.shareImages };
       if (enabled) {
         const response = await sendMessage<{ result?: TestResult }>({ type: "TEST_DECISION_CONNECTION", settings: next, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) });
         if (!response.result) throw new Error("Could not connect to the native host. Reconnect and try again.");
@@ -94,7 +94,7 @@ export default function ProviderSettings() {
           <p id="decision-key-help">Saved privately by the native host. Never stored in browser storage or returned to your agent.</p>
         </div>
         <p className="provider-consent">Enabling assistance sends bounded search or replay intent and candidate descriptions to {settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. Your agent remains in control of actions.</p>
-        {luna && <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>Allow screenshots for ambiguous visual targets<small className="help-note">Off by default. One bounded screenshot may be sent to OpenRouter when local search is ambiguous.</small></span></label>}
+        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>{jev ? "Allow experimental image fallback" : "Allow screenshots for ambiguous visual targets"}<small className="help-note">Off by default. {jev ? "Only after an unsure text decision: one small screenshot may be sent to " : "One bounded screenshot may be sent to "}{settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. At most one image request per UTC minute and 20 per UTC day across profiles. Image tokens cost extra; token counts depend on the image.</small></span></label>
         <details className="provider-advanced">
           <summary>Advanced · Environment variable</summary>
           <div className="provider-field">

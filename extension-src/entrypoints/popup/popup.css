@@ -38,12 +38,6 @@
 }
 
 /* Shared compact operating panel, including extension-page dialogs. */
-body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { padding: 20px; }
-#app-header { gap: 12px; padding-bottom: 18px; }
-#app-logo { width: 36px; height: 36px; }
-#app-identity h1 { font-size: 17px; line-height: 1.3; letter-spacing: -0.02em; }
-#app-subtitle { margin-top: 4px; }
 .decision-model { font-size: 20px; line-height: 1.3; font-weight: 650; margin: 18px 0 4px; }
 .usage-details { margin-top: 18px; border-top: 1px solid var(--surface-border); padding-top: 14px; }
 .usage-details > summary, .settings-advanced > summary { cursor: pointer; font-weight: 600; color: var(--text); min-height: 24px; }
@@ -58,7 +52,7 @@ input { caret-color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 summary:hover { color: var(--accent); }
 .decision-usage dd { font-variant-numeric: tabular-nums; }
-html { scrollbar-color: var(--surface-border-strong) var(--bg); scrollbar-width: thin; }
+html { scrollbar-color: var(--surface-border-strong) var(--bg); scrollbar-width: thin; scrollbar-gutter: stable; }
 a { text-underline-offset: 3px; }
 @media (prefers-reduced-motion: no-preference) { button { transition: background-color 120ms ease-out; } }
 
@@ -139,11 +133,11 @@ body.upload-confirm-page { width: auto; min-width: 300px; }
 }
 
 body {
-  width: 380px;
-  min-width: 340px;
-  max-width: 100vw;
+  width: 420px;
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
-  overflow-x: hidden;
+  overflow-x: clip;
   color: var(--text);
   background: var(--bg);
   font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -153,20 +147,22 @@ body {
 
 main {
   width: 100%;
-  padding: 14px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 #app-header {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 2px 2px 3px;
+  gap: 12px;
+  padding: 0 0 4px;
 }
 
 #app-logo {
+  width: 36px;
+  height: 36px;
   border-radius: 12px;
   flex: 0 0 auto;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), var(--shadow);
@@ -180,14 +176,14 @@ main {
 h1 {
   margin: 0;
   color: var(--text);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 750;
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 #app-subtitle {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 11.5px;
 }
@@ -1213,3 +1209,61 @@ body { scrollbar-color: var(--surface-border-strong) var(--bg); scrollbar-width:
 .view-panel { display: flex; flex-direction: column; gap: 12px; }
 .view-panel[hidden] { display: none; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible, .view-tab:focus-visible, .button:focus-visible, .quota-slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* All views use the same content measure, including when a scrollbar appears. */
+main > *, .view-panel > *, .view > * { min-width: 0; max-width: 100%; }
+#app-identity h1 { text-wrap: balance; }
+#app-subtitle { font-size: 11px; }
+.view-tabs { border: 0; padding: 4px; background: var(--button-bg); }
+.view-tab { min-height: 38px; }
+.view-tab.active { border-color: var(--surface-border-strong); background: var(--surface); box-shadow: none; }
+.view-panel, .view { gap: 16px; }
+.card, .provider-settings, .decision-overview { padding: 18px; }
+.card h2, .provider-settings h2, .decision-overview h2 { font-size: 15px; font-weight: 650; }
+.decision-model { margin: 14px 0 4px; color: var(--text); font-size: 21px; }
+.usage-details { margin-top: 14px; padding-top: 12px; }
+.usage-details > summary { font-size: 12px; color: var(--text-muted); }
+.decision-overview-heading { gap: 10px; }
+.decision-usage > div { align-items: baseline; }
+.decision-usage dd { overflow-wrap: anywhere; }
+.memory-state-line { line-height: 1.5; }
+.memory-usage { display: block; }
+.connection-summary { padding: 16px 18px; border-radius: 12px; background: var(--warn-soft); color: var(--text); }
+.connection-summary.is-connected { background: var(--accent-soft); }
+.connection-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.connection-summary h2 { margin: 0; font-size: 15px; font-weight: 650; }
+.connection-summary p { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+.connection-summary .current-profile { margin-top: 12px; color: var(--text); overflow-wrap: anywhere; }
+.setup-command { display: block; margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--surface); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; user-select: all; }
+.setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.setup-actions a { color: var(--text); font-size: 12px; }
+.setup-feedback:empty { display: none; }
+.connection-diagnostics { margin-top: 12px; font-size: 12px; }
+.connection-diagnostics summary { cursor: pointer; }
+.connection-diagnostics p { overflow-wrap: anywhere; }
+.connection-details > summary { cursor: pointer; color: var(--text-muted); }
+.connection-details > summary h2 { display: inline; }
+.connection-details[open] > summary { margin-bottom: 14px; }
+.memory-settings-details > summary { cursor: pointer; font-weight: 600; }
+.memory-settings-details[open] > summary { margin-bottom: 16px; }
+.provider-intro { margin-bottom: 16px; }
+.provider-field input, .provider-field select, .input-row input { min-width: 0; }
+input, select, .button, button { max-width: 100%; }
+.input-row, .profile-id-row, .quota-head, .memory-head, .semantic-toggle-row { flex-wrap: wrap; }
+.mono-value, .model-desc, .model-meta, .help-note, .feedback, .provider-feedback { overflow-wrap: anywhere; }
+.connection-summary .button-mini { background: transparent; border-color: var(--accent-border); }
+.checkbox-row { align-items: flex-start; }
+.checkbox-row input { margin-top: 2px; }
+.feedback:empty { display: none; }
+.search-settings > summary h2 { font-size: 14px; }
+.quota-scale { font-variant-numeric: tabular-nums; }
+#app-footer { margin-top: 0; padding: 4px 0; }
+@media (max-width: 360px) {
+  main { padding: 16px; gap: 12px; }
+  #app-header { flex-wrap: wrap; }
+  #app-identity { flex: 1 1 180px; }
+  #status-pill { margin-left: 48px; }
+  .card, .provider-settings, .decision-overview, .connection-summary { padding: 16px; }
+  .view-tab { padding-inline: 6px; }
+  .decision-overview-heading { flex-wrap: wrap; }
+}
