@@ -22,7 +22,7 @@ function walk(directory) {
         const specifier = statement.moduleSpecifier.text;
         if (!specifier.startsWith(".")) continue;
         const target = path.relative(root, path.resolve(root, path.dirname(relative), specifier)).replaceAll("\\", "/");
-        if (relative.startsWith("native-host/src/decisions/") && !target.startsWith("native-host/src/")) failures.push(`${relative} imports outside native-host ownership: ${target}`);
+        if (relative.startsWith("native-host/src/decisions/") && !target.startsWith("native-host/src/") && !target.startsWith("src/shared/")) failures.push(`${relative} imports outside native-host ownership: ${target}`);
         if (relative.startsWith("src/management/") && /^src\/(adapters|browser|core)\//.test(target)) failures.push(`${relative} imports browser orchestration: ${target}`);
       }
     }

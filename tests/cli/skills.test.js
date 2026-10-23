@@ -13,7 +13,7 @@ import {
   skillTargets,
   uninstallSkills,
   upsertCodexSkillConfig,
-} from "../../src/cli/skills.js";
+} from "../../src/cli/skills.ts";
 
 test("canonical skill conforms to the agent-skills spec", () => {
   const source = skillSourceDirectory();

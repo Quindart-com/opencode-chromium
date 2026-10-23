@@ -6,7 +6,7 @@ import test from "node:test";
 const root = path.resolve(process.cwd());
 
 test("memory tools are registered only when the memory flag is on", async () => {
-  const { createMemoryRegistry, createCoreRegistry } = await import("../../src/core/registry.js");
+  const { createMemoryRegistry, createCoreRegistry } = await import("../../src/core/registry.ts");
   const core = createCoreRegistry({});
   assert.equal("memory_status" in core, false);
   assert.equal("memory_search" in core, false);
@@ -19,7 +19,7 @@ test("memory tools are registered only when the memory flag is on", async () => 
 });
 
 test("memory tools expose inspection-ready schemas", async () => {
-  const { createMemoryRegistry } = await import("../../src/core/registry.js");
+  const { createMemoryRegistry } = await import("../../src/core/registry.ts");
   const memory = createMemoryRegistry({});
   const schema = memory.memory_search.inputSchema.shape;
   assert.equal(schema.query.minLength ?? 1, 1);
@@ -34,7 +34,7 @@ test("memory tools expose inspection-ready schemas", async () => {
 });
 
 test("MCP and OpenCode adapters gate memory tools by the environment", async () => {
-  const { memoryEnabledForServer } = await import("../../src/memory/index.js");
+  const { memoryEnabledForServer } = await import("../../src/memory/index.ts");
   const previous = process.env.OPENCODE_BROWSER_MEMORY;
   process.env.OPENCODE_BROWSER_MEMORY = "0";
   assert.equal(memoryEnabledForServer(), false);
@@ -45,9 +45,9 @@ test("MCP and OpenCode adapters gate memory tools by the environment", async () 
 });
 
 test("CLI recognizes memory and history aliases", async () => {
-  const source = fs.readFileSync(path.join(root, "src", "cli", "index.js"), "utf8");
+  const source = fs.readFileSync(path.join(root, "src", "cli", "commands.ts"), "utf8");
   assert.match(source, /command === "memory" \|\| command === "history"/);
-  const cli = fs.readFileSync(path.join(root, "src", "cli", "memory.js"), "utf8");
+  const cli = fs.readFileSync(path.join(root, "src", "cli", "memory.ts"), "utf8");
   assert.match(cli, /case "search"/);
   assert.match(cli, /case "prune"/);
   assert.match(cli, /case "chains"/);
@@ -84,16 +84,16 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
   assert.match(popupSource, /memory\.configure/);
   assert.match(popupSource, /memory\.prune/);
   assert.doesNotMatch(popupSource, /memory\.(?:export|import)|Export JSON|Import JSON|Share memory/);
-  const background = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "background", "runtime.js"), "utf8");
+  const background = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "background", "runtime.ts"), "utf8");
   assert.match(background, /"MEMORY_CALL"/);
   assert.match(background, /POPUP_MEMORY_METHODS/);
   assert.match(background, /rpc\.request\(message\.method/);
   assert.doesNotMatch(background, /memory\.(?:export|import)/);
   const backgroundEntrypoint = fs.readFileSync(
-    path.join(root, "extension-src", "entrypoints", "background", "index.js"),
+    path.join(root, "extension-src", "entrypoints", "background", "index.ts"),
     "utf8",
   );
-  assert.match(backgroundEntrypoint, /import ["']\.\/runtime\.js["']/);
+  assert.match(backgroundEntrypoint, /import ["']\.\/runtime\.ts["']/);
   assert.doesNotMatch(backgroundEntrypoint, /import\(["']\.\/runtime\.js/);
   const runtimeChunk = fs.readdirSync(path.join(root, "extension", "chunks")).find((file) => /^runtime-.+\.js$/.test(file));
   const builtBackground = fs.readFileSync(
@@ -107,19 +107,19 @@ test("extension surfaces memory settings and dashboard inside the popup", () => 
 });
 
 test("host handles memory extension methods locally", async () => {
-    const host = fs.readFileSync(path.join(root, "native-host", "src", "runtime.js"), "utf8");
+    const host = fs.readFileSync(path.join(root, "native-host", "src", "runtime.ts"), "utf8");
   assert.match(host, /memory\.stats/);
   assert.match(host, /memory\.configure/);
   assert.match(host, /memory\.enable/);
   assert.match(host, /memory\.prune/);
   assert.match(host, /memory\.query/);
   assert.doesNotMatch(host, /memory\.(?:export|import)/);
-  const relay = fs.readFileSync(path.join(root, "native-host", "src", "rpc-relay.js"), "utf8");
+  const relay = fs.readFileSync(path.join(root, "native-host", "src", "rpc-relay.ts"), "utf8");
   assert.doesNotMatch(relay, /startAgentRequest|noteResponse|completeAgentRequest/);
 });
 
 test("runtime records only high-level steps through the host boundary", () => {
-  const runtime = fs.readFileSync(path.join(root, "src", "core", "runtime.js"), "utf8");
+  const runtime = fs.readFileSync(path.join(root, "src", "core", "runtime.ts"), "utf8");
   assert.match(runtime, /requestHost\("memory\.recordStep"/);
   assert.doesNotMatch(runtime, /memory_chain_id|memory_step_index|memory_label/);
   assert.match(runtime, /memoryChainSequence\+\+/);

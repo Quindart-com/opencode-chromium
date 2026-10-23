@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { handleSemanticHostMethod, rankPageUnits } from "../native-host/src/semantic-search.js";
+import { handleSemanticHostMethod, rankPageUnits } from "../native-host/src/semantic-search.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = JSON.parse(fs.readFileSync(path.join(root, "tests", "fixtures", "page-units-anonymized.json"), "utf8"));

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { updateSessionPolicy, assertSessionUrl, installNavigationPolicy } from "../../extension-src/entrypoints/background/navigation-policy.js";
+import { updateSessionPolicy, assertSessionUrl, installNavigationPolicy } from "../../extension-src/entrypoints/background/navigation-policy.ts";
 test("session policy survives configuration updates and permits a safe blank tab", () => {
   const session = {};
   updateSessionPolicy(session, { url_policy: { allowedOrigins: ["https://*.example.com"], blockedOrigins: ["private.example.com"] } });

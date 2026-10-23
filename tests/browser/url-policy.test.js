@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assertNavigationAllowed, createUrlPolicy, urlPolicyFromEnv } from "../../src/browser/url-policy.js";
+import { assertNavigationAllowed, createUrlPolicy, urlPolicyFromEnv } from "../../src/browser/url-policy.ts";
 
 test("blocked origins are rejected with a typed non-retryable error", () => {
   const policy = createUrlPolicy({ blockedOrigins: ["https://bank.example.com"] });

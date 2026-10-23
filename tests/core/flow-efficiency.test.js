@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCoreRegistry } from "../../src/core/registry.js";
+import { createCoreRegistry } from "../../src/core/registry.ts";
 
 const runtime = { run() {}, observe() {}, session() {}, finalize() {} };
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import fs from "node:fs";
 import os from "node:os";
-import { FrameDecoder, encodeFrame } from "../../native-host/src/framing.js";
+import { FrameDecoder, encodeFrame } from "../../native-host/src/framing.ts";
 
 function startHost(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "host-version-test-"));

@@ -5,11 +5,11 @@ import path from "node:path";
 import http from "node:http";
 import { chromium } from "playwright";
 import { z } from "zod";
-import { AgentBrowserRuntime } from "../src/core/runtime.js";
-import { ArtifactStore } from "../src/core/artifacts.js";
-import { createDiscoveryOperations } from "../src/browser/discovery.js";
-import { domSnapshotExpression, pageSearchUnitsExpression } from "../src/browser/operations/snapshot-expressions.js";
-import { visualMapExpression, pageInspectExpression } from "../src/browser/operations/inspection-expressions.js";
+import { AgentBrowserRuntime } from "../src/core/runtime.ts";
+import { ArtifactStore } from "../src/core/artifacts.ts";
+import { createDiscoveryOperations } from "../src/browser/discovery.ts";
+import { domSnapshotExpression, pageSearchUnitsExpression } from "../src/browser/operations/snapshot-expressions.ts";
+import { visualMapExpression, pageInspectExpression } from "../src/browser/operations/inspection-expressions.ts";
 
 const child = http.createServer((request, response) => {
   response.setHeader("Content-Type", "text/html");

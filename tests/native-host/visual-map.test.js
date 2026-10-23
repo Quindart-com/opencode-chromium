@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { handleVisualHostMethod, setVisualSettings, visualDataDir } from "../../native-host/src/visual-map.js";
+import { handleVisualHostMethod, setVisualSettings, visualDataDir } from "../../native-host/src/visual-map.ts";
 
 test("persists visual settings in configured local directory", () => {
   const previous = process.env.OPENCODE_BROWSER_VISUAL_DIR;

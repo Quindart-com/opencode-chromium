@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compactConsoleEvents } from "../../src/browser/operations/index.js";
-import { SourceMapResolver } from "../../native-host/src/source-maps.js";
+import { compactConsoleEvents } from "../../src/browser/operations/index.ts";
+import { SourceMapResolver } from "../../native-host/src/source-maps.ts";
 
 function consoleEvents() {
   return {

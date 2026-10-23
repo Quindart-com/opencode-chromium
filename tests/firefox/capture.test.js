@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { registerDecisionImageCapture } from '../../extension-src/entrypoints/background/firefox-bridge.js';
+import { registerDecisionImageCapture } from '../../extension-src/entrypoints/background/firefox-bridge.ts';
 function fixture({ changedBefore=false, changedAfter=false, revoke=false, images=true, oversized=false, provider='openai-decisions', payload='YQ==' }={}) {
   let handler, captures=0, evaluations=0, statuses=0;
   registerDecisionImageCapture({rpc:{register(_name, fn){handler=fn},async request(){statuses++;return{ready:true,provider,shareImages:images&&!(revoke&&statuses>1)}}},tabIdFromParams:p=>p.tabId,ensureControlledTab(p){if(p.sessionId!=='owned')throw Error('Unowned tab')},getTab:async()=>({url:'https://fixture.test/'}),isBrowserInternalUrl:()=>false,attachTab:async()=>{},requiredSessionId:p=>p.sessionId,sendCdpCommand:async(_tab,method)=>{if(method==='Runtime.evaluate'){evaluations++;return{result:{value:changedBefore||changedAfter&&evaluations>1?'changed':'same-document-state'}};}captures++;return{data:oversized?'a'.repeat(400001):payload};}});

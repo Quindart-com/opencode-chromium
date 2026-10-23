@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
-import { configPath } from "../src/cli/config.js";
-import { createBrowserAgent } from "../src/adapters/sdk/index.js";
-import { packageInfo } from "../src/cli/version.js";
+import { configPath } from "../src/cli/config.ts";
+import { createBrowserAgent } from "../src/adapters/sdk/index.ts";
+import { packageInfo } from "../src/cli/version.ts";
 
 export function localClientReport() {
   const agent = createBrowserAgent();

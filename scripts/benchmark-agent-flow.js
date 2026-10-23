@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { createAgentBrowserRuntime, createCoreRegistry } from "../src/core/index.js";
+import { createAgentBrowserRuntime, createCoreRegistry } from "../src/core/index.ts";
 
 // Browser-operation latency smoke test with deterministic final-state checks.
 // Fixed selectors choose actions; this does not measure agent task accuracy.

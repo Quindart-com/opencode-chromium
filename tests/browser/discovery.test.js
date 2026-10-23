@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { boundedFrameTree, webMcpDiscoveryExpression, createDiscoveryOperations } from "../../src/browser/discovery.js";
-import { createUrlPolicy } from "../../src/browser/url-policy.js";
+import { boundedFrameTree, webMcpDiscoveryExpression, createDiscoveryOperations } from "../../src/browser/discovery.ts";
+import { createUrlPolicy } from "../../src/browser/url-policy.ts";
 const frame = (id, children = []) => ({ frame: { id, url: "https://example.com" }, childFrames: children });
 test("frame traversal caps breadth and depth and identifies parents", () => {
   const tree = frame("root", [frame("child", [frame("nested")]), ...Array.from({ length: 100 }, (_, i) => frame(`f${i}`))]);

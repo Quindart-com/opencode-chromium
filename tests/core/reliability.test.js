@@ -3,9 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { AgentBrowserRuntime } from "../../src/core/runtime.js";
-import { targetSchema } from "../../src/core/registry.js";
-import { MemoryStore } from "../../native-host/src/memory/store.js";
+import { AgentBrowserRuntime } from "../../src/core/runtime.ts";
+import { targetSchema } from "../../src/core/registry.ts";
+import { MemoryStore } from "../../native-host/src/memory/store.ts";
 
 function fixture(t, steps) {
   const runtime = new AgentBrowserRuntime({

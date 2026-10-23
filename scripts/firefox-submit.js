@@ -18,6 +18,8 @@ const collect = (dir, prefix) => { for (const e of fs.readdirSync(dir, { withFil
   if (e.isDirectory()) collect(absolute, relative); else zip.addFile(absolute, relative, archiveOptions);
 } };
 collect(path.join(root, "extension-src"), "extension-src");
+collect(path.join(root, "src/shared"), "src/shared");
+zip.addFile(path.join(root, "src/browser/url-policy.ts"), "src/browser/url-policy.ts", archiveOptions);
 for (const name of ["package.json", "bun.lock", "wxt.config.ts", "tsconfig.json", "LICENSE"]) zip.addFile(path.join(root, name), name, archiveOptions);
 zip.addBuffer(Buffer.from(`Firefox source build — OpenCode Browser Plugin ${version}\n\nPrerequisites: Bun 1.3.6 and Node.js 22. Extract this source archive into an empty directory.\n\n1. bun install --frozen-lockfile --ignore-scripts\n2. bunx wxt build -b firefox --mv3\n\nThe complete unpacked Firefox add-on is written to extension-firefox/.\nNo environment variables, credentials, network services, or private source are required for the build.\nThe lockfile pins dependencies. WXT compiles the included TypeScript/React sources and static assets.\n`), "BUILD.txt", archiveOptions);
 await new Promise((resolve, reject) => { const stream = fs.createWriteStream(sourceFile); stream.on("error", reject).on("close", resolve); zip.outputStream.on("error", reject).pipe(stream); zip.end(); });

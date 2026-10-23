@@ -8,8 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { browserIds, installedBrowsers, nativeMessagingDir, windowsRegistryKey } from "../src/cli/browsers.js";
-import { HOST_NAME, originIds, readRegistration, runtimeDir } from "../src/cli/native-host.js";
+import { browserIds, installedBrowsers, nativeMessagingDir, windowsRegistryKey } from "../src/cli/browsers.ts";
+import { HOST_NAME, originIds, readRegistration, runtimeDir } from "../src/cli/native-host.ts";
 
 const EXTENSION_ID_ENV = "OPENCODE_BROWSER_EXTENSION_ID";
 const MANIFEST_PATH_ENV = "OPENCODE_BROWSER_NATIVE_HOST_MANIFEST_PATH";

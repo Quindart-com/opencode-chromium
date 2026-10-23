@@ -1,9 +1,10 @@
+import { applyEdits,modify,parse,type ParseError } from "jsonc-parser";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
-import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
-import { planDeepSeek, deepSeekManaged } from "./deepseek.js";
+import { fileURLToPath,pathToFileURL } from "node:url";
+import { parse as parseToml,stringify as stringifyToml } from "smol-toml";
+import { record } from "../shared/values.ts";
+import { deepSeekManaged,planDeepSeek } from "./deepseek.js";
 
 export const SERVER_ID = "opencode-browser-plugin";
 export type HarnessId = "codex" | "opencode" | "opencode-mcp" | "claude-code" | "claude-desktop" | "dsh";
@@ -28,7 +29,7 @@ function ownPlugin(entry: unknown, expected: string): boolean {
   try { if (raw.startsWith("file:")) resolved = fileURLToPath(raw); } catch { return false; }
   if (expected && path.resolve(resolved) === path.resolve(expected)) return true;
   try {
-    return JSON.parse(fs.readFileSync(path.join(resolved, "package.json"), "utf8")).name === "opencode-chromium";
+    return record(JSON.parse(fs.readFileSync(path.join(resolved, "package.json"), "utf8")) as unknown).name === "opencode-chromium";
   } catch { return false; }
 }
 function jsonConfig(before: string): ObjectValue {

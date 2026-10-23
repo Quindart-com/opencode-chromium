@@ -1,10 +1,18 @@
 {
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": false,
+    "allowJs": false,
     "jsx": "react-jsx",
-    "noEmit": true
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["extension-src/**/*.ts", "extension-src/**/*.tsx", ".wxt/**/*.d.ts", "wxt.config.ts"]
+  "include": [
+    "extension-src/**/*.ts",
+    "extension-src/**/*.tsx",
+    ".wxt/**/*.d.ts",
+    "wxt.config.ts"
+  ]
 }

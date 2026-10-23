@@ -7,10 +7,10 @@ import { pathToFileURL } from "node:url";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRuntimeUpdater, createIdleUpdateCheck, releaseVersion } from "../../native-host/src/runtime-updates.js";
-import { resolveRuntime, activeRuntimeLeases, withRuntimeLock } from "../../native-host/src/runtime-lifecycle.js";
-import { RpcRelay } from "../../native-host/src/rpc-relay.js";
-import { FrameDecoder } from "../../native-host/src/framing.js";
+import { createRuntimeUpdater, createIdleUpdateCheck, releaseVersion } from "../../native-host/src/runtime-updates.ts";
+import { resolveRuntime, activeRuntimeLeases, withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
+import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
+import { FrameDecoder } from "../../native-host/src/framing.ts";
 
 function release(root, version) {
   fs.mkdirSync(root, { recursive: true });
@@ -106,7 +106,7 @@ test("two profile hosts share the worker lock and a mismatched package cannot ac
 test("startup takes a lease under the activation lock; exited-process leases are reaped", async () => {
   const f = fixture();
   try {
-    const module = pathToFileURL(path.resolve("native-host/src/runtime-lifecycle.js")).href;
+    const module = pathToFileURL(path.resolve("native-host/src/runtime-lifecycle.ts")).href;
     const child = promisify(execFile);
     await withRuntimeLock(f.dir, async () => {
       const marker = path.join(f.dir, "child-started");

@@ -5,11 +5,11 @@ import http from "node:http";
 import net from "node:net";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
-import { FirefoxBackend, remoteValue } from "../native-host/src/firefox/backend.js";
-import { executableCandidates } from "../src/cli/browsers.js";
-import { createUploadFiles } from "../native-host/src/uploads.js";
-import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.js";
-import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.js";
+import { FirefoxBackend, remoteValue } from "../native-host/src/firefox/backend.ts";
+import { executableCandidates } from "../src/cli/browsers.ts";
+import { createUploadFiles } from "../native-host/src/uploads.ts";
+import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.ts";
+import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.ts";
 
 // Real Firefox input/file assignment and the compiled shared consent panel.
 // Only synthetic content in a disposable profile is exposed to the test shim.

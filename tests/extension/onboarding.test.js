@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { openInstallGuide } from "../../extension-src/entrypoints/background/onboarding.js";
+import { openInstallGuide } from "../../extension-src/entrypoints/background/onboarding.ts";
 test("install guide opens once; updates respect opt-out and do not steal focus", async () => {
   const stored = {}, opened = [];
   const chrome = { runtime: { getManifest: () => ({ version: "1.9.3" }), getURL: value => `chrome-extension://fixture/${value}` },

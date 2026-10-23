@@ -1,6 +1,6 @@
-import { Data, Effect } from "effect";
-import { z } from "zod";
+import { Data,Effect } from "effect";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { boundedJevImage } from "./jev-image.js";
 
 const candidateSchema = z.object({ id: z.string().min(1).max(100).refine(id => id !== "__abstain"), description: z.string().min(1).max(160) });
@@ -88,7 +88,7 @@ export class JevProvider implements DecisionProvider {
           }
         } finally { reader.releaseLock(); }
         const text = Buffer.concat(chunks).toString("utf8");
-        const result = responseSchema.parse(JSON.parse(text));
+        const result = responseSchema.parse((JSON.parse(text) as unknown));
         const answer = result.answers.decision;
         const ids = Object.keys(criteria);
         const modelMatches = result.model === this.model || (this.route === "openrouter" && (

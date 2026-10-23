@@ -1,4 +1,4 @@
-import { memoryReplayThreshold } from "../memory/index.js";
+import { memoryReplayThreshold } from "../memory/index.ts";
 
 // Provider selection is only recall. The caller separately binds every step,
 // resolves live targets, and applies approvals before any recipe can execute.

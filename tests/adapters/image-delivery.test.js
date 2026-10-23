@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createOpenCodeSetup } from "../../src/adapters/opencode/index.js";
-import { mcpImageContent, sanitizeImagePayloads } from "../../src/adapters/mcp/server.js";
+import { createOpenCodeSetup } from "../../src/adapters/opencode/index.ts";
+import { mcpImageContent, sanitizeImagePayloads } from "../../src/adapters/mcp/server.ts";
 
 process.env.OPENCODE_BROWSER_MEMORY = "0";
 

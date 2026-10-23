@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
-import { updateClientConfig } from "../../src/cli/config.js";
-import { upsertCodexSkillConfig } from "../../src/cli/skills.js";
+import { updateClientConfig } from "../../src/cli/config.ts";
+import { upsertCodexSkillConfig } from "../../src/cli/skills.ts";
 
 test("CLI configuration updates are isolated, backed up, and idempotent", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-cli-"));

@@ -1,21 +1,21 @@
 {
-  "src/browser/operations/index.js": {
+  "src/browser/operations/index.ts": {
     "maxLines": 2300,
     "reason": "Existing module retained during staged responsibility extraction; ceiling may only decrease without review"
   },
-  "src/core/runtime.js": {
+  "src/core/runtime.ts": {
     "maxLines": 1250,
     "reason": "Existing module retained during staged responsibility extraction; ceiling may only decrease without review"
   },
-  "native-host/src/memory/store.js": {
+  "native-host/src/memory/store.ts": {
     "maxLines": 1084,
     "reason": "Existing module retained during staged responsibility extraction; ceiling may only decrease without review"
   },
-  "native-host/src/semantic-search.js": {
+  "native-host/src/semantic-search.ts": {
     "maxLines": 1168,
     "reason": "Existing module retained during staged responsibility extraction; ceiling may only decrease without review"
   },
-  "extension-src/entrypoints/background/runtime.js": {
+  "extension-src/entrypoints/background/runtime.ts": {
     "maxLines": 1580,
     "reason": "Existing module retained during staged responsibility extraction; ceiling may only decrease without review"
   }

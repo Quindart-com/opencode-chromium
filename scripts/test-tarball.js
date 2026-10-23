@@ -41,7 +41,24 @@ try {
   if (!setup.ok || !setup.dryRun || setup.targets?.join(",") !== "codex") throw new Error("Installed targeted setup did not preview Codex configuration");
   if (fs.readFileSync(config, "utf8") !== before || fs.existsSync(runtime)) throw new Error("Installed setup dry run changed user files");
   execFileSync("node", ["--input-type=module", "-e", "await import('opencode-chromium/sdk'); await import('opencode-chromium/core'); await import('opencode-chromium/browser');"], { cwd: packageRoot, stdio: "pipe", timeout: 15000, windowsHide: true });
-  console.log(JSON.stringify({ ok: true, tarball, packageRoot }, null, 2));
+  const consumer = path.join(packageRoot, "consumer.ts");
+  fs.writeFileSync(consumer, [
+    'import { createBrowserAgent } from "opencode-chromium/sdk";',
+    'import { createAgentBrowserRuntime } from "opencode-chromium/core";',
+    'import { parseKeyPress, keyDispatchEvents } from "opencode-chromium/browser";',
+    'type IsAny<T> = 0 extends (1 & T) ? true : false;',
+    'const event = keyDispatchEvents(parseKeyPress("Control+A"))[0]!;',
+    'const eventType: string = event.type;',
+    'const eventIsTyped: false = null as unknown as IsAny<typeof event>;',
+    'const agent = createBrowserAgent();',
+    'const call = agent.call("browser_session", { action: "open" });',
+    'const resultIsTyped: false = null as unknown as IsAny<Awaited<typeof call>>;',
+    'const runtime = createAgentBrowserRuntime();',
+    '// @ts-expect-error Unknown actions must fail static validation.',
+    'runtime.run({ steps: [{ action: "unknown-action" }] });',
+  ].join("\n"));
+  execFileSync("node", [path.join(root, "node_modules/typescript/lib/tsc.js"), "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", "--types", "node", "--typeRoots", path.join(root, "node_modules/@types"), consumer], { cwd: packageRoot, stdio: "pipe", timeout: 30000, windowsHide: true });
+  console.log(JSON.stringify({ ok: true, tarball, packageRoot, types: "consumer passed" }, null, 2));
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

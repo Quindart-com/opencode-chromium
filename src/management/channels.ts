@@ -1,9 +1,11 @@
+import { parseRuntimeActivation } from "../../native-host/src/runtime-lifecycle.ts";
+import { execFileSync } from "node:child_process";
+import { createHash,randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { createHash, randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { sourceFingerprint } from "../cli/source-fingerprint.ts";
+import { record } from "../shared/values.ts";
 import { atomicWrite } from "./transaction.js";
-import { sourceFingerprint } from "../cli/source-fingerprint.js";
 
 export type Channel = "development" | "production";
 export interface Activation {
@@ -22,8 +24,8 @@ function git(root: string, args: string[]): string {
 export function branchChannel(branch: string, active: Channel = "development"): Channel {
   return branch === "HEAD" ? active : branch === "master" ? "production" : "development";
 }
-export function readActivation(dir: string): Activation | null {
-  try { return JSON.parse(fs.readFileSync(path.join(dir, "runtime.json"), "utf8")) as Activation; } catch { return null; }
+export function readActivation(dir: string) {
+  try { return parseRuntimeActivation(JSON.parse(fs.readFileSync(path.join(dir, "runtime.json"), "utf8")) as unknown); } catch { return null; }
 }
 
 /** Publish a complete verified snapshot before changing the active pointer. */
@@ -46,10 +48,10 @@ export async function activateChannel({ root, dir, dryRun = false, followBranch 
     if (!fs.existsSync(destination)) {
       build(root);
       if (sourceFingerprint(root) !== fingerprint) throw new Error("Sources changed during build; activation aborted");
-      const manifest = JSON.parse(fs.readFileSync(path.join(root, "dist", "build-manifest.json"), "utf8"));
+      const manifest = record(JSON.parse(fs.readFileSync(path.join(root, "dist", "build-manifest.json"), "utf8")) as unknown);
       if (manifest.sourceSha256 !== fingerprint) throw new Error("Build fingerprint mismatch");
-      const extension = JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8"));
-      const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+      const extension = record(JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8")) as unknown);
+      const pkg = record(JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as unknown);
       if (extension.version !== pkg.version) throw new Error("Extension/runtime version mismatch");
       for (const relative of ["dist", "native-host/dist", "extension", "skills", "package.json", "bun.lock"]) {
         const target = path.join(stage, relative);
@@ -71,7 +73,8 @@ export async function activateChannel({ root, dir, dryRun = false, followBranch 
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.renameSync(stage, destination);
     }
-    const version = JSON.parse(fs.readFileSync(path.join(destination, "package.json"), "utf8")).version as string;
+    const version = record(JSON.parse(fs.readFileSync(path.join(destination, "package.json"), "utf8")) as unknown).version;
+    if (typeof version !== "string") throw new Error("Installed package version is invalid");
     const activation: Activation = { root: destination, sourceRoot: root, channel, fingerprint, version, followBranch, pendingReload: true,
       ...(active?.stateIsolation === true ? { stateIsolation: true } : {}) };
     if (busy || isBusy && await isBusy()) {

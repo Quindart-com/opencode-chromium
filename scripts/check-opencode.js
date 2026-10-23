@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import plugin, { createOpenCodeSetup } from "../src/adapters/opencode/index.js";
+import plugin, { createOpenCodeSetup } from "../src/adapters/opencode/index.ts";
 
 const calls = [];
 const ctx = {

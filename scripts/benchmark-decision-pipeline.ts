@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { decisionSearch } from "../native-host/src/decisions/search.js";
 import { decisionUsage } from "../native-host/src/decisions/usage.js";
 import { providerStatus } from "../native-host/src/decisions/settings.js";
-import { rankPageUnits } from "../native-host/src/semantic-search.js";
+import { rankPageUnits } from "../native-host/src/semantic-search.ts";
 
 // Synthetic labels only. This experiment never connects to a user's browser and
 // bills the configured decision provider through the ordinary pipeline, so the

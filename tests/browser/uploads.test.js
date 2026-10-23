@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { fileInputExpression } from "../../src/browser/uploads.js";
+import { fileInputExpression } from "../../src/browser/uploads.ts";
 
 test("upload resolves a selected node or associated label with multiple inputs on the page", () => {
   const logo = { isConnected: true, matches: selector => selector === 'input[type=file]' };

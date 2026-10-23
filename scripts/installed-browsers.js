@@ -2,7 +2,7 @@
 // List the Chromium-based browsers present on this machine. The inventory lives
 // in src/cli/browsers.js so the CLI and this script cannot disagree.
 
-import { describeInstalledBrowsers } from "../src/cli/browsers.js";
+import { describeInstalledBrowsers } from "../src/cli/browsers.ts";
 
 function usage() {
   console.error("Usage: node scripts/installed-browsers.js [--json] [--check]");

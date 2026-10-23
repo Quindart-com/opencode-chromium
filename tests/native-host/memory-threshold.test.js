@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CALIBRATION_PAIRS, sweepThreshold } from "../../tests/fixtures/memory-threshold-calibration.js";
-import { DEFAULT_MEMORY_SIMILARITY_THRESHOLD } from "../../native-host/src/memory/index.js";
+import { DEFAULT_MEMORY_SIMILARITY_THRESHOLD } from "../../native-host/src/memory/index.ts";
 
 test("the default rejection threshold keeps the fixture false-positive rate under 5%", () => {
   const { positives, negatives } = sweepThreshold(CALIBRATION_PAIRS);
@@ -15,7 +15,7 @@ test("the default rejection threshold keeps the fixture false-positive rate unde
 });
 
 test("per-profile thresholds are calibrated, not one arbitrary universal value", async () => {
-  const { MEMORY_SIMILARITY_THRESHOLDS } = await import("../../native-host/src/memory/index.js");
+  const { MEMORY_SIMILARITY_THRESHOLDS } = await import("../../native-host/src/memory/index.ts");
   assert.equal(MEMORY_SIMILARITY_THRESHOLDS["embeddinggemma-300m:q4:d256:prompt-v1"], 0.38);
   assert.equal(MEMORY_SIMILARITY_THRESHOLDS["snowflake-arctic-embed-xs:q8:d384:prompt-v1"], 0.42);
   assert.notEqual(MEMORY_SIMILARITY_THRESHOLDS["embeddinggemma-300m:q4:d256:prompt-v1"], MEMORY_SIMILARITY_THRESHOLDS["snowflake-arctic-embed-xs:q8:d384:prompt-v1"]);
@@ -31,7 +31,7 @@ test("the auto-execute replay floor can never fall below its retrieval threshold
     MEMORY_SIMILARITY_THRESHOLDS,
     memoryReplayThreshold,
     similarityThreshold,
-  } = await import("../../native-host/src/memory/index.js");
+  } = await import("../../native-host/src/memory/index.ts");
   for (const profile of [null, ...Object.keys(MEMORY_SIMILARITY_THRESHOLDS)]) {
     const label = profile ?? "default";
     const retrieval = similarityThreshold(profile);
@@ -43,7 +43,7 @@ test("the auto-execute replay floor can never fall below its retrieval threshold
 });
 
 test("the replay floor executes only clearly related recipes", async () => {
-  const { memoryReplayThreshold } = await import("../../native-host/src/memory/index.js");
+  const { memoryReplayThreshold } = await import("../../native-host/src/memory/index.ts");
   const { positives, negatives } = sweepThreshold(CALIBRATION_PAIRS);
   const floor = memoryReplayThreshold("snowflake-arctic-embed-xs:q8:d384:prompt-v1");
   assert.equal(floor, 0.62);

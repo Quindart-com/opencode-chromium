@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { FirefoxBackend, remoteValue, validateEndpoint } from "../../native-host/src/firefox/backend.js";
+import { FirefoxBackend, remoteValue, validateEndpoint } from "../../native-host/src/firefox/backend.ts";
 
 test("remote transport rejects non-loopback, authenticated, or ambiguous endpoints", () => {
   expect(validateEndpoint("ws://127.0.0.1:9223/session")).toBe("ws://127.0.0.1:9223/session");
@@ -8,7 +8,7 @@ test("remote transport rejects non-loopback, authenticated, or ambiguous endpoin
 test("duplicate URLs cannot substitute for a verified extension nonce", async () => {
   const backend = new FirefoxBackend(); backend.connect = async () => {};
   let markers = { first: "a".repeat(32), second: "b".repeat(32) };
-  backend.send = async (method, p) => method === "browsingContext.getTree" ? { contexts: [{ context: "first", url: "https://same.test/" }, { context: "second", url: "https://same.test/" }] } : { result: { type: "string", value: markers[p.target?.context] } };
+  backend.send = async (method, p) => method === "browsingContext.getTree" ? { contexts: [{ context: "first", url: "https://same.test/" }, { context: "second", url: "https://same.test/" }] } : { type: "success", result: { type: "string", value: markers[p.target?.context] } };
   await backend.attach(7, "b".repeat(32)); expect(backend.contexts.get(7)).toBe("second");
   await expect(backend.attach(8, "c".repeat(32))).rejects.toThrow("could not be verified");
   markers.first = markers.second;

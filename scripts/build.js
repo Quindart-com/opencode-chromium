@@ -5,7 +5,7 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { sourceFingerprint } from "../src/cli/source-fingerprint.js";
+import { sourceFingerprint } from "../src/cli/source-fingerprint.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
@@ -50,7 +50,7 @@ function collect(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const input = path.join(directory, entry.name);
     if (entry.isDirectory()) collect(input);
-    else if (/\.(js|ts)$/.test(entry.name)) rootNames.push(input);
+    else if (/\.ts$/.test(entry.name)) rootNames.push(input);
   }
 }
 collect(path.join(root, "src"));
@@ -63,8 +63,8 @@ function outputPath(input) {
 }
 const options = {
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  rootDir: root, outDir: stage, allowJs: true, checkJs: false, strict: true, skipLibCheck: true,
-  noUncheckedIndexedAccess: true, noEmitOnError: true, rewriteRelativeImportExtensions: true,
+  rootDir: root, outDir: stage, allowJs: false, strict: true, skipLibCheck: true,
+  noUncheckedIndexedAccess: true, noImplicitOverride: true, noFallthroughCasesInSwitch: true, noEmitOnError: true, rewriteRelativeImportExtensions: true,
   sourceMap: true, inlineSources: false, declaration: true,
 };
 const program = ts.createProgram(rootNames, options);
@@ -79,12 +79,13 @@ const relocate = context => source => {
   const rewrite = literal => {
     if (!ts.isStringLiteral(literal) || !literal.text.startsWith(".")) return literal;
     const target = path.resolve(path.dirname(source.fileName), literal.text);
-    if (!target.includes(path.join("native-host", "src"))) return literal;
+    if (![path.join(root, "src") + path.sep, path.join(root, "native-host", "src") + path.sep].some(prefix => target.startsWith(prefix))) return literal;
     let relative = path.relative(path.dirname(outputPath(source.fileName)), outputPath(target)).replaceAll(path.sep, "/");
     if (!relative.startsWith(".")) relative = "./" + relative;
     return context.factory.createStringLiteral(relative);
   };
   const visit = node => {
+    if (ts.isNewExpression(node) && node.expression.getText(source) === "URL" && node.arguments?.[0] && ts.isStringLiteral(node.arguments[0]) && /\.ts$/.test(node.arguments[0].text)) return context.factory.updateNewExpression(node, node.expression, node.typeArguments, [rewrite(node.arguments[0]), ...node.arguments.slice(1)]);
     if (ts.isImportDeclaration(node)) return context.factory.updateImportDeclaration(node, node.modifiers, node.importClause, rewrite(node.moduleSpecifier), node.attributes);
     if (ts.isExportDeclaration(node) && node.moduleSpecifier) return context.factory.updateExportDeclaration(node, node.modifiers, node.isTypeOnly, node.exportClause, rewrite(node.moduleSpecifier), node.attributes);
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0]) return context.factory.updateCallExpression(node, node.expression, node.typeArguments, [rewrite(node.arguments[0]), ...node.arguments.slice(1)]);
