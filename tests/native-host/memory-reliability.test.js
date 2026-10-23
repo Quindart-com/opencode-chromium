@@ -4,9 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import { MemoryStore } from "../../native-host/src/memory/store.js";
-import { safeSelector } from "../../native-host/src/memory/privacy.js";
-import { sqliteImplementation } from "../../native-host/src/memory/config.js";
+import { MemoryStore } from "../../native-host/src/memory/store.ts";
+import { safeSelector } from "../../native-host/src/memory/privacy.ts";
+import { sqliteImplementation } from "../../native-host/src/memory/config.ts";
 
 function stores(t, count = 1) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "memory-reliability-"));

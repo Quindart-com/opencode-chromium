@@ -1,0 +1,32 @@
+---
+layout: null
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="New features, fixes and update guidance for OpenCode Browser.">
+  <title>What’s new · OpenCode Browser</title>
+  <style>
+    :root { color-scheme: light dark; --canvas:#f5f7fc; --surface:#fff; --text:#172337; --muted:#52627a; --line:#d6deea; --blue:#3153d5; --soft:#eaf0ff; font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--canvas); color:var(--text); }
+    * { box-sizing:border-box; } body { margin:0; } main { max-width:880px; margin:auto; padding:36px 48px; }
+    header { display:flex; align-items:center; gap:12px; } header a { color:var(--text); text-decoration:none; font-weight:650; } header img { width:40px; height:40px; } header nav { margin-left:auto; font-size:.88rem; }
+    .intro { padding:56px 0 32px; } h1 { font-size:clamp(2rem,5vw,3rem); line-height:1.13; letter-spacing:-.03em; text-wrap:balance; margin:0 0 20px; } .intro p { font-size:1.1rem; color:var(--muted); }
+    h2 { font-size:1.5rem; line-height:1.3; margin:0 0 20px; letter-spacing:-.015em; } h2 a { color:var(--text); text-decoration:none; } h3 { font-size:1.1rem; margin:0 0 12px; }
+    p { max-width:68ch; margin:0 0 16px; } a { color:var(--blue); text-underline-offset:4px; } a:hover { text-decoration-thickness:2px; }
+    article { border-top:1px solid var(--line); padding:32px 0; scroll-margin-top:24px; } article:target h2 { color:var(--blue); } ul { padding-left:24px; max-width:70ch; margin:0; } li { padding-left:4px; margin-bottom:14px; }
+    details { margin-top:24px; } summary { cursor:pointer; font-weight:600; } details ul { margin-top:20px; } .setup { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:24px; margin:24px 0 48px; } code { font-size:.88em; overflow-wrap:anywhere; } .setup code { display:block; padding:12px 0; }
+    footer { border-top:1px solid var(--line); padding:24px 0; color:var(--muted); font-size:.85rem; } footer nav { display:flex; gap:24px; flex-wrap:wrap; } :focus-visible { outline:3px solid var(--blue); outline-offset:4px; } ::selection { background:var(--soft); color:var(--text); } html { scrollbar-color:var(--muted) var(--canvas); }
+    @media (prefers-color-scheme:dark) { :root { --canvas:#101722; --surface:#1a2433; --text:#eff3fc; --muted:#b2bfd4; --line:#3c4b60; --blue:#9aacff; --soft:#25345c; } }
+    @media (max-width:600px) { main { padding:24px; } .intro { padding-top:40px; } header nav { font-size:.8rem; } .setup { padding:20px; } }
+  </style>
+</head>
+<body><main>
+  <header><img src="logo.svg" alt=""><a href="https://github.com/Quindart-com/opencode-chromium">OpenCode Browser</a><nav aria-label="Help"><a href="https://github.com/Quindart-com/opencode-chromium#readme">Get started</a></nav></header>
+  <section class="intro"><h1>What’s new in your browser tools.</h1><p>New capabilities, useful fixes and the details that help you get back to browsing.</p></section>
+  {% include release-notes.html %}
+  <section class="setup" aria-labelledby="update-help"><h2 id="update-help">Keep your tools in step.</h2><p>Published installations can update the local runtime to match the extension. Check <strong>Settings → Updates</strong>. Updates wait for managed agent processes to exit; running sessions keep their version.</p><details><summary>First time using automatic updates?</summary><p>Run setup once from the current release:</p><code>npx -y opencode-chromium@latest setup --all</code><p>When current work has finished, reopen your browser and agent app to load the new updater. Development checkouts and pinned commands stay under your control. No browser or agent app is forcibly restarted.</p></details><p>Prefer fewer tabs? Turn off <strong>Show release notes after updates</strong> in the extension’s setup guide.</p></section>
+  <footer><nav aria-label="Project"><a href="../PRIVACY.html">Privacy</a><a href="../TERMS.html">Terms</a><a href="https://github.com/Quindart-com/opencode-chromium/releases">GitHub releases</a></nav></footer>
+</main></body></html>

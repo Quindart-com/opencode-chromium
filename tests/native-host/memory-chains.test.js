@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { MemoryStore, appendOverlap, composeChainFor, correctChainStep, mergeChains } from "../../native-host/src/memory/index.js";
+import { MemoryStore, appendOverlap, composeChainFor, correctChainStep, mergeChains } from "../../native-host/src/memory/index.ts";
 
 function removeRoot(root) {
   for (let attempt = 0; attempt < 10; attempt += 1) {

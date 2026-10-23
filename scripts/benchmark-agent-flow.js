@@ -2,11 +2,11 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createAgentBrowserRuntime, createCoreRegistry } from "../src/core/index.js";
+import assert from "node:assert/strict";
+import { createAgentBrowserRuntime, createCoreRegistry } from "../src/core/index.ts";
 
-// End-to-end measurement of the tool calls an agent actually issues, against a
-// page that exercises search, exact and paraphrased targets, a click and a fill.
-// The page is local; nothing here touches a real site.
+// Browser-operation latency smoke test with deterministic final-state checks.
+// Fixed selectors choose actions; this does not measure agent task accuracy.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = process.argv[2] ?? path.join(root, "reports", "benchmark-agent-flow.json");
 
@@ -31,7 +31,7 @@ ${SELECTS.map((label, index) => `<label>${label} <select id="select-${index}" ar
 <section id="billing"><h2>Billing and payments</h2>
 <p>Manage billing and payment method, download your latest invoice, or change plan.</p>
 </section>
-<section id="actions"><h2>Actions</h2>${CONTROLS.map(([label], index) => `<button id="action-${index}">${label}</button>`).join("\n")}</section>
+<section id="actions"><h2>Actions</h2>${CONTROLS.map(([label], index) => `<button id="action-${index}" onclick="document.documentElement.dataset.lastAction='${index}'">${label}</button>`).join("\n")}</section>
 <section id="filler"><h2>Notes</h2><p>${"Workspace governance, retention, and audit notes. ".repeat(40)}</p></section>
 </body></html>`;
 
@@ -56,8 +56,8 @@ const { decisionUsage } = await import("../native-host/src/decisions/usage.js");
 const before = decisionUsage();
 const samples = [];
 let tabId = null;
+const sessionId = `flow-${Date.now()}`;
 try {
-  const sessionId = `flow-${Date.now()}`;
   const navigation = await transaction(runtime, "browser_navigate", { url: origin, waitUntil: "load" })(sessionId);
   tabId = navigation.value.tabId;
   samples.push({ ...navigation, args: { url: origin } });
@@ -75,6 +75,9 @@ try {
     ["browser_page_search", { tabId, query: "invite teammate", maxResults: 5, mode: "auto" }],
   ];
   for (const [name, args] of chain) samples.push(await transaction(runtime, name, args)(sessionId));
+  const verified = await runtime.invoke("browser_cdp", { tabId, method: "Runtime.evaluate", params: { expression: "JSON.stringify({name:document.querySelector('#workspace-name').value,action:document.documentElement.dataset.lastAction})", returnByValue: true } }, sessionId);
+  const finalState = JSON.parse(verified.result.value);
+  assert.equal(finalState.name, "New name"); assert.equal(finalState.action, "2");
 
   const searches = samples.filter((sample) => sample.tool === "browser_page_search");
   const decisions = samples.map((sample) => sample.value?.decision).filter(Boolean);
@@ -82,6 +85,7 @@ try {
     generatedAt: new Date().toISOString(),
     scope: "Local fixture page driven in-process through the real tool registry; the browser is the linked runtime's browser",
     calls: samples.length,
+    finalStateVerified: true,
     searches: searches.length,
     wall: {
       totalMs: Math.round(samples.reduce((sum, sample) => sum + sample.ms, 0)),
@@ -99,7 +103,7 @@ try {
   fs.writeFileSync(output, JSON.stringify({ summary, samples }, null, 2) + "\n");
   console.log(JSON.stringify(summary, null, 2));
 } finally {
-  if (tabId !== null) await runtime.invoke("browser_close_tab", { tabId }, "flow-cleanup").catch(() => {});
+  if (tabId !== null) await runtime.finalize({ sessionId }).catch(() => {});
   runtime.close?.();
   await new Promise((resolve) => server.close(resolve));
 }

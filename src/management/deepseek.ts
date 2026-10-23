@@ -1,4 +1,4 @@
-import { isMap, isSeq, isScalar, parseDocument, type Document, type YAMLSeq } from "yaml";
+import { isMap,isScalar,isSeq,parseDocument,type Document,type YAMLSeq } from "yaml";
 
 export function deepSeekManaged(before: string): boolean {
   const doc = parseDocument(before, { customTags: [{ tag: "tag:yaml.org,2002:js", resolve: (value: string) => value }] });

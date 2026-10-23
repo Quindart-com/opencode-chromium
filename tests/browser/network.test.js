@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inspectNetworkEvents, networkBodyPreview } from "../../src/browser/network.js";
+import { inspectNetworkEvents, networkBodyPreview } from "../../src/browser/network.ts";
 
 function requestEvents({ requestId = "1", url = "https://example.test/api/data?token=private", method = "POST" } = {}) {
   return [

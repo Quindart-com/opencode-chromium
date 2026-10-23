@@ -9,8 +9,8 @@ import { chromium } from "playwright";
 // content scripts are the artifact under test, and chrome.runtime is a fixture.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extensionDir = path.join(root, "extension");
-const themeSource = fs.readFileSync(path.join(extensionDir, "content-scripts", "cursor-theme.js"), "utf8");
-const cursorSource = fs.readFileSync(path.join(extensionDir, "content-scripts", "cursor.js"), "utf8");
+const themeSource = fs.readFileSync(path.join(extensionDir, "cursor-theme.js"), "utf8");
+const cursorSource = fs.readFileSync(path.join(extensionDir, "cursor.js"), "utf8");
 
 function runtimeFixture() {
   const state = { delivered: [], listeners: [] };
@@ -23,6 +23,7 @@ function runtimeFixture() {
       sendMessage: (message, callback) => {
         state.delivered.push(message);
         if (typeof callback === "function") callback({ states: state.delivered });
+        return Promise.resolve({ states: state.delivered });
       },
     },
   };

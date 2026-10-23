@@ -1,10 +1,11 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { type HarnessId, planConfiguration } from "./configuration.js";
+import { runtimeDir } from "../cli/native-host.ts";
+import { record } from "../shared/values.ts";
+import { type HarnessId,managedConfiguration,planConfiguration } from "./configuration.js";
 import type { FileChange } from "./transaction.js";
-import { deepSeekManaged } from "./deepseek.js";
 
 export interface Harness {
   id: HarnessId;
@@ -32,7 +33,7 @@ function version(binary: string | null): string | null {
     const command = path.basename(binary).replace(/\.(cmd|ps1)$/, "");
     const packageName = ({ opencode: "opencode-ai", codex: "@openai/codex", claude: "@anthropic-ai/claude-code", dsh: "@deepseek-ai/dsh" } as Record<string, string>)[command];
     if (packageName) {
-      try { return JSON.parse(fs.readFileSync(path.join(path.dirname(binary), "node_modules", packageName, "package.json"), "utf8")).version as string; } catch { return null; }
+      try { return record(JSON.parse(fs.readFileSync(path.join(path.dirname(binary), "node_modules", packageName, "package.json"), "utf8")) as unknown).version as string; } catch { return null; }
     }
     return null;
   }
@@ -56,7 +57,7 @@ export function detectHarnesses(home = os.homedir()): Harness[] {
     const guiPath = id === "claude-desktop" ? platform === "darwin" ? "/Applications/Claude.app" : path.join(process.env.LOCALAPPDATA ?? "", "AnthropicClaude") : id === "codex" ? platform === "darwin" ? "/Applications/Codex.app" : path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Codex") : "";
     return { id, label, configPath: filePath, supported, detected: Boolean(binary || config || guiPath && fs.existsSync(guiPath)),
       version: version(binary), executable: binary, restart: id === "claude-desktop" ? "desktop" : "terminal",
-      managed: config && (id === "dsh" ? deepSeekManaged(fs.readFileSync(filePath, "utf8")) : fs.readFileSync(filePath, "utf8").includes("opencode-browser-plugin")) };
+      managed: config && managedConfiguration(fs.readFileSync(filePath, "utf8"), id, path.join(runtimeDir(), "plugin.mjs")) };
   });
 }
 export function planHarness(harness: Harness, runtimeDir: string, action: "install" | "uninstall" = "install"): FileChange {

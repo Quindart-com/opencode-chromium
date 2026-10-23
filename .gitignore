@@ -65,3 +65,9 @@ extension/*
 
 .build/
 extension-firefox/
+store/
+.impeccable/
+DESIGN.md
+PRODUCT.md
+docs/_includes/release-notes.html
+docs/updates/logo.svg

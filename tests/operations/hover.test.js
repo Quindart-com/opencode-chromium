@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { domNodeHoverTargetExpression, selectorHoverTargetExpression } from "../../src/browser/operations/index.js";
+import { domNodeHoverTargetExpression, selectorHoverTargetExpression } from "../../src/browser/operations/index.ts";
 
 test("node hover expression resolves the strict node map and scrolls into view", () => {
   const source = domNodeHoverTargetExpression("node-1");

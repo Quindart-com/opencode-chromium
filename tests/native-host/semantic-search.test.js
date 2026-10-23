@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { deleteSemanticModel, handleSemanticHostMethod, rankPageUnits, semanticDataDir, setSemanticSettings } from "../../native-host/src/semantic-search.js";
+import { deleteSemanticModel, handleSemanticHostMethod, rankPageUnits, semanticDataDir, setSemanticSettings } from "../../native-host/src/semantic-search.ts";
 
 test("persists semantic settings in configured local directory", async () => {
   const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
@@ -292,7 +292,7 @@ test("EmbeddingGemma MRL dimensions are restricted and 256 is the default", asyn
 });
 
 test("MRL truncation returns the requested length and re-normalizes", async () => {
-  const { truncateAndRenormalize } = await import("../../native-host/src/semantic-search.js");
+  const { truncateAndRenormalize } = await import("../../native-host/src/semantic-search.ts");
   const vector = Array.from({ length: 768 }, (_, index) => (index % 2 === 0 ? 0.5 : -0.25));
 
   const truncated = truncateAndRenormalize(vector, 256);
@@ -314,14 +314,14 @@ test("EmbeddingGemma uses distinct query and document prompts", async () => {
 });
 
 test("EmbeddingGemma reads the exported sentence embedding instead of token features", () => {
-  const source = fs.readFileSync(path.resolve("native-host", "src", "semantic-search.js"), "utf8");
+  const source = fs.readFileSync(path.resolve("native-host", "src", "semantic-search.ts"), "utf8");
   assert.match(source, /AutoModel\.from_pretrained\(model\.embedding\.id/);
   assert.match(source, /outputs\?\.sentence_embedding/);
   assert.doesNotMatch(source, /adapter === "embeddinggemma"[\s\S]{0,300}pooling: "none"/);
 });
 
 test("embedding profiles encode model, dtype, dimensions, and prompt version", async () => {
-  const { embeddingProfileFor } = await import("../../native-host/src/semantic-search.js");
+  const { embeddingProfileFor } = await import("../../native-host/src/semantic-search.ts");
   const gemma = await embeddingGemma();
 
   assert.equal(embeddingProfileFor(gemma), "embeddinggemma-300m:q4:d256:prompt-v1");

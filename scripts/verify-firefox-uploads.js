@@ -5,11 +5,11 @@ import http from "node:http";
 import net from "node:net";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
-import { FirefoxBackend, remoteValue } from "../native-host/src/firefox/backend.js";
-import { executableCandidates } from "../src/cli/browsers.js";
-import { createUploadFiles } from "../native-host/src/uploads.js";
-import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.js";
-import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.js";
+import { FirefoxBackend, remoteValue } from "../native-host/src/firefox/backend.ts";
+import { executableCandidates } from "../src/cli/browsers.ts";
+import { createUploadFiles } from "../native-host/src/uploads.ts";
+import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.ts";
+import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.ts";
 
 // Real Firefox input/file assignment and the compiled shared consent panel.
 // Only synthetic content in a disposable profile is exposed to the test shim.
@@ -54,7 +54,7 @@ try {
   await backend.send("browsingContext.navigate", { context: website, url: origin + "/website", wait: "complete" });
   const marker = "a".repeat(32); await evaluate(website, `document.documentElement.setAttribute('data-opencode-bidi-bridge','${marker}')`); await backend.attach(1, marker);
   consent = createUploadConsent({ chrome: {
-    runtime: { id: "fixture-extension", getURL: page => origin + "/" + page }, storage: { local: { get: async () => ({}) } },
+    runtime: { id: "fixture-extension", getURL: page => new URL(page, origin + "/").href }, storage: { local: { get: async () => ({}) } },
     windows: { onRemoved: { addListener: callback => removed.push(callback) },
       create: async ({ url }) => { const context = (await backend.send("browsingContext.create", { type: "tab" })).context, windowId = ++id; windows.set(windowId, { id: windowId, context, token: new URL(url).searchParams.get("token") }); await backend.send("browsingContext.navigate", { context, url, wait: "complete" }); return { id: windowId, tabs: [{ id: windowId }] }; },
       remove: async windowId => { const window = windows.get(windowId); windows.delete(windowId); if (window) await backend.send("browsingContext.close", { context: window.context }).catch(() => {}); removed.forEach(callback => callback(windowId)); },

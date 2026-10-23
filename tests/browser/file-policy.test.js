@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { createFilePolicy, filePolicyFromEnv } from "../../src/browser/file-policy.js";
+import { createFilePolicy, filePolicyFromEnv } from "../../src/browser/file-policy.ts";
 
 function sandbox() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "file-policy-test-"));

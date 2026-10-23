@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { checkTagVersion } from "../../scripts/check-tag-version.js";
@@ -57,7 +56,7 @@ describe("release metadata", () => {
 
 describe("popup privacy surface", () => {
   const popupDir = path.join(root, "extension-src", "entrypoints", "popup");
-  const backgroundRuntime = path.join(root, "extension-src", "entrypoints", "background", "runtime.js");
+  const backgroundRuntime = path.join(root, "extension-src", "entrypoints", "background", "runtime.ts");
 
   test("popup api never declares the raw model cache path", () => {
     const api = fs.readFileSync(path.join(popupDir, "api.ts"), "utf8");

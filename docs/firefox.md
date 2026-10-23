@@ -21,6 +21,16 @@ Core browsing uses WebDriver BiDi for trusted pointer/keyboard input, evaluation
 
 Windows, macOS, and Linux discovery includes Firefox and LibreWolf. Firefox 140+ is required. LibreWolf privacy settings may disable its Remote Agent; the health check reports this rather than silently changing preferences. No Android setup is provided. See release verification notes for the browsers and flows actually exercised.
 
+Download observations are limited to the current session's controlled tabs. The
+backend detects support for attributed download events: Firefox 144 introduced
+download starts, and Firefox 145 added completion and cancellation. Earlier
+versions can still browse, but download observations explicitly identify the
+unsupported lifecycle states. Unrelated browser downloads are never used as a
+fallback. Update Firefox or LibreWolf to get full download lifecycle reporting.
+Observed URLs omit credentials, query strings, and fragments, and filenames omit
+local directory paths. [Firefox 144 WebDriver changes](https://fxdx.dev/firefox-webdriver-newsletter-144/)
+· [Firefox 145 WebDriver changes](https://fxdx.dev/firefox-webdriver-newsletter-145/).
+
 ## Reproducible build and listed releases
 
 Use Bun 1.3.6, the committed lockfile, and the repository version being submitted:

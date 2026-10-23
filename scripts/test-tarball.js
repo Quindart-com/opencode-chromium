@@ -24,14 +24,41 @@ try {
   for (const relative of ["src", "native-host/src", "scripts", "reports", "node_modules"]) {
     if (fs.existsSync(path.join(packageRoot, relative))) throw new Error(`Tarball contains excluded source/local directory: ${relative}`);
   }
-  for (const relative of ["native-host/dist/runtime.js", "extension/manifest.json", "skills/opencode-browser-plugin/SKILL.md", "dist/adapters/sdk/index.d.ts", ".codex-plugin/plugin.json", ".mcp.json", ".agents/plugins/marketplace.json", "assets/logo.svg"]) {
+  for (const relative of ["native-host/dist/runtime.js", "extension/manifest.json", "extension-firefox/manifest.json", "skills/opencode-browser-plugin/SKILL.md", "dist/adapters/sdk/index.d.ts", ".codex-plugin/plugin.json", ".mcp.json", ".agents/plugins/marketplace.json", "assets/logo.svg"]) {
     if (!fs.existsSync(path.join(packageRoot, relative))) throw new Error(`Tarball is missing ${relative}`);
   }
   execFileSync("bun", ["install", "--production", "--ignore-scripts"], { cwd: packageRoot, stdio: "pipe", windowsHide: true });
   const version = execFileSync("node", ["dist/cli/index.js", "version"], { cwd: packageRoot, encoding: "utf8", timeout: 15000, windowsHide: true });
   if (JSON.parse(version).version !== packageJson.version) throw new Error("Installed CLI version mismatch");
+  const codexHome = path.join(temp, "codex"), config = path.join(codexHome, "config.toml"), runtime = path.join(temp, "runtime");
+  fs.mkdirSync(codexHome, { recursive: true });
+  const before = '# retained preference\nmodel = "chosen"\n[mcp_servers.other]\ncommand = "keep"\n';
+  fs.writeFileSync(config, before);
+  const setup = JSON.parse(execFileSync("node", ["dist/cli/index.js", "setup", "--targets", "codex", "--config", "codex=" + config, "--dry-run", "--json"], {
+    cwd: packageRoot, encoding: "utf8", timeout: 30000, windowsHide: true,
+    env: { ...process.env, CODEX_HOME: codexHome, OPENCODE_BROWSER_RUNTIME_DIR: runtime },
+  }));
+  if (!setup.ok || !setup.dryRun || setup.targets?.join(",") !== "codex") throw new Error("Installed targeted setup did not preview Codex configuration");
+  if (fs.readFileSync(config, "utf8") !== before || fs.existsSync(runtime)) throw new Error("Installed setup dry run changed user files");
   execFileSync("node", ["--input-type=module", "-e", "await import('opencode-chromium/sdk'); await import('opencode-chromium/core'); await import('opencode-chromium/browser');"], { cwd: packageRoot, stdio: "pipe", timeout: 15000, windowsHide: true });
-  console.log(JSON.stringify({ ok: true, tarball, packageRoot }, null, 2));
+  const consumer = path.join(packageRoot, "consumer.ts");
+  fs.writeFileSync(consumer, [
+    'import { createBrowserAgent } from "opencode-chromium/sdk";',
+    'import { createAgentBrowserRuntime } from "opencode-chromium/core";',
+    'import { parseKeyPress, keyDispatchEvents } from "opencode-chromium/browser";',
+    'type IsAny<T> = 0 extends (1 & T) ? true : false;',
+    'const event = keyDispatchEvents(parseKeyPress("Control+A"))[0]!;',
+    'const eventType: string = event.type;',
+    'const eventIsTyped: false = null as unknown as IsAny<typeof event>;',
+    'const agent = createBrowserAgent();',
+    'const call = agent.call("browser_session", { action: "open" });',
+    'const resultIsTyped: false = null as unknown as IsAny<Awaited<typeof call>>;',
+    'const runtime = createAgentBrowserRuntime();',
+    '// @ts-expect-error Unknown actions must fail static validation.',
+    'runtime.run({ steps: [{ action: "unknown-action" }] });',
+  ].join("\n"));
+  execFileSync("node", [path.join(root, "node_modules/typescript/lib/tsc.js"), "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", "--types", "node", "--typeRoots", path.join(root, "node_modules/@types"), consumer], { cwd: packageRoot, stdio: "pipe", timeout: 30000, windowsHide: true });
+  console.log(JSON.stringify({ ok: true, tarball, packageRoot, types: "consumer passed" }, null, 2));
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

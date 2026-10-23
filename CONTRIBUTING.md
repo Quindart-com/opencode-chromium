@@ -41,7 +41,6 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 - Keep new production modules below 500 lines. Existing migration exceptions are bounded in `architecture-exceptions.json`; increases require an explicit rationale in review.
 - Follow the [subsystem boundaries and migration status](docs/architecture.md). Validate contracts through behavior, including cancellation, failure, dry-run preservation, rollback, and mutation uncertainty.
 - Keep credentials and private benchmark/history inventories outside the checkout. Preserve runtime redaction, privacy behavior, synthetic fixtures, and ordinary secret scanning.
-- Follow [the contributor history-rewrite recovery procedure](docs/HISTORY-RECOVERY.md) after the maintainer announces a coordinated cutover.
 
 ## Security-Sensitive Changes
 
