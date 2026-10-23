@@ -20,7 +20,7 @@ export default function VersionNotice({ status, showSnoozed }: { status: NativeS
       <p>For a global npm installation, run:</p>
       <code className="update-command">{command}</code>
       <button type="button" className="button" onClick={() => void navigator.clipboard.writeText(command).then(() => setFeedback("Update command copied."), () => setFeedback("Could not copy. Select the command above."))}>Copy update command</button>
-      <p>Then restart your browser and agent app. If you use npx or a pinned client configuration, update that package version too.</p>
+      <p>After this first update, reopen your browser and agent app when current work has finished. Then enable automatic updates under Settings → Updates. Managed installations wait for agent processes to exit. Pinned commands and development checkouts stay under your control.</p>
     </>}
     <details><summary>Need help updating?</summary><p>Update the installation used by your native host. If the notice remains after restarting, rerun the native-host setup for that installation.</p><a href="https://github.com/Quindart-com/opencode-chromium#native-host-and-extension" target="_blank" rel="noopener noreferrer">Open setup instructions</a></details>
     </details>

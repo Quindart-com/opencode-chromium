@@ -9,6 +9,8 @@ import { launcherSource } from "../cli/runtime-link.js";
 import { offerRestart } from "./restart.js";
 import { planSkills } from "./skills.js";
 import { nativeCodexPluginEnabled, managedConfiguration, type HarnessId } from "./configuration.js";
+import { packagedRuntime } from "../../native-host/src/runtime-updates.js";
+import { runtimeLifecycleSource, withRuntimeLock } from "../../native-host/src/runtime-lifecycle.js";
 
 interface SetupEnvironment {
   home?: string;
@@ -21,6 +23,7 @@ interface SetupEnvironment {
 }
 
 export async function manageSetup(argv: string[], remove = false, environment: SetupEnvironment = {}) {
+  if (argv.includes("--auto-update") && argv.includes("--no-auto-update")) throw new Error("Choose --auto-update or --no-auto-update");
   const dir = environment.dir ?? runtimeDir();
   const rows = (environment.rows ?? detectHarnesses()).map(row => ({ ...row }));
   for (let index = 0; index < argv.length; index++) {
@@ -59,20 +62,24 @@ export async function manageSetup(argv: string[], remove = false, environment: S
   changes.push(...planSkills(root, selected.filter(id => !nativePlugins.includes(id as HarnessId)) as HarnessId[], remove, environment.home));
   const dryRun = argv.includes("--dry-run");
   if (!remove) {
+    const lifecycle = path.join(dir, "runtime-lifecycle.mjs");
+    changes.push({ filePath: lifecycle, before: fs.existsSync(lifecycle) ? fs.readFileSync(lifecycle, "utf8") : null, after: runtimeLifecycleSource() });
     for (const kind of ["host", "mcp", "plugin"] as const) {
       const filePath = path.join(dir, `${kind}.mjs`);
       changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: launcherSource(kind) });
     }
     const filePath = path.join(dir, "runtime.json");
-    const existing = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, "utf8")) as { followBranch?: boolean; stateIsolation?: boolean } : null;
+    const existing = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, "utf8")) as { followBranch?: boolean; stateIsolation?: boolean; autoUpdate?: boolean } : null;
     const production = argv.includes("--production");
     const manifest = existing?.followBranch && !production ? existing : { ...existing, root, version: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version,
+      autoUpdate: argv.includes("--no-auto-update") ? false : argv.includes("--auto-update") ? true : existing?.autoUpdate ?? packagedRuntime(root),
       ...(production ? { channel: "production", followBranch: false, pendingReload: true } : {}) };
     changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: JSON.stringify(manifest, null, 2) + "\n" });
   }
   const hosts = !remove ? (environment.planHosts ?? planNativeHosts)(dir) : null;
   if (hosts) changes.push(...hosts.changes);
-  const result = applyTransaction(changes, dryRun, hosts ? () => { if (process.platform !== "win32") fs.chmodSync(hosts.hostPath, 0o755); (environment.registerHosts ?? applyRegistryChanges)(hosts.registry); } : undefined);
+  const apply = () => applyTransaction(changes, dryRun, hosts ? () => { if (process.platform !== "win32") fs.chmodSync(hosts.hostPath, 0o755); (environment.registerHosts ?? applyRegistryChanges)(hosts.registry); } : undefined);
+  const result = dryRun ? apply() : await withRuntimeLock(dir, apply);
   const restarts = dryRun ? [] : await (environment.restart ?? offerRestart)(selected, argv.includes("--restart"), !argv.includes("--json"));
   return { ok: true, applied: !dryRun, dryRun, action: remove ? "uninstall" : "install", ...result, targets: selected,
     restarts, nativePlugins,

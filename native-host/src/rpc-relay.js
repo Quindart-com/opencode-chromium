@@ -41,8 +41,8 @@ export class RpcRelay {
     });
   }
 
-  activity() {
-    return { clients: Math.max(0, this.#clients.size - 1), pending: this.#pendingRequests.size };
+  activity(observer = true) {
+    return { clients: Math.max(0, this.#clients.size - Number(observer)), pending: this.#pendingRequests.size + this.#hostPending.size };
   }
 
   addClient(socket) {
@@ -96,14 +96,15 @@ export class RpcRelay {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Reload the updated extension to enable upload confirmation; no files were uploaded");
       return;
     }
-    if (message?.method?.startsWith("uploads.") || message?.method?.startsWith("firefox.")) {
-      if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Upload file preparation is restricted to the extension");
+    if (message?.method?.startsWith("uploads.") || message?.method?.startsWith("firefox.") || message?.method?.startsWith("runtime.update")) {
+      if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "This operation is restricted to the extension");
       return;
     }
-    if (typeof message?.clientVersion === "string" && /^\d{1,5}\.\d{1,5}\.\d{1,5}(?:\.\d{1,5})?(?:-[a-zA-Z0-9.-]{1,40})?$/.test(message.clientVersion) && this.#clientVersions.get(socket) !== message.clientVersion) {
+    const observer = message?.method === "runtime.activity";
+    if (!observer && typeof message?.clientVersion === "string" && /^\d{1,5}\.\d{1,5}\.\d{1,5}(?:\.\d{1,5})?(?:-[a-zA-Z0-9.-]{1,40})?$/.test(message.clientVersion) && this.#clientVersions.get(socket) !== message.clientVersion) {
       this.#clientVersions.set(socket, message.clientVersion);
       this.#broadcastVersions();
-    } else if (!this.#clientVersions.has(socket)) {
+    } else if (!observer && !this.#clientVersions.has(socket)) {
       this.#clientVersions.set(socket, null);
       this.#broadcastVersions();
     }

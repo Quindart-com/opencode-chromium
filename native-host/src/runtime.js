@@ -17,6 +17,8 @@ import { candidateRecipes } from "./memory/recipe-candidates.ts";
 import { createUploadFiles } from "./uploads.js";
 import { createFirefoxHost } from "./firefox/backend.js";
 import { EmbedQueue, MemoryStore, embeddingEnabled } from "./memory/index.js";
+import { createRuntimeUpdater, probeRuntimeActivity, createIdleUpdateCheck } from "./runtime-updates.js";
+import { runtimeDirectory } from "./runtime-lifecycle.js";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
 const PROTOCOL_VERSION = "1";
@@ -46,6 +48,7 @@ function registerProfile(profile) {
   writeProfileRegistration(registration);
   state.profile = registration;
   activeProfileId = profile.profileId;
+  try { updater.schedule(profile.extensionVersion); } catch { /* Update scheduling is best effort. */ }
   memoryStore?.profiles.register(profile);
 }
 
@@ -86,6 +89,8 @@ const relay = new RpcRelay({
     if (firefox !== undefined) return firefox;
     if (method.startsWith("uploads.")) return uploadFiles(method, params);
     if (method === "runtime.activity") return relay.activity();
+    if (method === "runtime.updateStatus") return updater.status();
+    if (method === "runtime.updateConfigure") return updater.configure(params.enabled);
     if (method === "memory.selectRecipe" && memoryStore) return await selectRecipe(params?.intent,
       () => candidateRecipes(memoryStore, { hostname: params?.hostname, stepCount: params?.stepCount, profileId: activeProfileId })) ?? { match: null };
     const decision = await handleDecisionHostMethod(method, params);
@@ -199,10 +204,28 @@ function createIpcServer() {
 
 const server = createIpcServer();
 let shutdownStarted = false;
+const updater = createRuntimeUpdater({ dir: runtimeDirectory(), busy: async () => {
+  if (relay.activity(false).clients || relay.activity(false).pending) return true;
+  const idle = await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null);
+  if (!idle?.idle) return true;
+  for (const profile of readProfileRegistrations()) {
+    if (profile.hostPid !== process.pid && profile.ipcPath && await probeRuntimeActivity(profile)) return true;
+  }
+  return false;
+} });
+const checkRuntimeUpdate = createIdleUpdateCheck({ updater, nativeVersion: nativeHostVersion,
+  target: () => state.profile?.extensionVersion,
+  active: () => shutdownStarted || relay.activity(false).clients > 0 || relay.activity(false).pending > 0,
+  canReconnect: async () => (await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null))?.idle === true,
+  retire: () => shutdownHost("Matching runtime ready; reconnecting idle browser host"),
+});
+const updateTimer = setInterval(() => { void checkRuntimeUpdate(); }, 60000);
+updateTimer.unref?.();
 
 function shutdownHost(reason, exitCode = 0) {
   if (shutdownStarted) return;
   shutdownStarted = true;
+  clearInterval(updateTimer);
   log(reason);
   relay.flushMemory();
   memoryStore?.close();

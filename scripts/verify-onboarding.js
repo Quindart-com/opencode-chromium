@@ -3,13 +3,22 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { chromium } from "playwright";
+import { buildUpdatePage } from "./build-update-page.js";
 
 const root = process.cwd(), extension = path.join(root, "extension");
 const screenshots = path.join(root, "reports", "onboarding-review");
 fs.mkdirSync(screenshots, { recursive: true });
 const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 const state = { showReleaseNotes: true };
+buildUpdatePage();
 const server = http.createServer(async (request, response) => {
+  if (request.url?.startsWith("/updates/")) {
+    const logo = request.url.split("?")[0] === "/updates/logo.svg";
+    response.setHeader("Content-Type", logo ? "image/svg+xml" : "text/html");
+    response.end(logo ? fs.readFileSync(path.join(root, "docs/updates/logo.svg")) :
+      fs.readFileSync(path.join(root, "docs/updates/index.html"), "utf8").replace(/^---[\s\S]*?---\s*/, "").replace("{% include release-notes.html %}", fs.readFileSync(path.join(root, "docs/_includes/release-notes.html"), "utf8")));
+    return;
+  }
   if (request.url === "/preferences") {
     if (request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
@@ -52,5 +61,16 @@ try {
   await page.reload(); assert.equal(await preference.isChecked(), false);
   await page.keyboard.press("Tab");
   assert.ok(await page.evaluate(() => document.activeElement?.matches(":focus-visible")));
-  console.log(JSON.stringify({ ok: true, states: 8, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus"] }));
+  for (const width of [1280, 360]) for (const theme of ["light", "dark"]) {
+    await page.setViewportSize({ width, height: 1000 }); await page.emulateMedia({ colorScheme: theme });
+    await page.goto(`${origin}/updates/#v${version}`);
+    await page.getByRole("heading", { name: "What’s new in your browser tools." }).waitFor();
+    assert.ok(await page.locator(`article[id="v${version}"]`).isVisible());
+    for (const article of await page.locator("article").all()) assert.ok(await article.locator("li, p").count(), "Every release has notes or a full-notes link");
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.getByRole("heading", { name: "Keep your tools in step." }).waitFor();
+    await page.getByText("First time using automatic updates?").click();
+    await page.screenshot({ path: path.join(screenshots, `hosted-updates-${width}-${theme}.png`), fullPage: true });
+  }
+  console.log(JSON.stringify({ ok: true, states: 12, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus", "hosted version anchors and update guidance"] }));
 } finally { await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

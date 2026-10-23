@@ -1,4 +1,4 @@
-name: Publish legal pages
+name: Publish documentation pages
 
 on:
   push:
@@ -7,6 +7,12 @@ on:
     paths:
       - "docs/PRIVACY.md"
       - "docs/TERMS.md"
+      - "docs/updates/**"
+      - "docs/releases/**"
+      - "docs/assets/**"
+      - "scripts/build-update-page.js"
+      - "package.json"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +26,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Build and deploy legal pages
+    name: Build and deploy documentation pages
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -31,6 +37,9 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Generate release notes
+        run: node scripts/build-update-page.js
 
       - name: Build Markdown pages
         uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
