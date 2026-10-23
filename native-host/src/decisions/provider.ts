@@ -1,4 +1,4 @@
-import { Data,Effect } from "effect";
+import { Data,Effect,Semaphore,Result } from "effect";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { boundedJevImage } from "./jev-image.js";
@@ -37,7 +37,7 @@ const responseSchema = z.object({
     probabilities: z.record(z.string(), z.number().min(0).max(1)), confidence: z.number().min(0).max(1) }) }),
   usage: z.object({ input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative(), cost: z.number().nonnegative().optional() }),
 });
-const semaphore = Effect.unsafeMakeSemaphore(2);
+const semaphore = Semaphore.makeUnsafe(2);
 export class JevProvider implements DecisionProvider {
   constructor(private readonly key: string, private readonly fetcher: typeof fetch = fetch,
     private readonly model = "jev-1.13.0", private readonly timeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
@@ -109,10 +109,10 @@ export class JevProvider implements DecisionProvider {
       catch: cause => cause instanceof DecisionFailure ? cause : new DecisionFailure({ code: "invalid_or_failed_response" }),
     });
     try {
-      const outcome = await Effect.runPromise(semaphore.withPermits(1)(operation).pipe(Effect.timeout(this.timeoutMs), Effect.either), { signal });
-      if (outcome._tag === "Right") return outcome.right;
+      const outcome = await Effect.runPromise(semaphore.withPermits(1)(operation).pipe(Effect.timeout(this.timeoutMs), Effect.result), { signal });
+      if (Result.isSuccess(outcome)) return outcome.success;
       return { status: "abstained", elapsedMs: performance.now() - started,
-        reason: outcome.left instanceof DecisionFailure ? outcome.left.code : "timeout" };
+        reason: outcome.failure instanceof DecisionFailure ? outcome.failure.code : "timeout" };
     } catch {
       return { status: "abstained", elapsedMs: performance.now() - started,
         reason: signal?.aborted ? "cancelled" : "provider_unavailable_or_invalid_response" };

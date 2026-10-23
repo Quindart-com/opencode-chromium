@@ -14,7 +14,7 @@ if (!manifest.background.scripts?.length || !manifest.browser_specific_settings.
 const result = JSON.parse(execFileSync(process.execPath, [path.join(root, "node_modules/web-ext/bin/web-ext.js"), "lint", "--source-dir", path.join(root, "extension-firefox"), "--output", "json"], { encoding: "utf8", cwd: root }));
 // React DOM's packaged dangerouslySetInnerHTML handlers are unused by our UI.
 // Pin the vendor bytes, warning code and locations; changed warnings fail.
-const reviewedVendorHash = "f01d37f40b911d8ac2681b9af4f3e156d5e916638275cebc974dc458c35e851c";
+const reviewedVendorHash = "8895c1ec8ca1bee629cee393b22c4f5aabf38956f99550d0fbc93e611e7f977a";
 // web-ext checks Android's inherited minimum even when the manifest does not
 // opt into Android. This exact warning is inapplicable to our desktop-only build.
 const desktopOnlyAndroidWarning = w => !manifest.browser_specific_settings.gecko_android &&
@@ -23,7 +23,7 @@ const desktopOnlyAndroidWarning = w => !manifest.browser_specific_settings.gecko
   w.description === '"strict_min_version" requires Firefox for Android 140, which was released before version 142 introduced support for "browser_specific_settings.gecko.data_collection_permissions".';
 const unreviewed = result.warnings.filter(w => {
   if (desktopOnlyAndroidWarning(w)) return false;
-  if (w.code !== "UNSAFE_VAR_ASSIGNMENT" || !/^chunks\/jsx-runtime-[A-Za-z0-9_-]+\.js$/.test(w.file) || w.line !== 9 || ![1777, 4644].includes(w.column)) return true;
+  if (w.code !== "UNSAFE_VAR_ASSIGNMENT" || !/^chunks\/jsx-runtime-[A-Za-z0-9_-]+\.js$/.test(w.file) || w.line !== 9 || ![1811, 4726].includes(w.column)) return true;
   return createHash("sha256").update(fs.readFileSync(path.join(root, "extension-firefox", w.file))).digest("hex") !== reviewedVendorHash;
 });
 if (result.errors.length || result.notices.length || unreviewed.length) throw new Error(JSON.stringify({ errors: result.errors, notices: result.notices, warnings: unreviewed }));
