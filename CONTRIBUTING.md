@@ -2,6 +2,12 @@
 
 Contributions are welcome.
 
+## Bug reports and questions
+
+Use the [bug report form](https://github.com/Quindart-com/opencode-chromium/issues/new?template=bug_report.yml) for broken behavior. Include reproduction steps, expected and actual results, runtime and extension versions, browser, operating system, and client details. Unknown versions are acceptable; a small example with synthetic data is more useful than a large private log.
+
+Issues and attachments are public. Remove credentials, cookies, personal information, private URLs, local user paths, and confidential page contents. Do not upload browser profiles or full configuration files. Follow [SECURITY.md](SECURITY.md) for vulnerability reports, and use [Discussions](https://github.com/Quindart-com/opencode-chromium/discussions) for usage questions.
+
 ## Feature proposals
 
 The roadmap is user-driven. Propose ideas as a
@@ -37,6 +43,7 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 - Keep changes small and focused.
 - Include tests for native-host protocol changes when practical.
 - Update README or component docs when setup behavior changes.
+- Reference related issues in the PR description. Use closing keywords only after verifying the reported workflow; otherwise state what still needs confirmation.
 - Do not commit generated files, browser profile data, `node_modules/`, local extension IDs, or internal reference material.
 - Keep new production modules below 500 lines. Existing migration exceptions are bounded in `architecture-exceptions.json`; increases require an explicit rationale in review.
 - Follow the [subsystem boundaries and migration status](docs/architecture.md). Validate contracts through behavior, including cancellation, failure, dry-run preservation, rollback, and mutation uncertainty.
