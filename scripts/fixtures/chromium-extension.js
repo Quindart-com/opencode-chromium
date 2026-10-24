@@ -9,7 +9,7 @@ import { chromium } from "playwright";
 /** Unique host name and disposable profile: never replaces an installed host. */
 export async function chromiumExtensionFixture() {
   const root = process.cwd(), fixture = fs.mkdtempSync(path.join(os.tmpdir(), "browser-reliability-"));
-  const source = path.join(fixture, "extension"), registry = path.join(fixture, "registry");
+  const source = path.join(fixture, "extension"), registry = path.join(fixture, "registry"), profile = path.join(fixture, "profile");
   fs.cpSync(path.join(root, "extension"), source, { recursive: true }); fs.mkdirSync(registry);
   const host = "com.opencode.browser.test" + randomBytes(5).toString("hex");
   const background = path.join(source, "background.js");
@@ -41,11 +41,11 @@ export async function chromiumExtensionFixture() {
       nativeKey = candidateKey;
     } else {
       env.HOME = fixture; env.XDG_CONFIG_HOME = path.join(fixture, ".config");
-      for (const browser of ["chromium", "google-chrome", "google-chrome-for-testing"]) {
-        const dir = path.join(env.XDG_CONFIG_HOME, browser, "NativeMessagingHosts"); fs.mkdirSync(dir, { recursive: true }); fs.copyFileSync(nativeManifest, path.join(dir, host + ".json"));
-      }
+      // Chromium resolves user hosts under --user-data-dir, including custom profiles.
+      const dir = path.join(profile, "NativeMessagingHosts");
+      fs.mkdirSync(dir, { recursive: true }); fs.copyFileSync(nativeManifest, path.join(dir, host + ".json"));
     }
-    context = await chromium.launchPersistentContext(path.join(fixture, "profile"), { headless: true, channel: "chromium", env, viewport: { width: 1100, height: 900 },
+    context = await chromium.launchPersistentContext(profile, { headless: true, channel: "chromium", env, viewport: { width: 1100, height: 900 },
       args: [`--disable-extensions-except=${source}`, `--load-extension=${source}`, "--site-per-process"] });
     let registration;
     for (let i = 0; i < 100; i++) {
