@@ -37,6 +37,7 @@ const environmentSchema = z.object({
 });
 
 const targetSchema = z.object({
+  frameId: z.string().min(1).max(300).optional(),
   nodeId: z.string().optional(),
   selector: z.string().optional(),
   query: z.string().optional(),
@@ -122,7 +123,7 @@ const errorSchema = z.object({
   message: z.string(),
   retryable: z.boolean(),
   uncertain: z.boolean(),
-});
+}).passthrough();
 
 const resultSchema = z.object({
   ok: z.boolean(),

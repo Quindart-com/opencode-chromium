@@ -58,3 +58,30 @@ test("reset removes only this tab's environment preloads", async () => {
   expect(backend.environmentPreloads.get(2)).toEqual(["two"]);
   expect(calls.at(-1).params.context).toBe("first");
 });
+
+test("native prompt recovery uses its owned child context without querying the blocked page", async () => {
+  const backend = new FirefoxBackend(), calls = [];
+  backend.contexts.set(1, "owned-root"); backend.frameTabs.set("owned-child", 1);
+  backend.event({ method: "browsingContext.userPromptOpened", params: { context: "owned-child", type: "prompt", message: "Fixture" } });
+  backend.send = async (method, params) => { calls.push({ method, params }); return {}; };
+  await backend.command(1, "Page.handleJavaScriptDialog", { agentFrameId: "old-frame", accept: false });
+  expect(calls).toEqual([{ method: "browsingContext.handleUserPrompt", params: { context: "owned-child", accept: false } }]);
+});
+
+test("failed attachment removes its own preload without affecting another tab", async () => {
+  const backend = new FirefoxBackend(), removed = [];
+  backend.connect = async () => {};
+  backend.contexts.set(2, "another-tab"); backend.preloads.set(2, "another-preload");
+  backend.send = async (method, params) => {
+    if (method === "browsingContext.getTree") return { contexts: [{ context: "fixture" }] };
+    if (method === "script.evaluate") return { type: "success", result: { type: "string", value: "a".repeat(32) } };
+    if (method === "script.addPreloadScript") return { script: "failed-preload" };
+    if (method === "script.callFunction") throw Error("Attachment interrupted");
+    if (method === "script.removePreloadScript") removed.push(params.script);
+    return {};
+  };
+  await expect(backend.attach(1, "a".repeat(32))).rejects.toThrow("Attachment interrupted");
+  expect(backend.contexts.has(1)).toBe(false); expect(backend.preloads.has(1)).toBe(false);
+  expect(removed).toEqual(["failed-preload"]);
+  expect(backend.contexts.get(2)).toBe("another-tab"); expect(backend.preloads.get(2)).toBe("another-preload");
+});

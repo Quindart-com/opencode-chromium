@@ -1,3 +1,4 @@
+import { pageStateSource } from "./page-state.ts";
 export type InspectionOptions = { maxResults?: number; scope?: string; selector?: string; nodeId?: string; query?: string; detail?: string; clip?: { x: number; y: number; width: number; height: number }; tabId?: number; depth?: number; maxChildren?: number; maxText?: number };
 export function visualMapExpression(options: InspectionOptions = {}) {
   const maxResults = options.maxResults !== undefined && Number.isInteger(options.maxResults) && options.maxResults > 0 ? Math.min(options.maxResults, 250) : 80;
@@ -15,9 +16,8 @@ export function visualMapExpression(options: InspectionOptions = {}) {
       }
     : null;
   return `(() => {
-    const previousNodeMap = window.__agentBrowserDomNodeMap instanceof Map ? window.__agentBrowserDomNodeMap : null;
-    window.__agentBrowserDomNodeMap = new Map();
-    window.__agentBrowserDomNextNodeId = 1;
+    ${pageStateSource()}
+    const previousNodeMap = agentState.nodes;
     const maxResults = ${JSON.stringify(maxResults)};
     const requestedScope = ${JSON.stringify(scope)};
     const requestedSelector = ${JSON.stringify(rootSelector)};
@@ -98,36 +98,14 @@ export function visualMapExpression(options: InspectionOptions = {}) {
       return role || tag || 'element';
     };
     const interactive = (element) => element.matches('a,button,input,textarea,select,[role="button"],[role="link"],[role="menuitem"],[role="checkbox"],[role="radio"],[role="switch"],[role="textbox"],[role="combobox"],[role="tab"],[tabindex],summary,label,[contenteditable],option');
-    const idFor = (element) => {
-      for (const [id, mapped] of window.__agentBrowserDomNodeMap) {
-        if (mapped === element) return id;
-      }
-      const id = 'node-' + window.__agentBrowserDomNextNodeId++;
-      window.__agentBrowserDomNodeMap.set(id, element);
-      return id;
-    };
-    const focusedRoot = () => {
-      const modalSelector = 'dialog[open],[role="dialog"],[aria-modal="true"],[popover]:popover-open,.modal,.popover,.dialog';
-      const candidates = [...document.querySelectorAll(modalSelector)]
-        .filter(visible)
-        .filter(inViewport)
-        .map((element) => {
-          const rect = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          const zIndex = Number.parseInt(style.zIndex, 10);
-          return { element, area: Math.max(0, rect.width * rect.height), zIndex: Number.isFinite(zIndex) ? zIndex : 0 };
-        })
-        .filter((item) => item.area > 0)
-        .sort((first, second) => second.zIndex - first.zIndex || second.area - first.area);
-      return candidates[0]?.element ?? null;
-    };
+    const idFor = agentNodeId;
+    const focusedRoot = agentDialogRoot;
     const rootForScope = () => {
-      if (requestedNodeId && previousNodeMap?.has(requestedNodeId)) {
-        const node = previousNodeMap.get(requestedNodeId);
-        if (node?.isConnected) return { root: node, mode: 'node' };
+      if (requestedNodeId) {
+        return { root: agentNodeById(requestedNodeId), mode: 'node' };
       }
       if (requestedSelector) {
-        const node = document.querySelector(requestedSelector);
+        const node = agentUnique(requestedSelector);
         if (node) return { root: node, mode: 'selector' };
       }
       if (requestedScope === 'focused' || requestedScope === 'auto') {
@@ -177,7 +155,7 @@ export function visualMapExpression(options: InspectionOptions = {}) {
     const elements = candidates.slice(0, maxResults).map((item) => {
       const element = item.element;
       const base = {
-        node_id: idFor(element),
+        node_id: idFor(element), frameId: agentFrameId,
         kind: kindFor(element),
         label: item.label || null,
         box: boxFor(element),
@@ -198,7 +176,7 @@ export function visualMapExpression(options: InspectionOptions = {}) {
     });
     const scopeBox = scopeInfo.root && scopeInfo.root !== document ? boxFor(scopeInfo.root) : { x: 0, y: 0, width: innerWidth, height: innerHeight };
     return {
-url: location.href,
+observation: agentObservation(typeof scopeInfo === 'undefined' ? 'page' : scopeInfo.mode), url: location.href,
       title: document.title,
       query: requestedQuery || null,
       scope: {
@@ -225,8 +203,7 @@ export function pageInspectExpression(options: InspectionOptions = {}) {
   const maxChildren = options.maxChildren !== undefined && Number.isInteger(options.maxChildren) && options.maxChildren > 0 ? Math.min(options.maxChildren, 80) : 30;
   const maxText = options.maxText !== undefined && Number.isInteger(options.maxText) && options.maxText > 0 ? Math.min(options.maxText, 2000) : 700;
   return `(() => {
-    if (!window.__agentBrowserDomNodeMap) window.__agentBrowserDomNodeMap = new Map();
-    if (!window.__agentBrowserDomNextNodeId) window.__agentBrowserDomNextNodeId = 1;
+    ${pageStateSource()}
     const requestedNodeId = ${JSON.stringify(nodeId)};
     const requestedSelector = ${JSON.stringify(selector)};
     const requestedDetail = ${JSON.stringify(detail)};
@@ -282,14 +259,7 @@ export function pageInspectExpression(options: InspectionOptions = {}) {
       return role || 'element';
     };
     const interactive = (element) => element.matches('a,button,input,textarea,select,[role="button"],[role="link"],[role="menuitem"],[role="checkbox"],[role="radio"],[role="switch"],[role="textbox"],[role="combobox"],[tabindex],summary,label,[contenteditable],option');
-    const idFor = (element) => {
-      for (const [id, mapped] of window.__agentBrowserDomNodeMap) {
-        if (mapped === element) return id;
-      }
-      const id = 'node-' + window.__agentBrowserDomNextNodeId++;
-      window.__agentBrowserDomNodeMap.set(id, element);
-      return id;
-    };
+    const idFor = agentNodeId;
     const boxFor = (element) => {
       const rect = element.getBoundingClientRect();
       return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
@@ -314,7 +284,7 @@ zIndex: style.zIndex,
     const summaryFor = (element, textMax = 220) => {
       const type = element.getAttribute('type');
       const summary = {
-        node_id: idFor(element),
+        node_id: idFor(element), frameId: agentFrameId,
         kind: kindFor(element),
         text: type === 'password' ? '' : textOf(element, textMax),
         selector: selectorFor(element),
@@ -343,10 +313,10 @@ zIndex: style.zIndex,
         }));
     };
     const target = requestedNodeId
-      ? window.__agentBrowserDomNodeMap.get(requestedNodeId)
+      ? agentNodeById(requestedNodeId)
       : requestedSelector
-        ? document.querySelector(requestedSelector)
-        : null;
+        ? agentUnique(requestedSelector)
+        : (agentDialogRoot() || document.body);
 if (!target) throw new Error(requestedNodeId ? 'DOM node ID not found in current page map: ' + requestedNodeId : 'Selector not found: ' + requestedSelector);
     const contextRoot = target.closest('main,section,article,form,dialog,nav,aside,[role="main"],[role="region"],[role="dialog"],[role="form"]') || target.parentElement || target;
     const ancestors = [];
@@ -362,6 +332,7 @@ if (!target) throw new Error(requestedNodeId ? 'DOM node ID not found in current
       .slice(0, 20)
       .map((element) => summaryFor(element, 180));
     return {
+      observation: agentObservation(typeof scopeInfo === 'undefined' ? 'page' : scopeInfo.mode),
       url: location.href,
       title: document.title,
       requested: { nodeId: requestedNodeId, selector: requestedSelector },

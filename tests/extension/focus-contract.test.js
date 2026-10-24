@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { finalizeOwnedTabs } from "../../extension-src/entrypoints/background/finalize-session.ts";
 
 const root = path.resolve(process.cwd());
 const extensionSource = fs.readFileSync(
@@ -43,7 +44,7 @@ test("finalized deliverables use the dedicated OpenCode group", () => {
   assert.match(extensionSource, /const DELIVERABLE_GROUP_TITLE = "OpenCode Deliverables";/);
   assert.match(extensionSource, /chrome\.tabGroups\.query\(\{ windowId \}\)/);
   assert.match(extensionSource, /group\.title === DELIVERABLE_GROUP_TITLE && group\.windowId === windowId/);
-  assert.match(extensionSource, /if \(status === "deliverable"\) \{\s*await ensureDeliverableGroup\(tabId\)/);
+  assert.match(extensionSource, /deliver: ensureDeliverableGroup/);
 });
 
 test("kept tabs default to handoff", () => {
@@ -51,18 +52,23 @@ test("kept tabs default to handoff", () => {
   assert.match(operationsSource, /status: tool\.schema\.enum\(\["handoff", "deliverable"\]\)\.default\("handoff"\)/);
 });
 
-test("handoff keeps a tab tracked in the session; only deliverables are untracked", () => {
-  assert.match(
-    extensionSource,
-    /if \(status === "deliverable"\) \{\s*await ensureDeliverableGroup\(tabId\)\.catch\(\(\) => \{\}\);\s*await untrackTab\(id, tabId\);\s*\}/,
-  );
-  const statusBranch = extensionSource.match(/if \(status\) \{[\s\S]*?\n    \}/)?.[0] ?? "";
-  const deliverableBlock = statusBranch.match(/if \(status === "deliverable"\) \{[\s\S]*?\n      \}/)?.[0] ?? "";
-  assert.ok(statusBranch.includes("continue;"));
-  assert.equal((statusBranch.match(/untrackTab/g) ?? []).length, 1);
-  assert.equal((deliverableBlock.match(/untrackTab/g) ?? []).length, 1);
+test("handoff keeps ownership and deliverables are grouped before release", async () => {
+  const session = { tabIds: new Set([1, 2]), tabOrigins: new Map([[1, "agent"], [2, "agent"]]) };
+  const calls = [];
+  const result = await finalizeOwnedTabs(session, new Map([[1, "handoff"], [2, "deliverable"]]), {
+    dialog: () => null, detach: async () => {}, hide: async () => {}, ungroup: async () => {}, close: async () => assert.fail("kept tabs cannot close"),
+    deliver: async id => calls.push(["deliver", id]), untrack: async id => { calls.push(["untrack", id]); session.tabIds.delete(id); },
+  });
+  assert.equal(result.partial, false);
+  assert.deepEqual(calls, [["deliver", 2], ["untrack", 2]]);
+  assert.deepEqual([...session.tabIds], [1]);
 });
 
-test("unkept agent tabs close tolerantly", () => {
-  assert.match(extensionSource, /await chrome\.tabs\.remove\(tabId\)\.catch\(\(\) => \{\}\)/);
+test("a failed close retains ownership and reports partial cleanup", async () => {
+  const session = { tabIds: new Set([1]), tabOrigins: new Map([[1, "agent"]]) };
+  const result = await finalizeOwnedTabs(session, new Map(), { dialog: () => null, detach: async () => {}, hide: async () => {}, deliver: async () => {}, ungroup: async () => {},
+    close: async () => { throw new Error("blocked close"); }, untrack: async () => assert.fail("must retain ownership"),
+  });
+  assert.equal(result.partial, true);
+  assert.equal(result.tabs[0].status, "blocked");
 });

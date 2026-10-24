@@ -4,11 +4,13 @@ import type { CommandParams } from "./command-schema.ts";
 import { prepareJevScreenshot } from "./decision-image.ts";
 import type { NativeRpc } from "./native-rpc.ts";
 import type { AttachDependencies,TabOwner } from "./types.ts";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 
-export function createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chromeCall: _chromeCall, chrome, rpc }: AttachDependencies & { rpc: Pick<NativeRpc, "request"> }) {
-  return (tabId: number, sessionId: string) => withTabLock(tabId, async () => {
+export function createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chromeCall: _chromeCall, chrome, rpc, generation, trackPending }: AttachDependencies & { rpc: Pick<NativeRpc, "request"> }) {
+  return (tabId: number, sessionId: string, deadlineAt = Date.now() + 10000) => withTabLock(tabId, async () => {
     if (isBrowserInternalUrl((await getTab(tabId)).url)) throw new Error("Agents cannot control browser or extension UI");
     if (attachedTabs.has(tabId)) return {};
+    const epoch = generation?.(tabId);
     const marker = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join("");
     await chrome.scripting.executeScript({ target: { tabId }, func: (value: string) => {
       document.documentElement.setAttribute("data-opencode-bidi-bridge", value);
@@ -19,10 +21,18 @@ export function createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUr
         document.addEventListener("click", globalThis.__opencodeFileGuard, true);
       }
     }, args: [marker] });
-    try { await rpc.request("firefox.attach", { tabId, marker }); attachedTabs.set(tabId, sessionId); return {}; }
+    try {
+      const task = rpc.request("firefox.attach", { tabId, marker, deadlineAt }, { timeoutMs: Math.max(1000, deadlineAt - Date.now() + 5000) }).then(async result => {
+        if (Date.now() >= deadlineAt || generation && epoch !== generation(tabId)) { await rpc.request("firefox.detach", { tabId }, { timeoutMs: 2000 }).catch(() => {}); throw new Error("Firefox attachment expired during setup"); }
+        return result;
+      });
+      trackPending?.(tabId, task);
+      await beforeDeadline(() => task, deadlineAt, { tabId, phase: "attach", method: "firefox.attach", executionState: "not_started" });
+      attachedTabs.set(tabId, sessionId); return {};
+    }
     catch (error) { await chrome.scripting.executeScript({ target: { tabId }, func: () => { if (globalThis.__opencodeFileGuard) document.removeEventListener("click", globalThis.__opencodeFileGuard, true); delete globalThis.__opencodeFileGuard; } }).catch(() => {}); throw error; }
     finally { await chrome.scripting.executeScript({ target: { tabId }, func: () => document.documentElement.removeAttribute("data-opencode-bidi-bridge") }).catch(() => {}); }
-  });
+  }, deadlineAt, "firefox.attach");
 }
 export function registerDecisionImageCapture({ rpc, tabIdFromParams, ensureControlledTab, getTab, isBrowserInternalUrl, attachTab, requiredSessionId, sendCdpCommand }: {
   rpc: Pick<NativeRpc, "register" | "request">;

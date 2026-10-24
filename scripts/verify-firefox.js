@@ -12,6 +12,7 @@ const browser = process.argv.includes("--librewolf") ? "librewolf" : "firefox";
 const executable = process.env.OPENCODE_FIREFOX_TEST_EXECUTABLE ?? executableCandidates(browser).find(file => fs.existsSync(file));
 if (!executable) throw new Error(browser + " executable missing");
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-bidi-"));
+fs.writeFileSync(path.join(profile, "user.js"), 'user_pref("termsofuse.bypassNotification",true);\nuser_pref("datareporting.policy.firstRunURL","");\nuser_pref("startup.homepage_welcome_url","about:blank");\n');
 const server = http.createServer((req, res) => {
   res.setHeader("Content-Type", "text/html");
   res.end(req.url === "/next" ? '<h1>Next page</h1>' : '<title>Parity fixture</title><button id="choose" onclick="window.clicked=event.isTrusted">Choose blue</button><input id="name"><input id="file" type="file"><div id="drag" style="width:80px;height:80px;background:blue" onpointerdown="window.dragged=event.isTrusted" onpointerup="window.released=event.isTrusted"></div><a href="/next">Next</a>');

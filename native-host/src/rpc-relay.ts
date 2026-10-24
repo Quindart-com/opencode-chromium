@@ -12,6 +12,8 @@ const JSON_RPC_VERSION = "2.0";
 const DEFAULT_RELAY_TIMEOUT_MS = 30000;
 
 function requestTimeoutMs(message: RpcMessage) {
+  const deadlineAt = message.params?.deadlineAt;
+  if (typeof deadlineAt === "number") return Math.max(1, deadlineAt - Date.now() + 5000);
   const timeoutMs = message?.params?.timeoutMs ?? message?.params?.timeout_ms;
   return typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.ceil(timeoutMs + 5000) : DEFAULT_RELAY_TIMEOUT_MS;
 }
@@ -134,7 +136,7 @@ export class RpcRelay {
         await writeFrame(socket, local.error ? {
           jsonrpc: JSON_RPC_VERSION,
           id: message.id,
-          error: { code: -32000, message: local.error },
+          error: { code: -32000, message: local.error, data: local.errorData },
         } : {
           jsonrpc: JSON_RPC_VERSION,
           id: message.id,
@@ -173,9 +175,11 @@ export class RpcRelay {
       const result = await this.#localHandler(method, params);
       return result === undefined ? { handled: false } : { handled: true, result };
     } catch (error) {
+      const fields = record(error);
       return {
         handled: true,
         error: error instanceof Error ? error.message : String(error),
+        errorData: { code: fields.code, uncertain: fields.uncertain, retryable: fields.retryable, executionState: fields.executionState, details: fields.details },
       };
     }
   }
@@ -285,7 +289,7 @@ export class RpcRelay {
       await this.#extensionWriter(local.error ? {
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,
-        error: { code: -32000, message: local.error },
+        error: { code: -32000, message: local.error, data: local.errorData },
       } : {
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,

@@ -1,6 +1,7 @@
 import type { Browser,WxtBrowser } from "wxt/browser";
 import { record } from "../../../src/shared/values.ts";
 import { commandParamsSchema,type CommandParams } from "./command-schema.ts";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 
 interface Pending {
   resolve(result: unknown): void;
@@ -108,10 +109,12 @@ export class NativeRpc {
       const id = typeof message.id === "number" || typeof message.id === "string" ? message.id : undefined;
       if (!handler) { if (id !== undefined) this.#post({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${message.method}` } }); return; }
       try {
-        const result = await handler(commandParamsSchema.parse(message.params ?? {}));
+        const params = commandParamsSchema.parse(message.params ?? {});
+        const result = await beforeDeadline(() => handler(params), (params.deadlineAt ?? Date.now() + 120000) + 100, { method: message.method, tabId: params.tabId ?? params.target?.tabId, phase: "extension handler" });
         if (id !== undefined) this.#post({ jsonrpc: "2.0", id, result });
       } catch (error) {
-        if (id !== undefined) this.#post({ jsonrpc: "2.0", id, error: { code: -32000, message: error instanceof Error ? error.message : String(error) } });
+        const fields = record(error);
+        if (id !== undefined) this.#post({ jsonrpc: "2.0", id, error: { code: -32000, message: error instanceof Error ? error.message : String(error), data: { code: fields.code, uncertain: fields.uncertain, retryable: fields.retryable, executionState: fields.executionState, details: fields.details } } });
       }
       return;
     }
@@ -119,7 +122,7 @@ export class NativeRpc {
     const pending = this.#pending.get(message.id);
     if (!pending) return;
     this.#pending.delete(message.id); clearTimeout(pending.timeout);
-    if (message.error) pending.reject(new Error(String(record(message.error).message ?? "RPC error")));
+    if (message.error) pending.reject(Object.assign(new Error(String(record(message.error).message ?? "RPC error")), record(record(message.error).data)));
     else pending.resolve(message.result);
   }
 }

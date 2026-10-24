@@ -16,6 +16,7 @@ export interface LoadState { state: string; modelId: string | null; component: s
 export interface Extractor { (texts: string[], options?: { pooling?: "cls" | "last_token" | "none"; normalize?: boolean }): Promise<Tensor>; dispose?(): Promise<unknown> }
 export interface Reranker { tokenizer: PreTrainedTokenizer; model: PreTrainedModel; dtype: ModelDtype; yesTokenId: number; noTokenId: number }
 export const pageUnitSchema = z.object({
+  frameId: z.string().max(300).optional(),
   node_id: z.union([z.number(), z.string()]).nullable().optional(), nodeId: z.union([z.number(), z.string()]).nullable().optional(),
   kind: z.string().optional(), tagName: z.string().nullable().optional(), role: z.string().nullable().optional(), name: z.string().nullable().optional(),
   ariaName: z.string().nullable().optional(), label: z.string().nullable().optional(), placeholder: z.string().nullable().optional(),

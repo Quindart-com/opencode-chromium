@@ -1,11 +1,8 @@
+import { pageStateSource } from "./page-state.ts";
 export function domSnapshotExpression() {
   return `(() => {
-    if (!(window.__agentBrowserDomNodeMap instanceof Map) || window.__agentBrowserDomNodeMap.size > 2000) window.__agentBrowserDomNodeMap = new Map();
-    for (const [id, element] of window.__agentBrowserDomNodeMap) {
-      if (!element?.isConnected) window.__agentBrowserDomNodeMap.delete(id);
-    }
-    if (!Number.isFinite(window.__agentBrowserDomNextNodeId)) window.__agentBrowserDomNextNodeId = 1;
-    const previousNodeMap = window.__agentBrowserDomNodeMap;
+    ${pageStateSource()}
+    const previousNodeMap = agentState.nodes;
     const selectorFor = (element) => {
       if (element.id) return '#' + CSS.escape(element.id);
       const parts = [];
@@ -29,17 +26,17 @@ export function domSnapshotExpression() {
       return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.right >= 0 && rect.top <= innerHeight && rect.left <= innerWidth;
     };
     const nameFor = (element) => element.getAttribute('aria-label') || element.getAttribute('aria-labelledby') || element.getAttribute('placeholder') || element.getAttribute('alt') || element.getAttribute('title') || element.labels?.[0]?.innerText || '';
-    const nodes = [...document.querySelectorAll('a,button,input,textarea,select,[role],[tabindex],summary,label,[contenteditable],details,option')]
+    const snapshotRoot = agentDialogRoot() || document;
+    const nodes = [...snapshotRoot.querySelectorAll('a,button,input,textarea,select,[role],[tabindex],summary,label,[contenteditable],details,option')]
       .filter(visible)
       .slice(0, 500)
       .map((element) => {
-        const id = 'node-' + window.__agentBrowserDomNextNodeId++;
-        window.__agentBrowserDomNodeMap.set(id, element);
+        const id = agentNodeId(element);
         const rect = element.getBoundingClientRect();
         const sensitive = element.matches('input[type="password"],input[type="file"],input[autocomplete="one-time-code"],input[autocomplete^="cc-"]');
         const text = (element.innerText || (sensitive ? '' : element.value) || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 240);
         return {
-          node_id: id,
+          node_id: id, frameId: agentFrameId,
           tagName: element.localName,
           role: element.getAttribute('role'),
           ariaName: nameFor(element) || null,
@@ -50,7 +47,7 @@ export function domSnapshotExpression() {
           disabled: Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true',
         };
       });
-    return { url: location.href, title: document.title, viewport: { width: innerWidth, height: innerHeight }, nodes };
+    return { observation: agentObservation(snapshotRoot === document ? 'page' : 'focused'), url: location.href, title: document.title, viewport: { width: innerWidth, height: innerHeight }, nodes };
   })()`;
 }
 
@@ -75,12 +72,8 @@ export function pageSearchUnitsExpression(options: PageSearchOptions = {}) {
       }
     : null;
   return `(() => {
-    if (!(window.__agentBrowserDomNodeMap instanceof Map) || window.__agentBrowserDomNodeMap.size > 2000) window.__agentBrowserDomNodeMap = new Map();
-    for (const [id, element] of window.__agentBrowserDomNodeMap) {
-      if (!element?.isConnected) window.__agentBrowserDomNodeMap.delete(id);
-    }
-    if (!Number.isFinite(window.__agentBrowserDomNextNodeId)) window.__agentBrowserDomNextNodeId = 1;
-    const previousNodeMap = window.__agentBrowserDomNodeMap;
+    ${pageStateSource()}
+    const previousNodeMap = agentState.nodes;
     const maxUnits = ${JSON.stringify(maxUnits)};
     const requestedScope = ${JSON.stringify(scope)};
     const requestedSelector = ${JSON.stringify(rootSelector)};
@@ -170,36 +163,14 @@ export function pageSearchUnitsExpression(options: PageSearchOptions = {}) {
       if (!landmark) return null;
       return compact(nameFor(landmark) || landmark.getAttribute('role') || landmark.localName, 120) || null;
     };
-    const idFor = (element) => {
-      for (const [id, mapped] of window.__agentBrowserDomNodeMap) {
-        if (mapped === element) return id;
-      }
-      const id = 'node-' + window.__agentBrowserDomNextNodeId++;
-      window.__agentBrowserDomNodeMap.set(id, element);
-      return id;
-    };
-    const focusedRoot = () => {
-      const modalSelector = 'dialog[open],[role="dialog"],[aria-modal="true"],[popover]:popover-open,.modal,.popover,.dialog';
-      const candidates = [...document.querySelectorAll(modalSelector)]
-        .filter(visible)
-        .filter(inViewport)
-        .map((element) => {
-          const rect = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          const zIndex = Number.parseInt(style.zIndex, 10);
-          return { element, area: Math.max(0, rect.width * rect.height), zIndex: Number.isFinite(zIndex) ? zIndex : 0 };
-        })
-        .filter((item) => item.area > 0)
-        .sort((first, second) => second.zIndex - first.zIndex || second.area - first.area);
-      return candidates[0]?.element ?? null;
-    };
+    const idFor = agentNodeId;
+    const focusedRoot = agentDialogRoot;
     const rootForScope = () => {
-      if (requestedContainerNodeId && previousNodeMap?.has(requestedContainerNodeId)) {
-        const node = previousNodeMap.get(requestedContainerNodeId);
-        if (node?.isConnected) return { root: node, mode: 'node' };
+      if (requestedContainerNodeId) {
+        return { root: agentNodeById(requestedContainerNodeId), mode: 'node' };
       }
       if (requestedSelector) {
-        const node = document.querySelector(requestedSelector);
+        const node = agentUnique(requestedSelector);
         if (node) return { root: node, mode: 'selector' };
       }
       if (requestedScope === 'focused' || requestedScope === 'auto') {
@@ -235,7 +206,7 @@ return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING 
       const rect = element.getBoundingClientRect();
       const type = element.getAttribute('type');
       const unit = {
-        node_id: idFor(element),
+        node_id: idFor(element), frameId: agentFrameId,
         kind: kindFor(element),
         text: type === 'password' ? '' : textOf(element, interactive(element) ? 240 : 500),
         selector: selectorFor(element),
@@ -261,6 +232,7 @@ return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING 
     let stateHash = 2166136261;
     for (const character of (document.body?.innerText ?? '').slice(0, 32000)) stateHash = Math.imul(stateHash ^ character.charCodeAt(0), 16777619);
     return {
+      observation: agentObservation(typeof scopeInfo === 'undefined' ? 'page' : scopeInfo.mode),
       url: location.href,
       title: document.title,
       decisionState: JSON.stringify([performance.timeOrigin, location.href, innerWidth, innerHeight, scrollX, scrollY, stateHash]),

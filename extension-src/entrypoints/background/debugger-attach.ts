@@ -1,30 +1,44 @@
 import type { Browser,WxtBrowser } from "wxt/browser";
 import type { DebuggerDependencies,TraceBuffer } from "./types.ts";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 
-export function createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall: _chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS }: DebuggerDependencies) {
-  return async function attachTab(tabId: number, sessionId: string) {
+export function createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall: _chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS, onAttached, generation, trackPending, keepAttached }: DebuggerDependencies) {
+  return async function attachTab(tabId: number, sessionId: string, deadlineAt = Date.now() + DEFAULT_CDP_TIMEOUT_MS) {
   return withTabLock(tabId, async () => {
-    if (isBrowserInternalUrl((await getTab(tabId)).url)) throw new Error("Agents cannot control browser or extension UI");
+    const innerDeadline = deadlineAt - 25;
+    if (isBrowserInternalUrl((await beforeDeadline(() => getTab(tabId), innerDeadline, { tabId, method: "attach", phase: "preflight", executionState: "not_started" })).url)) throw new Error("Agents cannot control browser or extension UI");
     if (attachedTabs.has(tabId)) return {};
+    const epoch = generation?.(tabId);
+    let expired = false;
     try {
-      await chrome.debugger.attach({ tabId }, DEBUGGER_VERSION);
+      await beforeDeadline(() => {}, innerDeadline, { tabId, method: "attach", phase: "attach", executionState: "not_started" });
+      const task = Promise.resolve(chrome.debugger.attach({ tabId }, DEBUGGER_VERSION)).then(async () => {
+        if (expired || generation && epoch !== generation(tabId)) await beforeDeadline(() => chrome.debugger.detach({ tabId }), Date.now() + 2000, { tabId, phase: "late attach cleanup" }).catch(() => {});
+      });
+      trackPending?.(tabId, task);
+      await beforeDeadline(() => task, innerDeadline, { tabId, method: "attach", phase: "attach", executionState: "not_started" });
     } catch (error) {
+      expired = true;
       if (/another debugger/i.test(errorMessage(error))) {
         throw new Error(`Cannot attach debugger to tab ${tabId}: another debugger is already attached`, { cause: error });
       }
       throw error;
     }
+    if (generation && epoch !== generation(tabId)) throw new Error("Attachment expired while the tab changed");
     attachedTabs.set(tabId, sessionId);
     try {
-      await sendCdpCommand(tabId, "Page.enable", {}, DEFAULT_CDP_TIMEOUT_MS);
-      await sendCdpCommand(tabId, "Page.setInterceptFileChooserDialog", { enabled: true }, DEFAULT_CDP_TIMEOUT_MS);
+      await beforeDeadline(() => sendCdpCommand(tabId, "Page.enable", {}, Math.max(1, innerDeadline - Date.now())), innerDeadline, { tabId, method: "Page.enable", phase: "attach setup", executionState: "not_started" });
+      await beforeDeadline(() => sendCdpCommand(tabId, "Page.setInterceptFileChooserDialog", { enabled: true }, Math.max(1, innerDeadline - Date.now())), innerDeadline, { tabId, method: "Page.setInterceptFileChooserDialog", phase: "attach setup", executionState: "not_started" });
+      await onAttached?.(tabId, innerDeadline);
+      if (generation && epoch !== generation(tabId)) throw new Error("Attachment expired during setup");
     } catch (error) {
+      if (keepAttached?.(tabId)) throw error;
       attachedTabs.delete(tabId);
-      await chrome.debugger.detach({ tabId }).catch(() => {});
+      await beforeDeadline(() => chrome.debugger.detach({ tabId }), Date.now() + 2000, { tabId, phase: "detach", method: "attach cleanup" }).catch(() => {});
       throw error;
     }
     return {};
-  });
+  }, deadlineAt, "attach");
   };
 }
 
