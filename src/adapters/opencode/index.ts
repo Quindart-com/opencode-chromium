@@ -12,6 +12,7 @@ import { responseMetadata as contractMetadata,PLUGIN_NAME,PLUGIN_VERSION } from 
 import { memoryEnabledForServer } from "../../memory/index.ts";
 import { record } from "../../shared/values.ts";
 import { imageCandidates,sanitizeImages } from "../image-content.ts";
+import { trackRuntime } from "../runtime-activity.ts";
 
 
 
@@ -87,10 +88,10 @@ function nativeTool(name: string, definition: RuntimeTool, runtime: AgentBrowser
     annotations: definition.annotations,
     codemode: false,
     async execute(args: unknown, context: BrowserContext = {}) {
-      const result = await dispatchBrowserTool({ [name]: definition }, name, args, {
+      const result = await trackRuntime(runtime).call(() => dispatchBrowserTool({ [name]: definition }, name, args, {
         ...context,
         agent: "opencode-v2",
-      });
+      }));
       const output = concise(result);
       return {
         output,
@@ -108,10 +109,10 @@ function legacyTool(name: string, definition: RuntimeTool, runtime: AgentBrowser
     description: definition.description,
     args: definition.inputSchema instanceof z.ZodObject ? definition.inputSchema.shape : {},
     async execute(args, context) {
-      const result = await dispatchBrowserTool({ [name]: definition }, name, args, {
+      const result = await trackRuntime(runtime).call(() => dispatchBrowserTool({ [name]: definition }, name, args, {
         ...context,
         agent: "opencode",
-      });
+      }));
       return {
         title: typeof record(result).summary === "string" ? String(record(result).summary) : `Completed ${name}`,
         output: concise(result),
@@ -132,6 +133,7 @@ function createLegacyOpenCodeHooks(options: OpenCodeOptions = {}) {
     async dispose() {
       if (disposed) return;
       disposed = true;
+      trackRuntime(runtime).close();
       runtime.close();
     },
     runtime,
@@ -163,6 +165,7 @@ export async function createOpenCodeSetup(ctx: OpenCodeContext = {}, options: Op
   const cleanup = async () => {
     if (closed) return;
     closed = true;
+    trackRuntime(runtime).close();
     runtime.close();
     logger.info("OpenCode V2 browser tools cleaned up", { plugin: PLUGIN_NAME });
   };

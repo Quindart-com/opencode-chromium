@@ -2,7 +2,7 @@ import { z } from "zod";
 import { record } from "../shared/values.ts";
 const tabSchema = z.looseObject({ id: z.number().int().positive().optional(), tabId: z.number().int().positive().optional(), url: z.string().nullable().optional(), title: z.string().nullable().optional() })
   .refine(tab => tab.id !== undefined || tab.tabId !== undefined, "Missing tab identity").transform(tab => ({ ...tab, id: tab.id ?? tab.tabId! }));
-export const candidateSchema = z.looseObject({ node_id: z.union([z.string(), z.number()]).nullable().optional(), nodeId: z.union([z.string(), z.number()]).nullable().optional(), id: z.union([z.string(), z.number()]).nullable().optional(), selector: z.string().nullable().optional(),
+export const candidateSchema = z.looseObject({ frameId: z.string().optional(), node_id: z.union([z.string(), z.number()]).nullable().optional(), nodeId: z.union([z.string(), z.number()]).nullable().optional(), id: z.union([z.string(), z.number()]).nullable().optional(), selector: z.string().nullable().optional(),
   role: z.string().nullable().optional(), name: z.string().nullable().optional(), text: z.string().nullable().optional(), kind: z.string().nullable().optional(), tagName: z.string().nullable().optional(),
   x: z.number().optional(), y: z.number().optional(), score: z.number().nullable().optional(), interactive: z.boolean().optional() });
 export const screenshotResultSchema = z.looseObject({ base64: z.string(), mimeType: z.string() });

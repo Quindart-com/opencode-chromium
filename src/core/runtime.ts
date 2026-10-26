@@ -1,4 +1,5 @@
-import { createHash,randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import type { RecipeStep } from "../../native-host/src/memory/recipe.ts";
 import { recipeSchema } from "../../native-host/src/memory/recipe.ts";
@@ -7,8 +8,9 @@ import { createFilePolicy,filePolicyFromEnv } from "../browser/file-policy.ts";
 import type { BrowserOperation } from "../browser/operation-definition.ts";
 import { createBrowserOperations } from "../browser/operations/index.ts";
 import { assertNavigationAllowed,combineUrlPolicyConfig,createUrlPolicy,urlPolicyFromEnv } from "../browser/url-policy.ts";
-import { canonicalJson } from "../shared/canonical-json.ts";
 import { record } from "../shared/values.ts";
+import { partialDispatchError } from "../shared/execution-state.ts";
+import { nodeFrameId } from "../browser/operations/page-state.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { createCapabilityRegistry } from "./capabilities.ts";
 import { cleanupSessionEnvironment } from "./environment-cleanup.ts";
@@ -26,6 +28,7 @@ import { replayGateRejection } from "./replay-gate.ts";
 import { requiresApproval,validateSteps } from './run-validation.ts';
 import type { PendingApproval,RuntimeOptions,RuntimeSession,SearchPreferences } from "./runtime-types.ts";
 import type { BrowserContext } from "./tool-definition.ts";
+import { settleBrowserStep } from "./settling.ts";
 import { responseMetadata as contractMetadata } from "./versions.ts";
 
 type PriorResults = Map<string, unknown>;
@@ -46,11 +49,6 @@ const READ_LEGACY_TOOLS = new Set([
   "browser_locator_count", "browser_locator_text", "browser_console_logs", "browser_network_events",
   "browser_network_inspect", "browser_download_events", "browser_snapshot", "browser_selected_tab", "browser_list_tabs",
 ]);
-const AUTO_SETTLE_ACTIONS = new Set(["navigate", "reload", "back", "forward", "click", "doubleClick"]);
-
-function digest(value: unknown) {
-  return createHash("sha256").update(JSON.stringify(canonicalJson(value))).digest("hex");
-}
 
 function parseLegacyResult(value: unknown): unknown {
   if (typeof value !== "string") return value;
@@ -137,6 +135,7 @@ function publicProfiles(profiles: BrowserProfile[]) {
 }
 
 export class AgentBrowserRuntime {
+  readonly operationScope = new AsyncLocalStorage<{ frameId?: string; deadlineAt?: number }>();
   readonly artifacts: ArtifactStore;
   readonly approvalTtlMs: number;
   readonly logger: ReturnType<typeof createLogger>;
@@ -193,7 +192,8 @@ export class AgentBrowserRuntime {
     const definition = (this.observationOperations as Record<string, BrowserOperation>)[name] ?? tools[name];
     if (!definition) throw new Error(`Legacy operation is unavailable: ${name}`);
     const parsed = z.object(definition.args).parse(args ?? {});
-    const context = { sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy };
+    const context = { ...this.operationScope.getStore(), sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy,
+      ...(typeof args.frameId === "string" ? { frameId: args.frameId } : nodeFrameId(args.nodeId) ? { frameId: nodeFrameId(args.nodeId) } : {}) };
     const checkTab = async (after = false) => {
       if (this.urlPolicy.allowedOrigins?.length === 0 && this.urlPolicy.blockedOrigins?.length === 0) return;
       if (!parsed.tabId || !tools.browser_get_tab || ["browser_claim_tab", "browser_close_tab", "browser_configure"].includes(name)) return;
@@ -211,6 +211,7 @@ export class AgentBrowserRuntime {
         return parseOperationResult(name, value);
       } catch (error) {
         lastError = error;
+        if (record(error).retryable === false) throw error;
         if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 40));
       }
     }
@@ -369,7 +370,7 @@ export class AgentBrowserRuntime {
       const prefs = await this.searchPreferences(this.getSession(sessionId));
       const search = await this.invoke("browser_page_search", {
         tabId,
-        query: target.query,
+        query: target.query, frameId: target.frameId,
         maxResults: Math.max(prefs.maxResults, (target.index ?? 0) + 1),
         detail: prefs.detail,
         mode: prefs.mode,
@@ -404,6 +405,10 @@ export class AgentBrowserRuntime {
   }
 
   async executeStep(step: Step, tabId: number, prior: PriorResults, session: RuntimeSession, chainId: string | null = null, stepIndex: number | null = null) {
+    return this.operationScope.run({ frameId: step.target?.frameId ?? nodeFrameId(step.target?.nodeId), deadlineAt: Date.now() + clamp(step.timeoutMs, step.action === "upload" ? 120000 : 15000, 250, 120000) }, () => this.executeStepInScope(step, tabId, prior, session, chainId, stepIndex));
+  }
+
+  async executeStepInScope(step: Step, tabId: number, prior: PriorResults, session: RuntimeSession, chainId: string | null, stepIndex: number | null) {
     const timeoutMs = clamp(step.timeoutMs, 15000, 250, 60000);
     if (step.action === "find") {
       const query = step.target?.query ?? step.value ?? "";
@@ -442,16 +447,18 @@ export class AgentBrowserRuntime {
         case "select": return this.editTarget(target, tabId, "replace", step.value, session.sessionId, chainId, stepIndex);
         case "fillForm": {
           const fields = [];
+          try {
           for (const [selector, value] of Object.entries(step.fields ?? {})) {
             fields.push(await this.invoke("browser_locator_fill", ({ tabId, selector, value, mode: "replace" }), session.sessionId));
           }
+          } catch (error) { throw partialDispatchError(error, fields.length); }
           return { filled: fields.length, fields };
         }
         case "type": {
           if (target.nodeId || target.selector) return this.editTarget(target, tabId, "append", step.value, session.sessionId, chainId, stepIndex);
           return this.invoke("browser_type", ({ tabId, text: step.value }), session.sessionId);
         }
-        case "press": return this.invoke("browser_keypress", ({ tabId, key: step.key }), session.sessionId);
+        case "press": return this.invoke("browser_keypress", ({ tabId, key: step.key, nodeId: target.nodeId, selector: target.selector, frameId: target.frameId }), session.sessionId);
         case "scroll": return this.invoke("browser_scroll", ({ tabId, x: target.x, y: target.y, scrollX: step.scrollX ?? 0, scrollY: step.scrollY ?? 0 }), session.sessionId);
         case "drag": return this.invoke("browser_drag", ({ tabId, path: step.path, button: step.button ?? "left" }), session.sessionId);
         case "assert": return this.assertTarget(target, tabId, step, session.sessionId, chainId, stepIndex);
@@ -477,11 +484,12 @@ export class AgentBrowserRuntime {
       }
     };
     try {
-      return await dispatch();
+      return await this.operationScope.run({ ...this.operationScope.getStore(), frameId: target.frameId ?? nodeFrameId(target.nodeId) ?? this.operationScope.getStore()?.frameId }, dispatch);
     } catch (error) {
+      if (record(error).code === "STALE_TARGET") throw error;
       if (errorDetails(error).uncertain || !isStaleTargetError(error) || (!step.target?.selector && !step.target?.query)) throw error;
       target = await this.resolveTarget({ ...step, target: { ...step.target, nodeId: undefined } }, tabId, prior, session.sessionId);
-      return dispatch();
+      return this.operationScope.run({ ...this.operationScope.getStore(), frameId: target.frameId ?? nodeFrameId(target.nodeId) ?? this.operationScope.getStore()?.frameId }, dispatch);
     }
   }
 
@@ -607,6 +615,7 @@ export class AgentBrowserRuntime {
     for (const [index, step] of bound.entries()) {
       const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId: replayChainId, memoryEnabled: true });
       if (outcome.ok) {
+        if (record(outcome.settled).settled === false) allOk = false;
         if (!READ_ACTIONS.has(step.action)) completedMutation = true;
         results.push({ index, action: step.action, ok: true, ...(outcome.settled ? { settle: outcome.settled } : {}) });
       } else {
@@ -679,6 +688,7 @@ export class AgentBrowserRuntime {
       } catch (error) {
         lastError = error;
         executionState = READ_ACTIONS.has(step.action) || record(error).executionState === "not_started" ? "not_started" : "unknown";
+        if (record(error).retryable === false) break;
       }
     }
     if (!lastError) {
@@ -696,9 +706,9 @@ export class AgentBrowserRuntime {
         position: index,
         step,
         tabId,
-        success: lastError == null,
+        success: lastError == null && record(settled).settled !== false,
         durationMs: Date.now() - startedAt,
-        errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : null,
+        errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : record(settled).settled === false ? "SETTLE_UNVERIFIED" : null,
       }, session).catch(() => {});
     }
     return lastError
@@ -757,58 +767,14 @@ export class AgentBrowserRuntime {
   }
 
   async settleStep(step: Step, tabId: number, prior: PriorResults, session: RuntimeSession) {
-    const spec = step.settle ?? (AUTO_SETTLE_ACTIONS.has(step.action) ? { condition: "dom-quiet" } : null);
-    if (!spec) return null;
-    const timeoutMs = clamp(spec.timeoutMs, 2500, 100, 15000);
-    const deadline = Date.now() + timeoutMs;
-    const target = await this.resolveTarget({ target: spec.target ?? step.target }, tabId, prior, session.sessionId);
-    if (spec.condition === "dom-quiet") {
-      let previous = null;
-      let stableCount = 0;
-      do {
-        const snapshot = await this.invoke("browser_dom_snapshot", { tabId }, session.sessionId);
-        // Snapshot handles are allocated afresh even when the page is unchanged.
-        // Compare visible content and geometry, retaining live handles elsewhere.
-        const current = digest({ ...snapshot, nodes: snapshot.nodes?.map(({ node_id: _nodeId, ...node }) => node) });
-        stableCount = current === previous ? stableCount + 1 : 0;
-        if (stableCount >= 1) return { condition: "dom-quiet", settled: true };
-        previous = current;
-        await new Promise((resolve) => setTimeout(resolve, 120));
-      } while (Date.now() < deadline);
-      return { condition: "dom-quiet", settled: false, timedOut: true };
-    }
-    if (spec.condition === "contains" && !target.selector) {
-      throw new Error(`settle condition "contains" requires a target selector`);
-    }
-    if ((spec.condition === "exists" || spec.condition === "not-exists") && !target.selector && !target.nodeId) {
-      throw new Error(`settle condition "${spec.condition}" requires a target selector or nodeId`);
-    }
-    do {
-      let passed = false;
-      if (spec.condition === "exists" || spec.condition === "not-exists") {
-        if (target.selector) {
-          const { count } = await this.invoke("browser_locator_count", { tabId, selector: target.selector }, session.sessionId);
-          passed = spec.condition === "exists" ? count > 0 : count === 0;
-        } else if (target.nodeId) {
-          try {
-            await this.invoke("browser_page_inspect", { tabId, nodeId: target.nodeId }, session.sessionId);
-            passed = spec.condition === "exists";
-          } catch {
-            passed = spec.condition === "not-exists";
-          }
-        }
-      } else if (spec.condition === "contains" && target.selector) {
-        const { text } = await this.invoke("browser_locator_text", { tabId, selector: target.selector }, session.sessionId);
-        passed = String(text ?? "").includes(spec.value ?? "");
-      }
-      if (passed) return { condition: spec.condition, settled: true };
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    } while (Date.now() < deadline);
-    const error = new BrowserRuntimeError(`Settle condition timed out: ${spec.condition}`, { code: "SETTLE_TIMEOUT", retryable: true });
-    throw error;
+    return settleBrowserStep(this, step, tabId, prior, session);
   }
 
   async observeValue(args: ObserveInput, tabId: number, session: RuntimeSession) {
+    return this.operationScope.run({ frameId: args.target?.frameId ?? nodeFrameId(args.target?.nodeId) }, () => this.observeInScope(args, tabId, session));
+  }
+
+  async observeInScope(args: ObserveInput, tabId: number, session: RuntimeSession) {
     const limit = clamp(args.limit, args.mode === "visual" ? 25 : 12, 1, 200);
     const target = args.target ?? {};
     if (args.mode === "capabilities") return (await this.capabilities()).manifest(args.pack ?? "core");
@@ -841,7 +807,7 @@ export class AgentBrowserRuntime {
       return this.invoke("browser_page_inspect", {
         tabId,
         nodeId: target.nodeId,
-        selector: target.selector ?? (!target.nodeId ? 'dialog[open], [role="dialog"], body' : undefined),
+        selector: target.selector,
         depth: args.detail === "full" || args.detail === "debug" ? 2 : 1,
         maxChildren: limit,
         maxText: args.detail === "full" || args.detail === "debug" ? 700 : 280,
@@ -922,7 +888,8 @@ export class AgentBrowserRuntime {
     }, sessionId);
     if (options.delivery === "inline") return shot;
     const artifact = this.artifacts.create({ sessionId, mimeType: shot.mimeType, data: Buffer.from(shot.base64, "base64"), label: "screenshot" });
-    return { screenshot: artifact };
+    const { base64: _base64, ...capture } = shot;
+    return { screenshot: artifact, capture };
   }
 
   compact(payload: ResultPayload, sessionId: string, maxChars: number = 4096, label: string = "result", inlinePayload: ResultPayload = payload) {
@@ -1032,7 +999,8 @@ export class AgentBrowserRuntime {
         }
       } finally {
         if (memoryEnabled) {
-          await this.requestHost("memory.finalizeChain", { chainId, success: !failed, supersedes: !failed ? correctiveCandidate : null }, session).catch(() => {});
+          const verified = !failed && results.every(item => record(item.settle).settled !== false);
+          await this.requestHost("memory.finalizeChain", { chainId, success: verified, supersedes: verified ? correctiveCandidate : null }, session).catch(() => {});
         }
         await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
       }
@@ -1159,8 +1127,9 @@ export class AgentBrowserRuntime {
     try {
       const session = this.getSession(sessionId);
       await this.selectProfile(session, args.profile);
-      if (args.keepEnvironment !== true) await cleanupSessionEnvironment(this, session);
-      const result = await this.invoke("browser_finalize", { keep: args.keep ?? [] }, sessionId);
+      const blockedTabs = args.keepEnvironment === true ? [] : await cleanupSessionEnvironment(this, session);
+      const result = await this.invoke("browser_finalize", { keep: args.keep ?? [], blockedTabs }, sessionId);
+      if (record(result).partial || blockedTabs.length) return { ...contractMetadata(), ok: false, status: "partial", sessionId, result, ...(blockedTabs.length ? { environmentCleanup: blockedTabs } : {}) };
       this.sessions.delete(sessionId);
       this.artifacts.cleanupSession(sessionId);
       return { ...contractMetadata(), ok: true, status: "finalized", sessionId, result };

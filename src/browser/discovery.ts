@@ -5,6 +5,7 @@ import { record } from "../shared/values.ts";
 import { safeNetworkUrl } from "./network.ts";
 import { defineObjectOperation } from "./operation-definition.ts";
 import { assertNavigationAllowed } from "./url-policy.ts";
+import { pageStateSource } from "./operations/page-state.ts";
 
 export function boundedFrameTree(tree: unknown, { maxDepth = 3, maxFrames = 20 } = {}) {
   const frames: { frameId: string; parentId: string | null; depth: number; url: string }[] = [];
@@ -76,18 +77,19 @@ export function createDiscoveryOperations({ command, evaluate, getTab }: {
   return {
     browser_frames: defineObjectOperation({ capabilityOnly: true, args: frameArgs, async execute(args, context) {
       const result = await readFrames(args, context);
-      return { ...result, frames: result.frames.map(frame => ({ ...frame, url: safeNetworkUrl(frame.url), allowed: context.urlPolicy?.evaluate(frame.url).allowed ?? true })) };
+      const allowed = (frame: typeof result.frames[number]): boolean => (frame.url === "about:srcdoc" || (context.urlPolicy?.evaluate(frame.url).allowed ?? true)) && (!frame.parentId || allowed(result.frames.find(parent => parent.frameId === frame.parentId)!));
+      return { ...result, frames: result.frames.map(frame => ({ ...frame, url: safeNetworkUrl(frame.url), allowed: allowed(frame) })) };
     } }),
     browser_frame_inspect: defineObjectOperation({ capabilityOnly: true, args: { ...frameArgs, frameId: z.string().min(1).max(300), maxChars: z.number().int().min(256).max(10000).default(2000) }, async execute(args, context) {
       const tree = await readFrames(args, context), frame = tree.frames.find(item => item.frameId === args.frameId);
       if (!frame) throw Object.assign(new Error("Frame is missing or outside traversal limits; discover frames again."), { code: "FRAME_NOT_FOUND", uncertain: false, retryable: false });
-      assertNavigationAllowed(frame.url, context.urlPolicy);
+      if (frame.url !== "about:srcdoc") assertNavigationAllowed(frame.url, context.urlPolicy);
       const world = await command(context, args.tabId, "Page.createIsolatedWorld", { frameId: frame.frameId, worldName: "opencode-frame-inspection" });
       const response = await command(context, args.tabId, "Runtime.evaluate", { contextId: world.executionContextId, returnByValue: true,
-        expression: `JSON.stringify({url:location.href,title:document.title.slice(0,200),text:(document.body?.innerText??'').slice(0,${args.maxChars}),truncated:(document.body?.innerText.length??0)>${args.maxChars}})` });
+        expression: `(() => { ${pageStateSource()} return JSON.stringify({observation:agentObservation('frame'),url:location.href,title:document.title.slice(0,200),text:(document.body?.innerText??'').slice(0,${args.maxChars}),truncated:(document.body?.innerText.length??0)>${args.maxChars}}); })()` });
       if (response.exceptionDetails || typeof response.result?.value !== "string") throw new Error("Frame changed during inspection; discover frames again.");
-      const value = z.object({ url: z.string(), title: z.string(), text: z.string(), truncated: z.boolean() }).parse((JSON.parse(response.result.value) as unknown));
-      assertNavigationAllowed(value.url, context.urlPolicy);
+      const value = z.looseObject({ url: z.string(), title: z.string(), text: z.string(), truncated: z.boolean() }).parse((JSON.parse(response.result.value) as unknown));
+      if (value.url !== "about:srcdoc") assertNavigationAllowed(value.url, context.urlPolicy);
       return { frameId: frame.frameId, ...value, url: safeNetworkUrl(value.url) };
     } }),
     browser_webmcp_discover: defineObjectOperation({ capabilityOnly: true, args: { tabId, limit: z.number().int().min(1).max(30).default(20), maxSchemaChars: z.number().int().min(100).max(3000).default(2000) }, async execute(args, context) {

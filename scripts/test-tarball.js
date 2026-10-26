@@ -52,6 +52,7 @@ try {
     'const eventIsTyped: false = null as unknown as IsAny<typeof event>;',
     'const agent = createBrowserAgent();',
     'const call = agent.call("browser_session", { action: "open" });',
+    'const frameCall = agent.call("browser_run", { steps: [{ action: "press", key: "Enter", target: { frameId: "owned-frame", selector: "#choose" } }] });',
     'const resultIsTyped: false = null as unknown as IsAny<Awaited<typeof call>>;',
     'const runtime = createAgentBrowserRuntime();',
     '// @ts-expect-error Unknown actions must fail static validation.',
@@ -60,5 +61,6 @@ try {
   execFileSync("node", [path.join(root, "node_modules/typescript/lib/tsc.js"), "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", "--types", "node", "--typeRoots", path.join(root, "node_modules/@types"), consumer], { cwd: packageRoot, stdio: "pipe", timeout: 30000, windowsHide: true });
   console.log(JSON.stringify({ ok: true, tarball, packageRoot, types: "consumer passed" }, null, 2));
 } finally {
+  if (path.dirname(path.resolve(temp)) !== path.resolve(os.tmpdir())) throw new Error("Package test cleanup escaped its temporary directory");
   fs.rmSync(temp, { recursive: true, force: true });
 }

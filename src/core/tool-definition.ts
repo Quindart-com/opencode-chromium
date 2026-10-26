@@ -3,6 +3,8 @@ import type { FilePolicy } from "../browser/file-policy.ts";
 import type { UrlPolicy } from "../browser/url-policy.ts";
 
 export interface BrowserContext {
+  frameId?: string;
+  deadlineAt?: number;
   sessionId?: string;
   sessionID?: string;
   session_id?: string;

@@ -7,6 +7,7 @@
     "src/browser/operations/index.ts",
     "native-host/src/host.js",
     "native-host/src/runtime.ts",
+    "native-host/src/runtime-supervisor.ts",
     "extension-src/entrypoints/background/index.ts",
     "extension-src/entrypoints/popup/main.tsx",
     "extension-src/entrypoints/upload-confirm/main.tsx",

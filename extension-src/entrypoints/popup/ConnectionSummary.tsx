@@ -21,10 +21,10 @@ export default function ConnectionSummary({ status, onProfiles }: { status: Nati
   }
   return <section className={`connection-summary${connected ? " is-connected" : ""}`} aria-labelledby="connection-summary-heading">
     <div className="connection-summary-heading">
-      <h2 id="connection-summary-heading">{connected ? "Browser connected" : checking ? "Checking connection" : "Connect your browser"}</h2>
+      <h2 id="connection-summary-heading">{connected ? "Runtime connected" : checking ? "Checking connection" : "Connect your browser"}</h2>
       {connected && <button type="button" className="button-mini" onClick={onProfiles}>Profiles</button>}
     </div>
-    <p>{connected ? "The extension is connected to your local runtime. Choose this profile in your agent to start browsing." : checking ? "Looking for the local runtime. Your settings stay on this device." : "Install the local bridge to connect this extension to your coding agent."}</p>
+    <p>{connected ? "The extension is connected to your local runtime. Choose this profile in your agent. Tab health and pending browser dialogs are reported separately by the browser tools." : checking ? "Looking for the local runtime. Your settings stay on this device." : "Install the local bridge to connect this extension to your coding agent."}</p>
     {connected && <p className="current-profile">This browser profile: <strong>{profile?.profileLabel || "Unnamed profile"}</strong></p>}
     {!connected && !checking && <>
       <code className="setup-command">{setupCommand}</code>

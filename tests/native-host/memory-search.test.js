@@ -187,7 +187,7 @@ test("typed values, full URLs, and paths never enter v2 recipes", async () => {
     position: 0,
     action: "fill",
     hostname: "example.com",
-    target: { label: "user@company.com", selector: "#email[data-account='12345678901234567']", role: "textbox" },
+    target: { label: "user@example.test", selector: "#email[data-account='12345678901234567']", role: "textbox" },
     success: true,
   });
   assert.ok(recorded.accepted);
@@ -196,11 +196,11 @@ test("typed values, full URLs, and paths never enter v2 recipes", async () => {
   const finalized = store.finalizeChain({ chainId: "274b81aa-1234-5678-9abc-def012345678", success: true });
   assert.ok(finalized.accepted);
   const summary = store.db.prepare("SELECT safe_summary, recipe_json FROM memory_chains_v2 WHERE id = ?").get(finalized.chainId);
-  assert.doesNotMatch(summary.safe_summary, /user@company\.com/);
+  assert.doesNotMatch(summary.safe_summary, /user@example\.test/);
   assert.doesNotMatch(summary.safe_summary, /12345678901234567/);
   const action = store.db.prepare("SELECT recipe_json FROM memory_actions_v2 WHERE id = ?").get(recorded.actionId);
   const recipe = JSON.parse(action.recipe_json);
-  assert.notEqual(recipe.target_label, "user@company.com");
+  assert.notEqual(recipe.target_label, "user@example.test");
   assert.equal(recipe.selector, null, "selector containing PII must be rejected");
   assert.equal(recipe.requiresRuntimeUrl, false);
   store.close();

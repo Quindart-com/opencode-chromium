@@ -14,9 +14,12 @@ import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/backgr
 // Real Firefox input/file assignment and the compiled shared consent panel.
 // Only synthetic content in a disposable profile is exposed to the test shim.
 const browser = process.argv.includes("--librewolf") ? "librewolf" : "firefox";
+const framed = process.argv.includes("--frames");
 const executable = process.env.OPENCODE_FIREFOX_TEST_EXECUTABLE ?? executableCandidates(browser).find(fs.existsSync);
 if (!executable) throw Error("Test browser executable missing");
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "firefox-upload-"));
+// Disable first-run modals only in this disposable profile, as web-ext does.
+fs.writeFileSync(path.join(fixture, "user.js"), 'user_pref("termsofuse.bypassNotification",true);\nuser_pref("datareporting.policy.firstRunURL","");\nuser_pref("startup.homepage_welcome_url","about:blank");\n');
 const file = path.join(fixture, "approved-fixture.txt"); fs.writeFileSync(file, "approved fixture contents");
 const windows = new Map(), removed = []; let id = 100, origin, consent, backend, child;
 const native = createUploadFiles();
@@ -30,7 +33,11 @@ const server = http.createServer(async (req, res) => {
       catch (error) { reply = { error: error.message }; }
       res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(reply)); return;
     }
-    if (req.url === "/website") { res.setHeader("Content-Type", "text/html"); res.end('<input id="document" type="file">'); return; }
+    if (req.url === "/website" || req.url === "/input") {
+      res.setHeader("Content-Type", "text/html");
+      res.end(framed && req.url === "/website" ? `<iframe src="${origin.replace("127.0.0.1", "localhost")}/input"></iframe>` : '<input id="document" type="file"><output id="processed"></output><script>document.addEventListener("change",async e=>{document.querySelector("output").textContent=await e.target.files[0].text()})</script>');
+      return;
+    }
     const target = path.resolve("extension-firefox", "." + new URL(req.url, origin).pathname);
     if (!target.startsWith(path.resolve("extension-firefox") + path.sep)) { res.writeHead(403).end(); return; }
     res.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(target)] ?? "application/octet-stream");
@@ -38,7 +45,7 @@ const server = http.createServer(async (req, res) => {
     res.end(path.extname(target) === ".html" ? content.toString().replace('<head>', '<head><script>globalThis.chrome={runtime:{sendMessage:m=>fetch("/rpc",{method:"POST",body:JSON.stringify(m)}).then(r=>r.json())}}</script>') : content);
   } catch { res.writeHead(500).end(); }
 });
-await new Promise(resolve => server.listen(0, "127.0.0.1", resolve)); origin = "http://127.0.0.1:" + server.address().port;
+await new Promise(resolve => server.listen(0, resolve)); origin = "http://127.0.0.1:" + server.address().port;
 const probe = net.createServer(); await new Promise(resolve => probe.listen(0, "127.0.0.1", resolve)); const port = probe.address().port; await new Promise(resolve => probe.close(resolve));
 const evaluate = async (context, expression) => remoteValue((await backend.send("script.evaluate", { target: { context }, expression, awaitPromise: true })).result);
 const trustedClick = async (context, label) => {
@@ -53,6 +60,9 @@ try {
   const website = (await backend.send("browsingContext.create", { type: "tab" })).context;
   await backend.send("browsingContext.navigate", { context: website, url: origin + "/website", wait: "complete" });
   const marker = "a".repeat(32); await evaluate(website, `document.documentElement.setAttribute('data-opencode-bidi-bridge','${marker}')`); await backend.attach(1, marker);
+  const frameId = framed ? (await backend.command(1, "Page.getFrameTree", {})).frameTree.childFrames[0].frame.id : undefined;
+  const inputContext = framed ? (await backend.send("browsingContext.getTree", { root: website, maxDepth: 1 })).contexts[0].children[0].context : website;
+  const command = (method, params) => backend.command(1, method, { ...params, ...(frameId ? { agentFrameId: frameId } : {}) });
   consent = createUploadConsent({ chrome: {
     runtime: { id: "fixture-extension", getURL: page => new URL(page, origin + "/").href }, storage: { local: { get: async () => ({}) } },
     windows: { onRemoved: { addListener: callback => removed.push(callback) },
@@ -60,18 +70,25 @@ try {
       remove: async windowId => { const window = windows.get(windowId); windows.delete(windowId); if (window) await backend.send("browsingContext.close", { context: window.context }).catch(() => {}); removed.forEach(callback => callback(windowId)); },
     },
   }, describe: files => native("uploads.describe", { files }), snapshot: token => native("uploads.snapshot", { token }), release: token => native("uploads.release", { token }) });
-  const object = (await backend.command(1, "Runtime.evaluate", { expression: "document.querySelector('#document')", returnByValue: false })).result.objectId;
-  const command = (method, params) => backend.command(1, method, params);
+  let object = (await command("Runtime.evaluate", { expression: "document.querySelector('#document')", returnByValue: false })).result.objectId;
   const upload = () => guardedCdp({ method: "DOM.setFileInputFiles", commandParams: { objectId: object, files: [file] }, tabId: 1, consent, getTab: async () => ({ url: await evaluate(website, "location.href") }), inspectTarget: (method, params) => uploadTargetUrl(method, params, command), send: params => command("DOM.setFileInputFiles", params) });
   const confirmation = async () => { for (let i = 0; i < 100; i++) { const window = [...windows.values()][0]; if (window && await evaluate(window.context, "document.body.innerText.includes('Allow upload')")) return window.context; await new Promise(resolve => setTimeout(resolve, 50)); } throw Error("Consent UI did not become ready"); };
   const denied = upload().then(() => "unexpected", error => error.message); let context = await confirmation();
   await evaluate(context, "[...document.querySelectorAll('button')].find(e=>e.textContent==='Allow upload').click()");
-  assert.equal(await evaluate(website, "document.querySelector('#document').files.length"), 0);
+  assert.equal(await evaluate(inputContext, "document.querySelector('#document').files.length"), 0);
   await trustedClick(context, "Cancel upload"); assert.match(await denied, /Upload refused/);
+  const stale = upload().then(() => "unexpected", error => error.message); context = await confirmation();
+  await evaluate(inputContext, "document.querySelector('#document').replaceWith(document.querySelector('#document').cloneNode(true))");
+  await trustedClick(context, "Allow upload"); assert.match(await stale, /detached|document changed|no such (node|element)/i);
+  assert.equal(await evaluate(inputContext, "document.querySelector('#document').files.length"), 0);
+  await command("Runtime.releaseObject", { objectId: object });
+  object = (await command("Runtime.evaluate", { expression: "document.querySelector('#document')", returnByValue: false })).result.objectId;
   const approved = upload(); context = await confirmation(); await trustedClick(context, "Allow upload"); await approved;
-  assert.equal(await evaluate(website, "document.querySelector('#document').files[0].text()"), "approved fixture contents");
-  fs.mkdirSync("reports", { recursive: true }); fs.writeFileSync("reports/" + browser + "-upload-parity.json", JSON.stringify({ browser, checks: ["synthetic approval rejected", "trusted cancel", "trusted approval", "file contents preserved"] }, null, 2));
-  console.log(browser + " upload consent checks passed");
+  assert.equal(await evaluate(inputContext, "document.querySelector('#document').files[0].text()"), "approved fixture contents");
+  for (let i = 0; i < 50 && await evaluate(inputContext, "document.querySelector('#processed').textContent") !== "approved fixture contents"; i++) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(await evaluate(inputContext, "document.querySelector('#processed').textContent"), "approved fixture contents", "Application processed the selected file");
+  fs.mkdirSync("reports", { recursive: true }); fs.writeFileSync("reports/" + browser + (framed ? "-frame" : "") + "-upload-parity.json", JSON.stringify({ browser, framed, checks: ["synthetic approval rejected", "trusted cancel", "replaced target rejected after approval", "trusted approval", "file contents preserved", "application processed contents"] }, null, 2));
+  console.log(browser + (framed ? " cross-origin frame" : "") + " upload consent checks passed");
 } finally {
   if (backend?.ready) await backend.send("browser.close", {}, 2000).catch(() => {}); await backend?.close();
   if (child && child.exitCode === null) { if (process.platform === "win32") { try { execFileSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { windowsHide: true, stdio: "ignore" }); } catch {} } else child.kill(); }

@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import net from "node:net";
+import path from "node:path";
 import process from "node:process";
 import { z } from "zod";
 import { errorMessage } from "../../src/core/errors.ts";
@@ -20,7 +21,9 @@ import { candidateRecipes } from "./memory/recipe-candidates.ts";
 import { normalizeProfileRegistration,readProfileRegistrations,removeProfileRegistration,writeProfileRegistration } from "./profile-registry.ts";
 import type { RelayState } from "./rpc-relay.ts";
 import { RpcRelay } from "./rpc-relay.ts";
-import { runtimeDirectory } from "./runtime-lifecycle.ts";
+import { runtimeDirectory,withRuntimeLock } from "./runtime-lifecycle.ts";
+import { createParticipant,participantBusy,participants,processAlive,readJournal } from "./runtime-participants.ts";
+import { runActivationCoordinator } from "./runtime-coordinator.ts";
 import { createIdleUpdateCheck,createRuntimeUpdater,probeRuntimeActivity } from "./runtime-updates.ts";
 import { embedMemoryTexts,handleSemanticHostMethod,rankPageUnits } from "./semantic-search.ts";
 import { rankInputSchema } from "./semantic-types.ts";
@@ -32,6 +35,7 @@ const PROTOCOL_VERSION = "1";
 
 const ipcPath = instanceIpcPath();
 const nativeHostVersion = z.string().parse(record(JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as unknown).version);
+const hostActivity = createParticipant(runtimeDirectory(), "host", nativeHostVersion);
 const state: RelayState = { startedAt: new Date().toISOString(), ipcPath, profile: null, nativeHostVersion };
 let activeProfileId: string | null = null;
 
@@ -92,11 +96,15 @@ const relay: RpcRelay = new RpcRelay({
   state,
   extensionWriter: (message: unknown) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
+  admit: async () => { await hostActivity.enter(); return () => hostActivity.leave(); },
   localHandler: async (method, params): Promise<unknown> => {
     const firefox = await firefoxHost(method, params);
     if (firefox !== undefined) return firefox;
     if (method.startsWith("uploads.")) return uploadFiles(method, params);
-    if (method === "runtime.activity") return relay.activity();
+    if (method === "runtime.activity") {
+      const idle = await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null);
+      return { ...relay.activity(), extensionIdle: record(idle).idle === true, nativeHostVersion };
+    }
     if (method === "runtime.updateStatus") return updater.status();
     if (method === "runtime.updateConfigure") return updater.configure(z.boolean().parse(params.enabled));
     if (method === "memory.selectRecipe" && memoryStore) return await selectRecipe(params?.intent,
@@ -213,28 +221,67 @@ function createIpcServer() {
 
 const server = createIpcServer();
 let shutdownStarted = false;
-const updater = createRuntimeUpdater({ dir: runtimeDirectory(), busy: async () => {
-  if (relay.activity(false).clients || relay.activity(false).pending) return true;
+const verifiedProfiles = new Set<string>();
+const updater = createRuntimeUpdater({ dir: runtimeDirectory(), activate: runActivationCoordinator, verifiedProfiles: () => [...verifiedProfiles], busy: async () => {
+  verifiedProfiles.clear();
+  if (relay.activity(false).unmanaged || relay.activity(false).pending) return true;
   const idle = await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null);
   if (record(idle).idle !== true) return true;
+  if (activeProfileId) verifiedProfiles.add(activeProfileId);
   for (const profile of readProfileRegistrations()) {
-    if (profile.hostPid !== process.pid && profile.ipcPath && await probeRuntimeActivity(profile)) return true;
+    if (profile.hostPid !== process.pid && profile.ipcPath) {
+      if (await probeRuntimeActivity(profile)) return true;
+      verifiedProfiles.add(profile.profileId);
+    }
   }
   return false;
 } });
 const checkRuntimeUpdate = createIdleUpdateCheck({ updater, nativeVersion: nativeHostVersion,
+  quietMs: 0,
   target: () => state.profile?.extensionVersion,
-  active: () => shutdownStarted || relay.activity(false).clients > 0 || relay.activity(false).pending > 0,
-  canReconnect: async () => record(await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null)).idle === true,
-  retire: () => shutdownHost("Matching runtime ready; reconnecting idle browser host"),
+  active: () => shutdownStarted || relay.activity(false).unmanaged > 0 || relay.activity(false).pending > 0,
+  canReconnect: async () => {
+    if (participants(runtimeDirectory()).some(row => processAlive(row.pid) && participantBusy(row))) return false;
+    for (const profile of readProfileRegistrations()) if (profile.hostPid !== process.pid && await probeRuntimeActivity(profile)) return false;
+    return record(await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null)).idle === true;
+  },
+  retire: () => { void retireAtGate(false); },
 });
-const updateTimer = setInterval(() => { void checkRuntimeUpdate(); }, 60000);
+let checkingRetirement = false;
+async function retireAtGate(requireJournal = true) {
+  if (checkingRetirement || shutdownStarted) return;
+  checkingRetirement = true;
+  try {
+    const dir = runtimeDirectory(), journal = readJournal(dir);
+    if (requireJournal && (!journal || journal.phase === "preparing")) return;
+    const selected = JSON.parse(fs.readFileSync(path.join(dir, "runtime.json"), "utf8")) as { version?: string };
+    if (selected.version === nativeHostVersion) return;
+    await withRuntimeLock(dir, async () => {
+      if (participants(dir).some(participantBusy) || relay.activity(false).unmanaged || relay.activity(false).pending) return;
+      if (record(await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null)).idle !== true) return;
+      // New agent admission remains blocked by the journal until the helper
+      // observes replacement hosts. The helper does not die with this host.
+      shutdownHost("Matching runtime ready; reconnecting idle browser host");
+    });
+  } catch { /* A failed idle check must leave this host serving work. */ }
+  finally { checkingRetirement = false; }
+}
+const updateTimer = setInterval(() => { void checkRuntimeUpdate(); }, 1000);
 updateTimer.unref?.();
+const retirementTimer = setInterval(() => { void retireAtGate(); }, 100);
+retirementTimer.unref();
+const activityWatcher = fs.watch(path.join(runtimeDirectory(), "participants"), (_event, file) => {
+  if (file?.toString().endsWith(".json")) void checkRuntimeUpdate();
+});
+activityWatcher.unref();
 
 function shutdownHost(reason: string|undefined, exitCode = 0) {
   if (shutdownStarted) return;
   shutdownStarted = true;
   clearInterval(updateTimer);
+  clearInterval(retirementTimer);
+  activityWatcher.close();
+  hostActivity.close();
   log(reason ?? "Native host shutting down");
   relay.flushMemory();
   memoryStore?.close();

@@ -8,6 +8,7 @@ import type { Environment,Target } from "../../core/registry.ts";
 import type { BrowserContext } from "../../core/tool-definition.ts";
 import type { CdpMethod,CdpParams,CdpResult } from "../../shared/cdp.ts";
 import type { CursorAction } from "../../shared/cursor-actions.ts";
+import { pageException } from "../../shared/page-error.ts";
 import { isRecord,record,requiredRecord } from "../../shared/values.ts";
 import { browserRequest,listBrowserProfiles,resolveBrowserProfile } from "../client.ts";
 import { cursorActionForTool,cursorPoint } from "../cursor.ts";
@@ -22,6 +23,9 @@ import { createFileInputOperation } from "../uploads.ts";
 import { assertNavigationAllowed } from "../url-policy.ts";
 import { pageInspectExpression,visualMapExpression } from './inspection-expressions.ts';
 import { interactionHelpersSource } from './interaction-helpers.ts';
+import { freshSearch } from "./fresh-search.ts";
+import { focusExpression,selectionSnapshotExpression } from './focus-expressions.ts';
+import { pageStateExpression } from './page-state.ts';
 import { domSnapshotExpression,pageSearchUnitsExpression } from './snapshot-expressions.ts';
 export { keyDispatchEvents,parseKeyPress } from "../keyboard.ts";
 export { pageInspectExpression,visualMapExpression } from './inspection-expressions.ts';
@@ -63,6 +67,8 @@ function sessionParams(context: BrowserContext, params: Record<string, unknown> 
   return {
     session_id: sessionId,
     turn_id: turnId,
+    ...(context.frameId ? { frameId: context.frameId } : {}),
+    ...(context.deadlineAt ? { deadlineAt: context.deadlineAt } : {}),
     ...(context?.urlPolicy ? { url_policy: { allowedOrigins: context.urlPolicy.allowedOrigins, blockedOrigins: context.urlPolicy.blockedOrigins } } : {}),
     ...params,
   };
@@ -121,7 +127,7 @@ async function extensionProfileRequest<K extends string>(context: BrowserContext
   markProfileUsed(context, request.profileId);
   return {
     profileId: request.profileId,
-    result: parseExtensionResult(method, await browserRequest(method, request.params, { profileId: request.profileId })),
+    result: parseExtensionResult(method, await browserRequest(method, request.params, { profileId: request.profileId, timeoutMs: Math.max(20000, (context.deadlineAt ? context.deadlineAt - Date.now() : 10000) + 10000) })),
   };
 }
 
@@ -173,7 +179,7 @@ function clearSessionCache(context: BrowserContext, profileId: string | null = n
 }
 
 function cdpRequestOptions(timeoutMs: unknown) {
-  return typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs: Math.ceil(timeoutMs + 5000) } : {};
+  return typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs: Math.ceil(timeoutMs + 10000) } : {};
 }
 
 async function ensureAttached(context: BrowserContext, tabId: number, profileId: string) {
@@ -203,9 +209,9 @@ async function executeCdpRequest(context: BrowserContext, tabId: number, method:
       target: { tabId },
       method,
       commandParams,
-      timeoutMs,
+      timeoutMs, deadlineAt: context.deadlineAt ?? Date.now() + (timeoutMs ?? 10000),
     }),
-    { ...cdpRequestOptions(timeoutMs), profileId: resolvedProfileId },
+    { ...cdpRequestOptions(context.deadlineAt ? Math.max(1, context.deadlineAt - Date.now()) : timeoutMs), profileId: resolvedProfileId },
   );
 }
 
@@ -219,7 +225,7 @@ async function cdp<K extends CdpMethod>(context: BrowserContext, tabId: number, 
   try {
     return await executeCdpRequest(context, tabId, method, commandParams, timeoutMs, profileId) as CdpResult<K>;
   } catch (error) {
-    if (!isDebuggerDetachedError(error)) throw error;
+    if (!isDebuggerDetachedError(error) || record(error).executionState !== "not_started" || record(error).uncertain === true) throw error;
     clearTabCache(context, tabId, profileId);
     await ensureAttached(context, tabId, profileId);
     return await executeCdpRequest(context, tabId, method, commandParams, timeoutMs, profileId) as CdpResult<K>;
@@ -281,7 +287,7 @@ async function inputGesture(context: BrowserContext, tabId: number, steps: Input
   return browserRequest(
     "inputGesture",
     params,
-    { profileId, timeoutMs: Math.max(timeoutMs ?? 0, 30000) },
+    { profileId, timeoutMs: Math.max((timeoutMs ?? 10000) + 10000, 30000) },
   );
 }
 
@@ -350,7 +356,8 @@ function compactDialogEvents(response: BrowserEvents) {
       });
     }
   }
-  return { totalEvents: events.length, returned: dialogs.length, open, events: dialogs };
+  const current = record(response.dialogs).open;
+  return { totalEvents: events.length, returned: dialogs.length, open: Array.isArray(current) ? current[0] ?? null : open, health: response.health, events: dialogs };
 }
 
 export function compactConsoleEvents(response: BrowserEvents, options: { raw?: boolean; includeStack?: boolean; sourceMapped?: boolean; resolver?: SourceMapResolver | null } = {}) {
@@ -401,8 +408,9 @@ function pageSearchLabel(result: SearchResult) {
 }
 
 function leanPageSearchResult(result: SearchResult) {
-  const shaped: { node_id: string | number | null; kind: string | null; label: string | null; role: string | null; interactive: boolean; selector?: string | null } = {
+  const shaped: { node_id: string | number | null; kind: string | null; label: string | null; role: string | null; interactive: boolean; selector?: string | null; frameId?: string } = {
     node_id: result.node_id ?? null,
+    ...(typeof result.frameId === "string" ? { frameId: result.frameId } : {}),
     kind: result.kind ?? null,
     label: pageSearchLabel(result),
     role: result.role ?? null,
@@ -439,7 +447,7 @@ export function shapePageSearchRanking(input: unknown, detail: string = "lean") 
     url: ranking.url,
     title: ranking.title,
     query: ranking.query,
-    scope: ranking.scope ?? null,
+    scope: ranking.scope ?? null, observation: ranking.observation,
     totalCandidates: ranking.totalCandidates,
     truncated: ranking.truncated,
     mode: ranking.mode,
@@ -577,11 +585,7 @@ async function runtimeEvaluate(context: BrowserContext, tabId: number, expressio
     timeout: options.runtimeTimeoutMs,
   }, options.timeoutMs);
   if (result.exceptionDetails) {
-    const details = result.exceptionDetails;
-    const callFrame = details.stackTrace?.callFrames?.[0];
-    const location = callFrame ? ` (${callFrame.url || "evaluated script"}:${callFrame.lineNumber + 1}:${callFrame.columnNumber + 1})` : "";
-    const message = `${details.exception?.description ?? details.text ?? "Runtime.evaluate failed"}${location}`;
-    throw new Error(message);
+    throw pageException(result.exceptionDetails);
   }
   return result.result?.value;
 }
@@ -769,6 +773,7 @@ export function clickAtPointExpression(x: number, y: number, options: { button?:
     const point = { x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)} };
     const element = document.elementFromPoint(point.x, point.y);
     if (!element) throw new Error('No element at viewport point: ' + point.x + ', ' + point.y);
+    if (element.matches('iframe,frame')) agentFail('FRAME_TARGET_REQUIRED', 'Choose a frameId from frames.list before interacting with embedded controls.');
     assertPointerInteractable(element);
     visibleRect(element);
     ${options.trusted ? "" : `backgroundClick(element, point, ${JSON.stringify(clickOptions)});`}
@@ -819,7 +824,7 @@ function selectorTextExpression(selector: string) {
   return `(() => {
     ${interactionHelpersSource()}
     const element = querySelectorStrict(${JSON.stringify(selector)});
-    return (element.innerText || element.value || element.textContent || '').trim();
+    return { text: (element.innerText || element.value || element.textContent || '').trim(), observation: agentObservation('selector') };
   })()`;
 }
 
@@ -871,25 +876,6 @@ function setFocusedSelectValueExpression(value: string) {
   })()`;
 }
 
-function verifyFocusedSelectAllExpression(before: unknown) {
-  return `(() => {
-    ${interactionHelpersSource()}
-    const before = ${JSON.stringify(before)};
-    const element = focusedEditableElement(false);
-    if (!element) throw new Error('No editable element is focused after select-all');
-    const kind = editableKind(element, false);
-    const after = editableSnapshot(element, kind);
-    if (kind === 'input' || kind === 'textarea') {
-      if (after.selectionStart !== 0 || after.selectionEnd !== after.value.length) {
-        throw new Error('Select-all verification failed: selection is ' + after.selectionStart + '-' + after.selectionEnd + ' of ' + after.value.length);
-      }
-    } else if (kind === 'contenteditable' && after.value.length > 0 && after.selectedText.length < before.value.length) {
-      throw new Error('Select-all verification failed: contenteditable text was not fully selected');
-    }
-    return after;
-  })()`;
-}
-
 async function clickPoint(context: BrowserContext, tabId: number, x: number, y: number, button: "left" | "middle" | "right" = "left") {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
@@ -933,19 +919,18 @@ async function fillFocusedEditable(context: BrowserContext, tabId: number, befor
   return { filled: true, tabId, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash };
 }
 
-async function pressKey(context: BrowserContext, tabId: number, key: string) {
+async function pressKey(context: BrowserContext, tabId: number, key: string, target: { nodeId?: string; selector?: string } = {}) {
   const parsed = parseKeyPress(key);
   await activate(context, tabId);
-  const before = parsed.selectAll
-    ? await runtimeEvaluate(context, tabId, focusedEditableSnapshotExpression())
-    : null;
+  if (parsed.selectAll) await runtimeEvaluate(context, tabId, selectionSnapshotExpression());
 
-  for (const event of keyDispatchEvents(parsed)) {
-    await cdp(context, tabId, "Input.dispatchKeyEvent", event);
-  }
+  const steps: InputGestureStep[] = [];
+  if (target.nodeId || target.selector) steps.push({ method: "Runtime.evaluate", commandParams: { expression: focusExpression(target), returnByValue: true } });
+  steps.push(...keyDispatchEvents(parsed).map(event => ({ method: "Input.dispatchKeyEvent", commandParams: event })));
+  await inputGesture(context, tabId, steps, Math.max(1, (context.deadlineAt ?? Date.now() + 10000) - Date.now()));
 
   const after = parsed.selectAll
-    ? await runtimeEvaluate(context, tabId, verifyFocusedSelectAllExpression(before))
+    ? await runtimeEvaluate(context, tabId, selectionSnapshotExpression(true))
     : null;
 
   return { pressed: key, tabId, parsed: { key: parsed.primary.key, code: parsed.primary.code, modifiers: parsed.modifiers }, verification: after };
@@ -1377,6 +1362,7 @@ async execute(args, context) {
         async execute(args, context) {
           await activate(context, args.tabId);
           await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
+          const observation = record(await runtimeEvaluate(context, args.tabId, pageStateExpression()));
           const params: CdpParams<"Page.captureScreenshot"> = { format: args.format, optimizeForSpeed: true };
           if (args.format !== "png" && args.quality !== undefined) params.quality = args.quality;
           if (args.clip) params.clip = { ...args.clip, scale: args.clip.scale ?? 1 };
@@ -1402,10 +1388,13 @@ async execute(args, context) {
             mimeType = "image/jpeg";
             capture.formatApplied = "jpeg";
           }
+          const current = record(await runtimeEvaluate(context, args.tabId, pageStateExpression()));
+          if (current.documentId !== observation.documentId) throw Object.assign(new Error("Document changed while capturing the screenshot. Observe it again."), { code: "STALE_OBSERVATION", uncertain: false, retryable: false });
           return stringify({
             mimeType,
             base64: result.data,
             ...capture,
+            observation: { ...observation, scope: args.fullPage ? "document" : "viewport", changedDuringCapture: current.revision !== observation.revision },
             bytes: Math.floor(result.data.length * 0.75),
           });
         },
@@ -1490,8 +1479,7 @@ async execute(args, context) {
           promptText: tool.schema.string().max(2000).optional().describe("Text to provide when accepting a prompt dialog."),
         },
         async execute(args, context) {
-          await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
-          const result = await cdp(context, args.tabId, "Page.handleJavaScriptDialog", {
+          const result = await executeCdpRequest(context, args.tabId, "Page.handleJavaScriptDialog", {
             accept: args.value === "accept",
             ...(args.promptText !== undefined ? { promptText: args.promptText } : {}),
           }, 5000);
@@ -1565,13 +1553,14 @@ async execute(args, context) {
         },
       }),
       browser_keypress: tool({
-        description: "Dispatch a key press or common key chord in a Chromium tab.",
+        description: "Focus an optional target, then dispatch a key press or chord. Without a target, use current focus.",
         args: {
           tabId: tool.schema.number().int().positive(),
           key: tool.schema.string().describe("Key value or chord, such as Enter, Tab, Escape, Control+A, Shift+Tab, or a single character"),
+          nodeId: tool.schema.string().optional(), selector: tool.schema.string().optional(),
         },
         async execute(args, context) {
-          return stringify(await pressKey(context, args.tabId, args.key));
+          return stringify(await pressKey(context, args.tabId, args.key, args));
         },
       }),
       browser_snapshot: tool({
@@ -1624,7 +1613,7 @@ async execute(args, context) {
           const maxResults = Math.max(1, Math.min(args.maxResults, 100));
           const maxUnits = Math.max(1, Math.min(args.maxUnits, 1000));
           const embeddingCandidates = Math.max(1, Math.min(args.embeddingCandidates, strategy === "deep" ? 120 : 48));
-          const page = await runtimeEvaluate(context, args.tabId, pageSearchUnitsExpression({
+          const { page, ranking } = await freshSearch(async () => runtimeEvaluate(context, args.tabId, pageSearchUnitsExpression({
             maxUnits,
             scope: args.scope,
             selector: args.selector,
@@ -1633,8 +1622,7 @@ async execute(args, context) {
           }), {
             timeoutMs: Math.min(timeoutMs, 30000),
             runtimeTimeoutMs: 5000,
-          });
-          const ranking = await browserRequest("semantic.rankPageUnits", sessionParams(context, {
+          }), page => browserRequest("semantic.rankPageUnits", sessionParams(context, {
             profile_id: profileId,
             tabId: args.tabId,
             pageUrl: page.url,
@@ -1646,9 +1634,9 @@ async execute(args, context) {
             embeddingCandidates,
             rerankCandidates: args.rerankCandidates,
             pageFingerprint: `${page.decisionState}|${page.title}|${page.units.length}`,
-          }), { profileId, timeoutMs });
+          }), { profileId, timeoutMs }), () => runtimeEvaluate(context, args.tabId, pageStateExpression()));
           return stringify(shapePageSearchRanking({
-            url: page.url,
+            observation: page.observation, url: page.url,
             title: page.title,
             query: args.query,
             scope: page.scope,
@@ -1727,7 +1715,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           const profileId = await resolveSessionProfileId(context);
           markProfileUsed(context, profileId);
-          const inspectArgs = { ...args, selector: args.selector ?? (!args.nodeId ? 'dialog[open], [role="dialog"], body' : undefined) };
+          const inspectArgs = args;
           return stringify(await runtimeEvaluate(context, args.tabId, pageInspectExpression(inspectArgs), {
             timeoutMs: 30000,
             runtimeTimeoutMs: 5000,
@@ -1758,12 +1746,12 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "text");
+          if (args.mode === "focus") return stringify(await runtimeEvaluate(context, args.tabId, focusExpression({ nodeId: args.nodeId })));
           const before = await runtimeEvaluate(context, args.tabId, domNodeEditableExpression(args.nodeId, {
             selectAll: args.mode === "replace",
             cursorAtEnd: args.mode === "append",
             includeSelect: args.mode === "replace",
           }));
-          if (args.mode === "focus") return stringify({ focused: true, tabId: args.tabId, nodeId: args.nodeId, kind: before.kind, valueLength: before.value.length, valueHash: before.valueHash });
           if (args.mode === "replace") return stringify(await fillFocusedEditable(context, args.tabId, before, args.text));
           const after = await insertTextAndVerify(context, args.tabId, before, args.text);
           return stringify({ typed: true, tabId: args.tabId, nodeId: args.nodeId, length: args.text.length, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash });
@@ -1804,12 +1792,12 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "text");
+          if (args.mode === "focus") return stringify(await runtimeEvaluate(context, args.tabId, focusExpression({ selector: args.selector })));
           const before = await runtimeEvaluate(context, args.tabId, selectorEditableExpression(args.selector, {
             selectAll: args.mode === "replace",
             cursorAtEnd: args.mode === "append",
             includeSelect: args.mode === "replace",
           }));
-          if (args.mode === "focus") return stringify({ focused: true, tabId: args.tabId, selector: args.selector, kind: before.kind, valueLength: before.value.length, valueHash: before.valueHash });
           if (args.mode === "replace") return stringify(await fillFocusedEditable(context, args.tabId, before, args.value));
           const after = await insertTextAndVerify(context, args.tabId, before, args.value);
           return stringify({ typed: true, tabId: args.tabId, selector: args.selector, length: args.value.length, kind: after.kind, valueLength: after.value.length, valueHash: after.valueHash });
@@ -1822,7 +1810,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           selector: tool.schema.string(),
         },
         async execute(args, context) {
-          return stringify({ text: await runtimeEvaluate(context, args.tabId, selectorTextExpression(args.selector)) });
+          return stringify(await runtimeEvaluate(context, args.tabId, selectorTextExpression(args.selector)));
         },
       }),
       browser_set_file_input: createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }),
@@ -1873,7 +1861,6 @@ browser_console_logs: tool({
           sourceMap: tool.schema.boolean().default(false).describe("Resolve source-mapped stack frames by fetching maps through the page context."),
         },
         async execute(args, context) {
-          await enableCdpDomains(context, args.tabId, ["Runtime", "Log"], { optional: true });
           const response = await extensionRequest(context, "getCdpEvents", {
             tabId: args.tabId,
             limit: args.limit,
@@ -1892,7 +1879,6 @@ browser_console_logs: tool({
           limit: tool.schema.number().int().positive().default(50),
         },
         async execute(args, context) {
-          await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
           const response = await extensionRequest(context, "getCdpEvents", {
             tabId: args.tabId,
             limit: args.limit,
@@ -1908,7 +1894,6 @@ browser_console_logs: tool({
           limit: tool.schema.number().int().positive().default(100),
         },
         async execute(args, context) {
-          await enableCdpDomains(context, args.tabId, ["Network"], { optional: true });
           return stringify(await extensionRequest(context, "getCdpEvents", {
             tabId: args.tabId,
             limit: args.limit,
@@ -1966,7 +1951,7 @@ browser_console_logs: tool({
           const results: Record<string, unknown> = {};
           for (const profileId of await targetProfileIdsForSession(context)) {
             results[profileId] = await browserRequest("turnEnded", sessionParams(context, { profile_id: profileId }), { profileId });
-            clearSessionCache(context, profileId);
+            if (!record(results[profileId]).partial) clearSessionCache(context, profileId);
           }
           return stringify({ profiles: results });
         },
@@ -2106,6 +2091,7 @@ browser_finalize: tool({
               }),
             ]),
           ).default([]),
+          blockedTabs: tool.schema.array(tool.schema.object({ tabId: tool.schema.number().int().positive(), profileId: tool.schema.string().nullable(), reason: tool.schema.string() })).default([]),
         },
         async execute(args, context) {
           const profileIds = await targetProfileIdsForSession(context);
@@ -2115,16 +2101,21 @@ browser_finalize: tool({
           }
 
           const results: Record<string, unknown> = {};
-          for (const profileId of profileIds) {
+          await Promise.all(profileIds.map(async profileId => {
             const profileKeep = keep
               .filter((item) => !item.profileId || item.profileId === profileId)
               .map(({ tabId, status }) => ({ tabId, status }));
-            results[profileId] = await browserRequest("finalizeTabs", sessionParams(context, { profile_id: profileId, keep: profileKeep }), { profileId });
-            clearSessionCache(context, profileId);
-          }
-          environmentController.forgetSession(`${sessionKey(context)}:`);
-          usedProfilesBySession.delete(sessionKey(context));
-          return stringify({ profiles: results });
+            const blockedTabs = args.blockedTabs.filter(tab => !tab.profileId || tab.profileId === profileId);
+            try { results[profileId] = await browserRequest("finalizeTabs", sessionParams(context, { profile_id: profileId, keep: profileKeep, blockedTabs }), { profileId }); }
+            catch (error) { results[profileId] = { partial: true, error: error instanceof Error ? error.message : String(error) }; }
+            if (!record(results[profileId]).partial) {
+              clearSessionCache(context, profileId);
+              environmentController.forgetSession(`${sessionKey(context)}:${profileId}:`);
+            }
+          }));
+          const partial = Object.values(results).some(value => record(value).partial === true);
+          if (!partial) usedProfilesBySession.delete(sessionKey(context));
+          return stringify({ partial, profiles: results });
         },
       }),
   };

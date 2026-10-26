@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { sendMessage } from "./api";
 
-type Updates = { supported: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; reason?: string };
+type Updates = { supported: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; stagedVersion?: string; loadedVersions?: string[]; blockerCount?: number; reason?: string };
 const labels: Record<string, string> = {
   waiting: "Update scheduled. Waiting for agent sessions to finish.",
   downloading: "Downloading a matching runtime in the background.",
+  staged: "Download verified. Checking that every browser session has finished.",
+  activating: "Switching local tools to the updated runtime.",
+  reconnect_required: "This release changes the tool connection. Run setup and reconnect MCP once.",
   ready: "Matching runtime installed. New agent sessions use it automatically.",
   retry: "Update deferred. The current runtime is still available; another attempt will run later.",
 };
@@ -41,9 +44,10 @@ export default function RuntimeUpdates() {
   }
   return <section className="card" aria-labelledby="runtime-updates-title">
     <h2 id="runtime-updates-title">Updates</h2>
-    <label className="checkbox-row"><input type="checkbox" checked={updates?.enabled ?? false} disabled={busy || !updates?.supported} onChange={event => void configure(event.target.checked)} /><span>Keep local browser tools up to date<small className="help-note">Install the CLI version matching your extension after managed agent processes have exited. Running sessions keep their current version.</small></span></label>
+    <label className="checkbox-row"><input type="checkbox" checked={updates?.enabled ?? false} disabled={busy || !updates?.supported} onChange={event => void configure(event.target.checked)} /><span>Keep local browser tools up to date<small className="help-note">Download matching tools in the background and switch when all browser sessions have finished. Managed MCP connections stay open.</small></span></label>
     <p className="help-note">{updates?.supported ? !updates.enabled ? "Automatic runtime updates are off." : labels[updates.state ?? ""] ?? "Automatic checks run while the browser is connected. Downloads use npm." : updates?.reason ?? "Update the local runtime once to enable automatic updates."}</p>
     <p role="status" className="feedback">{message}</p>
+    {updates?.supported && <p className="help-note">Selected: {updates.installedVersion ?? "unknown"}. Loaded: {updates.loadedVersions?.join(", ") || "no active workers"}.{updates.stagedVersion ? ` Downloaded: ${updates.stagedVersion}.` : ""}{updates.blockerCount ? ` Waiting on ${updates.blockerCount} active participant(s).` : ""}</p>}
     <a href="https://quindart-com.github.io/opencode-chromium/updates/" target="_blank" rel="noopener noreferrer">What’s new</a>
   </section>;
 }

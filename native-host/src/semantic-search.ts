@@ -806,6 +806,7 @@ function normalizeUnits(units: unknown[] | undefined) {
 function publicResult(unit: PageUnit, score: number, components: { lexical: number; embedding: number | null; reranker: number | null }) {
   return {
     node_id: unit.node_id ?? unit.nodeId ?? null,
+    ...(unit.frameId ? { frameId: unit.frameId } : {}),
     kind: unit.kind ?? null,
     tagName: unit.tagName ?? null,
     role: unit.role ?? null,

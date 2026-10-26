@@ -6,7 +6,7 @@ import { ProfileSelectionError,type BrowserProfile } from "../core/profiles.ts";
 import { PLUGIN_VERSION } from "../core/versions.ts";
 import { isRecord,record } from "../shared/values.ts";
 
-const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 20000;
 const PROFILE_STATUS_TIMEOUT_MS = 1000;
 const PROFILE_CACHE_TTL_MS = 750;
 
@@ -24,9 +24,10 @@ export class BrowserHostRpcError extends Error {
   constructor(message: string | undefined, { code, data, method }: { code?: unknown; data?: unknown; method?: string } = {}) {
     super(message);
     this.name = "BrowserHostRpcError";
-    this.code = code;
+    this.code = record(data).code ?? code;
     this.data = data;
     this.method = method;
+    Object.assign(this, record(data));
   }
 }
 
@@ -155,7 +156,7 @@ export class BrowserHostClient {
         this.#settle(id, () => reject(new Error(`Timed out waiting for browser host response to ${method}`)));
       }, timeoutMs);
       this.#pending.set(id, { method, resolve, reject, timeout });
-      writeFrame(socket, { jsonrpc: "2.0", method, params, id, clientVersion: PLUGIN_VERSION }).catch((error) => {
+      writeFrame(socket, { jsonrpc: "2.0", method, params: { ...params, deadlineAt: record(params).deadlineAt ?? Date.now() + Math.max(1, timeoutMs - 10000) }, id, clientVersion: PLUGIN_VERSION, coordinated: process.env.OPENCODE_BROWSER_COORDINATED === "1" }).catch((error) => {
         this.#settle(id, () => reject(error));
         this.#disconnect(error);
       });

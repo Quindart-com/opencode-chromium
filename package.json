@@ -1,6 +1,7 @@
 {
   "name": "opencode-chromium",
-  "version": "1.9.3",
+  "version": "1.10.0",
+  "runtimeSupervisorProtocol": 1,
   "description": "Provider-neutral Chromium and Firefox browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -155,8 +156,8 @@
     "@jridgewell/trace-mapping": "^0.3.31",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
-    "@opencode-ai/plugin": "1.19.3",
-    "effect": "4.0.2",
+    "@opencode-ai/plugin": "1.19.4",
+    "effect": "4.0.6",
     "jsonc-parser": "^3.3.1",
     "pngjs": "7.0.0",
     "react": "19.3.1",
@@ -166,7 +167,7 @@
     "yaml": "^2.9.0",
     "zod": "4.6.7",
     "devtools-protocol": "0.0.1724436",
-    "webdriver-bidi-protocol": "0.4.3"
+    "webdriver-bidi-protocol": "1.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

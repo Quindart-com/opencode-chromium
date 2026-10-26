@@ -10,9 +10,13 @@ import { errorMessage } from "./errors.ts";
 export const FAILURE_MESSAGE_LIMIT = 240;
 
 const FAILURE_HINTS: Record<string, string> = {
+  DIALOG_OPEN: "Read events and handle the native dialog before continuing.",
+  TAB_UNHEALTHY: "Read session health and events; wait for the previous command to finish before retrying.",
+  FRAME_NOT_FOUND: "Discover frames again and use a current frameId.",
+  FRAME_TARGET_REQUIRED: "Discover frames with frames.list and pass target.frameId.",
   INVALID_REQUEST: "Check the step arguments with the selected profile and tab, then retry once.",
   STALE_TARGET: "Re-read the page and use a fresh nodeId, selector, or coordinates.",
-  TIMEOUT: "The browser did not answer in time. Retry once, then narrow the step.",
+  TIMEOUT: "The browser did not answer in time. Check health and dialogs; the action may have run.",
   BROWSER_OPERATION_FAILED: "Re-read the page before retrying; do not repeat the same step unchanged.",
   APPROVAL_REQUIRED: "Review the chain, then call browser_run with only the approvalToken.",
   PROFILE_DISCONNECTED: "Reconnect the browser profile, then retry.",
@@ -58,6 +62,7 @@ export function errorDetails(error: unknown) {
     hint: failureHint(code),
     retryable: Boolean(fields.retryable ?? (timeout || disconnected)),
     uncertain: Boolean(fields.uncertain ?? (timeout || disconnected)),
+    ...(typeof fields.executionState === "string" ? { executionState: fields.executionState } : {}),
     ...(fields.details ? { details: fields.details } : {}),
   };
 }

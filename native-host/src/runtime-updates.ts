@@ -8,6 +8,8 @@ import { FrameDecoder,writeFrame } from "./framing.ts";
 import { runProcess } from "./process-effect.ts";
 import type { ProfileRegistration } from "./profile-registry.ts";
 import { activeRuntimeLeases,parseRuntimeActivation,withRuntimeLock } from "./runtime-lifecycle.ts";
+import { activateRelease } from "./runtime-activation.ts";
+import { atomicJson,participantBusy,participants,processAlive,readJournal } from "./runtime-participants.ts";
 
 const read = (file: string): Record<string, unknown> | null => { try { return record((JSON.parse(fs.readFileSync(file, "utf8")) as unknown)); } catch { return null; } };
 const activationAt = (file: string): RuntimeActivation | null => { try { return parseRuntimeActivation(read(file)); } catch { return null; } };
@@ -18,24 +20,26 @@ const updateAt = (file: string): UpdateState => {
     retryAt: typeof value?.retryAt === "number" ? value.retryAt : undefined, reason: typeof value?.reason === "string" ? value.reason : undefined,
     checkedAt: typeof value?.checkedAt === "number" ? value.checkedAt : undefined };
 };
-export function probeRuntimeActivity(profile: Pick<ProfileRegistration, "ipcPath" | "hostPid">) {
-  return new Promise<boolean>(resolve => {
+export function queryRuntimeActivity(profile: Pick<ProfileRegistration, "ipcPath" | "hostPid">) {
+  return new Promise<Record<string, unknown> | null>(resolve => {
     const socket = net.createConnection(profile.ipcPath);
-    const finish = (busy: boolean): void => { clearTimeout(timer); socket.destroy(); resolve(busy); };
-    const timer = setTimeout(() => finish(true), 1500);
-    const decoder = new FrameDecoder({ onMessage: message => { const result = record(record(message).result); finish(!Object.keys(result).length || Number(result.clients) > 0 || Number(result.pending) > 0); } });
-    socket.on("connect", () => { void writeFrame(socket, { jsonrpc: "2.0", id: 1, method: "runtime.activity", params: {} }).catch(() => finish(true)); });
-    socket.on("data", chunk => { try { decoder.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk); } catch { finish(true); } });
+    const finish = (value: Record<string, unknown> | null): void => { clearTimeout(timer); socket.destroy(); resolve(value); };
+    const timer = setTimeout(() => finish(null), 1500);
+    const decoder = new FrameDecoder({ onMessage: message => finish(record(record(message).result)) });
+    socket.on("connect", () => { void writeFrame(socket, { jsonrpc: "2.0", id: 1, method: "runtime.activity", params: {} }).catch(() => finish(null)); });
+    socket.on("data", chunk => { try { decoder.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk); } catch { finish(null); } });
     socket.on("error", () => {
-      if (profile.hostPid === null) { finish(true); return; }
-      try { process.kill(profile.hostPid, 0); finish(true); } catch (error) { finish(record(error).code !== "ESRCH"); }
+      // A dead host alone does not prove that its extension has no retained tabs.
+      finish(null);
     });
   });
 }
+export async function probeRuntimeActivity(profile: Pick<ProfileRegistration, "ipcPath" | "hostPid">) {
+  const result = await queryRuntimeActivity(profile);
+  return result?.extensionIdle !== true || Number(result?.unmanaged ?? result?.clients) > 0 || Number(result?.pending) > 0;
+}
 function write(file: string, value: object) {
-  const temp = `${file}.${randomUUID()}.tmp`;
-  try { fs.writeFileSync(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" }); fs.renameSync(temp, file); }
-  finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
+  atomicJson(file, value);
 }
 export const releaseVersion = (value: unknown): value is string => typeof value === "string" && /^(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})$/.test(value);
 export function newerRelease(first: unknown, second: unknown) {
@@ -52,6 +56,9 @@ export function validateRelease(root: string, version: string) {
     if (!fs.statSync(path.join(root, file)).isFile()) throw new Error("Incomplete release");
   }
   for (const folder of ["extension", "extension-firefox"]) if (read(path.join(root, folder, "manifest.json"))?.version !== version) throw new Error("Release version mismatch");
+  if (pkg.runtimeSupervisorProtocol === 1) for (const file of ["runtime-coordinator.js", "runtime-supervisor.js", "runtime-worker.js", "runtime-participants.js", "runtime-activation.js", "runtime-lifecycle.js"]) {
+    if (!fs.statSync(path.join(root, "native-host/dist", file)).isFile()) throw new Error("Incomplete managed runtime");
+  }
 }
 
 function npmCli() {
@@ -79,14 +86,21 @@ export async function installRelease(stage: string, version: string) {
   await run([path.join(root, "dist/cli/index.js"), "version"], root, 15000);
 }
 
-export function createRuntimeUpdater({ dir, install = installRelease, now = Date.now, busy = async () => false }: { dir: string; install?: typeof installRelease; now?: () => number; busy?: () => Promise<boolean> }) {
+export function createRuntimeUpdater({ dir, install = installRelease, now = Date.now, busy = async () => false, verifiedProfiles = () => [], activate = activateRelease }: { dir: string; install?: typeof installRelease; now?: () => number; busy?: () => Promise<boolean>; verifiedProfiles?: () => readonly string[]; activate?: typeof activateRelease }) {
   const manifestFile = path.join(dir, "runtime.json"), statusFile = path.join(dir, "update-status.json");
   let running: Promise<void>|null = null;
   function status() {
     const activation = activationAt(manifestFile);
     const supported = !!activation?.root && !activation.followBranch && packagedRuntime(activation.root);
+    const update = updateAt(statusFile);
+    if (update.state === "activating" && activation?.version === update.targetVersion && !readJournal(dir)) update.state = "ready";
     return { supported, enabled: supported && activation?.autoUpdate !== false, installedVersion: activation?.version ?? null,
-      ...(updateAt(statusFile) ?? {}), ...(!supported ? { state: "manual", reason: "Development or unmanaged installation; run setup from a published package." } : {}) };
+      stagedVersion: activation?.stagedRelease?.version ?? null, ...participantStatus(),
+      ...update, ...(!supported ? { state: "manual", reason: "Development or unmanaged installation; run setup from a published package." } : {}) };
+  }
+  function participantStatus() {
+    try { const rows = participants(dir); return { blockerCount: rows.filter(participantBusy).length + activeRuntimeLeases(dir), loadedVersions: [...new Set(rows.filter(row => processAlive(row.pid)).map(row => row.version))].sort() }; }
+    catch { return { blockerCount: 1, loadedVersions: [], registryError: true }; }
   }
   async function configure(enabled: boolean) {
     if (typeof enabled !== "boolean") throw new Error("Expected an update preference");
@@ -108,14 +122,11 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
   async function check(target: unknown) {
     if (!releaseVersion(target) || !status().enabled) return;
     const initial = activationAt(manifestFile);
-    if (!initial || !newerRelease(target, initial.version)) return;
+    if (!initial || !newerRelease(target, initial.version) && initial.stagedRelease?.version !== target) return;
     const last = updateAt(statusFile);
     if (last?.targetVersion === target && (last.retryAt ?? 0) > now()) return;
     await withRuntimeLock(dir, async () => {
       // This long-lived worker lock is separate from the short launch gate.
-      const browsersBusy = await busy();
-      const allowed = await withRuntimeLock(dir, () => !activeRuntimeLeases(dir) && !browsersBusy);
-      if (!allowed) { save({ state: "waiting", targetVersion: target }); return; }
       const destination = path.join(dir, "releases", target), root = path.join(destination, "node_modules/opencode-chromium");
       const stage = path.join(dir, `update-stage-${randomUUID()}`);
       try {
@@ -129,15 +140,18 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
           fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.renameSync(stage, destination);
         }
         validateRelease(root, target);
-        const browsersStillBusy = await busy();
         await withRuntimeLock(dir, () => {
           const activation = activationAt(manifestFile);
           if (!activation || activation.root !== initial.root || activation.autoUpdate === false || activation.followBranch || !newerRelease(target, activation.version)) return;
-          if (activeRuntimeLeases(dir) || browsersStillBusy) { save({ state: "waiting", targetVersion: target }); return; }
-          write(manifestFile, { ...activation, root, version: target, pendingReload: false });
-          save({ state: "ready", targetVersion: target });
+          write(manifestFile, { ...activation, stagedRelease: { root, version: target } });
         });
-      } catch {
+        save({ state: "staged", targetVersion: target });
+        const activated = await activate(dir, { root, version: target }, busy, verifiedProfiles, () => save({ state: "activating", targetVersion: target }));
+        save({ state: activated ? "ready" : "waiting", targetVersion: target });
+      } catch (error) {
+        if (error instanceof Error && /reconnect|contract|supervisor/i.test(error.message)) {
+          save({ state: "reconnect_required", targetVersion: target, retryAt: now() + 6 * 3600000, reason: "This release changes the MCP contract. Run setup and reconnect MCP to adopt it." }); return;
+        }
         save({ state: "retry", targetVersion: target, retryAt: now() + 6 * 3600000,
           reason: "Release unavailable or installation failed. Retrying later; your current runtime is unchanged." });
       } finally {
@@ -150,15 +164,16 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
   return { status, configure, schedule, tick };
 }
 
-export function createIdleUpdateCheck({ updater, nativeVersion, target, active, canReconnect, retire, now = Date.now }: { updater: ReturnType<typeof createRuntimeUpdater>; nativeVersion: string; target(): string | null | undefined; active(): boolean; canReconnect(): Promise<boolean>; retire(): void; now?: () => number }) {
+export function createIdleUpdateCheck({ updater, nativeVersion, target, active, canReconnect, retire, now = Date.now, quietMs = 60000 }: { updater: ReturnType<typeof createRuntimeUpdater>; nativeVersion: string; target(): string | null | undefined; active(): boolean; canReconnect(): Promise<boolean>; retire(): void; now?: () => number; quietMs?: number }) {
   let checking = false, idleSince = now();
   return async () => {
     if (checking || !target()) return;
     checking = true;
     try {
-      if (active()) { idleSince = now(); return; }
-      if (now() - idleSince < 60000 || !updater.status().enabled) return;
+      if (!updater.status().enabled) return;
       await updater.tick(target());
+      if (active()) { idleSince = now(); return; }
+      if (now() - idleSince < quietMs) return;
       if (!updater.status().enabled || !newerRelease(updater.status().installedVersion, nativeVersion)) return;
       if (await canReconnect() && !active()) retire();
     } catch { /* Neither update failures nor busy profiles interrupt browsing. */ }
