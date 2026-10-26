@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { pageException } from "../shared/page-error.ts";
 import type { BrowserContext } from "../core/tool-definition.ts";
 import type { PageCdpRequest } from "../shared/cdp.ts";
 import type { FilePolicy } from "./file-policy.ts";
@@ -48,8 +49,8 @@ export function fileInputExpression(nodeId: string | undefined, selector = "inpu
   return `(() => {
     const nodeByIdStrict = id => {
       const node = window.__agentBrowserDomNodeMap?.get(id);
-      if (!node) throw new Error('Unknown DOM node id. Take a fresh snapshot first.');
-      if (!node.isConnected) throw new Error('DOM node is detached. Take a fresh snapshot first.');
+      if (!node) throw new Error('[STALE_TARGET] Unknown DOM node id. Take a fresh snapshot first.');
+      if (!node.isConnected) throw new Error('[STALE_TARGET] DOM node is detached. Take a fresh snapshot first.');
       return node;
     };
     const target = ${nodeId ? `nodeByIdStrict(${JSON.stringify(nodeId)})` : "document"};
@@ -76,7 +77,7 @@ export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringif
       const result = await cdp(context, args.tabId, "Runtime.evaluate", {
         expression: fileInputExpression(args.nodeId, args.selector), returnByValue: false,
       });
-      if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
+      if (result.exceptionDetails) throw pageException(result.exceptionDetails);
       const objectId = result.result?.objectId;
       if (!objectId) throw new Error("No file input resolved from upload target");
       try {
@@ -89,7 +90,7 @@ export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringif
           throw new Error(`File input does not accept multiple files: ${args.selector}`);
         }
         try {
-          await cdp(context, args.tabId, "DOM.setFileInputFiles", { objectId, files: args.files }, 120000);
+          await cdp(context, args.tabId, "DOM.setFileInputFiles", { ...(description.node?.backendNodeId ? { backendNodeId: description.node.backendNodeId } : { objectId }), files: args.files }, 120000);
         } catch (error) {
           throw fileUploadError(error);
         }

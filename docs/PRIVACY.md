@@ -2,7 +2,7 @@
 
 **Effective date:** October 23, 2026
 
-Extension updates can open the public release-notes page on GitHub Pages. This can be disabled in the setup guide. Published managed runtimes can download matching releases and dependencies from npm after agent processes exit; automatic updates can be disabled under Settings → Updates. These requests disclose normal connection information to the hosting service, but do not include browser content, profile identifiers or decision credentials.
+Extension updates can open the public release-notes page on GitHub Pages. This can be disabled in the setup guide. Published managed runtimes can download matching releases and dependencies from npm in the background and activate after all browser sessions finish; automatic updates can be disabled under Settings → Updates. These requests disclose normal connection information to the hosting service, but do not include browser content, profile identifiers or decision credentials. Coordination records stay local and contain process identities, opaque session/profile identifiers, activity counts and release versions; they contain no browser content or tool arguments.
 
 This privacy policy applies to the **OpenCode Browser Plugin** extensions for
 Chromium-based browsers (Chrome, Edge, Brave, Chromium) and Firefox-based browsers

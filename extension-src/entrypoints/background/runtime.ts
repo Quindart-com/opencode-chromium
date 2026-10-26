@@ -1,8 +1,10 @@
 import type { Browser } from "wxt/browser";
 import { browser as chrome } from "wxt/browser";
 import { z } from "zod/mini";
-import type { CdpMethod,CdpParams,CdpResult } from "../../../src/shared/cdp.ts";
+import type { CdpMethod,CdpParams,CdpRequest,CdpResult } from "../../../src/shared/cdp.ts";
+import { pageException } from "../../../src/shared/page-error.ts";
 import { record } from "../../../src/shared/values.ts";
+import { partialDispatchError } from "../../../src/shared/execution-state.ts";
 import type { VersionStatus } from "../../version-status.ts";
 import { validVersion,versionNotice } from "../../version-status.ts";
 import type { CommandParams,KeepItem } from "./command-schema.ts";
@@ -12,6 +14,11 @@ import { createDebuggerAttacher,installChromiumEvents } from "./debugger-attach.
 import { createDownloadEvents,registerDownloadHandlers } from "./download-events.ts";
 import { createFirefoxAttacher,registerDecisionImageCapture } from "./firefox-bridge.ts";
 import { resolveTabActivation } from "./focus-policy.ts";
+import { CommandHealth } from "./command-health.ts";
+import { finalizeOwnedTabs } from "./finalize-session.ts";
+import { FirefoxFrameRouting } from "./firefox-frame-routing.ts";
+import { FrameRouting } from "./frame-routing.ts";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 import { NativeRpc } from "./native-rpc.ts";
 import { assertSessionUrl,installNavigationPolicy,updateSessionPolicy } from "./navigation-policy.ts";
 import { openInstallGuide } from "./onboarding.ts";
@@ -57,9 +64,12 @@ const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
 const PROFILE_STORAGE_KEY = "OPENCODE_BROWSER_PROFILE";
 const VERSION_REMINDER_KEY = "OPENCODE_VERSION_REMINDER";
 let versionCheckGeneration = 0;
+let restoringSessions = 0;
 const sessions = new Map<string, ExtensionSession>();
 const attachedTabs = new Map<number, string>();
-const tabLocks = new Map<number, Promise<void>>();
+const commandHealth = new CommandHealth();
+const firefoxFrameRouting = new FirefoxFrameRouting((tabId, method, params, timeoutMs) => sendCdpCommand(tabId, method, params, timeoutMs));
+const frameRouting = new FrameRouting((tabId, method, params, timeoutMs, sessionId) => sendCdpCommand(tabId, method, params, timeoutMs, sessionId));
 const cdpEventsByTabId = new Map<number, CdpEvent[]>();
 const traceBuffers = new Map<number, TraceBuffer>();
 const cursorStateByTabId = new Map<number, Map<string, CursorState>>();
@@ -201,7 +211,7 @@ function applyHostVersions(value: unknown) {
     broadcastNativeStatus();
 }
 rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });
-rpc.register("runtime.canReconnect", async () => ({ idle: rpc.idle() && sessions.size === 0 && attachedTabs.size === 0 && tabLocks.size === 0 && traceBuffers.size === 0 }));
+rpc.register("runtime.canReconnect", async () => ({ idle: restoringSessions === 0 && rpc.idle() && sessions.size === 0 && attachedTabs.size === 0 && commandHealth.idle() && traceBuffers.size === 0 }));
 async function updateVersionBadge() {
     const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
     if (!chrome.action?.setBadgeText)
@@ -321,6 +331,8 @@ function recordCdpEvent(source: Browser.debugger.Debuggee, method: string, param
         downloadEvents.capture(tabId, method, record(params));
         return;
     }
+    const childSessionId = record(source).sessionId;
+    commandHealth.event(tabId, method, record(params), typeof childSessionId === "string" ? childSessionId : undefined);
     const events = cdpEventsByTabId.get(tabId) ?? [];
     events.push({
         time: nowIso(),
@@ -371,6 +383,8 @@ async function persistSessions() {
     await storageSet({ [SESSIONS_STORAGE_KEY]: serialized });
 }
 async function restoreSessions() {
+    restoringSessions++;
+    try {
     const stored = (await storageGet(SESSIONS_STORAGE_KEY).catch((): Record<string, unknown> => ({})))?.[SESSIONS_STORAGE_KEY];
     if (!stored || typeof stored !== "object")
         return;
@@ -402,6 +416,7 @@ async function restoreSessions() {
         if (!session.tabIds.size)
             sessions.delete(id);
     }
+    } finally { restoringSessions--; }
 }
 async function getTab(tabId: number) {
     return chrome.tabs.get(tabId);
@@ -563,7 +578,16 @@ async function publishCursorState(tabId: number, state: CursorState) {
     }
     throw new Error(`Could not deliver cursor state to tab ${tabId}`);
 }
+async function framePoint(params: CommandParams) {
+    const tabId = tabIdFromParams(params);
+    const { session } = ensureControlledTab(params, tabId);
+    const point = { x: params.x ?? 0, y: params.y ?? 0 };
+    if (!params.frameId || params.frameId === "main") return point;
+    if (IS_FIREFOX) return z.object({ x: z.number(), y: z.number() }).parse(await firefoxFrameRouting.command(tabId, "OpenCode.framePoint", point, params.frameId, url => assertSessionUrl(session, url), 5000));
+    return frameRouting.viewportPoint(tabId, params.frameId, point, url => assertSessionUrl(session, url));
+}
 async function moveMouse(params: CommandParams) {
+    if (params.frameId) params = { ...params, ...await framePoint(params) };
     const tabId = tabIdFromParams(params);
     const { session } = ensureControlledTab(params, tabId);
     const cursorId = cursorIdFromParams(params);
@@ -594,46 +618,38 @@ async function moveMouse(params: CommandParams) {
 }
 async function hideCursor(tabId: number, cursorId?: string) {
     const states = cursorStateByTabId.get(tabId);
+    if (!states?.size && !cursorInjectedTabs.has(tabId)) return;
     const ids = cursorId ? [cursorId] : [...(states?.keys() ?? ["default"])];
     for (const id of ids) {
         const previous = states?.get(id) ?? { x: -100, y: -100, moveSequence: 0, cursorId: id, label: id, visible: false };
         await publishCursorState(tabId, { ...previous, cursorId: id, visible: false, moveSequence: previous.moveSequence + 1 });
     }
 }
-async function withTabLock<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
-    const previous = tabLocks.get(tabId) ?? Promise.resolve();
-    let release: () => void = () => { };
-    const gate = new Promise<void>((resolve) => {
-        release = resolve;
-    });
-    const stored = previous.catch(() => { }).then(() => gate);
-    tabLocks.set(tabId, stored);
-    await previous.catch(() => { });
-    try {
-        return await operation();
-    }
-    finally {
-        release();
-        if (tabLocks.get(tabId) === stored)
-            tabLocks.delete(tabId);
-    }
-}
-const attachChromiumTab = createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS });
-const attachTab = IS_FIREFOX ? createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chromeCall, chrome, rpc }) : attachChromiumTab;
+const withTabLock = <T>(tabId: number, operation: () => Promise<T>, deadlineAt?: number, method?: string) => commandHealth.run(tabId, operation, deadlineAt, method);
+const attachChromiumTab = createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS, onAttached: (tabId, deadlineAt) => frameRouting.enable(tabId, undefined, deadlineAt).catch(() => {}), generation: tabId => commandHealth.generation(tabId), trackPending: (tabId, task) => commandHealth.track(tabId, task), keepAttached: tabId => Boolean(commandHealth.dialog(tabId)) });
+const attachTab = IS_FIREFOX ? createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chromeCall, chrome, rpc, generation: tabId => commandHealth.generation(tabId), trackPending: (tabId, task) => commandHealth.track(tabId, task) }) : attachChromiumTab;
 async function detachTab(tabId: number) {
-    return withTabLock(tabId, async () => {
+    commandHealth.invalidate(tabId);
+    const epoch = commandHealth.generation(tabId);
+    const task = (async () => {
         if (!attachedTabs.has(tabId))
             return {};
         if (IS_FIREFOX)
-            await rpc.request("firefox.detach", { tabId }).catch(() => { });
+            await rpc.request("firefox.detach", { tabId }, { timeoutMs: 3000 });
         else
-            await chrome.debugger.detach({ tabId }).catch(() => { });
+            await chrome.debugger.detach({ tabId });
         if (IS_FIREFOX)
             await chrome.scripting.executeScript({ target: { tabId }, func: () => { if (globalThis.__opencodeFileGuard)
                     document.removeEventListener("click", globalThis.__opencodeFileGuard, true); delete globalThis.__opencodeFileGuard; } }).catch(() => { });
-        attachedTabs.delete(tabId);
+        if (epoch === commandHealth.generation(tabId)) {
+            attachedTabs.delete(tabId);
+            frameRouting.forget(tabId); firefoxFrameRouting.forget(tabId);
+            commandHealth.recovered(tabId);
+        }
         return {};
-    });
+    })();
+    commandHealth.track(tabId, task);
+    return beforeDeadline(() => task, Date.now() + 2500, { tabId, phase: "detach", method: "detach" });
 }
 function commandTimeoutMs(params: CommandParams): number {
     const timeoutMs = params.timeoutMs ?? params.timeout_ms ?? DEFAULT_CDP_TIMEOUT_MS;
@@ -642,36 +658,27 @@ function commandTimeoutMs(params: CommandParams): number {
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
-function sendCdpCommand<K extends CdpMethod>(tabId: number, method: K, commandParams: CdpParams<K>, timeoutMs?: number): Promise<CdpResult<K>>;
-function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs?: number): Promise<unknown>;
-async function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs = DEFAULT_CDP_TIMEOUT_MS): Promise<unknown> {
+function sendCdpCommand<K extends CdpMethod>(tabId: number, method: K, commandParams: CdpParams<K>, timeoutMs?: number, sessionId?: string): Promise<CdpResult<K>>;
+function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs?: number, sessionId?: string): Promise<unknown>;
+async function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs = DEFAULT_CDP_TIMEOUT_MS, sessionId?: string): Promise<unknown> {
     if (IS_FIREFOX)
-        return rpc.request("firefox.command", { tabId, method, commandParams, timeoutMs }).catch(error => {
+        return rpc.request("firefox.command", { tabId, method, commandParams, timeoutMs }, { timeoutMs: timeoutMs + 5000 }).catch(error => {
             if (/bridge required|connection closed|remote connection/i.test(errorMessage(error)))
                 attachedTabs.delete(tabId);
             throw error;
         });
-    let timeoutId: ReturnType<typeof setTimeout>;
-    let settled = false;
-    return new Promise((resolve, reject) => {
-        timeoutId = setTimeout(() => {
-            if (settled)
-                return;
-            settled = true;
-            void detachTab(tabId);
-            reject(new Error(`CDP command timed out after ${timeoutMs}ms: ${method}`));
-        }, timeoutMs);
-        chrome.debugger.sendCommand({ tabId }, method, record(commandParams), (result) => {
+    const task = new Promise<unknown>((resolve, reject) => {
+        chrome.debugger.sendCommand({ tabId, ...(sessionId ? { sessionId } : {}) }, method, record(commandParams), (result) => {
             const error = chrome.runtime.lastError;
-            if (settled)
-                return;
-            settled = true;
-            clearTimeout(timeoutId);
             if (error)
-                reject(new Error(error.message));
+                reject(Object.assign(new Error(error.message), /could not find (object|node)|no node with given id|cannot find context|no frame for given id|cannot find frame/i.test(error.message ?? "") ? { code: "STALE_TARGET", uncertain: false, executionState: "not_started" } : {}));
             else
                 resolve(result ?? {});
         });
+    });
+    return beforeDeadline(() => task, Date.now() + timeoutMs, { tabId, phase: "command", method, dialogType: commandHealth.dialog(tabId)?.type }).catch(error => {
+        if (record(error).code === "TIMEOUT") commandHealth.track(tabId, task);
+        throw error;
     });
 }
 async function executeCdp(params: CommandParams) {
@@ -691,12 +698,23 @@ async function executeCdp(params: CommandParams) {
     else if ((session.urlPolicy?.allowedOrigins?.length || session.urlPolicy?.blockedOrigins?.length) && !/^(Page.stopLoading|Emulation.clear|Network.setExtraHTTPHeaders|Page.removeScriptToEvaluateOnNewDocument)/.test(method))
         assertSessionUrl(session, (await getTab(tabId)).url ?? "about:blank");
     if (!attachedTabs.has(tabId))
-        throw new Error("Debugger unattached");
+        throw Object.assign(new Error("Debugger unattached"), { code: "DEBUGGER_DETACHED", executionState: "not_started", uncertain: false });
+    const deadlineAt = params.deadlineAt ?? Date.now() + commandTimeoutMs(params);
+    const send = (command: object) => IS_FIREFOX
+      ? firefoxFrameRouting.command(tabId, method, command, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now())
+      : frameRouting.command(tabId, method, command, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now());
+    const inspect: CdpRequest = async <K extends CdpMethod>(inspectMethod: K, inspectParams: CdpParams<K>) =>
+      await (IS_FIREFOX ? firefoxFrameRouting : frameRouting).command(tabId, inspectMethod, inspectParams, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now()) as CdpResult<K>;
+    if (method === "Page.handleJavaScriptDialog") {
+      const result = await beforeDeadline(() => sendCdpCommand(tabId, method, params.commandParams ?? params.command_params ?? {}, Math.max(1, deadlineAt - Date.now()), commandHealth.dialog(tabId)?.sessionId), deadlineAt, { tabId, method, phase: "dialog recovery" });
+      commandHealth.event(tabId, "Page.javascriptDialogClosed", {});
+      return result;
+    }
+    if (commandHealth.dialog(tabId)) throw Object.assign(new Error("A native browser dialog is open. Read events and use handleDialog before continuing."), { code: "DIALOG_OPEN", executionState: "not_started", uncertain: false, details: { tabId, method, phase: "preflight", dialogType: commandHealth.dialog(tabId)?.type } });
     return withTabLock(tabId, () => guardedCdp({ method, tabId, consent: uploadConsent, getTab,
-        inspectTarget: (method, command) => uploadTargetUrl(method, command, (method, command) => sendCdpCommand(tabId, method, command, DEFAULT_CDP_TIMEOUT_MS)),
-        commandParams: params.commandParams ?? params.command_params ?? {},
-        send: command => sendCdpCommand(tabId, method, command, commandTimeoutMs(params)),
-    }));
+        inspectTarget: (uploadMethod, command) => uploadTargetUrl(uploadMethod, command, inspect),
+        commandParams: params.commandParams ?? params.command_params ?? {}, send,
+    }), deadlineAt, method);
 }
 async function executeInputGesture(params: CommandParams) {
     const tabId = tabIdFromParams(params);
@@ -721,7 +739,8 @@ async function executeInputGesture(params: CommandParams) {
                 finiteNumber(params.y, `steps[${index}].commandParams.y`);
         }
     }
-    await attachTab(tabId, sessionId);
+    const deadlineAt = params.deadlineAt ?? Date.now() + methodTimeoutMs;
+    await attachTab(tabId, sessionId, deadlineAt);
     let moveSequence = cursorStateByTabId.get(tabId)?.get(cursorId)?.moveSequence ?? 0;
     return withTabLock(tabId, async () => {
         const results = [];
@@ -729,18 +748,21 @@ async function executeInputGesture(params: CommandParams) {
         const cursorPublishInterval = hasCursorSteps && steps.length > 20 ? Math.max(1, Math.floor(steps.length / 20)) : 1;
         let stepIndex = 0;
         let pointerDown = false;
+        try {
         for (const step of steps) {
+            await beforeDeadline(() => {}, deadlineAt, { tabId, method: step.method, phase: "gesture", executionState: results.length ? "unknown" : "not_started" });
             stepIndex += 1;
             const isLast = stepIndex === steps.length;
             const commandParams = step.commandParams ?? step.command_params ?? {};
             const action = gestureAction(step, pointerDown);
             if (step.cursor && Number.isFinite(step.cursor.x) && Number.isFinite(step.cursor.y)) {
                 moveSequence += 1;
+                const point = params.frameId ? await framePoint({ ...params, ...step.cursor }) : step.cursor;
                 const patch = cursorState({
                     cursorId,
                     session,
-                    x: step.cursor.x,
-                    y: step.cursor.y,
+                    x: point.x,
+                    y: point.y,
                     visible: step.cursor.visible !== false,
                     moveSequence,
                     action,
@@ -756,15 +778,21 @@ async function executeInputGesture(params: CommandParams) {
                 results.push(await guardedCdp({ method: step.method, tabId, consent: uploadConsent, getTab,
                     inspectTarget: (method, command) => uploadTargetUrl(method, command, (method, command) => sendCdpCommand(tabId, method, command, DEFAULT_CDP_TIMEOUT_MS)),
                     commandParams,
-                    send: command => sendCdpCommand(tabId, step.method, command, step.timeoutMs !== undefined && Number.isFinite(step.timeoutMs) && step.timeoutMs > 0 ? step.timeoutMs : methodTimeoutMs),
+                    send: async command => {
+                      const result = await (IS_FIREFOX ? firefoxFrameRouting : frameRouting).command(tabId, step.method, command, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now());
+                      const exception = record(result).exceptionDetails;
+                      if (exception) throw pageException(exception);
+                      return result;
+                    },
                 }));
             }
             const delayMs = Number(step.delayMs ?? step.delay_ms ?? 0);
             if (delayMs > 0)
                 await sleep(Math.min(delayMs, 1000));
         }
+        } catch (error) { throw partialDispatchError(error, results.length); }
         return { results, cursorId, moveSequence };
-    });
+    }, deadlineAt, "inputGesture");
 }
 function headerValue(headers: unknown, name: string): unknown {
     if (!headers || typeof headers !== "object")
@@ -856,7 +884,7 @@ rpc.register("setProfileLabel", async (params) => setProfileLabel(params.label))
 rpc.register("attach", async (params) => {
     const tabId = tabIdFromParams(params);
     const { sessionId } = ensureControlledTab(params, tabId);
-    return attachTab(tabId, sessionId);
+    return attachTab(tabId, sessionId, params.deadlineAt);
 });
 rpc.register("detach", async (params) => detachTab(tabIdFromParams(params)));
 rpc.register("executeCdp", executeCdp);
@@ -871,6 +899,7 @@ rpc.register("activateTab", async (params) => {
     return normalizeTab(await focusTab(tabId, activation));
 });
 rpc.register("moveMouse", moveMouse);
+rpc.register("framePoint", framePoint);
 rpc.register("notifyCursorArrived", async (params) => {
     const tabId = tabIdFromParams(params);
     const cursorId = cursorIdFromParams(params);
@@ -893,7 +922,7 @@ rpc.register("getCdpEvents", async (params) => {
         events = events.filter((event) => methods.has(event.method));
     if (prefix)
         events = events.filter((event) => event.method.startsWith(prefix));
-    return { events: events.slice(-limit) };
+    return { events: events.slice(-limit), dialogs: { open: commandHealth.dialog(tabId) ? [{ tabId, ...commandHealth.dialog(tabId) }] : [] }, health: commandHealth.snapshot([tabId])[0] };
 });
 rpc.register("clearCdpEvents", async (params) => {
     const tabId = tabIdFromParams(params);
@@ -991,7 +1020,7 @@ rpc.register("getTabs", async (params) => {
             await untrackTab(id, tabId);
         }
     }
-    return { tabs };
+    return { tabs, health: commandHealth.snapshot(session.tabIds) };
 });
 rpc.register("getSelectedTab", async (params) => {
     const id = requiredSessionId(params);
@@ -1082,35 +1111,17 @@ rpc.register("finalizeTabs", async (params) => {
             throw new Error(`Cannot keep unmanaged tab ${normalized.tabId}`);
         return [normalized.tabId, normalized.status];
     }));
-    for (const tabId of [...session.tabIds]) {
-        const status = keep.get(tabId);
-        const origin = session.tabOrigins.get(tabId) ?? "agent";
-        await detachTab(tabId);
-        await hideCursor(tabId).catch(() => { });
-        if (status) {
-            if (status === "deliverable") {
-                await ensureDeliverableGroup(tabId).catch(() => { });
-                await untrackTab(id, tabId);
-            }
-            continue;
-        }
-        if (origin === "user") {
-            await ungroupTab(tabId);
-            await untrackTab(id, tabId);
-            continue;
-        }
-        await chrome.tabs.remove(tabId).catch(() => { });
-        await untrackTab(id, tabId);
-    }
-    await persistSessions().catch(() => { });
-    return {};
+    const result = await finalizeOwnedTabs(session, keep, { blocked: tabId => params.blockedTabs?.find(tab => tab.tabId === tabId)?.reason, dialog: tabId => commandHealth.dialog(tabId), detach: detachTab, hide: hideCursor,
+      deliver: ensureDeliverableGroup, ungroup: ungroupTab, untrack: tabId => untrackTab(id, tabId), close: tabId => chrome.tabs.remove(tabId) });
+    await persistSessions().catch(() => {});
+    return result;
 });
 rpc.register("turnEnded", async (params) => {
     const id = requiredSessionId(params);
     const session = sessionState(id);
     for (const tabId of [...session.tabIds]) {
-        await detachTab(tabId);
-        await hideCursor(tabId).catch(() => { });
+        if (!commandHealth.dialog(tabId)) await detachTab(tabId).catch(() => {});
+        await beforeDeadline(() => hideCursor(tabId), Date.now() + 500, { tabId, phase: "cursor cleanup" }).catch(() => {});
     }
     session.currentTurnId = null;
     await persistSessions().catch(() => { });
@@ -1136,11 +1147,15 @@ rpc.register("firefox.event", async ({ tabId, method, params }) => {
     return {};
 });
 registerDecisionImageCapture({ rpc, tabIdFromParams, ensureControlledTab, getTab, isBrowserInternalUrl, attachTab, requiredSessionId, sendCdpCommand });
+if (!IS_FIREFOX) chrome.debugger.onDetach.addListener(source => { if (source.tabId !== undefined) { commandHealth.invalidate(source.tabId); frameRouting.forget(source.tabId); } });
+if (!IS_FIREFOX) chrome.debugger.onEvent.addListener((source, method, params) => { if (source.tabId !== undefined && attachedTabs.has(source.tabId)) frameRouting.event(source, method, params); });
 if (!IS_FIREFOX)
     installChromiumEvents({ chrome, cdpEventTabId, traceBuffers, MAX_TRACE_CHUNKS, recordCdpEvent, attachedTabs });
 installNavigationPolicy({ chrome, findOwner: findTabOwner, trackTab, getTab, stopLoading: tabId => sendCdpCommand(tabId, "Page.stopLoading", {}, 2000) });
 chrome.tabs.onRemoved.addListener((tabId) => {
     attachedTabs.delete(tabId);
+    commandHealth.removed(tabId);
+    frameRouting.forget(tabId);
     cdpEventsByTabId.delete(tabId);
     traceBuffers.delete(tabId);
     cursorStateByTabId.delete(tabId);

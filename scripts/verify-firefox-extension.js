@@ -43,13 +43,13 @@ const manifest = path.join(fixture, 'native.json');
 fs.writeFileSync(manifest, JSON.stringify({ name: host, description: 'Disposable extension verification host', path: launcher, type: 'stdio', allowed_extensions: ['opencode-browser-plugin@quindart.com'] }));
 let nativeKey, nativeFile, child, agent, profileId;
 const server = http.createServer((req, res) => {
-  if (req.url === '/frame') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Frame fixture</p><iframe src="/leaf"></iframe>'); return; }
+  if (req.url === '/frame') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Frame fixture</p><button id="frame-choice" onclick="document.querySelector(\'#frame-result\').textContent=event.isTrusted?\'Trusted frame\':\'Synthetic frame\'">Frame choose</button><input id="frame-name"><button id="frame-prompt" onclick="prompt(123)">Frame prompt</button><p id="frame-result">Ready</p><iframe src="/leaf"></iframe>'); return; }
   if (req.url === '/leaf') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Nested frame fixture</p>'); return; }
   if (req.url === '/download') { res.setHeader('Content-Type', 'text/plain'); res.setHeader('Content-Disposition', 'attachment; filename="fixture.txt"'); res.end('owned fixture'); return; }
   res.setHeader('Content-Type', 'text/html');
   res.end(req.url === '/next' ? '<h1>Next page</h1>' : '<title>Extension parity fixture</title><button id="choose" onclick="document.querySelector(\'#result\').textContent=event.isTrusted?\'Trusted choice\':\'Synthetic choice\'">Choose blue</button><p id="result">Ready</p><input id="name" aria-label="Your name"><button id="dialog" onclick="alert(\'Owned fixture dialog\')">Open dialog</button><div id="drag" style="width:60px;height:60px;background:blue" onpointerdown="window.dragged=event.isTrusted" onpointerup="window.released=event.isTrusted"></div><a id="next" href="/next">Next</a><a id="download" href="/download">Download fixture</a><iframe src="/frame"></iframe><iframe src="http://127.0.0.1:' + frameServer.address().port + '/frame"></iframe>');
 });
-const frameServer = http.createServer((req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(req.url === '/leaf' ? '<p>Nested frame fixture</p>' : '<p>Frame fixture</p><iframe src="/leaf"></iframe>'); });
+const frameServer = http.createServer((req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(req.url === '/leaf' ? '<p>Nested frame fixture</p>' : '<p>Frame fixture</p><button id="frame-choice" onclick="document.querySelector(\'#frame-result\').textContent=event.isTrusted?\'Trusted frame\':\'Synthetic frame\'">Frame choose</button><input id="frame-name"><button id="frame-prompt" onclick="prompt(123)">Frame prompt</button><p id="frame-result">Ready</p><iframe src="/leaf"></iframe>'); });
 await new Promise(resolve => frameServer.listen(0, '127.0.0.1', resolve));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
@@ -57,9 +57,11 @@ const probe = net.createServer(); await new Promise(resolve => probe.listen(0, '
 const report = { browser, version: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version, checks: [] };
 try {
   if (process.platform === 'win32') {
-    nativeKey = 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\' + host;
-    try { execFileSync('reg', ['query', nativeKey], { stdio: 'ignore' }); throw Error('Disposable host registration already exists'); } catch (error) { if (!error.status) throw error; }
-    execFileSync('reg', ['add', nativeKey, '/ve', '/t', 'REG_SZ', '/d', manifest, '/f'], { stdio: 'ignore', windowsHide: true });
+    const candidateKey = 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\' + host;
+    let exists = false; try { execFileSync('reg', ['query', candidateKey], { stdio: 'ignore' }); exists = true; } catch {}
+    assert.equal(exists, false, 'Never overwrite an existing native host');
+    execFileSync('reg', ['add', candidateKey, '/ve', '/t', 'REG_SZ', '/d', manifest, '/f'], { stdio: 'ignore', windowsHide: true });
+    nativeKey = candidateKey;
   } else {
     env.HOME = fixture;
     const dir = path.join(fixture, '.mozilla/native-messaging-hosts'); fs.mkdirSync(dir, { recursive: true });
@@ -97,6 +99,25 @@ try {
     const inspected = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'frames.inspect', input: { frameId: frame.frameId } }] });
     assert.match(inspected.results[0].result.text, /Frame fixture/);
   }
+  for (const frame of frames.results[0].result.frames.filter(item => item.depth === 1)) {
+    const frameId = frame.frameId;
+    const found = await call('browser_observe', { mode: 'search', target: { frameId }, query: 'Frame choose', searchStrategy: 'lexical', detail: 'compact' });
+    const button = found.result.results.find(item => item.selector === '#frame-choice'); assert.ok(button, JSON.stringify({ frame, result: found.result }));
+    await call('browser_run', { memoryMode: 'off', steps: [{ action: 'click', target: { frameId, nodeId: button.node_id }, settle: { condition: 'contains', target: { frameId, selector: '#frame-result' }, value: 'Trusted frame' } }, { action: 'fill', target: { frameId, selector: '#frame-name' }, value: 'Frame input' }, { action: 'press', target: { frameId, selector: '#frame-name' }, key: 'End' }] });
+    const extracted = await call('browser_observe', { mode: 'extract', target: { frameId, selector: '#frame-result' } });
+    assert.equal(extracted.result.text, 'Trusted frame');
+    const prompting = agent.call('browser_run', { profile: profileId, sessionId, tabId, memoryMode: 'off', steps: [{ action: 'click', target: { frameId, selector: '#frame-prompt' }, timeoutMs: 1500 }] });
+    let opened = false;
+    for (let i = 0; i < 40; i++) {
+      const events = await call('browser_observe', { mode: 'events' });
+      if (events.result.dialogs.open?.type === 'prompt') { opened = true; break; }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(opened, true, 'Embedded native prompt is observable');
+    await call('browser_run', { memoryMode: 'off', steps: [{ action: 'handleDialog', target: { frameId }, value: 'dismiss' }] });
+    await prompting;
+  }
+  report.checks.push('high-level same-origin and cross-origin frame search, trusted clicks, settling, keyboard input, and prompt recovery');
   const bounded = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'frames.list', input: { maxDepth: 0, maxFrames: 1 } }] });
   assert.equal(bounded.results[0].result.frames.length, 1); report.checks.push('nested and cross-origin frames across reconnects');
   const webmcp = await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'capability', capability: 'webmcp.discover', input: { limit: 3 } }] });

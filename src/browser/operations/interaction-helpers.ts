@@ -1,5 +1,8 @@
+import { pageStateSource } from "./page-state.ts";
+
 export function interactionHelpersSource() {
   return `
+    ${pageStateSource()}
     const describeElement = (element) => {
       if (!element || element.nodeType !== Node.ELEMENT_NODE) return 'none';
       const id = element.id ? '#' + element.id : '';
@@ -18,7 +21,7 @@ export function interactionHelpersSource() {
     const querySelectorStrict = (selector) => {
       let element;
       try {
-        element = document.querySelector(selector);
+        element = agentUnique(selector);
       } catch (error) {
         throw new Error('Invalid selector: ' + selector + ': ' + (error && error.message ? error.message : String(error)));
       }
@@ -27,16 +30,16 @@ export function interactionHelpersSource() {
     };
 
     const nodeByIdStrict = (nodeId) => {
-      const node = window.__agentBrowserDomNodeMap && window.__agentBrowserDomNodeMap.get(nodeId);
+      const node = agentNodeById(nodeId);
       if (!node) throw new Error('Unknown DOM node id. Take a fresh browser_dom_snapshot first.');
       if (!node.isConnected) throw new Error('DOM node is detached. Take a fresh browser_dom_snapshot first.');
       return node;
     };
 
     const disabledReason = (element) => {
-      if (element.disabled === true) return 'element is disabled';
+      for(let parent=element;parent;parent=parent.parentElement||parent.getRootNode?.().host) if(parent.inert) return 'element is inert';
+      if (element.matches?.(':disabled')) return 'element is disabled';
       if (element.getAttribute('aria-disabled') === 'true') return 'element has aria-disabled=true';
-      if (element.closest?.('fieldset[disabled]')) return 'element is inside a disabled fieldset';
       return null;
     };
 
@@ -121,16 +124,23 @@ export function interactionHelpersSource() {
       const rect = visibleRect(element);
       const fractions = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75], [0.5, 0.2], [0.5, 0.8]];
       let coveredBy = null;
+      const samples = [];
       for (const [fx, fy] of fractions) {
         const x = Math.floor(rect.left + Math.max(1, rect.width - 1) * fx);
         const y = Math.floor(rect.top + Math.max(1, rect.height - 1) * fy);
-        const hit = document.elementFromPoint(x, y);
+        let hit = document.elementFromPoint(x, y);
+        while (hit?.shadowRoot?.elementFromPoint) {
+          const inner = hit.shadowRoot.elementFromPoint(x, y);
+          if (!inner || inner === hit) break;
+          hit = inner;
+        }
         if (hit && composedContains(element, hit)) {
           return { x, y, tagName: element.localName, text: (element.innerText || element.value || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160) };
         }
         coveredBy = hit;
+        samples.push({ x, y, hit: hit ? agentNodeId(hit) : null });
       }
-      throw new Error('Element is not clickable: safe click points are covered by ' + describeElement(coveredBy) + ': ' + describeElement(element));
+      agentFail('TARGET_OBSTRUCTED', 'Element is not clickable: safe click points are covered by ' + describeElement(coveredBy) + ': ' + describeElement(element), { target: agentNodeId(element), hit: coveredBy ? agentNodeId(coveredBy) : null, frameId: agentFrameId, documentId: agentState.documentId, samples });
     };
 
     // Keep ordinary activation inside the page. HTMLElement.click() preserves
@@ -246,6 +256,18 @@ export function interactionHelpersSource() {
       if (options.selectAll && kind !== 'select') selectEditableText(element, kind);
       if (options.cursorAtEnd && kind !== 'select') placeCursorAtEnd(element, kind);
       return editableSnapshot(element, kind);
+    };
+
+    const prepareFocus = element => {
+      const reason = disabledReason(element);
+      if (reason) agentFail(reason.includes('inert') ? 'TARGET_INERT' : 'TARGET_DISABLED', reason + ': ' + describeElement(element));
+      element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      try { visibleRect(element); } catch(error) { agentFail('TARGET_HIDDEN', error.message); }
+      element.focus({ preventScroll: true });
+      let active = document.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+      if (active !== element) agentFail('TARGET_NOT_FOCUSABLE', 'Element could not receive keyboard focus: ' + describeElement(element));
+      return { focused: true, nodeId: agentNodeId(element), frameId: agentFrameId, tagName: element.localName, kind: editableKind(element, true), observation: agentObservation('focus') };
     };
 
     const setFocusedSelectValue = (value) => {

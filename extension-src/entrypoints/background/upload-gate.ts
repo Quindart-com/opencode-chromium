@@ -14,8 +14,8 @@ export async function uploadTargetUrl(method: string, params: CdpCommandParams, 
   }
   if (!objectId) throw new Error("Cannot identify upload destination");
   try {
-    const result = await cdp("Runtime.callFunctionOn", { objectId, functionDeclaration: "function () { return (this.ownerDocument || this).location.href; }", returnByValue: true });
-    if (result.exceptionDetails || typeof result.result?.value !== "string") throw new Error("Upload destination changed or cannot be verified");
+    const result = await cdp("Runtime.callFunctionOn", { objectId, functionDeclaration: "function () { const doc=this.ownerDocument||this; if(doc!==document || this.nodeType===1&&!this.isConnected) throw Error('Detached upload target'); return doc.location.href; }", returnByValue: true });
+    if (result.exceptionDetails || typeof result.result?.value !== "string") throw Object.assign(new Error("Upload target is detached or its document changed"), { code: "STALE_TARGET", uncertain: false, executionState: "not_started" });
     return result.result.value;
   } finally { if (owned) await cdp("Runtime.releaseObject", { objectId }).catch(() => {}); }
 }

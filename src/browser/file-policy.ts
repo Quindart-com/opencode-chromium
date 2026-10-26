@@ -6,7 +6,7 @@ export interface FilePolicyConfig { allowedFileRoots?: readonly string[] }
 export type FilePolicy = ReturnType<typeof createFilePolicy>;
 
 function blocked(message: string|undefined) {
-  return new BrowserRuntimeError(message, { code: "FILE_POLICY_BLOCKED" });
+  return Object.assign(new BrowserRuntimeError(message, { code: "FILE_POLICY_BLOCKED" }), { executionState: "not_started" });
 }
 
 export function createFilePolicy(config: FilePolicyConfig = {}) {

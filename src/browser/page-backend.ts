@@ -31,7 +31,11 @@ export function createPageBackend({ request, evaluate, command, ready }: Backend
     },
     async click(context: BrowserContext, tabId: number, expression: (trusted: boolean) => string, options: { button?: CdpParams<"Input.dispatchMouseEvent">["button"]; clickCount?: number } = {}) {
       const trusted = await gecko(context);
-      const point = pointSchema.parse(await evaluate(context, tabId, expression(trusted), { userGesture: true }));
+      const point = pointSchema.parse(await evaluate(context, tabId, expression(trusted || Boolean(context.frameId && context.frameId !== "main")), { userGesture: true }));
+      if (context.frameId && context.frameId !== "main") {
+        await request(context, "framePoint", { tabId, frameId: context.frameId, ...point });
+        if (!trusted) await evaluate(context, tabId, expression(false), { userGesture: true });
+      }
       if (trusted) {
         await command(context, tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
         for (let i = 0; i < (options.clickCount ?? 1); i++) {

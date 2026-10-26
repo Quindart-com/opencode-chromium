@@ -45,6 +45,7 @@ export function normalizeError(error: unknown, fallbackCode = "BROWSER_OPERATION
     message,
     retryable: Boolean(properties.retryable ?? (timeout || disconnected)),
     uncertain: Boolean(properties.uncertain ?? (timeout || disconnected)),
+    ...(typeof properties.executionState === "string" ? { executionState: properties.executionState } : {}),
     ...(properties.details ? { details: properties.details } : {}),
   };
 }

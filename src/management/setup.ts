@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseRuntimeActivation,runtimeLifecycleSource,withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
 import { packagedRuntime } from "../../native-host/src/runtime-updates.ts";
+import { runActivationCoordinator } from "../../native-host/src/runtime-coordinator.ts";
 import { packageRoot } from "../cli/config.ts";
 import { applyRegistryChanges,planNativeHosts,runtimeDir } from "../cli/native-host.ts";
 import { launcherSource } from "../cli/runtime-link.ts";
@@ -12,6 +13,7 @@ import { selectHarnesses } from "./menu.js";
 import { offerRestart } from "./restart.js";
 import { planSkills } from "./skills.js";
 import { applyTransaction,type FileChange } from "./transaction.js";
+import { ensureManagedRelease,supervisorFiles } from "./supervisor.ts";
 
 interface SetupEnvironment {
   home?: string;
@@ -62,7 +64,9 @@ export async function manageSetup(argv: string[], remove = false, environment: S
     fs.existsSync(row.configPath) && nativeCodexPluginEnabled(fs.readFileSync(row.configPath, "utf8"))).map(row => row.id);
   changes.push(...planSkills(root, selected.filter(id => !nativePlugins.includes(id as HarnessId)) as HarnessId[], remove, environment.home));
   const dryRun = argv.includes("--dry-run");
+  let pendingRelease: { root: string; version: string } | null = null;
   if (!remove) {
+    changes.push(...supervisorFiles(dir));
     const lifecycle = path.join(dir, "runtime-lifecycle.mjs");
     changes.push({ filePath: lifecycle, before: fs.existsSync(lifecycle) ? fs.readFileSync(lifecycle, "utf8") : null, after: runtimeLifecycleSource() });
     for (const kind of ["host", "mcp", "plugin"] as const) {
@@ -72,15 +76,26 @@ export async function manageSetup(argv: string[], remove = false, environment: S
     const filePath = path.join(dir, "runtime.json");
     const existing = fs.existsSync(filePath) ? parseRuntimeActivation(JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown) : null;
     const production = argv.includes("--production");
-    const manifest = existing?.followBranch && !production ? existing : { ...existing, root, version: record(JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as unknown).version,
+    const pkg = record(JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as unknown);
+    const managed = packagedRuntime(root) && pkg.name === "opencode-chromium" && typeof pkg.version === "string" && !(existing?.followBranch && !production);
+    const selectedRoot = managed ? dryRun ? path.join(dir, "releases", String(pkg.version), "node_modules/opencode-chromium") : await ensureManagedRelease(dir, String(pkg.version)) : root;
+    const manifest = existing?.followBranch && !production ? existing : { ...existing, root: selectedRoot, version: pkg.version,
+      generation: existing?.generation ?? 0,
       autoUpdate: argv.includes("--no-auto-update") ? false : argv.includes("--auto-update") ? true : existing?.autoUpdate ?? packagedRuntime(root),
       ...(production ? { channel: "production", followBranch: false, pendingReload: true } : {}) };
+    // After the one-time legacy migration, setup uses the same global switch
+    // transaction as automatic updates instead of replacing a live pointer.
+    if (managed && existing && existing.root !== selectedRoot && existing.autoUpdate !== false && fs.existsSync(path.join(dir, "supervisor/1/runtime-supervisor.js"))) {
+      pendingRelease = { root: selectedRoot, version: String(pkg.version) };
+      Object.assign(manifest, { root: existing.root, version: existing.version, stagedRelease: pendingRelease });
+    }
     changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: JSON.stringify(manifest, null, 2) + "\n" });
   }
   const hosts = !remove ? (environment.planHosts ?? planNativeHosts)(dir) : null;
   if (hosts) changes.push(...hosts.changes);
   const apply = () => applyTransaction(changes, dryRun, hosts ? () => { if (process.platform !== "win32") fs.chmodSync(hosts.hostPath, 0o755); (environment.registerHosts ?? applyRegistryChanges)(hosts.registry); } : undefined);
   const result = dryRun ? apply() : await withRuntimeLock(dir, apply);
+  if (!dryRun && pendingRelease) await runActivationCoordinator(dir, pendingRelease, async () => false);
   const restarts = dryRun ? [] : await (environment.restart ?? offerRestart)(selected, argv.includes("--restart"), !argv.includes("--json"));
   return { ok: true, applied: !dryRun, dryRun, action: remove ? "uninstall" : "install", ...result, targets: selected,
     restarts, nativePlugins,

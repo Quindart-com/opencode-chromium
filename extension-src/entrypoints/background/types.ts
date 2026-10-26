@@ -29,9 +29,11 @@ export interface TraceBuffer {
 }
 
 export type ChromeCall = <T>(fn: (done: (result: T) => void) => void) => Promise<T>;
-export type WithTabLock = <T>(tabId: number, action: () => Promise<T>) => Promise<T>;
+export type WithTabLock = <T>(tabId: number, action: () => Promise<T>, deadlineAt?: number, method?: string) => Promise<T>;
 
 export interface AttachDependencies {
+  generation?(tabId: number): number;
+  trackPending?<T>(tabId: number, task: Promise<T>): void;
   chrome: WxtBrowser;
   withTabLock: WithTabLock;
   attachedTabs: Map<number, string>;
@@ -41,6 +43,8 @@ export interface AttachDependencies {
 }
 
 export interface DebuggerDependencies extends AttachDependencies {
+  onAttached?(tabId: number, deadlineAt: number): Promise<unknown>;
+  keepAttached?(tabId: number): boolean;
   DEBUGGER_VERSION: string;
   errorMessage(error: unknown): string;
   sendCdpCommand: TabCdpRequest;
