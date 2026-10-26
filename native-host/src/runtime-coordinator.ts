@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath,pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { activateRelease } from "./runtime-activation.ts";
 import { atomicJson,sleep } from "./runtime-participants.ts";
 import { readProfileRegistrations } from "./profile-registry.ts";
@@ -69,7 +69,7 @@ async function coordinate(dir: string, root: string, version: string, resultFile
     atomicJson(resultFile, { error: incompatible ? "MCP contract changed; reconnect MCP" : "Runtime activation failed" });
   }
 }
-if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+if (process.argv[1] && fs.existsSync(process.argv[1]) && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
   const [dir, root, version, result] = process.argv.slice(2);
   if (!dir || !root || !version || !result) throw new Error("Missing coordinator arguments");
   await coordinate(dir, root, version, result);

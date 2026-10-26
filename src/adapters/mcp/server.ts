@@ -16,7 +16,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath,pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { closeBrowserClients } from "../../browser/client.ts";
 import { createBrowserOperations } from "../../browser/operations/index.ts";
@@ -308,5 +308,5 @@ export async function main(argv = process.argv.slice(2)) {
   await startMcpServer(options, { runtime });
 }
 
-const isMainModule = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
+const isMainModule = process.argv[1] && fs.existsSync(process.argv[1]) && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
 if (isMainModule) await main();
