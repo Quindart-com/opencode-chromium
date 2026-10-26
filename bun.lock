@@ -17,7 +17,7 @@
         "react": "19.3.1",
         "react-dom": "19.3.1",
         "smol-toml": "^1.9.0",
-        "webdriver-bidi-protocol": "0.4.3",
+        "webdriver-bidi-protocol": "1.0.2",
         "ws": "^8.22.0",
         "yaml": "^2.9.0",
         "zod": "4.6.7",
@@ -1153,7 +1153,7 @@
 
     "web-ext": ["web-ext@10.8.0", "", { "dependencies": { "@babel/runtime": "8.0.7", "@devicefarmer/adbkit": "3.3.9", "addons-linter": "10.14.0", "camelcase": "8.0.0", "chrome-launcher": "1.2.0", "debounce": "1.2.1", "decamelize": "6.0.1", "es6-error": "4.1.1", "firefox-profile": "4.7.1", "fx-runner": "1.7.0", "https-proxy-agent": "^7.0.0", "jose": "5.9.6", "jszip": "3.10.2", "multimatch": "6.0.0", "open": "11.0.4", "parse-json": "8.3.0", "pino": "10.4.0", "promise-toolbox": "0.21.0", "source-map-support": "0.5.21", "strip-bom": "5.0.0", "strip-json-comments": "5.0.3", "tmp": "0.2.7", "update-notifier": "7.3.1", "watchpack": "2.5.2", "yargs": "17.7.3", "zip-dir": "2.0.0" }, "bin": { "web-ext": "bin/web-ext.js" } }, "sha512-UdZJkdZZ9TTqDUDZLf1Tb9MCFQsi2P7FmHGx2e00VB+1U9iJPA1WUUHUtdjh2m7Cnh6su27wivhmEkaSkcl2+g=="],
 
-    "webdriver-bidi-protocol": ["webdriver-bidi-protocol@0.4.3", "", {}, "sha512-uuN0goWfxP22B7J/uAgBpOYNPttC+XVseYE+rSY5+rQ+YBeVz/VORw8WbmLVcqW78zNg5A4qnjNXYUWR3il2ig=="],
+    "webdriver-bidi-protocol": ["webdriver-bidi-protocol@1.0.2", "", {}, "sha512-nghazPI+J5RrLZ+qb6vMjC6l1/tnwqr2muVEax4Ufd6eIdcjeqNnhLsAxTG9s+7Zf4umgf0DrEwDC8CoU91nAA=="],
 
     "webpack-virtual-modules": ["webpack-virtual-modules@0.6.2", "", {}, "sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ=="],
 

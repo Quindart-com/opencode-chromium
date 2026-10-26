@@ -166,7 +166,7 @@
     "yaml": "^2.9.0",
     "zod": "4.6.7",
     "devtools-protocol": "0.0.1724436",
-    "webdriver-bidi-protocol": "0.4.3"
+    "webdriver-bidi-protocol": "1.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
