@@ -26,6 +26,7 @@ import { createAgentBrowserRuntime } from "../../core/runtime.ts";
 import { jsonSchemaFor } from "../../core/schema-adapters.ts";
 import { responseMetadata as contractMetadata,PLUGIN_NAME,PLUGIN_VERSION } from "../../core/versions.ts";
 import { memoryEnabledForServer } from "../../memory/index.ts";
+import { trackRuntime } from "../runtime-activity.ts";
 
 export const SERVER_NAME = PLUGIN_NAME;
 export const SERVER_INSTRUCTIONS = [
@@ -153,6 +154,7 @@ function mcpSchema(schema: z.ZodType) {
   };
 }
 export async function registerCoreTools(server: McpServer, runtime: AgentBrowserRuntime, fallbackSessionId: string, { memory = false }: { memory?: boolean } = {}) {
+  const activity = trackRuntime(runtime);
   const registries: Record<string, RuntimeTool>[] = [createCoreRegistry(runtime)];
   if (memory) registries.push(createMemoryRegistry(runtime));
   for (const registry of registries) {
@@ -162,7 +164,7 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
       inputSchema: mcpSchema(definition.inputSchema),
       outputSchema: mcpSchema(definition.outputSchema),
       annotations: definition.annotations,
-    }, async (args: unknown) => {
+    }, async (args: unknown) => activity.call(async () => {
       try {
         const parsed = definition.inputSchema.parse(args ?? {});
         const result = definition.outputSchema.parse(await definition.execute(parsed, { sessionID: fallbackSessionId, sessionId: fallbackSessionId, agent: "mcp" }));
@@ -176,7 +178,7 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
         const result = { ...contractMetadata(), ok: false, status: "invalid_request", sessionId: fallbackSessionId, error: { code: "INVALID_REQUEST", message: error instanceof Error ? error.message : String(error), retryable: false, uncertain: false } };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result, isError: true };
       }
-    });
+    }));
   }
   }
 
@@ -184,7 +186,7 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
     "browser-artifact",
     new ResourceTemplate(artifactUriTemplate(), { list: undefined }),
     { title: "Browser result artifact", description: "Ephemeral large result or screenshot produced by the browser runtime." },
-    async (uri: URL) => {
+    async (uri: URL) => activity.call(async () => {
       const artifact = runtime.artifacts.read(uri.href);
       if (!artifact) throw new Error(`Browser artifact expired or was not found: ${uri.href}`);
       const binary = !artifact.mimeType.startsWith("text/") && artifact.mimeType !== "application/json";
@@ -195,7 +197,7 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
           ...(binary ? { blob: artifact.data.toString("base64") } : { text: artifact.data.toString("utf8") }),
         }],
       };
-    },
+    }),
   );
 }
 
@@ -283,6 +285,7 @@ export async function startMcpServer(options = parseArgs(process.argv.slice(2)),
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  if (argv.includes("--managed")) return (await import("../../cli/managed-mcp.ts")).managedMcp(argv.filter(arg => arg !== "--managed"));
   const options = parseArgs(argv);
   if (options.help) {
     process.stdout.write("Usage: opencode-chromium-mcp [--transport=stdio|http] [--toolset=core|legacy|debug] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN] [--allowed-origin=PATTERN] [--blocked-origin=PATTERN]\n");
@@ -295,6 +298,7 @@ export async function main(argv = process.argv.slice(2)) {
     },
   });
   const cleanup = () => {
+    trackRuntime(runtime).close();
     runtime.close();
     closeBrowserClients();
   };

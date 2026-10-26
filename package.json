@@ -1,6 +1,7 @@
 {
   "name": "opencode-chromium",
-  "version": "1.9.3",
+  "version": "1.10.0",
+  "runtimeSupervisorProtocol": 1,
   "description": "Provider-neutral Chromium and Firefox browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {

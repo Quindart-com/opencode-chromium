@@ -22,6 +22,7 @@ export class NativeRpc {
   readonly #handlers = new Map<string, (params: CommandParams) => Promise<unknown>>();
   #nextId = 1;
   readonly #pending = new Map<number, Pending>();
+  #activeHandlers = 0;
   #port: Browser.runtime.Port | null = null;
   #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly options: {
@@ -33,7 +34,7 @@ export class NativeRpc {
   constructor(options: NativeRpc["options"]) { this.options = options; }
 
   register(method: string, handler: (params: CommandParams) => Promise<unknown>): void { this.#handlers.set(method, handler); }
-  idle(): boolean { return this.#pending.size === 0; }
+  idle(): boolean { return this.#pending.size === 0 && this.#activeHandlers === 0; }
 
   connect(): void {
     if (this.#port) return;
@@ -107,12 +108,14 @@ export class NativeRpc {
       const handler = this.#handlers.get(message.method);
       const id = typeof message.id === "number" || typeof message.id === "string" ? message.id : undefined;
       if (!handler) { if (id !== undefined) this.#post({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${message.method}` } }); return; }
+      const observer = message.method === "runtime.canReconnect";
+      if (!observer) this.#activeHandlers++;
       try {
         const result = await handler(commandParamsSchema.parse(message.params ?? {}));
         if (id !== undefined) this.#post({ jsonrpc: "2.0", id, result });
       } catch (error) {
         if (id !== undefined) this.#post({ jsonrpc: "2.0", id, error: { code: -32000, message: error instanceof Error ? error.message : String(error) } });
-      }
+      } finally { if (!observer) this.#activeHandlers--; }
       return;
     }
     if (typeof message.id !== "number") return;

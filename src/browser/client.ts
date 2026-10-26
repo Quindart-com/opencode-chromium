@@ -155,7 +155,7 @@ export class BrowserHostClient {
         this.#settle(id, () => reject(new Error(`Timed out waiting for browser host response to ${method}`)));
       }, timeoutMs);
       this.#pending.set(id, { method, resolve, reject, timeout });
-      writeFrame(socket, { jsonrpc: "2.0", method, params, id, clientVersion: PLUGIN_VERSION }).catch((error) => {
+      writeFrame(socket, { jsonrpc: "2.0", method, params, id, clientVersion: PLUGIN_VERSION, coordinated: process.env.OPENCODE_BROWSER_COORDINATED === "1" }).catch((error) => {
         this.#settle(id, () => reject(error));
         this.#disconnect(error);
       });

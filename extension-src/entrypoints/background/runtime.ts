@@ -57,6 +57,7 @@ const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
 const PROFILE_STORAGE_KEY = "OPENCODE_BROWSER_PROFILE";
 const VERSION_REMINDER_KEY = "OPENCODE_VERSION_REMINDER";
 let versionCheckGeneration = 0;
+let restoringSessions = 0;
 const sessions = new Map<string, ExtensionSession>();
 const attachedTabs = new Map<number, string>();
 const tabLocks = new Map<number, Promise<void>>();
@@ -201,7 +202,7 @@ function applyHostVersions(value: unknown) {
     broadcastNativeStatus();
 }
 rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });
-rpc.register("runtime.canReconnect", async () => ({ idle: rpc.idle() && sessions.size === 0 && attachedTabs.size === 0 && tabLocks.size === 0 && traceBuffers.size === 0 }));
+rpc.register("runtime.canReconnect", async () => ({ idle: restoringSessions === 0 && rpc.idle() && sessions.size === 0 && attachedTabs.size === 0 && tabLocks.size === 0 && traceBuffers.size === 0 }));
 async function updateVersionBadge() {
     const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
     if (!chrome.action?.setBadgeText)
@@ -371,6 +372,8 @@ async function persistSessions() {
     await storageSet({ [SESSIONS_STORAGE_KEY]: serialized });
 }
 async function restoreSessions() {
+    restoringSessions++;
+    try {
     const stored = (await storageGet(SESSIONS_STORAGE_KEY).catch((): Record<string, unknown> => ({})))?.[SESSIONS_STORAGE_KEY];
     if (!stored || typeof stored !== "object")
         return;
@@ -402,6 +405,7 @@ async function restoreSessions() {
         if (!session.tabIds.size)
             sessions.delete(id);
     }
+    } finally { restoringSessions--; }
 }
 async function getTab(tabId: number) {
     return chrome.tabs.get(tabId);

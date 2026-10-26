@@ -40,11 +40,12 @@ test("idle update validates a side-by-side release and preserves the original in
     await f.updater.tick("1.9.2"); await f.updater.tick("1.9.3"); assert.equal(f.installs(), 1);
   } finally { f.cleanup(); }
 });
-test("live agent leases and busy browser profiles defer downloads", async () => {
+test("live leases and busy profiles allow staging but defer activation", async () => {
   const f = fixture();
   try {
     await resolveRuntime(f.dir); await f.updater.tick("1.9.3");
-    assert.equal(f.updater.status().state, "waiting"); assert.equal(f.installs(), 0);
+    assert.equal(f.updater.status().state, "waiting"); assert.equal(f.installs(), 1);
+    assert.equal(f.updater.status().stagedVersion, "1.9.3");
     fs.rmSync(path.join(f.dir, "leases"), { recursive: true });
     const second = createRuntimeUpdater({ dir: f.dir, busy: async () => true, install: async () => assert.fail("Busy browser must not install") });
     await second.tick("1.9.3"); assert.equal(second.status().state, "waiting");
@@ -135,10 +136,10 @@ test("host retirement waits for quiet time and rechecks new activity after the e
   const updater = { status: () => ({ enabled: true, installedVersion: "1.9.3" }), tick: async () => { ticks++; } };
   const check = createIdleUpdateCheck({ updater, nativeVersion: "1.9.2", target: () => "1.9.3", active: () => active,
     canReconnect: async () => { if (panelIdle) active = true; return panelIdle; }, retire: () => { retirements++; }, now: () => clock });
-  await check(); assert.equal(ticks, 0);
+  await check(); assert.equal(ticks, 1);
   clock = 61000; active = true; await check(); active = false;
-  clock = 90000; await check(); assert.equal(ticks, 0);
-  clock = 122000; await check(); assert.equal(ticks, 1); assert.equal(retirements, 0);
+  clock = 90000; await check(); assert.equal(ticks, 3);
+  clock = 122000; await check(); assert.equal(ticks, 4); assert.equal(retirements, 0);
   panelIdle = true; await check(); assert.equal(retirements, 0);
   const ready = createIdleUpdateCheck({ updater, nativeVersion: "1.9.2", target: () => "1.9.3", active: () => false,
     canReconnect: async () => true, retire: () => { retirements++; }, now: () => clock });

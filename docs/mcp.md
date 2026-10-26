@@ -17,6 +17,7 @@ Options:
 --auth-token-env=AGENT_BROWSER_AUTH_TOKEN
 --allowed-origin=PATTERN
 --blocked-origin=PATTERN
+--managed
 ```
 
 Core mode exposes exactly `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Debug mode adds diagnostics; legacy mode exposes the preserved 55 granular operations for migration and regression testing only.
