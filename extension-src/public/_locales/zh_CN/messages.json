@@ -1,0 +1,1109 @@
+{
+  "extensionName": {
+    "message": "opencode-chromium"
+  },
+  "extensionDescription": {
+    "message": "将 OpenCode、Codex 和 MCP 智能体连接到浏览器，搜索网页、填写表单、截图并使用本地操作记忆。"
+  },
+  "connected": {
+    "message": "已连接"
+  },
+  "checking": {
+    "message": "正在检查"
+  },
+  "reconnecting": {
+    "message": "正在重新连接"
+  },
+  "notConnected": {
+    "message": "未连接"
+  },
+  "localAutomation": {
+    "message": "本地浏览器自动化"
+  },
+  "extensionViews": {
+    "message": "扩展程序视图"
+  },
+  "overview": {
+    "message": "概览"
+  },
+  "profiles": {
+    "message": "配置文件"
+  },
+  "settings": {
+    "message": "设置"
+  },
+  "setupGuide": {
+    "message": "设置指南"
+  },
+  "sourceGithub": {
+    "message": "GitHub 源代码"
+  },
+  "uploadTitle": {
+    "message": "允许上传文件？"
+  },
+  "uploadSendOne": {
+    "message": "智能体想要将此文件发送至："
+  },
+  "uploadSendMany": {
+    "message": "智能体想要将这些文件发送至："
+  },
+  "uploadWebsiteWarning": {
+    "message": "网站可以读取并保留上传的文件。"
+  },
+  "uploadFileLocation": {
+    "message": "文件位置"
+  },
+  "uploadExpiry": {
+    "message": "此请求将在一分钟后过期。关闭窗口会取消上传。"
+  },
+  "uploadCancel": {
+    "message": "取消上传"
+  },
+  "uploadSaving": {
+    "message": "正在保存决定…"
+  },
+  "uploadAllow": {
+    "message": "允许上传"
+  },
+  "uploadLoading": {
+    "message": "正在加载上传请求…"
+  },
+  "uploadExpired": {
+    "message": "此上传请求已过期。请关闭此窗口并重新请求上传。"
+  },
+  "uploadPreview": {
+    "message": "$1 的预览"
+  },
+  "profilesTitle": {
+    "message": "选择浏览器配置文件"
+  },
+  "copySetup": {
+    "message": "复制设置命令"
+  },
+  "connectionDetails": {
+    "message": "连接详情"
+  },
+  "chooseProfile": {
+    "message": "选择浏览器配置文件"
+  },
+  "connectedProfiles": {
+    "message": "已连接的浏览器配置文件"
+  },
+  "copySelector": {
+    "message": "复制供智能体使用的选择器"
+  },
+  "renameProfile": {
+    "message": "重命名此配置文件（可选）"
+  },
+  "profileLabel": {
+    "message": "配置文件名称"
+  },
+  "save": {
+    "message": "保存"
+  },
+  "localSearchModels": {
+    "message": "本地搜索和模型"
+  },
+  "searchMeaning": {
+    "message": "按语义搜索"
+  },
+  "enableSemantic": {
+    "message": "启用语义检索"
+  },
+  "advancedSearch": {
+    "message": "高级搜索设置"
+  },
+  "searchMode": {
+    "message": "搜索模式"
+  },
+  "agentCount": {
+    "message": "智能体结果数量"
+  },
+  "resultDetail": {
+    "message": "结果详情"
+  },
+  "retrievalModels": {
+    "message": "检索模型"
+  },
+  "developerDetails": {
+    "message": "开发者详情"
+  },
+  "cacheLocation": {
+    "message": "缓存位置"
+  },
+  "localModelCache": {
+    "message": "本地模型缓存"
+  },
+  "decisionAssistance": {
+    "message": "决策辅助"
+  },
+  "configure": {
+    "message": "配置"
+  },
+  "usagePerformance": {
+    "message": "用量和性能"
+  },
+  "calls": {
+    "message": "调用次数"
+  },
+  "selectedAbstained": {
+    "message": "已选择 / 已弃权"
+  },
+  "tokens": {
+    "message": "输入 / 输出令牌"
+  },
+  "reportedCost": {
+    "message": "提供商报告的费用"
+  },
+  "responseTime": {
+    "message": "平均 / 最近响应"
+  },
+  "callsAvoided": {
+    "message": "已避免的调用"
+  },
+  "actionMemory": {
+    "message": "操作记忆"
+  },
+  "enableMemory": {
+    "message": "启用记忆"
+  },
+  "disableMemory": {
+    "message": "停用记忆"
+  },
+  "storageLimit": {
+    "message": "存储限制"
+  },
+  "cleanup": {
+    "message": "清理"
+  },
+  "removeAfter": {
+    "message": "删除时间"
+  },
+  "days": {
+    "message": "天后"
+  },
+  "cleanupNow": {
+    "message": "立即清理"
+  },
+  "replayMemory": {
+    "message": "重放与记忆"
+  },
+  "activityStats": {
+    "message": "活动和记忆统计"
+  },
+  "showActivity": {
+    "message": "显示活动范围"
+  },
+  "thisProfile": {
+    "message": "此配置文件"
+  },
+  "allProfiles": {
+    "message": "所有配置文件"
+  },
+  "selectedProfiles": {
+    "message": "所选配置文件"
+  },
+  "oldActivity": {
+    "message": "早期未分配的活动"
+  },
+  "profilesInclude": {
+    "message": "要包含的配置文件"
+  },
+  "rebuildIndex": {
+    "message": "重建记忆索引"
+  },
+  "fileUploads": {
+    "message": "文件上传"
+  },
+  "allowUnconfirmed": {
+    "message": "允许无需确认的上传"
+  },
+  "uploadDefault": {
+    "message": "默认关闭。请检查文件名和目标地址，然后允许或取消每次上传。关闭请求会取消上传。"
+  },
+  "uploadRisk": {
+    "message": "启用后，智能体可以不经询问向网站发送任何可访问的本地文件，包括图片和私人文档。网站可以读取并保留上传的文件。文件访问限制仍然适用。"
+  },
+  "updates": {
+    "message": "更新"
+  },
+  "help": {
+    "message": "帮助"
+  },
+  "privacy": {
+    "message": "隐私"
+  },
+  "closeGuide": {
+    "message": "关闭本指南"
+  },
+  "newRelease": {
+    "message": "本次更新"
+  },
+  "beforeAfter": {
+    "message": "前后对比。"
+  },
+  "compareSnapshots": {
+    "message": "比较页面快照或像素，准确查看更改。"
+  },
+  "tabPurpose": {
+    "message": "有用途的标签页。"
+  },
+  "tabGroups": {
+    "message": "智能体可以为会话的标签页组命名。"
+  },
+  "moreContext": {
+    "message": "更多页面上下文。"
+  },
+  "contextDetails": {
+    "message": "有限范围的框架检查和实验性的 WebMCP 发现。"
+  },
+  "clearerSetup": {
+    "message": "更清晰的设置。"
+  },
+  "setupDetails": {
+    "message": "连接指南、更稳定的面板布局和改进的工具安装。"
+  },
+  "saferSessions": {
+    "message": "更安全的会话。"
+  },
+  "saferDetails": {
+    "message": "限定范围的下载、网址策略检查和浏览器覆盖设置清理。"
+  },
+  "readNotes": {
+    "message": "阅读发行说明"
+  },
+  "connectAgent": {
+    "message": "连接您的编程智能体"
+  },
+  "runTerminal": {
+    "message": "在终端中运行此命令。设置程序会连接找到的受支持工具并注册浏览器的本地主机。"
+  },
+  "copyCommand": {
+    "message": "复制命令"
+  },
+  "reopenAgent": {
+    "message": "然后重新打开桌面智能体，或在终端客户端中重新连接 MCP。"
+  },
+  "firefoxExtra": {
+    "message": "Firefox 和 LibreWolf 需要额外的启动步骤"
+  },
+  "firefoxInstructions": {
+    "message": "Firefox 启动说明"
+  },
+  "openExtension": {
+    "message": "打开扩展程序。"
+  },
+  "askAgent": {
+    "message": "让智能体浏览网页。"
+  },
+  "chooseSharing": {
+    "message": "选择要共享的内容。"
+  },
+  "readyBrowse": {
+    "message": "准备好浏览了吗？"
+  },
+  "checkConnection": {
+    "message": "在“概览”中检查连接，然后返回智能体。"
+  },
+  "openPanel": {
+    "message": "打开扩展程序面板"
+  },
+  "showNotes": {
+    "message": "更新后显示发行说明"
+  },
+  "welcomeUpdated": {
+    "message": "浏览器工具已更新。"
+  },
+  "welcomeIntro": {
+    "message": "连接您的浏览器和智能体。"
+  },
+  "welcomeChanges": {
+    "message": "以下是新增功能及其位置。"
+  },
+  "welcomeDescription": {
+    "message": "在您常用的浏览器中搜索页面、填写表单并检查操作。运行一条命令即可开始设置。"
+  },
+  "welcomeFirefox": {
+    "message": "可信点击、输入和对话框需要 Firefox Remote Agent。请在环回端口上启用它，然后连接对应的浏览器配置文件。仅靠扩展无法提供此控制。"
+  },
+  "welcomeOverview": {
+    "message": "“概览”检查本地运行时。“配置文件”可为此浏览器命名，例如“工作”或“个人”。"
+  },
+  "welcomeExample": {
+    "message": "试试：“在我的个人浏览器中打开 example.com 并描述该页面。”"
+  },
+  "welcomeSharing": {
+    "message": "设置中的决策辅助默认关闭。共享截图需要单独启用；上传文件时会请求确认。"
+  },
+  "welcomeReadFailure": {
+    "message": "无法读取您的更新偏好。请重试。"
+  },
+  "welcomeCopied": {
+    "message": "设置命令已复制。"
+  },
+  "welcomeCopyFailure": {
+    "message": "无法复制。请选中下方命令并手动复制。"
+  },
+  "welcomeSaved": {
+    "message": "更新偏好已保存。"
+  },
+  "welcomeSaveFailure": {
+    "message": "无法保存您的偏好。请重试。"
+  },
+  "welcomeOpenFailure": {
+    "message": "请从浏览器工具栏打开扩展程序以检查连接。"
+  },
+  "runtimeConnected": {
+    "message": "运行时已连接"
+  },
+  "checkingConnection": {
+    "message": "正在检查连接"
+  },
+  "connectBrowser": {
+    "message": "连接浏览器"
+  },
+  "runtimeExplanation": {
+    "message": "扩展已连接到本地运行时。请在智能体中选择此配置文件。浏览器工具会单独报告标签页状态和待处理对话框。"
+  },
+  "runtimeChecking": {
+    "message": "正在查找本地运行时。您的设置保留在此设备上。"
+  },
+  "runtimeInstall": {
+    "message": "安装本地桥接程序，将此扩展连接到编程智能体。"
+  },
+  "unnamedProfile": {
+    "message": "未命名的配置文件"
+  },
+  "copyUnavailable": {
+    "message": "无法复制。请改为选中下方命令。"
+  },
+  "usageUnavailable": {
+    "message": "用量不可用。请连接本地主机。"
+  },
+  "loading": {
+    "message": "正在加载…"
+  },
+  "localSearch": {
+    "message": "本地搜索"
+  },
+  "checkingConfiguration": {
+    "message": "正在检查配置…"
+  },
+  "assistanceNeedsConnection": {
+    "message": "需要连接。请配置服务以启用辅助功能；本地搜索仍可使用。"
+  },
+  "assistanceOff": {
+    "message": "云端辅助已关闭。搜索和重放仍可使用。"
+  },
+  "notReported": {
+    "message": "未报告"
+  },
+  "usageDetails": {
+    "message": "仅统计提供商报告的令牌和费用。其他工具的用量单独计算。"
+  },
+  "selectorHelp": {
+    "message": "复制配置文件选择器并交给智能体，以便在您选择的浏览器中执行操作。"
+  },
+  "searchHelp": {
+    "message": "在本地查找相关页面内容。关键词搜索仍可使用。"
+  },
+  "autoSearchHelp": {
+    "message": "自动搜索兼顾相关性和速度。大多数用户可以保留默认设置。"
+  },
+  "memoryDescription": {
+    "message": "在本地保存成功的浏览器操作，加快重复任务。"
+  },
+  "expandedStorage": {
+    "message": "扩展存储空间 — 最多允许 10 GB"
+  },
+  "expandedStorageHelp": {
+    "message": "扩展存储可能占用更多磁盘空间。"
+  },
+  "cleanupHelp": {
+    "message": "未成功的操作会自动过期，已确认的操作会保留。"
+  },
+  "memoryStatsHelp": {
+    "message": "共享操作记忆 · 按浏览器配置文件统计。"
+  },
+  "decisionHelp": {
+    "message": "查找相关目标并选择已保存的操作方案。智能体控制操作；重放会保留安全检查。"
+  },
+  "keyPrivacy": {
+    "message": "由本地主机私下保存。不会存储在浏览器存储中，也不会返回给智能体。"
+  },
+  "environmentAlternative": {
+    "message": "已保存密钥的可选替代方案。该变量必须存在于本地主机的环境中。"
+  },
+  "testKeyHelp": {
+    "message": "使用一次小型、计费的模拟决策测试密钥和所选模型。"
+  },
+  "removeKey": {
+    "message": "删除已保存的密钥"
+  },
+  "envVariable": {
+    "message": "高级 · 环境变量"
+  },
+  "variableName": {
+    "message": "变量名称"
+  },
+  "modelMigration": {
+    "message": "本地模型迁移"
+  },
+  "dismissNotice": {
+    "message": "关闭通知"
+  },
+  "keepUpdated": {
+    "message": "保持本地浏览器工具为最新版本"
+  },
+  "whatsNew": {
+    "message": "更新内容"
+  },
+  "howUpdate": {
+    "message": "如何更新"
+  },
+  "copyUpdate": {
+    "message": "复制更新命令"
+  },
+  "updateHelp": {
+    "message": "需要更新帮助？"
+  },
+  "openSetup": {
+    "message": "打开设置说明"
+  },
+  "remindWeek": {
+    "message": "一周后提醒我"
+  },
+  "snoozed": {
+    "message": "提醒已延后。这些说明仍可在“设置”中查看。"
+  },
+  "service": {
+    "message": "服务"
+  },
+  "serviceOff": {
+    "message": "关闭 · 本地搜索和重放"
+  },
+  "providerConsent": {
+    "message": "启用辅助功能会将限定范围的搜索或重放意图及候选项描述发送给 $1。智能体仍控制操作。"
+  },
+  "imageFallback": {
+    "message": "允许实验性图像备用方案"
+  },
+  "imageScreenshots": {
+    "message": "允许为不明确的视觉目标发送截图"
+  },
+  "imageJevNotice": {
+    "message": "默认关闭。仅在文本决策不确定后，才可能向 $1 发送一张小截图。所有配置文件合计每 UTC 分钟最多请求一张图像，每 UTC 日最多 20 张。图像令牌额外收费，数量取决于图像。"
+  },
+  "imageNotice": {
+    "message": "默认关闭。可能向 $1 发送一张有限范围的截图。所有配置文件合计每 UTC 分钟最多请求一张图像，每 UTC 日最多 20 张。图像令牌额外收费，数量取决于图像。"
+  },
+  "testing": {
+    "message": "正在测试…"
+  },
+  "saveTest": {
+    "message": "保存并测试连接"
+  },
+  "saveSettings": {
+    "message": "保存设置"
+  },
+  "memoryUnavailable": {
+    "message": "记忆不可用。请重新连接本地主机。"
+  },
+  "memoryChecking": {
+    "message": "正在检查记忆状态…"
+  },
+  "memoryOn": {
+    "message": "记忆已启用。保存的操作有助于完成重复任务。"
+  },
+  "memoryOff": {
+    "message": "记忆已关闭。请在设置中启用它以保存重复任务。"
+  },
+  "loadingStats": {
+    "message": "正在加载统计信息…"
+  },
+  "waitingStats": {
+    "message": "正在等待统计信息…"
+  },
+  "hostTotals": {
+    "message": "此主机提供所有配置文件的总计。请更新本地主机以进行筛选。"
+  },
+  "oldHistory": {
+    "message": "添加配置文件跟踪之前保存的历史记录。"
+  },
+  "allHistory": {
+    "message": "所有配置文件，包括早期未分配的活动。"
+  },
+  "memoryEnabled": {
+    "message": "操作记忆已启用。"
+  },
+  "memoryDisabled": {
+    "message": "操作记忆已关闭。"
+  },
+  "indexRebuilt": {
+    "message": "记忆索引已重建。"
+  },
+  "cleanupComplete": {
+    "message": "清理完成。"
+  },
+  "standardLimit": {
+    "message": "标准限制。启用扩展存储以提高限制。"
+  },
+  "expandedEnabled": {
+    "message": "扩展存储已启用 — 最多 10 GB。"
+  },
+  "enableStartMemory": {
+    "message": "启用后即可开始建立操作记忆。"
+  },
+  "memoryStateChecking": {
+    "message": "正在检查记忆状态…"
+  },
+  "thisBrowser": {
+    "message": "此浏览器配置文件："
+  },
+  "defaultLabel": {
+    "message": "默认"
+  },
+  "activeModel": {
+    "message": "当前检索模型"
+  },
+  "active": {
+    "message": "使用中"
+  },
+  "useModel": {
+    "message": "使用"
+  },
+  "onDemand": {
+    "message": "按需"
+  },
+  "delete": {
+    "message": "删除"
+  },
+  "status": {
+    "message": "状态"
+  },
+  "host": {
+    "message": "主机"
+  },
+  "lastCheck": {
+    "message": "上次检查"
+  },
+  "profileId": {
+    "message": "配置文件 ID"
+  },
+  "copy": {
+    "message": "复制"
+  },
+  "hide": {
+    "message": "隐藏"
+  },
+  "reveal": {
+    "message": "显示"
+  },
+  "download": {
+    "message": "下载"
+  },
+  "redownload": {
+    "message": "重新下载"
+  },
+  "ready": {
+    "message": "就绪"
+  },
+  "notDownloaded": {
+    "message": "未下载"
+  },
+  "statsUnavailable": {
+    "message": "统计信息不可用："
+  },
+  "chartLabel": {
+    "message": "每天已确认与失败的操作"
+  },
+  "versionNotice": {
+    "message": "版本更新通知"
+  },
+  "extensionLabel": {
+    "message": "扩展程序"
+  },
+  "copySelectorReady": {
+    "message": "配置文件选择器已复制。"
+  },
+  "clipboardUnavailable": {
+    "message": "剪贴板不可用。"
+  },
+  "profileCopied": {
+    "message": "配置文件 ID 已复制。"
+  },
+  "migrationText": {
+    "message": "内嵌模型已弃用，将迁移到可选软件包。迁移期间仍可使用，移除前至少提前 90 天通知。您的记忆记录和缓存模型会保留。"
+  },
+  "updateInstall": {
+    "message": "受管理的智能体进程退出后，安装与扩展匹配的 CLI 版本。正在运行的会话保留当前版本。"
+  },
+  "storeAutoUpdate": {
+    "message": "Chrome 网上应用店的更新会自动安装。请检查扩展更新；如果版本仍在审核中，请等待批准。无需降级本地工具。"
+  },
+  "globalNpm": {
+    "message": "对于全局 npm 安装，请运行："
+  },
+  "postUpdate": {
+    "message": "首次更新后，等当前工作完成，再重新打开浏览器和智能体应用。然后在“设置 → 更新”中启用自动更新。受管理的安装会等待智能体进程退出。固定版本的命令和开发检出仍由您控制。"
+  },
+  "updateInstallHelp": {
+    "message": "更新本地主机使用的安装。如果重新启动后通知仍然显示，请为该安装重新运行本地主机设置。"
+  },
+  "connectReopen": {
+    "message": "连接本地主机，然后重新打开“设置”。"
+  },
+  "cannotConnect": {
+    "message": "无法连接到本地主机。请重新连接并重试。"
+  },
+  "testFailed": {
+    "message": "连接测试失败。"
+  },
+  "cannotSaveReconnect": {
+    "message": "无法保存。请重新连接本地主机并重试。"
+  },
+  "decisionOff": {
+    "message": "决策辅助已关闭。本地搜索和重放仍可使用。"
+  },
+  "cannotSaveSettings": {
+    "message": "无法保存设置。"
+  },
+  "cannotRemoveKey": {
+    "message": "无法删除已保存的密钥。"
+  },
+  "keyRemoved": {
+    "message": "已删除保存的密钥。如果配置了环境变量密钥，它仍然可用。"
+  },
+  "removeKeyFailure": {
+    "message": "无法删除密钥。请重新连接并重试。"
+  },
+  "replaceKey": {
+    "message": "密钥已保存 · 输入新密钥以替换"
+  },
+  "pasteKey": {
+    "message": "粘贴 API 密钥"
+  },
+  "loadingSettings": {
+    "message": "正在加载设置…"
+  },
+  "decisionEnabled": {
+    "message": "决策辅助已启用"
+  },
+  "saveTestEnable": {
+    "message": "保存并测试以启用辅助功能。"
+  },
+  "localSearchActive": {
+    "message": "本地搜索已启用"
+  },
+  "dismissFailure": {
+    "message": "无法关闭通知。"
+  },
+  "updatePrefSaved": {
+    "message": "更新偏好已保存。"
+  },
+  "saveTryAgain": {
+    "message": "无法保存。请重试。"
+  },
+  "updatesOff": {
+    "message": "运行时自动更新已关闭。"
+  },
+  "updateChecks": {
+    "message": "浏览器连接时会自动检查更新。下载使用 npm。"
+  },
+  "updateOnce": {
+    "message": "请先更新一次本地运行时，以启用自动更新。"
+  },
+  "profileLabelHelp": {
+    "message": "名称保存在本地，仅用于选择正确的已打开浏览器配置文件。"
+  },
+  "loadingModels": {
+    "message": "正在加载模型选项…"
+  },
+  "profileIdUnavailable": {
+    "message": "配置文件 ID 不可用。请重新连接浏览器并重试。"
+  },
+  "profileCopyFail": {
+    "message": "无法复制。请显示配置文件 ID 并手动复制。"
+  },
+  "profileSaved": {
+    "message": "已保存。在首次有效浏览器调用中提供此配置文件名称。"
+  },
+  "enableSemanticBusy": {
+    "message": "正在启用语义检索…"
+  },
+  "disableSemanticBusy": {
+    "message": "正在停用语义检索…"
+  },
+  "localRetrievalModel": {
+    "message": "本地检索模型。"
+  },
+  "runtimeScheduled": {
+    "message": "更新已安排。正在等待智能体会话结束。"
+  },
+  "runtimeDownloading": {
+    "message": "正在后台下载匹配的运行时。"
+  },
+  "runtimeInstalled": {
+    "message": "已安装匹配的运行时。新的智能体会话会自动使用它。"
+  },
+  "runtimeDeferred": {
+    "message": "更新已推迟。当前运行时仍可使用；稍后将再次尝试。"
+  },
+  "runtimeReconnect": {
+    "message": "连接本地运行时以检查更新设置。"
+  },
+  "runtimeSaveFail": {
+    "message": "无法保存。请重新连接本地运行时并重试。"
+  },
+  "uploadSaveFail": {
+    "message": "无法保存上传偏好"
+  },
+  "versionBehind": {
+    "message": "扩展版本落后于本地工具"
+  },
+  "checkToolVersion": {
+    "message": "检查本地工具版本"
+  },
+  "updateTools": {
+    "message": "更新本地浏览器工具"
+  },
+  "versionMissing": {
+    "message": "某个本地组件未报告其版本，因此无法检查所有版本是否匹配。"
+  },
+  "versionMismatch": {
+    "message": "已安装的版本不同。保持版本一致有助于避免意外的浏览器错误。"
+  },
+  "updateCopied": {
+    "message": "更新命令已复制。"
+  },
+  "updateCopyFail": {
+    "message": "无法复制。请选中上方命令。"
+  },
+  "reminderFail": {
+    "message": "无法保存提醒。请重试。"
+  },
+  "replaySuccess": {
+    "message": "重放成功率"
+  },
+  "uniqueActions": {
+    "message": "唯一操作"
+  },
+  "recipes": {
+    "message": "操作方案"
+  },
+  "replays": {
+    "message": "重放次数"
+  },
+  "stepsReused": {
+    "message": "重用的步骤"
+  },
+  "executions": {
+    "message": "总执行次数"
+  },
+  "negativeLessons": {
+    "message": "失败经验"
+  },
+  "indexed": {
+    "message": "已索引"
+  },
+  "awaitingIndex": {
+    "message": "等待索引"
+  },
+  "replayNotAttempted": {
+    "message": "尚未尝试重放 — 在同一网站上重复已保存的操作方案时会自动重放。"
+  },
+  "purgeInvalid": {
+    "message": "清理周期必须为 1 到 365 天。"
+  },
+  "storageExpanded": {
+    "message": "扩展存储已启用 — 限额现在最多可达 10 GB。"
+  },
+  "storageStandard": {
+    "message": "扩展存储已关闭 — 已恢复标准限制。"
+  },
+  "thisProfileSuffix": {
+    "message": "（此配置文件）"
+  },
+  "currentBrowserProfile": {
+    "message": "当前浏览器配置文件"
+  },
+  "lastSuccessful": {
+    "message": "显示上次成功更新的内容。"
+  },
+  "quotaUsage": {
+    "message": "已使用 $1，共 $2"
+  },
+  "apiKey": {
+    "message": "API 密钥"
+  },
+  "exampleLabels": {
+    "message": "工作、个人、测试"
+  },
+  "decision": {
+    "message": "决策"
+  },
+  "localHost": {
+    "message": "本地主机"
+  },
+  "recommendedDim": {
+    "message": "$1 维 — 推荐的平衡选择"
+  },
+  "modelDownload": {
+    "message": "正在为 $2 下载 $1…$3"
+  },
+  "modelReady": {
+    "message": "已就绪：$1。模型缓存在本地。"
+  },
+  "modelError": {
+    "message": "模型错误：$1。"
+  },
+  "modelUnknown": {
+    "message": "未知错误"
+  },
+  "modelWord": {
+    "message": "模型"
+  },
+  "deleteModelConfirm": {
+    "message": "删除 $1 的本地文件？以后可以重新下载。"
+  },
+  "downloadingModel": {
+    "message": "正在下载 $1…"
+  },
+  "deletingModel": {
+    "message": "正在删除 $1 的本地文件…"
+  },
+  "switchModel": {
+    "message": "正在将检索切换为 $1…"
+  },
+  "embeddingLabel": {
+    "message": "$1 嵌入维度"
+  },
+  "connectedThrough": {
+    "message": "通过 $1 连接"
+  },
+  "copyPath": {
+    "message": "复制路径"
+  },
+  "copied": {
+    "message": "已复制"
+  },
+  "failed": {
+    "message": "失败"
+  },
+  "profileNumber": {
+    "message": "配置文件 $1"
+  },
+  "providerSuccess": {
+    "message": "已连接。API 密钥和决策模型已验证。"
+  },
+  "providerInvalidKey": {
+    "message": "API 密钥被拒绝。请检查密钥和所选服务。"
+  },
+  "providerDenied": {
+    "message": "此密钥无权访问决策模型。"
+  },
+  "providerCredit": {
+    "message": "请充值或提高 API 密钥的支出限额。"
+  },
+  "providerRate": {
+    "message": "已达到服务速率限制。请稍后重试测试。"
+  },
+  "providerTimeout": {
+    "message": "连接超时。请检查网络并重试。"
+  },
+  "providerCheck": {
+    "message": "请检查提供商设置和 API 密钥。"
+  },
+  "providerLuna": {
+    "message": "Luna 需要 OpenRouter。"
+  },
+  "providerNeedKey": {
+    "message": "请输入 API 密钥，或在高级设置中配置环境变量。"
+  },
+  "providerUnavailable": {
+    "message": "OpenRouter 不可用。请稍后重试。"
+  },
+  "providerNetwork": {
+    "message": "无法访问 OpenRouter。请检查网络并重试。"
+  },
+  "providerDecisionFail": {
+    "message": "决策测试失败。设置未更改；请稍后重试。"
+  },
+  "skipNoMatch": {
+    "message": "没有足够接近的匹配项"
+  },
+  "skipPriorFailure": {
+    "message": "该方案曾经失败"
+  },
+  "skipSteps": {
+    "message": "请求的步骤数不同"
+  },
+  "skipRecipe": {
+    "message": "请求的步骤已更改"
+  },
+  "skipSite": {
+    "message": "请求针对其他网站"
+  },
+  "skipActions": {
+    "message": "请求的操作已更改"
+  },
+  "skipTargets": {
+    "message": "请求的目标已更改"
+  },
+  "skipValue": {
+    "message": "缺少输入值"
+  },
+  "skipUrl": {
+    "message": "缺少网址"
+  },
+  "skipApproval": {
+    "message": "该方案需要您的批准"
+  },
+  "memorySqlite": {
+    "message": "操作记忆需要支持 SQLite 的本地主机。"
+  },
+  "memoryCounts": {
+    "message": "唯一操作：$1 · 方案：$2"
+  },
+  "memoryIndexReady": {
+    "message": "记忆索引已就绪（$1）"
+  },
+  "memoryIndexPending": {
+    "message": "记忆索引：$1 已就绪 · $2 等待嵌入"
+  },
+  "embeddingErrors": {
+    "message": "嵌入错误：$1"
+  },
+  "skipCount": {
+    "message": "跳过的已记忆方案：$1。"
+  },
+  "skipCountReason": {
+    "message": "跳过的已记忆方案：$1。最常见原因：$2（$3）。"
+  },
+  "dbLimitSet": {
+    "message": "数据库限制已设为 $1。"
+  },
+  "purgeAfter": {
+    "message": "失败经验将在 $1 天后清理。"
+  },
+  "selectedCount": {
+    "message": "已选配置文件：$1。共享操作仅计一次。"
+  },
+  "currentProfileValue": {
+    "message": "此配置文件：$1"
+  },
+  "statsUpdated": {
+    "message": "更新于 $1 · 图表日期使用 UTC"
+  },
+  "strategySet": {
+    "message": "搜索模式已设为 $1…"
+  },
+  "resultCountSet": {
+    "message": "智能体结果数已设为 $1…"
+  },
+  "resultDetailSet": {
+    "message": "结果详情已设为 $1…"
+  },
+  "dimensionSet": {
+    "message": "嵌入大小已设为 $1 维…"
+  },
+  "searchLocalDetail": {
+    "message": "检索使用当前模型在本地运行，必要时回退到词法排序。深度搜索按需加载 Qwen；下载失败时会安全降级。"
+  },
+  "usageReport": {
+    "message": "连接测试：$1。已报告用量的调用：$2/$3；已报告费用的调用：$4/$3。$5。"
+  },
+  "efficiencyReport": {
+    "message": "自本地主机启动以来已避免：$1 次明确排序、$2 次重复搜索、$3 次重复请求和 $4 次超过突发限制的请求。付费决策仅用于解决不明确的排序。"
+  },
+  "keyCheck": {
+    "message": "密钥检查 $1 毫秒 ·"
+  },
+  "inputTokens": {
+    "message": "输入令牌：$1"
+  },
+  "strategyAuto": {
+    "message": "自动"
+  },
+  "strategySemantic": {
+    "message": "语义"
+  },
+  "strategyLexical": {
+    "message": "关键词"
+  },
+  "strategyDeep": {
+    "message": "深度"
+  },
+  "detailLean": {
+    "message": "精简"
+  },
+  "detailCompact": {
+    "message": "紧凑"
+  },
+  "detailDebug": {
+    "message": "调试"
+  },
+  "modelXs": {
+    "message": "默认英文页面检索使用紧凑的 2260 万参数 Snowflake 嵌入模型。如果更注重低延迟，请明确选择关键词或自动模式。"
+  },
+  "modelM": {
+    "message": "较大的 Snowflake 检索模型，使用 768 维以提高相关性。当质量比本地磁盘和内存占用更重要时可选择此模型。"
+  },
+  "modelGemma": {
+    "message": "本地多语言嵌入模型，支持 Matryoshka 输出维度（128/256/512/768）。推荐 256 维，兼顾大小和质量。"
+  },
+  "modelQwen": {
+    "message": "当前本地检索方案：使用 Qwen3 嵌入广泛搜索页面，再用 Qwen3 重排序选出最终相关上下文。"
+  },
+  "noClientVersion": {
+    "message": "未报告客户端版本"
+  },
+  "connectedClients": {
+    "message": "已连接的 CLI/MCP：$1"
+  },
+  "notConnectedState": {
+    "message": "未连接"
+  },
+  "profileChecking": {
+    "message": "正在检查…"
+  },
+  "profileSaving": {
+    "message": "正在保存…"
+  },
+  "deepSearchOnly": {
+    "message": "仅限深度搜索"
+  },
+  "memoryUnknown": {
+    "message": "未知"
+  },
+  "copyProfileHelp": {
+    "message": "无法复制。请显示配置文件 ID 并手动复制。"
+  },
+  "runtimeStaged": {
+    "message": "下载已验证。正在检查所有浏览器会话是否已结束。"
+  },
+  "runtimeActivating": {
+    "message": "正在将本地工具切换到更新后的运行时。"
+  },
+  "runtimeReconnectRequired": {
+    "message": "此版本更改了工具连接。请运行设置并重新连接一次 MCP。"
+  },
+  "runtimeUpdateHelp": {
+    "message": "在后台下载匹配的工具，并在所有浏览器会话结束后切换。受管理的 MCP 连接保持打开。"
+  },
+  "runtimeVersions": {
+    "message": "已选：$1。已加载：$2。"
+  },
+  "noWorkers": {
+    "message": "没有活动工作进程"
+  },
+  "runtimeDownloaded": {
+    "message": "已下载：$1。"
+  },
+  "runtimeWaiting": {
+    "message": "等待活动参与者：$1。"
+  },
+  "postUpdateMaster": {
+    "message": "当前工作完成后，运行设置并重新连接一次 MCP。未来兼容更新会在后台下载，并在所有浏览器会话结束后切换，同时保持受管理的 MCP 连接。固定版本的命令和开发检出仍由您控制。"
+  }
+}

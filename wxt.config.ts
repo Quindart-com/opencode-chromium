@@ -9,10 +9,11 @@ export default defineConfig({
   outDirTemplate: "{{modeSuffix}}",
   modules: ["@wxt-dev/module-react"],
   manifest: {
-    name: "opencode-chromium",
-    description: "Connect OpenCode, Codex and MCP agents to your browser for page search, forms, screenshots and local action memory.",
+    name: "__MSG_extensionName__",
+    description: "__MSG_extensionDescription__",
+    default_locale: "en",
     action: {
-      default_title: "opencode-chromium",
+      default_title: "__MSG_extensionName__",
       default_icon: {
         "16": "images/icon16.png",
         "32": "images/icon32.png",
