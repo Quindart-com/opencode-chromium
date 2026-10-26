@@ -1,7 +1,10 @@
+import { setDocumentLanguage } from "../../i18n";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./popup.css";
+
+setDocumentLanguage();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Popup root element is missing");

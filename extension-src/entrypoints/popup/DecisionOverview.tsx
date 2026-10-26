@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import { useEffect, useState } from "react";
 import { sendMessage } from "./api";
 import type { DecisionSettings } from "./decision-types";
@@ -12,7 +13,7 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
         const response = await sendMessage<{ result?: DecisionSettings }>({ type: "GET_DECISION_SETTINGS" });
         if (!response.result) throw new Error("unavailable");
         if (active) { setStatus(response.result); setError(""); }
-      } catch { if (active) setError("Usage unavailable. Connect the native host."); }
+      } catch { if (active) setError(t("usageUnavailable")); }
     }
     void refresh(); const timer = window.setInterval(() => void refresh(), 5000);
     return () => { active = false; window.clearInterval(timer); };
@@ -24,20 +25,20 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
   const providerSelected = status && status.provider !== "off";
   const model = status?.provider === "openai-decisions" ? "OpenAI Luna" : "Jev";
   return <section className="decision-overview" aria-labelledby="jev-usage-heading">
-    <div className="decision-overview-heading"><h2 id="jev-usage-heading">Decision assistance</h2><button type="button" className="button-mini" onClick={onConfigure}>Configure</button></div>
-    <p className="decision-model">{!status ? error ? "Not connected" : "Loading…" : providerSelected ? model : "Local search"}</p>
-    <p className="help-note">{error || (!status ? "Checking your configuration…" : status.ready ? `Connected through ${status.route === "openrouter" ? "OpenRouter" : "TypeSafe"}` : providerSelected && status.shareText ? "Connection needed. Configure the service to enable assistance; local search stays available." : "Cloud assistance is off. Search and replay remain available.")}</p>
-    <details className="usage-details"><summary>Usage and performance</summary>
+    <div className="decision-overview-heading"><h2 id="jev-usage-heading">{t("decisionAssistance")}</h2><button type="button" className="button-mini" onClick={onConfigure}>{t("configure")}</button></div>
+    <p className="decision-model">{!status ? error ? t("notConnected") : t("loading") : providerSelected ? model : t("localSearch")}</p>
+    <p className="help-note">{error || (!status ? t("checkingConfiguration") : status.ready ? t("connectedThrough", status.route === "openrouter" ? "OpenRouter" : "TypeSafe") : providerSelected && status.shareText ? t("assistanceNeedsConnection") : t("assistanceOff"))}</p>
+    <details className="usage-details"><summary>{t("usagePerformance")}</summary>
     <dl className="decision-usage">
-      <div><dt>Call attempts</dt><dd>{number(usage?.calls)}</dd></div>
-      <div><dt>Selected / abstained</dt><dd>{usage ? `${number(usage.selected)} / ${number(usage.abstained)}` : "—"}</dd></div>
-      <div><dt>Input / output tokens</dt><dd>{usage ? `${number(usage.inputTokens)} / ${number(usage.outputTokens)}` : "—"}</dd></div>
-      <div><dt>Provider-reported cost</dt><dd>{usage?.costReportedCalls ? `$${usage.reportedCost.toFixed(6)}` : "Not reported"}</dd></div>
-      <div><dt>Average / last response</dt><dd>{usage?.calls ? `${Math.round(usage.averageMs)} / ${Math.round(usage.lastMs)} ms` : "—"}</dd></div>
-      <div><dt>Calls avoided</dt><dd>{number(avoided)}</dd></div>
+      <div><dt>{t("calls")}</dt><dd>{number(usage?.calls)}</dd></div>
+      <div><dt>{t("selectedAbstained")}</dt><dd>{usage ? `${number(usage.selected)} / ${number(usage.abstained)}` : "—"}</dd></div>
+      <div><dt>{t("tokens")}</dt><dd>{usage ? `${number(usage.inputTokens)} / ${number(usage.outputTokens)}` : "—"}</dd></div>
+      <div><dt>{t("reportedCost")}</dt><dd>{usage?.costReportedCalls ? `$${usage.reportedCost.toFixed(6)}` : t("notReported")}</dd></div>
+      <div><dt>{t("responseTime")}</dt><dd>{usage?.calls ? `${Math.round(usage.averageMs)} / ${Math.round(usage.lastMs)} ms` : "—"}</dd></div>
+      <div><dt>{t("callsAvoided")}</dt><dd>{number(avoided)}</dd></div>
     </dl>
-    <p className="provider-test-help">{usage ? `Includes ${usage.tests} connection tests. Usage reported for ${usage.usageReportedCalls}/${usage.calls} calls; cost for ${usage.costReportedCalls}/${usage.calls}. ${usage.window}.` : "Only provider-reported tokens and cost are counted. Harness usage is separate."}</p>
-    {efficiency ? <p className="provider-test-help">{`Avoided since the host started: ${number(efficiency.skipped)} unambiguous rankings, ${number(efficiency.cacheHits)} repeated searches, ${number(efficiency.coalesced)} duplicate requests in flight${efficiency.budgetSkipped ? `, ${number(efficiency.budgetSkipped)} over the burst limit` : ""}. Paid decisions only resolve ambiguous rankings.`}</p> : null}
+    <p className="provider-test-help">{usage ? t("usageReport", [String(usage.tests), String(usage.usageReportedCalls), String(usage.calls), String(usage.costReportedCalls), String(usage.window)]) : t("usageDetails")}</p>
+    {efficiency ? <p className="provider-test-help">{t("efficiencyReport", [number(efficiency.skipped), number(efficiency.cacheHits), number(efficiency.coalesced), number(efficiency.budgetSkipped)])}</p> : null}
     </details>
   </section>;
 }

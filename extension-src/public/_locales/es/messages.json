@@ -1,0 +1,1109 @@
+{
+  "extensionName": {
+    "message": "opencode-chromium"
+  },
+  "extensionDescription": {
+    "message": "Conecta OpenCode, Codex y agentes MCP al navegador para buscar, rellenar formularios, capturar pantalla y guardar acciones."
+  },
+  "connected": {
+    "message": "Conectado"
+  },
+  "checking": {
+    "message": "Comprobando"
+  },
+  "reconnecting": {
+    "message": "Reconectando"
+  },
+  "notConnected": {
+    "message": "Sin conexión"
+  },
+  "localAutomation": {
+    "message": "Automatización local del navegador"
+  },
+  "extensionViews": {
+    "message": "Vistas de la extensión"
+  },
+  "overview": {
+    "message": "Resumen"
+  },
+  "profiles": {
+    "message": "Perfiles"
+  },
+  "settings": {
+    "message": "Configuración"
+  },
+  "setupGuide": {
+    "message": "Guía de configuración"
+  },
+  "sourceGithub": {
+    "message": "Código en GitHub"
+  },
+  "uploadTitle": {
+    "message": "¿Permitir la subida de archivos?"
+  },
+  "uploadSendOne": {
+    "message": "Un agente quiere enviar este archivo a:"
+  },
+  "uploadSendMany": {
+    "message": "Un agente quiere enviar estos archivos a:"
+  },
+  "uploadWebsiteWarning": {
+    "message": "El sitio web puede leer y conservar los archivos subidos."
+  },
+  "uploadFileLocation": {
+    "message": "Ubicación del archivo"
+  },
+  "uploadExpiry": {
+    "message": "Esta solicitud caduca después de un minuto. Cerrar la ventana cancela la subida."
+  },
+  "uploadCancel": {
+    "message": "Cancelar subida"
+  },
+  "uploadSaving": {
+    "message": "Guardando decisión…"
+  },
+  "uploadAllow": {
+    "message": "Permitir subida"
+  },
+  "uploadLoading": {
+    "message": "Cargando solicitud de subida…"
+  },
+  "uploadExpired": {
+    "message": "Esta solicitud de subida ha caducado. Cierra esta ventana y vuelve a solicitar la subida."
+  },
+  "uploadPreview": {
+    "message": "Vista previa de $1"
+  },
+  "profilesTitle": {
+    "message": "Elegir un perfil de navegador"
+  },
+  "copySetup": {
+    "message": "Copiar comando de configuración"
+  },
+  "connectionDetails": {
+    "message": "Detalles de conexión"
+  },
+  "chooseProfile": {
+    "message": "Elegir un perfil de navegador"
+  },
+  "connectedProfiles": {
+    "message": "Perfiles de navegador conectados"
+  },
+  "copySelector": {
+    "message": "Copiar selector para el agente"
+  },
+  "renameProfile": {
+    "message": "Cambiar el nombre de este perfil (opcional)"
+  },
+  "profileLabel": {
+    "message": "Nombre del perfil"
+  },
+  "save": {
+    "message": "Guardar"
+  },
+  "localSearchModels": {
+    "message": "Búsqueda y modelos locales"
+  },
+  "searchMeaning": {
+    "message": "Buscar por significado"
+  },
+  "enableSemantic": {
+    "message": "Activar búsqueda semántica"
+  },
+  "advancedSearch": {
+    "message": "Configuración avanzada de búsqueda"
+  },
+  "searchMode": {
+    "message": "Modo de búsqueda"
+  },
+  "agentCount": {
+    "message": "Número de resultados para el agente"
+  },
+  "resultDetail": {
+    "message": "Detalle del resultado"
+  },
+  "retrievalModels": {
+    "message": "Modelos de búsqueda"
+  },
+  "developerDetails": {
+    "message": "Detalles para desarrolladores"
+  },
+  "cacheLocation": {
+    "message": "Ubicación de la caché"
+  },
+  "localModelCache": {
+    "message": "Caché de modelos local"
+  },
+  "decisionAssistance": {
+    "message": "Asistencia para decisiones"
+  },
+  "configure": {
+    "message": "Configurar"
+  },
+  "usagePerformance": {
+    "message": "Uso y rendimiento"
+  },
+  "calls": {
+    "message": "Intentos de llamada"
+  },
+  "selectedAbstained": {
+    "message": "Seleccionados / abstenciones"
+  },
+  "tokens": {
+    "message": "Tokens de entrada / salida"
+  },
+  "reportedCost": {
+    "message": "Coste informado por el proveedor"
+  },
+  "responseTime": {
+    "message": "Respuesta media / última"
+  },
+  "callsAvoided": {
+    "message": "Llamadas evitadas"
+  },
+  "actionMemory": {
+    "message": "Memoria de acciones"
+  },
+  "enableMemory": {
+    "message": "Activar memoria"
+  },
+  "disableMemory": {
+    "message": "Desactivar memoria"
+  },
+  "storageLimit": {
+    "message": "Límite de almacenamiento"
+  },
+  "cleanup": {
+    "message": "Limpieza"
+  },
+  "removeAfter": {
+    "message": "Eliminar después de"
+  },
+  "days": {
+    "message": "días"
+  },
+  "cleanupNow": {
+    "message": "Limpiar ahora"
+  },
+  "replayMemory": {
+    "message": "Repetición y memoria"
+  },
+  "activityStats": {
+    "message": "Estadísticas de actividad y memoria"
+  },
+  "showActivity": {
+    "message": "Mostrar actividad de"
+  },
+  "thisProfile": {
+    "message": "Este perfil"
+  },
+  "allProfiles": {
+    "message": "Todos los perfiles"
+  },
+  "selectedProfiles": {
+    "message": "Perfiles seleccionados"
+  },
+  "oldActivity": {
+    "message": "Actividad anterior sin asignar"
+  },
+  "profilesInclude": {
+    "message": "Perfiles que incluir"
+  },
+  "rebuildIndex": {
+    "message": "Reconstruir índice de memoria"
+  },
+  "fileUploads": {
+    "message": "Subida de archivos"
+  },
+  "allowUnconfirmed": {
+    "message": "Permitir subidas sin confirmación"
+  },
+  "uploadDefault": {
+    "message": "Desactivado por defecto. Revisa los nombres de archivo y el destino y permite o cancela cada subida. Cerrar la solicitud la cancela."
+  },
+  "uploadRisk": {
+    "message": "Al activarlo, los agentes pueden enviar cualquier archivo local accesible, incluidas imágenes y documentos privados, a sitios web sin preguntarte. Los sitios pueden leer y conservar los archivos. Las restricciones de acceso siguen vigentes."
+  },
+  "updates": {
+    "message": "Actualizaciones"
+  },
+  "help": {
+    "message": "Ayuda"
+  },
+  "privacy": {
+    "message": "Privacidad"
+  },
+  "closeGuide": {
+    "message": "Cerrar esta guía"
+  },
+  "newRelease": {
+    "message": "Novedades de esta versión"
+  },
+  "beforeAfter": {
+    "message": "Antes y después."
+  },
+  "compareSnapshots": {
+    "message": "Compara instantáneas o píxeles de la página para ver exactamente qué cambió."
+  },
+  "tabPurpose": {
+    "message": "Pestañas con propósito."
+  },
+  "tabGroups": {
+    "message": "Los agentes pueden nombrar el grupo de pestañas de su sesión."
+  },
+  "moreContext": {
+    "message": "Más contexto de la página."
+  },
+  "contextDetails": {
+    "message": "Inspección limitada de marcos y detección experimental de WebMCP."
+  },
+  "clearerSetup": {
+    "message": "Configuración más clara."
+  },
+  "setupDetails": {
+    "message": "Guía de conexión, diseño de panel más estable e instalación mejorada de herramientas."
+  },
+  "saferSessions": {
+    "message": "Sesiones más seguras."
+  },
+  "saferDetails": {
+    "message": "Descargas delimitadas, comprobaciones de URL y limpieza de ajustes temporales del navegador."
+  },
+  "readNotes": {
+    "message": "Leer las notas de la versión"
+  },
+  "connectAgent": {
+    "message": "Conecta tu agente de programación"
+  },
+  "runTerminal": {
+    "message": "Ejecuta esto en una terminal. La configuración conecta las herramientas compatibles detectadas y registra el host nativo del navegador."
+  },
+  "copyCommand": {
+    "message": "Copiar comando"
+  },
+  "reopenAgent": {
+    "message": "Después, vuelve a abrir tu agente de escritorio o reconecta MCP en el cliente de terminal."
+  },
+  "firefoxExtra": {
+    "message": "Firefox y LibreWolf necesitan un paso adicional al iniciarse"
+  },
+  "firefoxInstructions": {
+    "message": "Instrucciones de inicio de Firefox"
+  },
+  "openExtension": {
+    "message": "Abre la extensión."
+  },
+  "askAgent": {
+    "message": "Pide a tu agente que navegue."
+  },
+  "chooseSharing": {
+    "message": "Elige qué compartir."
+  },
+  "readyBrowse": {
+    "message": "¿Todo listo para navegar?"
+  },
+  "checkConnection": {
+    "message": "Comprueba la conexión en Resumen y vuelve a tu agente."
+  },
+  "openPanel": {
+    "message": "Abrir panel de la extensión"
+  },
+  "showNotes": {
+    "message": "Mostrar notas de la versión después de actualizar"
+  },
+  "welcomeUpdated": {
+    "message": "Tus herramientas de navegador, actualizadas."
+  },
+  "welcomeIntro": {
+    "message": "Tu navegador y tu agente, conectados."
+  },
+  "welcomeChanges": {
+    "message": "Esto es lo nuevo y dónde encontrarlo."
+  },
+  "welcomeDescription": {
+    "message": "Busca en páginas, completa formularios y revisa tu trabajo en tu navegador habitual. Empieza con un comando de configuración."
+  },
+  "welcomeFirefox": {
+    "message": "Los clics confiables, la escritura y los diálogos requieren Firefox Remote Agent. Actívalo en un puerto local y conecta el perfil de navegador correspondiente. El complemento por sí solo no ofrece este control."
+  },
+  "welcomeOverview": {
+    "message": "Resumen comprueba el entorno local. En Perfiles puedes nombrar este navegador, por ejemplo, «trabajo» o «personal»."
+  },
+  "welcomeExample": {
+    "message": "Prueba: «Abre example.com en mi navegador personal y describe la página»."
+  },
+  "welcomeSharing": {
+    "message": "La asistencia para decisiones está desactivada por defecto. Compartir capturas requiere activación independiente; las subidas piden confirmación."
+  },
+  "welcomeReadFailure": {
+    "message": "No se pudo leer tu preferencia de actualización. Inténtalo de nuevo."
+  },
+  "welcomeCopied": {
+    "message": "Comando de configuración copiado."
+  },
+  "welcomeCopyFailure": {
+    "message": "No se pudo copiar. Selecciona el comando de abajo y cópialo manualmente."
+  },
+  "welcomeSaved": {
+    "message": "Preferencia de actualización guardada."
+  },
+  "welcomeSaveFailure": {
+    "message": "No se pudo guardar tu preferencia. Inténtalo de nuevo."
+  },
+  "welcomeOpenFailure": {
+    "message": "Abre la extensión desde la barra del navegador para comprobar la conexión."
+  },
+  "runtimeConnected": {
+    "message": "Entorno conectado"
+  },
+  "checkingConnection": {
+    "message": "Comprobando conexión"
+  },
+  "connectBrowser": {
+    "message": "Conecta tu navegador"
+  },
+  "runtimeExplanation": {
+    "message": "La extensión está conectada al entorno local. Elige este perfil en tu agente. Las herramientas del navegador informan por separado del estado de las pestañas y los diálogos pendientes."
+  },
+  "runtimeChecking": {
+    "message": "Buscando el entorno local. Tu configuración permanece en este dispositivo."
+  },
+  "runtimeInstall": {
+    "message": "Instala el puente local para conectar esta extensión a tu agente de programación."
+  },
+  "unnamedProfile": {
+    "message": "Perfil sin nombre"
+  },
+  "copyUnavailable": {
+    "message": "No se puede copiar. Selecciona el comando de abajo."
+  },
+  "usageUnavailable": {
+    "message": "Uso no disponible. Conecta el host nativo."
+  },
+  "loading": {
+    "message": "Cargando…"
+  },
+  "localSearch": {
+    "message": "Búsqueda local"
+  },
+  "checkingConfiguration": {
+    "message": "Comprobando tu configuración…"
+  },
+  "assistanceNeedsConnection": {
+    "message": "Se necesita conexión. Configura el servicio para activar la asistencia; la búsqueda local sigue disponible."
+  },
+  "assistanceOff": {
+    "message": "La asistencia en la nube está desactivada. La búsqueda y la repetición siguen disponibles."
+  },
+  "notReported": {
+    "message": "No informado"
+  },
+  "usageDetails": {
+    "message": "Solo se cuentan los tokens y costes informados por el proveedor. El uso de otras herramientas se cuenta aparte."
+  },
+  "selectorHelp": {
+    "message": "Copia un selector de perfil y dáselo a tu agente para mantener la automatización en el navegador elegido."
+  },
+  "searchHelp": {
+    "message": "Busca contenido relevante de la página localmente. La búsqueda por palabras clave sigue disponible."
+  },
+  "autoSearchHelp": {
+    "message": "La búsqueda automática equilibra relevancia y velocidad. La mayoría puede mantener los valores predeterminados."
+  },
+  "memoryDescription": {
+    "message": "Guarda localmente las acciones correctas del navegador para agilizar tareas repetidas."
+  },
+  "expandedStorage": {
+    "message": "Almacenamiento ampliado: permitir hasta 10 GB"
+  },
+  "expandedStorageHelp": {
+    "message": "El almacenamiento ampliado puede usar más espacio en disco."
+  },
+  "cleanupHelp": {
+    "message": "Las acciones fallidas caducan automáticamente. Las confirmadas se conservan."
+  },
+  "memoryStatsHelp": {
+    "message": "Memoria de acciones compartida · estadísticas por perfil de navegador."
+  },
+  "decisionHelp": {
+    "message": "Busca objetivos relevantes y elige recetas guardadas. Tu agente controla las acciones; la repetición conserva sus controles de seguridad."
+  },
+  "keyPrivacy": {
+    "message": "Guardada de forma privada por el host nativo. Nunca se almacena en el navegador ni se devuelve al agente."
+  },
+  "environmentAlternative": {
+    "message": "Alternativa opcional a una clave guardada. La variable debe existir en el entorno del host nativo."
+  },
+  "testKeyHelp": {
+    "message": "Prueba tu clave y el modelo seleccionado con una pequeña decisión sintética facturable."
+  },
+  "removeKey": {
+    "message": "Eliminar clave guardada"
+  },
+  "envVariable": {
+    "message": "Avanzado · Variable de entorno"
+  },
+  "variableName": {
+    "message": "Nombre de la variable"
+  },
+  "modelMigration": {
+    "message": "Migración de modelos locales"
+  },
+  "dismissNotice": {
+    "message": "Descartar aviso"
+  },
+  "keepUpdated": {
+    "message": "Mantén actualizadas las herramientas locales del navegador"
+  },
+  "whatsNew": {
+    "message": "Novedades"
+  },
+  "howUpdate": {
+    "message": "Cómo actualizar"
+  },
+  "copyUpdate": {
+    "message": "Copiar comando de actualización"
+  },
+  "updateHelp": {
+    "message": "¿Necesitas ayuda para actualizar?"
+  },
+  "openSetup": {
+    "message": "Abrir instrucciones de configuración"
+  },
+  "remindWeek": {
+    "message": "Recordármelo en una semana"
+  },
+  "snoozed": {
+    "message": "Recordatorio pospuesto. Estas instrucciones siguen disponibles en Configuración."
+  },
+  "service": {
+    "message": "Servicio"
+  },
+  "serviceOff": {
+    "message": "Desactivado · Búsqueda y repetición locales"
+  },
+  "providerConsent": {
+    "message": "Al activar la asistencia se envían a $1 la intención de búsqueda o repetición y descripciones limitadas de los candidatos. Tu agente mantiene el control de las acciones."
+  },
+  "imageFallback": {
+    "message": "Permitir la alternativa experimental con imágenes"
+  },
+  "imageScreenshots": {
+    "message": "Permitir capturas para objetivos visuales ambiguos"
+  },
+  "imageJevNotice": {
+    "message": "Desactivado por defecto. Solo tras una decisión de texto incierta, se puede enviar una captura pequeña a $1. Como máximo, una solicitud de imagen por minuto UTC y 20 por día UTC entre todos los perfiles. Los tokens de imagen tienen coste adicional y dependen de la imagen."
+  },
+  "imageNotice": {
+    "message": "Desactivado por defecto. Se puede enviar una captura limitada a $1. Como máximo, una solicitud de imagen por minuto UTC y 20 por día UTC entre todos los perfiles. Los tokens de imagen tienen coste adicional y dependen de la imagen."
+  },
+  "testing": {
+    "message": "Probando…"
+  },
+  "saveTest": {
+    "message": "Guardar y probar conexión"
+  },
+  "saveSettings": {
+    "message": "Guardar configuración"
+  },
+  "memoryUnavailable": {
+    "message": "La memoria no está disponible. Reconecta el host nativo."
+  },
+  "memoryChecking": {
+    "message": "Comprobando el estado de la memoria…"
+  },
+  "memoryOn": {
+    "message": "La memoria está activada. Las acciones guardadas ayudan con las tareas repetidas."
+  },
+  "memoryOff": {
+    "message": "La memoria está desactivada. Actívala en Configuración para guardar tareas repetidas."
+  },
+  "loadingStats": {
+    "message": "Cargando estadísticas…"
+  },
+  "waitingStats": {
+    "message": "Esperando estadísticas…"
+  },
+  "hostTotals": {
+    "message": "Este host proporciona totales de todos los perfiles. Actualiza el host nativo para filtrarlos."
+  },
+  "oldHistory": {
+    "message": "Historial guardado antes de incorporar el seguimiento de perfiles."
+  },
+  "allHistory": {
+    "message": "Todos los perfiles, incluida la actividad anterior sin asignar."
+  },
+  "memoryEnabled": {
+    "message": "Memoria de acciones activada."
+  },
+  "memoryDisabled": {
+    "message": "Memoria de acciones desactivada."
+  },
+  "indexRebuilt": {
+    "message": "Índice de memoria reconstruido."
+  },
+  "cleanupComplete": {
+    "message": "Limpieza completada."
+  },
+  "standardLimit": {
+    "message": "Límite estándar. Activa el almacenamiento ampliado para aumentarlo."
+  },
+  "expandedEnabled": {
+    "message": "Almacenamiento ampliado activado: hasta 10 GB."
+  },
+  "enableStartMemory": {
+    "message": "Actívala para empezar a crear memoria de acciones."
+  },
+  "memoryStateChecking": {
+    "message": "Comprobando el estado de la memoria…"
+  },
+  "thisBrowser": {
+    "message": "Perfil de este navegador:"
+  },
+  "defaultLabel": {
+    "message": "Predeterminado"
+  },
+  "activeModel": {
+    "message": "Modelo de búsqueda activo"
+  },
+  "active": {
+    "message": "Activo"
+  },
+  "useModel": {
+    "message": "Usar"
+  },
+  "onDemand": {
+    "message": "Bajo demanda"
+  },
+  "delete": {
+    "message": "Eliminar"
+  },
+  "status": {
+    "message": "Estado"
+  },
+  "host": {
+    "message": "Host"
+  },
+  "lastCheck": {
+    "message": "Última comprobación"
+  },
+  "profileId": {
+    "message": "ID de perfil"
+  },
+  "copy": {
+    "message": "Copiar"
+  },
+  "hide": {
+    "message": "Ocultar"
+  },
+  "reveal": {
+    "message": "Mostrar"
+  },
+  "download": {
+    "message": "Descargar"
+  },
+  "redownload": {
+    "message": "Descargar de nuevo"
+  },
+  "ready": {
+    "message": "Listo"
+  },
+  "notDownloaded": {
+    "message": "No descargado"
+  },
+  "statsUnavailable": {
+    "message": "Estadísticas no disponibles:"
+  },
+  "chartLabel": {
+    "message": "Acciones confirmadas y fallidas por día"
+  },
+  "versionNotice": {
+    "message": "Aviso de actualización de versión"
+  },
+  "extensionLabel": {
+    "message": "Extensión"
+  },
+  "copySelectorReady": {
+    "message": "Selector de perfil copiado."
+  },
+  "clipboardUnavailable": {
+    "message": "Portapapeles no disponible."
+  },
+  "profileCopied": {
+    "message": "ID de perfil copiado."
+  },
+  "migrationText": {
+    "message": "Los modelos integrados están obsoletos y pasarán a un paquete opcional. Seguirán disponibles durante la migración y se avisará al menos 90 días antes de retirarlos. Se conservarán tus registros de memoria y modelos en caché."
+  },
+  "updateInstall": {
+    "message": "Instala la versión de CLI correspondiente a la extensión cuando terminen los procesos de agentes administrados. Las sesiones activas conservan su versión actual."
+  },
+  "storeAutoUpdate": {
+    "message": "Las actualizaciones de Chrome Web Store se instalan automáticamente. Busca una actualización de la extensión; si la versión sigue en revisión, espera su aprobación. No necesitas degradar las herramientas locales."
+  },
+  "globalNpm": {
+    "message": "Para una instalación global de npm, ejecuta:"
+  },
+  "postUpdate": {
+    "message": "Tras esta primera actualización, vuelve a abrir el navegador y la aplicación del agente cuando termine el trabajo actual. Luego activa las actualizaciones automáticas en Configuración → Actualizaciones. Las instalaciones administradas esperan a que terminen los procesos del agente. Los comandos fijados y las copias de desarrollo siguen bajo tu control."
+  },
+  "updateInstallHelp": {
+    "message": "Actualiza la instalación que usa tu host nativo. Si el aviso continúa después de reiniciar, vuelve a ejecutar la configuración del host nativo para esa instalación."
+  },
+  "connectReopen": {
+    "message": "Conecta el host nativo y vuelve a abrir Configuración."
+  },
+  "cannotConnect": {
+    "message": "No se pudo conectar al host nativo. Reconéctalo e inténtalo de nuevo."
+  },
+  "testFailed": {
+    "message": "La prueba de conexión falló."
+  },
+  "cannotSaveReconnect": {
+    "message": "No se pudo guardar. Reconecta el host nativo e inténtalo de nuevo."
+  },
+  "decisionOff": {
+    "message": "La asistencia para decisiones está desactivada. La búsqueda y repetición locales siguen disponibles."
+  },
+  "cannotSaveSettings": {
+    "message": "No se pudo guardar la configuración."
+  },
+  "cannotRemoveKey": {
+    "message": "No se pudo eliminar la clave guardada."
+  },
+  "keyRemoved": {
+    "message": "Clave guardada eliminada. La clave de entorno, si está configurada, sigue disponible."
+  },
+  "removeKeyFailure": {
+    "message": "No se pudo eliminar la clave. Reconecta e inténtalo de nuevo."
+  },
+  "replaceKey": {
+    "message": "Clave guardada · Introduce otra para reemplazarla"
+  },
+  "pasteKey": {
+    "message": "Pega tu clave API"
+  },
+  "loadingSettings": {
+    "message": "Cargando configuración…"
+  },
+  "decisionEnabled": {
+    "message": "Asistencia para decisiones activada"
+  },
+  "saveTestEnable": {
+    "message": "Guarda y prueba para activar la asistencia."
+  },
+  "localSearchActive": {
+    "message": "La búsqueda local está activa"
+  },
+  "dismissFailure": {
+    "message": "No se pudo descartar el aviso."
+  },
+  "updatePrefSaved": {
+    "message": "Preferencia de actualización guardada."
+  },
+  "saveTryAgain": {
+    "message": "No se pudo guardar. Inténtalo de nuevo."
+  },
+  "updatesOff": {
+    "message": "Las actualizaciones automáticas del entorno están desactivadas."
+  },
+  "updateChecks": {
+    "message": "Las comprobaciones automáticas se ejecutan mientras el navegador está conectado. Las descargas usan npm."
+  },
+  "updateOnce": {
+    "message": "Actualiza el entorno local una vez para activar las actualizaciones automáticas."
+  },
+  "profileLabelHelp": {
+    "message": "Los nombres permanecen en el dispositivo y solo se usan para elegir el perfil de navegador abierto correcto."
+  },
+  "loadingModels": {
+    "message": "Cargando opciones de modelos…"
+  },
+  "profileIdUnavailable": {
+    "message": "ID de perfil no disponible. Reconecta el navegador e inténtalo de nuevo."
+  },
+  "profileCopyFail": {
+    "message": "No se puede copiar. Muestra el ID de perfil y cópialo manualmente."
+  },
+  "profileSaved": {
+    "message": "Guardado. Pasa este nombre de perfil a la primera llamada útil al navegador."
+  },
+  "enableSemanticBusy": {
+    "message": "Activando búsqueda semántica…"
+  },
+  "disableSemanticBusy": {
+    "message": "Desactivando búsqueda semántica…"
+  },
+  "localRetrievalModel": {
+    "message": "Modelo de búsqueda local."
+  },
+  "runtimeScheduled": {
+    "message": "Actualización programada. Esperando a que terminen las sesiones del agente."
+  },
+  "runtimeDownloading": {
+    "message": "Descargando un entorno compatible en segundo plano."
+  },
+  "runtimeInstalled": {
+    "message": "Entorno compatible instalado. Las nuevas sesiones del agente lo usan automáticamente."
+  },
+  "runtimeDeferred": {
+    "message": "Actualización aplazada. El entorno actual sigue disponible; se intentará de nuevo más tarde."
+  },
+  "runtimeReconnect": {
+    "message": "Conecta el entorno local para comprobar la configuración de actualización."
+  },
+  "runtimeSaveFail": {
+    "message": "No se pudo guardar. Reconecta el entorno local e inténtalo de nuevo."
+  },
+  "uploadSaveFail": {
+    "message": "No se pudo guardar la preferencia de subida"
+  },
+  "versionBehind": {
+    "message": "La extensión está por detrás de tus herramientas locales"
+  },
+  "checkToolVersion": {
+    "message": "Comprueba la versión de tus herramientas locales"
+  },
+  "updateTools": {
+    "message": "Actualiza tus herramientas locales del navegador"
+  },
+  "versionMissing": {
+    "message": "Un componente local no informa de su versión, por lo que no se puede comprobar si todas coinciden."
+  },
+  "versionMismatch": {
+    "message": "Las versiones instaladas difieren. Mantenerlas alineadas ayuda a evitar errores inesperados del navegador."
+  },
+  "updateCopied": {
+    "message": "Comando de actualización copiado."
+  },
+  "updateCopyFail": {
+    "message": "No se pudo copiar. Selecciona el comando de arriba."
+  },
+  "reminderFail": {
+    "message": "No se pudo guardar el recordatorio. Inténtalo de nuevo."
+  },
+  "replaySuccess": {
+    "message": "éxito de repetición"
+  },
+  "uniqueActions": {
+    "message": "acciones únicas"
+  },
+  "recipes": {
+    "message": "recetas"
+  },
+  "replays": {
+    "message": "repeticiones"
+  },
+  "stepsReused": {
+    "message": "pasos reutilizados"
+  },
+  "executions": {
+    "message": "ejecuciones totales"
+  },
+  "negativeLessons": {
+    "message": "lecciones negativas"
+  },
+  "indexed": {
+    "message": "indexadas"
+  },
+  "awaitingIndex": {
+    "message": "pendientes de indexación"
+  },
+  "replayNotAttempted": {
+    "message": "Aún no se ha intentado repetir: al repetir una receta guardada en el mismo sitio se reproduce automáticamente."
+  },
+  "purgeInvalid": {
+    "message": "El periodo de limpieza debe estar entre 1 y 365 días."
+  },
+  "storageExpanded": {
+    "message": "Almacenamiento ampliado activado: el límite puede alcanzar 10 GB."
+  },
+  "storageStandard": {
+    "message": "Almacenamiento ampliado desactivado: se ha restablecido el límite estándar."
+  },
+  "thisProfileSuffix": {
+    "message": " (este perfil)"
+  },
+  "currentBrowserProfile": {
+    "message": "perfil actual del navegador"
+  },
+  "lastSuccessful": {
+    "message": " Se muestra la última actualización correcta."
+  },
+  "quotaUsage": {
+    "message": "Usados $1 de $2"
+  },
+  "apiKey": {
+    "message": "Clave API"
+  },
+  "exampleLabels": {
+    "message": "trabajo, personal, pruebas"
+  },
+  "decision": {
+    "message": "Decisión"
+  },
+  "localHost": {
+    "message": "Host local"
+  },
+  "recommendedDim": {
+    "message": "$1 dimensiones — equilibrio recomendado"
+  },
+  "modelDownload": {
+    "message": "Descargando $1 para $2…$3"
+  },
+  "modelReady": {
+    "message": "Listo: $1. Caché del modelo: local."
+  },
+  "modelError": {
+    "message": "Error del modelo: $1."
+  },
+  "modelUnknown": {
+    "message": "error desconocido"
+  },
+  "modelWord": {
+    "message": "modelo"
+  },
+  "deleteModelConfirm": {
+    "message": "¿Eliminar los archivos locales de $1? Se pueden descargar de nuevo más tarde."
+  },
+  "downloadingModel": {
+    "message": "Descargando $1…"
+  },
+  "deletingModel": {
+    "message": "Eliminando archivos locales de $1…"
+  },
+  "switchModel": {
+    "message": "Cambiando la búsqueda a $1…"
+  },
+  "embeddingLabel": {
+    "message": "Tamaño de embedding de $1"
+  },
+  "connectedThrough": {
+    "message": "Conectado mediante $1"
+  },
+  "copyPath": {
+    "message": "Copiar ruta"
+  },
+  "copied": {
+    "message": "Copiado"
+  },
+  "failed": {
+    "message": "Error"
+  },
+  "profileNumber": {
+    "message": "Perfil $1"
+  },
+  "providerSuccess": {
+    "message": "Conectado. Clave API y modelo de decisiones verificados."
+  },
+  "providerInvalidKey": {
+    "message": "Clave API rechazada. Comprueba la clave y el servicio seleccionado."
+  },
+  "providerDenied": {
+    "message": "Esta clave no tiene acceso al modelo de decisiones."
+  },
+  "providerCredit": {
+    "message": "Añade crédito o aumenta el límite de gasto de tu clave API."
+  },
+  "providerRate": {
+    "message": "Se alcanzó el límite de solicitudes del servicio. Vuelve a probar más tarde."
+  },
+  "providerTimeout": {
+    "message": "Se agotó el tiempo de conexión. Comprueba la red e inténtalo de nuevo."
+  },
+  "providerCheck": {
+    "message": "Comprueba la configuración del proveedor y la clave API."
+  },
+  "providerLuna": {
+    "message": "Luna requiere OpenRouter."
+  },
+  "providerNeedKey": {
+    "message": "Introduce una clave API o configura la variable de entorno en la configuración avanzada."
+  },
+  "providerUnavailable": {
+    "message": "OpenRouter no está disponible. Inténtalo más tarde."
+  },
+  "providerNetwork": {
+    "message": "No se pudo contactar con OpenRouter. Comprueba la red e inténtalo de nuevo."
+  },
+  "providerDecisionFail": {
+    "message": "La prueba de decisión falló. La configuración no cambió; inténtalo más tarde."
+  },
+  "skipNoMatch": {
+    "message": "no hay coincidencias suficientemente cercanas"
+  },
+  "skipPriorFailure": {
+    "message": "esa receta falló antes"
+  },
+  "skipSteps": {
+    "message": "se solicitó otro número de pasos"
+  },
+  "skipRecipe": {
+    "message": "los pasos solicitados cambiaron"
+  },
+  "skipSite": {
+    "message": "la solicitud era para otro sitio"
+  },
+  "skipActions": {
+    "message": "las acciones solicitadas cambiaron"
+  },
+  "skipTargets": {
+    "message": "los objetivos solicitados cambiaron"
+  },
+  "skipValue": {
+    "message": "faltaba un valor escrito"
+  },
+  "skipUrl": {
+    "message": "faltaba una URL"
+  },
+  "skipApproval": {
+    "message": "la receta necesita tu aprobación"
+  },
+  "memorySqlite": {
+    "message": "La memoria de acciones necesita un host nativo compatible con SQLite."
+  },
+  "memoryCounts": {
+    "message": "Acciones únicas: $1 · Recetas: $2"
+  },
+  "memoryIndexReady": {
+    "message": "Índice de memoria listo ($1)"
+  },
+  "memoryIndexPending": {
+    "message": "Índice de memoria: $1 listas · $2 pendientes de embeddings"
+  },
+  "embeddingErrors": {
+    "message": "Errores de embedding: $1"
+  },
+  "skipCount": {
+    "message": "Recetas guardadas omitidas: $1."
+  },
+  "skipCountReason": {
+    "message": "Recetas guardadas omitidas: $1. Motivo más frecuente: $2 ($3)."
+  },
+  "dbLimitSet": {
+    "message": "Límite de base de datos establecido en $1."
+  },
+  "purgeAfter": {
+    "message": "Las lecciones negativas se eliminan tras $1 días."
+  },
+  "selectedCount": {
+    "message": "Perfiles seleccionados: $1. Las acciones compartidas se cuentan una vez."
+  },
+  "currentProfileValue": {
+    "message": "Este perfil: $1"
+  },
+  "statsUpdated": {
+    "message": "Actualizado $1 · los días del gráfico usan UTC"
+  },
+  "strategySet": {
+    "message": "Modo de búsqueda establecido en $1…"
+  },
+  "resultCountSet": {
+    "message": "Resultados del agente establecidos en $1…"
+  },
+  "resultDetailSet": {
+    "message": "Detalle de resultados establecido en $1…"
+  },
+  "dimensionSet": {
+    "message": "Tamaño de embedding establecido en $1 dimensiones…"
+  },
+  "searchLocalDetail": {
+    "message": "La búsqueda se ejecuta localmente con el modelo activo y recurre a la clasificación léxica si es necesario. La búsqueda profunda carga Qwen bajo demanda; si falla la descarga, usa una alternativa segura."
+  },
+  "usageReport": {
+    "message": "Pruebas de conexión: $1. Uso informado en $2 de $3 llamadas; coste en $4 de $3. $5."
+  },
+  "efficiencyReport": {
+    "message": "Evitados desde el inicio del host: $1 clasificaciones inequívocas, $2 búsquedas repetidas, $3 solicitudes duplicadas y $4 por encima del límite. Las decisiones de pago solo resuelven clasificaciones ambiguas."
+  },
+  "keyCheck": {
+    "message": "Comprobación de clave $1 ms ·"
+  },
+  "inputTokens": {
+    "message": "Tokens de entrada: $1"
+  },
+  "strategyAuto": {
+    "message": "Automático"
+  },
+  "strategySemantic": {
+    "message": "Semántico"
+  },
+  "strategyLexical": {
+    "message": "Palabras clave"
+  },
+  "strategyDeep": {
+    "message": "Profundo"
+  },
+  "detailLean": {
+    "message": "Breve"
+  },
+  "detailCompact": {
+    "message": "Compacto"
+  },
+  "detailDebug": {
+    "message": "Depuración"
+  },
+  "modelXs": {
+    "message": "La búsqueda predeterminada en páginas en inglés usa un modelo compacto Snowflake de 22,6 millones de parámetros. Para menor latencia, selecciona explícitamente el modo léxico o automático."
+  },
+  "modelM": {
+    "message": "Modelo de búsqueda Snowflake más grande y relevante con 768 dimensiones. Elígelo cuando la calidad importe más que el uso de disco y memoria."
+  },
+  "modelGemma": {
+    "message": "Modelo multilingüe de embeddings en el dispositivo con dimensiones Matryoshka (128/256/512/768). Se recomiendan 256 dimensiones para equilibrar tamaño y calidad."
+  },
+  "modelQwen": {
+    "message": "Búsqueda local actual: embeddings Qwen3 para buscar en la página y reclasificación Qwen3 para seleccionar el contexto final relevante."
+  },
+  "noClientVersion": {
+    "message": "No se informó la versión del cliente"
+  },
+  "connectedClients": {
+    "message": "CLI/MCP conectados: $1"
+  },
+  "notConnectedState": {
+    "message": "Sin conexión"
+  },
+  "profileChecking": {
+    "message": "Comprobando…"
+  },
+  "profileSaving": {
+    "message": "Guardando…"
+  },
+  "deepSearchOnly": {
+    "message": "solo búsqueda profunda"
+  },
+  "memoryUnknown": {
+    "message": "desconocido"
+  },
+  "copyProfileHelp": {
+    "message": "No se puede copiar. Muestra el ID de perfil y cópialo manualmente."
+  },
+  "runtimeStaged": {
+    "message": "Descarga verificada. Comprobando que todas las sesiones del navegador hayan terminado."
+  },
+  "runtimeActivating": {
+    "message": "Cambiando las herramientas locales al entorno actualizado."
+  },
+  "runtimeReconnectRequired": {
+    "message": "Esta versión cambia la conexión de las herramientas. Ejecuta la configuración y reconecta MCP una vez."
+  },
+  "runtimeUpdateHelp": {
+    "message": "Descarga herramientas compatibles en segundo plano y cambia cuando terminen todas las sesiones del navegador. Las conexiones MCP administradas permanecen abiertas."
+  },
+  "runtimeVersions": {
+    "message": "Seleccionado: $1. Cargado: $2."
+  },
+  "noWorkers": {
+    "message": "sin procesos activos"
+  },
+  "runtimeDownloaded": {
+    "message": "Descargado: $1."
+  },
+  "runtimeWaiting": {
+    "message": "Esperando participantes activos: $1."
+  },
+  "postUpdateMaster": {
+    "message": "Cuando termine el trabajo actual, ejecuta la configuración y reconecta MCP una vez. Las futuras actualizaciones compatibles se descargan en segundo plano y se aplican al terminar todas las sesiones, manteniendo abiertas las conexiones MCP administradas. Los comandos fijados y las copias de desarrollo siguen bajo tu control."
+  }
+}
