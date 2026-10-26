@@ -9,4 +9,6 @@ export interface RuntimeActivation {
   pendingReload?: boolean;
   stateIsolation?: boolean;
   autoUpdate?: boolean;
+  generation?: number;
+  stagedRelease?: { root: string; version: string };
 }

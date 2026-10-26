@@ -15,6 +15,7 @@ export interface UrlPolicy {
 }
 
 export class UrlPolicyError extends Error {
+  readonly executionState = "not_started";
   readonly code = "URL_POLICY_BLOCKED";
   readonly retryable = false;
   readonly uncertain = false;

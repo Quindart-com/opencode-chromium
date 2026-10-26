@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Feature proposal
+    url: https://github.com/Quindart-com/opencode-chromium/discussions/categories/feature-requests
+    about: Describe a new capability or improvement in the existing feature-request discussion template.
+  - name: Usage question or setup help
+    url: https://github.com/Quindart-com/opencode-chromium/discussions
+    about: Ask a question in Discussions. Use the bug report form for broken behavior.
+  - name: Security vulnerability
+    url: https://github.com/Quindart-com/opencode-chromium/security/policy
+    about: Follow the security policy to report vulnerabilities privately instead of opening a public issue.

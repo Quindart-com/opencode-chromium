@@ -371,9 +371,9 @@ test("dom-quiet settles unchanged content despite fresh snapshot handles", async
   let calls = 0;
   runtime.invoke = async () => ({ url: "https://example.com", title: "Fixture", nodes: [{ node_id: `node-${++calls}`, text: "Ready", boundingBox: { x: 1, y: 2, width: 80, height: 20 } }] });
   try {
-    const result = await runtime.settleStep({ action: "navigate", settle: { condition: "dom-quiet", timeoutMs: 500 } }, 42, new Map(), runtime.getSession("quiet-handles"));
+    const result = await runtime.settleStep({ action: "navigate", settle: { condition: "dom-quiet", timeoutMs: 1000 } }, 42, new Map(), runtime.getSession("quiet-handles"));
     assert.deepEqual(result, { condition: "dom-quiet", settled: true });
-    assert.equal(calls, 2);
+    assert.ok(calls >= 5, "observe a continuous quiet interval instead of two equal samples");
   } finally { runtime.close(); }
 });
 
@@ -450,7 +450,7 @@ test("untargeted inspect uses a bounded active-surface root", async () => {
   try {
     const result = await runtime.observe({ sessionId: "inspect-root", mode: "inspect", limit: 9999, maxChars: 999999 });
     assert.equal(result.ok, true);
-    assert.match(selector, /dialog/);
+    assert.equal(selector, undefined, "the page expression chooses the live dialog before falling back to body");
     assert.ok(JSON.stringify(result).length <= 20000);
   } finally {
     runtime.close();
@@ -911,14 +911,14 @@ test("finalize reports failed cleanup and leaves the session available for retry
       if (args.environment.reset && failReset) throw new Error("Environment cleanup failed");
       return { configured: true };
     }
-    if (name === "browser_finalize") { finalized = true; return { profiles: {} }; }
+    if (name === "browser_finalize") { finalized = true; assert.equal(args.blockedTabs.length, failReset ? 1 : 0); return { profiles: {} }; }
     throw new Error(`Unexpected operation: ${name}`);
   };
   try {
     await runtime.session({ sessionId: "env-retry", action: "configure", tabId: 7, environment: { colorScheme: "dark" } });
     const failed = await runtime.finalize({ sessionId: "env-retry", keep: [7] });
     assert.equal(failed.ok, false);
-    assert.equal(finalized, false);
+    assert.equal(finalized, true);
     assert.equal(runtime.sessions.has("env-retry"), true);
     failReset = false;
     const result = await runtime.finalize({ sessionId: "env-retry", keep: [7] });

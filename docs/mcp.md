@@ -17,6 +17,7 @@ Options:
 --auth-token-env=AGENT_BROWSER_AUTH_TOKEN
 --allowed-origin=PATTERN
 --blocked-origin=PATTERN
+--managed
 ```
 
 Core mode exposes exactly `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Debug mode adds diagnostics; legacy mode exposes the preserved 55 granular operations for migration and regression testing only.
@@ -43,7 +44,15 @@ Discover a pack with `browser_observe` using `mode: "capabilities"` and the pack
 
 Pixel comparisons use a per-channel tolerance (`threshold`, default 0.1), not perceptual similarity. Baselines belong to their original session, profile, tab and URL, expire with other artifacts, and require matching dimensions. Use a stable viewport or `clip` (maximum 1,600 × 1,200, two million pixels), settle the relevant state and avoid animations. Large or non-PNG captures fail explicitly. Changes outside the capture/visible control set are not measured.
 
-Frame IDs are scoped to the controlled document. Rediscover after navigation; Firefox bridges its current BiDi contexts to document markers across reconnects. Discovery and inspection are bounded; this does not add automatic traversal to every locator or trusted action. Cross-origin frame inspection follows the same origin policy.
+Use `frames.list`, then pass a returned ID as `target.frameId` to search, inspect, extract, focus, click, press, fill, assert, settle, or upload inside that frame. The default stays the top document; searches do not automatically combine every frame. Search results carry frame identity, and node handles retain their frame and document identity. Rediscover after frame navigation or replacement. Both same-origin and cross-origin frames follow the existing origin policy and tab ownership checks.
+
+Coordinates with a frame target are CSS viewport coordinates within that frame. Trusted input and the visible cursor are translated through its ancestors. An unresolved iframe coordinate target returns `FRAME_TARGET_REQUIRED`; a covered ancestor returns `FRAME_OBSTRUCTED`. Rotated or perspective-transformed frames return `UNSUPPORTED_FRAME` for coordinate input. Keep the embedded parent open when uploading. File selection (`set:true`) confirms the browser received files; verify the application's preview or crop state separately.
+
+`focus` accepts focusable controls, including links, buttons, readonly inputs, selects and contenteditable regions. `press` with a target focuses it before dispatch; without a target it uses current focus. Enter retains its approval flow. Ordinary Chromium clicks preserve background page activation; controls requiring trusted pointer input can use `diagnostics.cdp` after inspecting a fresh screenshot. Convert image coordinates to CSS viewport coordinates using the returned capture geometry, send matched mouse press/release events, then verify the resulting UI and native-dialog events.
+
+Observations include `observation.capturedAt`, `documentId`, `frameId`, revision and scope. DOM quiet means 500 ms without relevant changes, not proof that the application saved a value. Use an explicit `settle` condition for the expected outcome and reopen persisted settings when appropriate. Unsettled or uncertain mutations are excluded from successful memory recipes.
+
+The extension's runtime connection is separate from tab health, returned with session tab listings. Check `browser_observe` mode `events` for `dialogs.open` when page commands stall. Event reads and `handleDialog` use a recovery path without attaching first; accepting a prompt still requires approval. Timeout details identify phase, method, tab and known dialog type. A timeout can occur after a mutation ran: inspect current state before repeating it. `browser_finalize` can return `status:"partial"` with per-tab results; handle the blocked dialog and finalize again using the same session.
 
 Name tab groups with `browser_session` action `open`, `name: "Checkout review"`, or action `name` to rename an existing session. Browsers without native groups keep the session label internally.
 

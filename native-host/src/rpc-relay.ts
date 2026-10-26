@@ -12,6 +12,8 @@ const JSON_RPC_VERSION = "2.0";
 const DEFAULT_RELAY_TIMEOUT_MS = 30000;
 
 function requestTimeoutMs(message: RpcMessage) {
+  const deadlineAt = message.params?.deadlineAt;
+  if (typeof deadlineAt === "number") return Math.max(1, deadlineAt - Date.now() + 5000);
   const timeoutMs = message?.params?.timeoutMs ?? message?.params?.timeout_ms;
   return typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.ceil(timeoutMs + 5000) : DEFAULT_RELAY_TIMEOUT_MS;
 }
@@ -20,6 +22,8 @@ export class RpcRelay {
   #extensionWriter: ExtensionWriter;
   #clients = new Set<RpcSocket>();
   #clientVersions = new Map<RpcSocket, string | null>();
+  #coordinated = new Set<RpcSocket>();
+  #admit: (() => Promise<() => void>) | undefined;
   #pendingRequests = new Map<number, PendingRequest>();
   #pendingBySocket = new Map<RpcSocket, Set<number>>();
   #nextRequestId = 1;
@@ -27,11 +31,12 @@ export class RpcRelay {
   #onProfile: ((profile: ProfileHello) => void) | undefined;
   #localHandler: ((method: string, params: Record<string, unknown>) => unknown | Promise<unknown>) | undefined;
   #hostPending = new Map<number, { resolve(value: unknown): void; reject(error: unknown): void; timer: ReturnType<typeof setTimeout> }>();
-  constructor({ extensionWriter, state, onProfile, localHandler }: { extensionWriter: ExtensionWriter; state: RelayState; onProfile?(profile: ProfileHello): void; localHandler?(method: string, params: Record<string, unknown>): unknown | Promise<unknown> }) {
+  constructor({ extensionWriter, state, onProfile, localHandler, admit }: { extensionWriter: ExtensionWriter; state: RelayState; onProfile?(profile: ProfileHello): void; localHandler?(method: string, params: Record<string, unknown>): unknown | Promise<unknown>; admit?(): Promise<() => void> }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
     this.#onProfile = onProfile;
     this.#localHandler = localHandler;
+    this.#admit = admit;
   }
 
   flushMemory() {
@@ -50,7 +55,7 @@ export class RpcRelay {
   }
 
   activity(observer = true) {
-    return { clients: Math.max(0, this.#clients.size - Number(observer)), pending: this.#pendingRequests.size + this.#hostPending.size };
+    return { clients: Math.max(0, this.#clients.size - Number(observer)), unmanaged: Math.max(0, this.#clients.size - this.#coordinated.size - Number(observer)), pending: this.#pendingRequests.size + this.#hostPending.size };
   }
 
   addClient(socket: RpcSocket) {
@@ -62,6 +67,7 @@ export class RpcRelay {
 
   #removeClient(socket: RpcSocket) {
     this.#clients.delete(socket);
+    this.#coordinated.delete(socket);
     if (this.#clientVersions.delete(socket)) this.#broadcastVersions();
     const pendingIds = this.#pendingBySocket.get(socket) ?? new Set();
     for (const extensionId of pendingIds) this.#deletePending(extensionId);
@@ -98,6 +104,13 @@ export class RpcRelay {
   }
 
   async handleClientMessage(socket: RpcSocket, input: unknown) {
+    const parsed = rpcMessageSchema.parse(input);
+    if (parsed.coordinated === true) this.#coordinated.add(socket);
+    const leave = !["runtime.activity", "host.status"].includes(parsed.method ?? "") ? await this.#admit?.() : undefined;
+    try { await this.#dispatchClientMessage(socket, parsed); } finally { leave?.(); }
+  }
+
+  async #dispatchClientMessage(socket: RpcSocket, input: unknown) {
     const message = rpcMessageSchema.parse(input);
     const commands: unknown[] = (message.method === "inputGesture" || message.method === "executeInputGesture") && Array.isArray(message.params.steps) ? message.params.steps : message?.method === "executeCdp" ? [message.params] : [];
     const hasFiles = commands.some(value => { const command = record(value), params = record(command.commandParams ?? command.command_params); const files = command.method === "DOM.setFileInputFiles" ? params.files : command.method === "Input.dispatchDragEvent" ? record(params.data).files : null; return Array.isArray(files) && files.length > 0; });
@@ -134,7 +147,7 @@ export class RpcRelay {
         await writeFrame(socket, local.error ? {
           jsonrpc: JSON_RPC_VERSION,
           id: message.id,
-          error: { code: -32000, message: local.error },
+          error: { code: -32000, message: local.error, data: local.errorData },
         } : {
           jsonrpc: JSON_RPC_VERSION,
           id: message.id,
@@ -173,9 +186,11 @@ export class RpcRelay {
       const result = await this.#localHandler(method, params);
       return result === undefined ? { handled: false } : { handled: true, result };
     } catch (error) {
+      const fields = record(error);
       return {
         handled: true,
         error: error instanceof Error ? error.message : String(error),
+        errorData: { code: fields.code, uncertain: fields.uncertain, retryable: fields.retryable, executionState: fields.executionState, details: fields.details },
       };
     }
   }
@@ -285,7 +300,7 @@ export class RpcRelay {
       await this.#extensionWriter(local.error ? {
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,
-        error: { code: -32000, message: local.error },
+        error: { code: -32000, message: local.error, data: local.errorData },
       } : {
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,

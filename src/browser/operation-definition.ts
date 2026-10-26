@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { BrowserContext } from "../core/tool-definition.ts";
+import { nodeFrameId } from "./operations/page-state.ts";
 
 export interface BrowserOperation {
   description: string;
@@ -13,8 +14,13 @@ export function defineBrowserOperation<S extends z.ZodRawShape>(definition: {
   args: S;
   execute(input: z.output<z.ZodObject<S>>, context: BrowserContext): string | Promise<string>;
 }): BrowserOperation {
+  const args = { frameId: z.string().min(1).max(300).optional(), ...definition.args };
   const schema = z.object(definition.args);
-  return { ...definition, async execute(input, context) { return definition.execute(schema.parse(input), context); } };
+  const location = z.object({ frameId: z.string().min(1).max(300).optional(), nodeId: z.unknown().optional() });
+  return { ...definition, args, async execute(input, context) {
+    const selected = location.parse(input);
+    return definition.execute(schema.parse(input), { ...context, frameId: selected.frameId ?? nodeFrameId(selected.nodeId) ?? context.frameId });
+  } };
 }
 
 export function defineObjectOperation<S extends z.ZodRawShape>(definition: {

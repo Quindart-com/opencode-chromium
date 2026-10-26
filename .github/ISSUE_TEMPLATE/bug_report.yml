@@ -1,0 +1,121 @@
+name: Bug report
+description: Report a problem with browser automation, setup, or connectivity.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe one problem per report. A small reproduction helps us investigate even when the affected website requires an account.
+
+        **This issue will be public.** Remove credentials, cookies, access tokens, personal information, private URLs, local user paths, and confidential page contents from examples, logs, and screenshots. Do not attach browser profiles or full configuration files. Report vulnerabilities using our [security policy](https://github.com/Quindart-com/opencode-chromium/security/policy).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is going wrong?
+      description: Describe the task you are trying to complete and where it fails.
+      placeholder: After opening an embedded editor, the agent cannot find its upload control.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest tool call or code example that reproduces it. Use synthetic data. A public test page is helpful but not required; do not share account access.
+      placeholder: |
+        1. Start the runtime and connect the extension.
+        2. Open a page with ...
+        3. Call ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen when you follow those steps?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead? Include the exact error code or message if available. Describe whether the browser action happened despite an error.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Runtime and extension versions
+      description: Give the installed package/runtime version and browser extension version. Include the installation method and say if a version is unknown.
+      placeholder: |
+        Runtime/package version:
+        Extension version:
+        Installation method (npm, plugin marketplace, source checkout, other):
+        Source commit, if applicable:
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 150, Firefox 157, or LibreWolf 157
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: Windows 11, macOS 15, or Ubuntu 24.04
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: How are you using the project?
+      options:
+        - OpenCode
+        - MCP client (including Codex)
+        - JavaScript SDK
+        - Source checkout or direct native-host testing
+        - Other or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Client and workflow details
+      description: Include the client name/version and relevant settings. For page interaction, mention embedded frames, shadow roots, native dialogs, background tabs, or upload approval if involved. Share only sanitized excerpts.
+      placeholder: |
+        Client and version:
+        Relevant tool/action and settings:
+        Page/frame/dialog details:
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Intermittently
+        - Only once so far
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics or screenshots
+      description: Optional. Paste relevant error output, tool results, or a cropped screenshot. For connectivity problems, include sanitized doctor/status output and session health or dialog events if available. Review everything before posting; full logs can contain sensitive data.
+  - type: textarea
+    id: regression
+    attributes:
+      label: Previous behavior and workarounds
+      description: Did this work in an earlier version? What have you tried, and does any workaround help? Link related issues if known.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I reviewed this report and its attachments and removed sensitive or personal information.
+          required: true

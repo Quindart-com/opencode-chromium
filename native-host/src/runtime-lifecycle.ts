@@ -24,6 +24,8 @@ export function parseRuntimeActivation(value: unknown): RuntimeActivation {
   if (data.version !== undefined && data.version !== null && typeof data.version !== "string") throw new TypeError("Invalid runtime version");
   for (const key of ["followBranch", "pendingReload", "stateIsolation", "autoUpdate"] as const) if (data[key] !== undefined && typeof data[key] !== "boolean") throw new TypeError(`Invalid runtime ${key}`);
   if (data.channel !== undefined && data.channel !== "development" && data.channel !== "production") throw new TypeError("Invalid runtime channel");
+  if (data.generation !== undefined && (!Number.isSafeInteger(data.generation) || Number(data.generation) < 0)) throw new TypeError("Invalid runtime generation");
+  if (data.stagedRelease !== undefined && (typeof record(data.stagedRelease).root !== "string" || typeof record(data.stagedRelease).version !== "string")) throw new TypeError("Invalid staged release");
   return data as unknown as RuntimeActivation;
 }
 
