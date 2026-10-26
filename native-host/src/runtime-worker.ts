@@ -51,7 +51,7 @@ export class McpWorker {
     this.child.stdout?.on("data", chunk => { try { decode(chunk); } catch (error) { this.#fail(error); this.close(); } });
     this.child.stderr?.on("data", chunk => process.stderr.write(chunk));
     this.child.on("error", error => this.#fail(error));
-    this.child.on("exit", () => this.#fail(new Error("Browser worker exited; the interrupted call was not replayed")));
+    this.child.on("exit", (code, signal) => this.#fail(new Error(`Browser worker exited (${signal ?? code ?? "unknown"}); the interrupted call was not replayed`)));
     this.child.stdin?.on("error", error => this.#fail(error));
   }
   #fail(error: unknown) {

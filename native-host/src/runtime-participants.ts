@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { withRuntimeLock } from "./runtime-lifecycle.js";
+import { withRuntimeLock } from "./runtime-lifecycle.ts";
 
 export interface ParticipantState {
   id: string; pid: number; kind: "supervisor" | "runtime" | "host";

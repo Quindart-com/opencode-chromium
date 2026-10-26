@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { createParticipant,readJournal,type SwitchJournal } from "./runtime-participants.js";
-import { McpWorker,lines,type Message } from "./runtime-worker.js";
+import { createParticipant,readJournal,type SwitchJournal } from "./runtime-participants.ts";
+import { McpWorker,lines,type Message } from "./runtime-worker.ts";
 
 export async function superviseMcp(dir: string, args = process.argv.slice(2)) {
   const manifest = () => JSON.parse(fs.readFileSync(path.join(dir, "runtime.json"), "utf8")) as { root: string; version: string; generation?: number };

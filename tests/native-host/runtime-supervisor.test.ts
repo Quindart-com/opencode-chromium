@@ -28,6 +28,7 @@ function fixture() {
     return root;
   }
   const children: ReturnType<typeof spawn>[] = [];
+  const logs: Array<() => string> = [];
   function client(extraEnv: NodeJS.ProcessEnv = {}) {
     const child = spawn("node", [path.join(dir, "mcp.mjs")], { windowsHide: true,
       env: { ...process.env, OPENCODE_BROWSER_RUNTIME_DIR: dir, TEST_PARTICIPANTS_MODULE: path.join(process.cwd(), "native-host/dist/runtime-participants.js"), TEST_MUTATION_LOG: path.join(dir, "mutations"), ...extraEnv }, stdio: ["pipe", "pipe", "pipe"] });
@@ -35,6 +36,7 @@ function fixture() {
     const pending = new Map<number, { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
     let id = 0, stderr = "";
     child.stderr?.on("data", chunk => { stderr += String(chunk); });
+    logs.push(() => stderr);
     const decode = lines(message => { const entry = pending.get(Number(message.id)); if (entry) { pending.delete(Number(message.id)); clearTimeout(entry.timer); entry.resolve(message); } });
     child.stdout?.on("data", decode);
     child.on("exit", () => { for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(new Error(stderr || "Supervisor exited")); } });
@@ -44,9 +46,9 @@ function fixture() {
       pending.set(requestId, { resolve, reject, timer });
       child.stdin?.write(JSON.stringify({ jsonrpc: "2.0", id: requestId, method, params }) + "\n");
     });
-    return { call, child, initialize: () => call("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1" } }), tool: (args: Record<string, unknown> = {}) => call("tools/call", { name: "browser_session", arguments: args }) };
+    return { call, child, logs: () => stderr, initialize: () => call("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1" } }), tool: (args: Record<string, unknown> = {}) => call("tools/call", { name: "browser_session", arguments: args }) };
   }
-  return { dir, root, release, client, async cleanup() {
+  return { dir, root, release, client, logs: () => logs.map(read => read()).join("\n"), async cleanup() {
     for (const child of children) {
       if (child.exitCode !== null) continue;
       const exited = once(child, "exit"); child.stdin?.end(); await exited;
@@ -184,7 +186,7 @@ test("extension announcement replaces two real native hosts and MCP workers befo
     while (!predicate()) {
       if (Date.now() > deadline) {
         const diagnostic = Object.fromEntries(["runtime.json", "update-status.json", "activation-journal.json"].map(name => [name, fs.existsSync(path.join(f.dir, name)) ? fs.readFileSync(path.join(f.dir, name), "utf8") : null]));
-        throw new Error(`Update flow timed out: ${JSON.stringify(diagnostic)}; participants=${JSON.stringify(participants(f.dir))}; ${stderr}`);
+        throw new Error(`Update flow timed out: ${JSON.stringify(diagnostic)}; participants=${JSON.stringify(participants(f.dir))}; workers=${f.logs()}; hosts=${stderr}`);
       }
       await sleep(20);
     }
