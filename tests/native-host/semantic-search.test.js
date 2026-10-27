@@ -53,6 +53,18 @@ test("lexical page-unit ranking works without loading a model", async () => {
   }
 });
 
+test("lexical ranking keeps tokenless and repeated-token queries stable", async () => {
+  const units = [
+    { node_id: "short", kind: "button", text: "x", interactive: true },
+    { node_id: "unicode", kind: "button", text: "東京", interactive: true },
+    { node_id: "repeat", kind: "button", text: "save save", interactive: true },
+  ];
+  for (const [query, expected] of [["x", "short"], ["東京", "unicode"], ["save save", "repeat"]]) {
+    const result = await rankPageUnits({ query, mode: "lexical", units });
+    assert.equal(result.results[0].node_id, expected);
+  }
+});
+
 test("semantic is the default ranking strategy while lexical remains explicit", async () => {
   const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
   const previousDisabled = process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
