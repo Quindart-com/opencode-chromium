@@ -16,6 +16,8 @@ fs.writeFileSync(file, "approved fixture contents");
 const windows = new Map();
 const removed = [];
 const native = createUploadFiles();
+const locale = JSON.parse(fs.readFileSync("extension/_locales/en/messages.json", "utf8"));
+const fixtureMessages = Object.fromEntries(Object.entries(locale).map(([key, value]) => [key, value.message]));
 let browser, consent, origin, id = 100;
 const server = http.createServer(async (req, res) => {
   try {
@@ -56,7 +58,7 @@ try {
         const page = await context.newPage(); const windowId = ++id;
         windows.set(windowId, { id: windowId, page, token: new URL(url).searchParams.get("token") });
         page.on("close", () => { windows.delete(windowId); removed.forEach(callback => callback(windowId)); });
-        await page.addInitScript(() => { globalThis.chrome = { runtime: { sendMessage: message => fetch("/rpc", { method: "POST", body: JSON.stringify(message) }).then(response => response.json()) } }; });
+        await page.addInitScript((messages) => { globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = messages[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, runtime: { sendMessage: message => fetch("/rpc", { method: "POST", body: JSON.stringify(message) }).then(response => response.json()) } }; }, fixtureMessages);
         await page.goto(url);
         return { id: windowId, tabs: [{ id: windowId }] };
       },
