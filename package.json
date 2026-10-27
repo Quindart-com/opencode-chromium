@@ -150,6 +150,7 @@
     "benchmark:decisions": "bun scripts/benchmark-decision-pipeline.ts",
     "benchmark:flow": "bun scripts/benchmark-agent-flow.js",
     "benchmark:heldout": "bun scripts/benchmark-heldout-flow.js",
+    "benchmark:production": "node scripts/benchmark-production-flow.js",
     "benchmark:decisions:capped": "bun scripts/benchmark-decision-capped.ts",
     "benchmark:lexical": "bun scripts/benchmark-lexical.ts",
     "benchmark:accuracy": "bun scripts/benchmark-accuracy.ts"
