@@ -4,6 +4,7 @@ import { defaultIpcPath } from "../../native-host/src/ipc-path.ts";
 import { normalizeProfileRegistration,profileRegistryDir,readProfileRegistrations,type ProfileRegistration } from "../../native-host/src/profile-registry.ts";
 import { ProfileSelectionError,type BrowserProfile } from "../core/profiles.ts";
 import { PLUGIN_VERSION } from "../core/versions.ts";
+import { BrowserRuntimeError } from "../core/errors.ts";
 import { isRecord,record } from "../shared/values.ts";
 
 const DEFAULT_TIMEOUT_MS = 20000;
@@ -92,7 +93,7 @@ export class BrowserHostClient {
         }
       });
       socket.on("error", (error) => {
-        const wrapped = new Error(`Could not connect to the agent browser host at ${this.ipcPath}: ${error.message}`);
+        const wrapped = Object.assign(new Error(`Could not connect to the agent browser host at ${this.ipcPath}: ${error.message}`, { cause: error }), { code: (error as NodeJS.ErrnoException).code });
         if (!connected) reject(wrapped);
         this.#disconnect(wrapped);
       });
@@ -263,6 +264,15 @@ export async function listBrowserProfiles(options: ProfileOptions = {}) {
       const result = settled[index];
       if (result?.status === "fulfilled") profiles.push(result.value);
       // A busy live host can miss a probe; only the owner removes its registration.
+    }
+    if (registrations.length && !profiles.length) {
+      const failures = settled.filter(result => result.status === "rejected").map(result => result.reason as unknown);
+      const denied = failures.some(error => ["EPERM", "EACCES"].includes(String(record(error).code)));
+      const timedOut = failures.some(error => error instanceof Error && /Timed out/.test(error.message));
+      if (denied || timedOut) throw new BrowserRuntimeError(denied ?
+        "A browser host is registered, but this process cannot access it. Allow the local host connection or run the MCP server outside the restricted sandbox; reinstalling the extension will not grant access." :
+        "A browser host is registered but did not answer its status probe. Run opencode-chromium doctor --repair-runtime --json, then retry; if it persists, reconnect the extension.",
+      { code: denied ? "BROWSER_HOST_ACCESS_DENIED" : "BROWSER_HOST_UNRESPONSIVE", retryable: !denied, uncertain: false });
     }
     profiles.sort((first, second) => String(first.profileLabel ?? first.profileId).localeCompare(String(second.profileLabel ?? second.profileId)));
     profileCache.set(cacheKey, { at: Date.now(), profiles });

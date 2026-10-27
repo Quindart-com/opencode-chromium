@@ -23,6 +23,34 @@ to avoid duplicate tools. Setup recognizes an enabled native plugin, removes a
 duplicate manual browser MCP registration, and does not copy a second browser
 skill. Choose either native plugin installation or manual MCP registration below.
 
+## Marketplace updates and recovery
+
+The marketplace installation above points directly to GitHub. Users do not need
+to clone this repository or load a local development directory. Codex downloads a
+snapshot; the `source.path: "./"` entry refers to the plugin inside that snapshot.
+It does not mean the user must supply a local checkout.
+
+To refresh that Git source:
+
+```sh
+codex plugin marketplace upgrade quindart-browser
+```
+
+Reopen Codex's plugin browser, choose **Quindart Browser**, and install/update the
+displayed release. Start a new chat after reconnecting. Updating npm or the managed
+runtime does not refresh Codex's plugin listing. A development checkout on an old
+branch can also expose an older project catalog; `doctor` reports a project
+listing that differs from the CLI version. Use the Git marketplace for releases.
+
+Release checks already keep the plugin manifest and pinned npm version aligned.
+They cannot force existing clients to refresh immediately. Git-backed catalogs
+are supported by [OpenAI's marketplace documentation](https://developers.openai.com/plugins/build/plugins).
+
+If the skill appears but tools are missing, follow the
+[startup recovery guide](../skills/opencode-browser-plugin/references/recovery.md)
+before repeatedly reinstalling or reloading. It distinguishes startup failures,
+damaged npm cache entries, browser discovery, and permission errors.
+
 ## One-command setup
 
 For a Codex MCP connection and browser skill without marketplace installation:

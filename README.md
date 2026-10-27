@@ -28,6 +28,7 @@ npx -y opencode-chromium@latest setup --targets codex
 ```
 
 Both use the shared Codex MCP configuration. A native Codex plugin bundles the MCP server and browser skill; see the [Codex guide](docs/codex.md#native-plugin) for marketplace installation.
+The marketplace can track GitHub directly; no local clone is required. See [updates and startup recovery](docs/codex.md#marketplace-updates-and-recovery) if Codex shows an older version or loads the skill without browser tools.
 </details>
 <details><summary><strong>Claude Code</strong></summary>
 

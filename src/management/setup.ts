@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseRuntimeActivation,runtimeLifecycleSource,withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
 import { packagedRuntime } from "../../native-host/src/runtime-updates.ts";
+import { CODEX_MARKETPLACE_UPDATE } from "../cli/codex-marketplace.ts";
 import { runActivationCoordinator } from "../../native-host/src/runtime-coordinator.ts";
 import { packageRoot } from "../cli/config.ts";
 import { applyRegistryChanges,planNativeHosts,runtimeDir } from "../cli/native-host.ts";
@@ -99,6 +100,8 @@ export async function manageSetup(argv: string[], remove = false, environment: S
   const restarts = dryRun ? [] : await (environment.restart ?? offerRestart)(selected, argv.includes("--restart"), !argv.includes("--json"));
   return { ok: true, applied: !dryRun, dryRun, action: remove ? "uninstall" : "install", ...result, targets: selected,
     restarts, nativePlugins,
+    pluginUpdates: nativePlugins.includes("codex") ? [{ id: "codex", command: CODEX_MARKETPLACE_UPDATE,
+      instruction: "Codex manages the plugin catalog separately from the browser runtime. Refresh the marketplace, then reopen Codex and select the updated plugin." }] : [],
     pendingReload: dryRun ? [] : rows.filter(row => selected.includes(row.id)).map(row => ({ id: row.id,
       instruction: row.restart === "desktop" ? "Quit and reopen the desktop application to reload MCP configuration." : "Reconnect MCP or relaunch the terminal session to reload tools." })),
     browserSetup: hosts ? `${dryRun ? "Will register" : "Registered"} native hosts for installed browsers. Install the browser extension; Firefox and LibreWolf also need remote debugging configured (see docs/firefox.md).` :
@@ -115,6 +118,7 @@ export function formatSetupResult(result: Awaited<ReturnType<typeof manageSetup>
   const lines = [`${heading}: ${targets.join(", ") || "browser connection only"}.`,
     `${changed.length} file${changed.length === 1 ? "" : "s"} ${preview ? "would change" : "changed"}.`];
   if ("nativePlugins" in result && result.nativePlugins.length) lines.push("Codex uses its enabled native browser plugin; no duplicate MCP server or skill was added.");
+  if ("pluginUpdates" in result) for (const entry of result.pluginUpdates) lines.push(`${entry.id}: ${entry.instruction} Run: ${entry.command}`);
   if ("pendingReload" in result) for (const entry of result.pendingReload) lines.push(`${entry.id}: ${entry.instruction}`);
   if ("browserSetup" in result) lines.push(result.browserSetup);
   return lines.join("\n");
