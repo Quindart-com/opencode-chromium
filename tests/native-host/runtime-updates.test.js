@@ -152,3 +152,23 @@ test("idle probes never create an unknown-client version warning", async () => {
   await relay.handleClientMessage(socket, { jsonrpc: "2.0", id: 1, method: "runtime.activity", params: {} });
   assert.equal(broadcasts.length, 0); socket.destroy();
 });
+
+test("routine no-update ticks do not scan participant files; explicit status still reports them", async () => {
+  const f = fixture();
+  const original = fs.readdirSync;
+  let scans = 0;
+  fs.readdirSync = function (directory, ...args) {
+    if (String(directory) === path.join(f.dir, "participants")) scans++;
+    return original.call(this, directory, ...args);
+  };
+  try {
+    fs.mkdirSync(path.join(f.dir, "participants"));
+    const check = createIdleUpdateCheck({ updater: f.updater, nativeVersion: "1.9.2", target: () => "1.9.2", active: () => false,
+      canReconnect: async () => assert.fail("Matching versions must not reconnect"), retire: () => assert.fail("Must not retire"), quietMs: 0 });
+    f.updater.schedule("1.9.2");
+    await f.updater.tick("1.9.2"); await check(); await check();
+    assert.equal(scans, 0);
+    assert.equal(f.updater.status().blockerCount, 0);
+    assert.equal(scans, 1);
+  } finally { fs.readdirSync = original; f.cleanup(); }
+});

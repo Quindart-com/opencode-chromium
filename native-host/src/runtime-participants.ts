@@ -67,6 +67,9 @@ export function reapParticipants(dir: string, verifiedProfiles: readonly string[
   }
 }
 export function createParticipant(dir: string, kind: ParticipantState["kind"], version: string, root?: string) {
+  // Crashes skip exit handlers. Reap only dead, idle owners before adding a new
+  // one; unfinished sessions and approvals still require extension verification.
+  try { reapParticipants(dir); } catch { /* Admission/update checks still report invalid records. */ }
   const state: ParticipantState = { id: `${process.pid}-${randomUUID()}`, pid: process.pid, kind, version, root, inFlight: 0, sessions: [], approvals: 0 };
   const folder = path.join(dir, "participants");
   fs.mkdirSync(folder, { recursive: true, mode: 0o700 });

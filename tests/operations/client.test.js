@@ -57,7 +57,7 @@ function testIpcPath(name) {
   return path.join(os.tmpdir(), `opencode-browser-test-${process.pid}-${name}.sock`);
 }
 
-function createFakeProfileHost({ profileId, profileLabel }) {
+function createFakeProfileHost({ profileId, profileLabel, respondToStatus = true }) {
   const ipcPath = testIpcPath(profileId);
   let connections = 0;
   if (process.platform !== "win32") fs.rmSync(ipcPath, { force: true });
@@ -67,6 +67,7 @@ function createFakeProfileHost({ profileId, profileLabel }) {
     const decoder = new FrameDecoder({
       onMessage: (message) => {
         if (message.method === "host.status") {
+          if (!respondToStatus) return;
           void writeFrame(socket, {
             jsonrpc: "2.0",
             id: message.id,
@@ -129,6 +130,25 @@ test("discovers and routes to live browser profile hosts", async () => {
     closeBrowserClients();
     await host.close();
     fs.rmSync(registryDir, { recursive: true, force: true });
+    if (previousRegistry === undefined) delete process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
+    else process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = previousRegistry;
+  }
+});
+
+test("an unresponsive registered host gives recovery guidance instead of no browser profile", async () => {
+  const previousRegistry = process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
+  const registryDir = fs.mkdtempSync(path.join(os.tmpdir(), "browser-probe-timeout-"));
+  process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = registryDir;
+  const host = await createFakeProfileHost({ profileId: "slow-profile", profileLabel: "test", respondToStatus: false });
+  try {
+    await assert.rejects(listBrowserProfiles({ fresh: true, timeoutMs: 20 }), error => {
+      assert.equal(error.code, "BROWSER_HOST_UNRESPONSIVE");
+      assert.match(error.message, /doctor --repair-runtime/);
+      assert.equal(error.uncertain, false);
+      return true;
+    });
+  } finally {
+    closeBrowserClients(); await host.close(); fs.rmSync(registryDir, { recursive: true, force: true });
     if (previousRegistry === undefined) delete process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
     else process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = previousRegistry;
   }
