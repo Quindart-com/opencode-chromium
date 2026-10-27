@@ -75,7 +75,9 @@ test("two harness connections stay open: stage during work, switch only after bo
     await updater.tick("1.0.1"); expect(updater.status().state).toBe("waiting"); expect(updater.status().stagedVersion).toBe("1.0.1");
     await a.tool({ action: "finish", sessionId: "agent-a" }); await updater.tick("1.0.1"); expect(updater.status().installedVersion).toBe("1.0.0");
     expect((await b.tool()).result.structuredContent.version).toBe("1.0.0");
-    await b.tool({ action: "finish", sessionId: "agent-b" }); await updater.tick("1.0.1");
+    await b.tool({ action: "finish", sessionId: "agent-b" });
+    await idleParticipants(f.dir);
+    await updater.tick("1.0.1");
     expect(updater.status().state).toBe("ready");
     for (const client of [a, b]) {
       const result = await client.tool({ text: "مرحبا 🌍" });
