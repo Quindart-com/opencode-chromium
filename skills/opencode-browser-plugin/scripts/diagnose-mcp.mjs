@@ -64,7 +64,10 @@ export function quarantineBrokenCache(stderr, cacheRoot) {
   const match = /['"]([^'"\r\n]+[\\/]_npx[\\/]([a-f0-9]+))[\\/]node_modules[\\/]/i.exec(stderr);
   if (!match) throw new Error("The error does not identify an npm execution cache entry");
   const root = fs.realpathSync(path.join(cacheRoot, "_npx")), entry = path.resolve(match[1]);
-  if (path.dirname(entry) !== root || fs.lstatSync(entry).isSymbolicLink() || fs.realpathSync(entry) !== entry) throw new Error("Cache entry is outside the expected npm cache");
+  // Resolve the parent before comparing: macOS commonly exposes the same
+  // temporary directory through /var and /private/var. The entry itself must
+  // still be a real directory directly inside the configured cache.
+  if (fs.lstatSync(entry).isSymbolicLink() || fs.realpathSync(path.dirname(entry)) !== root || path.dirname(fs.realpathSync(entry)) !== root) throw new Error("Cache entry is outside the expected npm cache");
   const pkg = JSON.parse(fs.readFileSync(path.join(entry, "node_modules", "opencode-chromium", "package.json"), "utf8"));
   if (pkg.name !== "opencode-chromium") throw new Error("Cache entry does not contain this browser runtime");
   const backup = `${entry}.broken-${Date.now()}`; fs.renameSync(entry, backup); return backup;

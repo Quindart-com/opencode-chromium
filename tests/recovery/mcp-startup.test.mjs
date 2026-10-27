@@ -40,3 +40,26 @@ test("cache recovery preserves only this runtime's identified npm entry and reje
     assert.equal(fs.existsSync(unrelated), true);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test("cache recovery accepts a symlinked cache parent but rejects a symlinked cache entry", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-cache-alias-"));
+  try {
+    const cache = path.join(root, "cache"), alias = path.join(root, "alias");
+    const entry = path.join(cache, "_npx", "abc123");
+    fs.mkdirSync(path.join(entry, "node_modules", "opencode-chromium"), { recursive: true });
+    fs.writeFileSync(path.join(entry, "node_modules", "opencode-chromium", "package.json"), '{"name":"opencode-chromium"}');
+    fs.symlinkSync(cache, alias, process.platform === "win32" ? "junction" : "dir");
+    const aliasedEntry = path.join(alias, "_npx", "abc123");
+    const backup = quarantineBrokenCache(`Cannot find package '${aliasedEntry}/node_modules/dependency/index.js'`, cache);
+    assert.equal(fs.existsSync(backup), true);
+
+    const external = path.join(root, "external");
+    fs.mkdirSync(path.join(external, "node_modules", "opencode-chromium"), { recursive: true });
+    fs.writeFileSync(path.join(external, "node_modules", "opencode-chromium", "package.json"), '{"name":"opencode-chromium"}');
+    const link = path.join(cache, "_npx", "def456");
+    fs.symlinkSync(external, link, process.platform === "win32" ? "junction" : "dir");
+    assert.throws(() => quarantineBrokenCache(`Cannot find package '${link}/node_modules/dependency/index.js'`, cache), /outside the expected npm cache/);
+    assert.equal(fs.existsSync(external), true);
+    assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
