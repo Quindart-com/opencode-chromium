@@ -9,6 +9,7 @@ import { isRecord,record } from "../shared/values.ts";
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const PROFILE_STATUS_TIMEOUT_MS = 1000;
+const PROFILE_STATUS_RETRY_TIMEOUT_MS = 3000;
 const PROFILE_CACHE_TTL_MS = 750;
 
 const browserClients = new Map<string, BrowserHostClient>();
@@ -258,7 +259,15 @@ export async function listBrowserProfiles(options: ProfileOptions = {}) {
     profiles = cached.profiles;
   } else {
     const registrations = readProfileRegistrations();
-    const settled = await Promise.allSettled(registrations.map((registration) => statusForRegistration(registration, timeoutMs)));
+    const settled = await Promise.allSettled(registrations.map(async registration => {
+      try { return await statusForRegistration(registration, timeoutMs); }
+      catch (error) {
+        // A status read is safe to repeat. Give a busy host one bounded chance
+        // to answer; explicit caller budgets and mutations are never retried here.
+        if (options.timeoutMs !== undefined || !(error instanceof Error) || !/Timed out waiting for browser host response to host[.]status/.test(error.message)) throw error;
+        return statusForRegistration(registration, PROFILE_STATUS_RETRY_TIMEOUT_MS);
+      }
+    }));
     profiles = [];
     for (let index = 0; index < settled.length; index += 1) {
       const result = settled[index];
