@@ -1209,7 +1209,7 @@ export const createBrowserOperations = async () => {
         },
       }),
       browser_list_tabs: tool({
-        description: "List Chromium tabs available to OpenCode or all user tabs.",
+        description: "List this session's tabs or ungrouped, unclaimed user tabs available to claim.",
         args: {
           scope: tool.schema.enum(["session", "user"]).default("user"),
         },
@@ -1246,7 +1246,7 @@ export const createBrowserOperations = async () => {
         },
       }),
       browser_claim_tab: tool({
-        description: "Claim an existing Chromium tab by tab ID so OpenCode can control it.",
+        description: "Claim an ungrouped, unclaimed tab by ID after the user's explicit request or permission. Prefer a new tab otherwise.",
         args: {
           tabId: tool.schema.number().int().positive().describe("Chrome tab ID to claim"),
         },
@@ -2079,14 +2079,14 @@ browser_console_logs: tool({
       }),
 
 browser_finalize: tool({
-        description: "End the session: keep tabs as \"deliverable\" (user-facing output, moved to the blue OpenCode Deliverables group) or \"handoff\" (work continues later, stays in the session's green group); default is handoff. Close agent-created tabs unless kept; release unkept user-claimed tabs without closing them.",
+        description: "End the session: preserve all tabs in a blue group for human review and release ownership. Only explicit keep status 'handoff' retains a tab for later work in the green session group.",
         args: {
           keep: tool.schema.array(
             tool.schema.union([
               tool.schema.number().int().positive(),
               tool.schema.object({
                 tabId: tool.schema.number().int().positive(),
-                status: tool.schema.enum(["handoff", "deliverable"]).default("handoff"),
+                status: tool.schema.enum(["handoff", "deliverable"]).default("deliverable"),
                 profileId: tool.schema.string().optional(),
               }),
             ]),
@@ -2095,7 +2095,7 @@ browser_finalize: tool({
         },
         async execute(args, context) {
           const profileIds = await targetProfileIdsForSession(context);
-          const keep: { tabId: number; status: "handoff" | "deliverable"; profileId?: string }[] = args.keep.map((item) => (typeof item === "number" ? { tabId: item, status: "handoff" as const } : item));
+          const keep: { tabId: number; status: "handoff" | "deliverable"; profileId?: string }[] = args.keep.map((item) => (typeof item === "number" ? { tabId: item, status: "deliverable" as const } : item));
           if (profileIds.length > 1 && keep.some((item) => !item.profileId)) {
             throw new Error("browser_finalize keep items must include profileId when multiple browser profiles were used");
           }
