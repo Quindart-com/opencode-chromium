@@ -594,12 +594,10 @@ function tokenize(value: string) {
   return compactString(value, 2000).toLowerCase().match(/[a-z0-9]{2,}/g) ?? [];
 }
 
-function lexicalScore(query: string, text: string) {
-  const normalizedQuery = compactString(query).toLowerCase();
+function lexicalScore(normalizedQuery: string, queryTokens: string[], text: string) {
   const normalizedText = compactString(text, 2000).toLowerCase();
   if (!normalizedQuery || !normalizedText) return 0;
 
-  const queryTokens = [...new Set(tokenize(normalizedQuery))];
   if (!queryTokens.length) return normalizedText.includes(normalizedQuery) ? 0.7 : 0;
 
   const textTokens = new Set(tokenize(normalizedText));
@@ -842,7 +840,9 @@ function baseRanking(input: RankInput = {}) {
   const maxResults = Number.isInteger(input.maxResults) && input.maxResults !== undefined && input.maxResults > 0 ? Math.min(input.maxResults, 100) : DEFAULT_MAX_RESULTS;
   const units = normalizeUnits(input.units);
   const documents = units.map(unitText);
-  const lexical = documents.map((text, index) => lexicalScore(query, text) + unitBoost(units[index]));
+  const normalizedQuery = compactString(query).toLowerCase();
+  const queryTokens = [...new Set(tokenize(normalizedQuery))];
+  const lexical = documents.map((text, index) => lexicalScore(normalizedQuery, queryTokens, text) + unitBoost(units[index]));
   const ranked: RankedItem[] = units.map((unit, index) => ({
     unit,
     score: Math.max(0, Math.min(1, lexical[index] ?? 0)),
@@ -886,8 +886,8 @@ async function rankPageUnitsLocal(input: RankInput = {}) {
   const settings = getSemanticSettings();
   const { strategy: requestedStrategy, deprecatedAlias } = normalizeSearchStrategy(input.mode);
   const base = baseRanking(input);
-  const confident = lexicalIsConfident(base.query, base.documents, base.ranked);
-  if (requestedStrategy === "lexical" || !settings.enabled && requestedStrategy === "auto" || confident && requestedStrategy === "auto") {
+  if (requestedStrategy === "lexical" || requestedStrategy === "auto" &&
+    (!settings.enabled || lexicalIsConfident(base.query, base.documents, base.ranked))) {
     return formatRanking(base, { enabled: settings.enabled, mode: "lexical", searchStrategy: requestedStrategy, deprecatedAlias });
   }
 
