@@ -53,6 +53,20 @@ test("credits or model failure never retries or commits new settings", async () 
   expect(providerStatus().provider).toBe("off"); expect(fs.existsSync(credentialPath())).toBe(false);
 });
 
+test("direct OpenAI verifies and stores a separate key without replacing OpenRouter", async () => {
+  storeProviderKey("openrouter", secret);
+  const directKey = `direct-${randomUUID()}`;
+  const direct = { provider: "openai-decisions" as const, route: "openai" as const, shareText: true, shareImages: false, keyEnv: "OPENAI_API_KEY" };
+  let calls = 0;
+  const result = await saveAndTestProvider({ settings: direct, apiKey: directKey }, (async (url) => {
+    calls++; expect(String(url)).toBe("https://api.openai.com/v1/decisions");
+    return Response.json({ model: "gpt-6-luna", answers: [{ type: "choice", name: "decision", choice: "ready", confidence: 0.99, probabilities: [{ value: "ready", probability: 0.99 }, { value: "__abstain", probability: 0.01 }] }], usage: { input_tokens: 10, output_tokens: 0 } });
+  }) as typeof fetch);
+  expect(result.ok).toBe(true); expect(calls).toBe(1);
+  expect(providerKey(direct)).toBe(directKey); expect(providerKey(settings)).toBe(secret);
+  expect(providerStatus()).toMatchObject({ route: "openai", model: "gpt-6-luna", ready: true });
+}, 15000);
+
 test("usage keeps known costs separate from missing costs and includes abstentions", () => {
   recordDecision({ status: "selected", elapsedMs: 100, usage: { input_tokens: 10, output_tokens: 0, cost: 0.00002 } }, "rank");
   recordDecision({ status: "abstained", elapsedMs: 300 }, "select");

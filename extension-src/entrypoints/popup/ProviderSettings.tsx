@@ -3,7 +3,7 @@ import { sendMessage } from "./api";
 import type { DecisionSettings } from "./decision-types";
 
 const defaults: DecisionSettings = { provider: "off", route: "openrouter", shareText: false, shareImages: false, keyEnv: "OPENROUTER_API_KEY" };
-const selection = (settings: DecisionSettings) => settings.provider === "jev" ? `jev-${settings.route}` : settings.provider;
+const selection = (settings: DecisionSettings) => settings.provider === "jev" ? `jev-${settings.route}` : settings.provider === "openai-decisions" && settings.route === "openai" ? "openai-direct" : settings.provider;
 type TestResult = { ok: boolean; settings?: DecisionSettings; message?: string; elapsedMs?: number; authMs?: number;
   usage?: { input_tokens: number; output_tokens: number; cost?: number } };
 
@@ -34,9 +34,9 @@ export default function ProviderSettings() {
     return () => { disposed = true; };
   }, []);
   function choose(value: string) {
-    const route = value === "jev-typesafe" ? "typesafe" : "openrouter";
-    setSettings({ ...settings, provider: value === "off" ? "off" : value === "openai-decisions" ? "openai-decisions" : "jev", route,
-      keyEnv: route === "openrouter" ? "OPENROUTER_API_KEY" : "TYPESAFE_API_KEY", shareImages: false,
+    const route = value === "jev-typesafe" ? "typesafe" : value === "openai-direct" ? "openai" : "openrouter";
+    setSettings({ ...settings, provider: value === "off" ? "off" : value === "openai-decisions" || value === "openai-direct" ? "openai-decisions" : "jev", route,
+      keyEnv: route === "openrouter" ? "OPENROUTER_API_KEY" : route === "openai" ? "OPENAI_API_KEY" : "TYPESAFE_API_KEY", shareImages: false,
       credentialConfigured: route === settings.route && settings.credentialConfigured });
     setApiKey(""); setMessage(""); setTest(null); setError(false);
   }
@@ -83,6 +83,7 @@ export default function ProviderSettings() {
           <option value="jev-openrouter">Jev · OpenRouter</option>
           <option value="jev-typesafe">Jev · TypeSafe</option>
           <option value="openai-decisions">OpenAI Luna · OpenRouter</option>
+          <option value="openai-direct">OpenAI Luna · OpenAI Platform</option>
         </select>
       </div>
       {enabled && <>
@@ -93,8 +94,8 @@ export default function ProviderSettings() {
             disabled={busy} onChange={event => { setApiKey(event.target.value); setTest(null); setMessage(""); }} aria-describedby="decision-key-help" />
           <p id="decision-key-help">Saved privately by the native host. Never stored in browser storage or returned to your agent.</p>
         </div>
-        <p className="provider-consent">Enabling assistance sends bounded search or replay intent and candidate descriptions to {settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. Your agent remains in control of actions.</p>
-        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>{jev ? "Allow experimental image fallback" : "Allow screenshots for ambiguous visual targets"}<small className="help-note">Off by default. {jev ? "Only after an unsure text decision: one small screenshot may be sent to " : "One bounded screenshot may be sent to "}{settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. At most one image request per UTC minute and 20 per UTC day across profiles. Image tokens cost extra; token counts depend on the image.</small></span></label>
+        <p className="provider-consent">Enabling assistance sends bounded search or replay intent and candidate descriptions to {settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe"}. Your agent remains in control of actions.</p>
+        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>{jev ? "Allow experimental image fallback" : "Allow screenshots for ambiguous visual targets"}<small className="help-note">Off by default. {jev ? "Only after an unsure text decision: one small screenshot may be sent to " : "One bounded screenshot may be sent to "}{settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe"}. At most one image request per UTC minute and 20 per UTC day across profiles. Image tokens cost extra; token counts depend on the image.</small></span></label>
         <details className="provider-advanced">
           <summary>Advanced · Environment variable</summary>
           <div className="provider-field">

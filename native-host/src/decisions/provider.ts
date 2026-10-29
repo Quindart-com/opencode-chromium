@@ -41,14 +41,14 @@ const semaphore = Semaphore.makeUnsafe(2);
 export class JevProvider implements DecisionProvider {
   constructor(private readonly key: string, private readonly fetcher: typeof fetch = fetch,
     private readonly model = "jev-1.13.0", private readonly timeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
-    private readonly route: "typesafe" | "openrouter" = "typesafe", private readonly canSend: () => boolean = () => true) {}
+    private readonly route: "typesafe" | "openrouter" | "openai" = "typesafe", private readonly canSend: () => boolean = () => true) {}
   async decide(input: DecisionRequest, signal?: AbortSignal): Promise<DecisionResult> {
     const started = performance.now();
     const operation = Effect.tryPromise({
       try: async (effectSignal) => {
         const request = decisionSchema.parse(input);
         const jevImage = !!request.image && ["jev-1.14.0", "typesafe/jev-1.14"].includes(this.model);
-        if (request.image && this.model !== "openai/gpt-6-luna-decisions" && !jevImage) throw new DecisionFailure({ code: "images_not_supported" });
+        if (request.image && this.model !== "openai/gpt-6-luna-decisions" && this.model !== "gpt-6-luna" && !jevImage) throw new DecisionFailure({ code: "images_not_supported" });
         if (jevImage && !boundedJevImage(request.image!)) throw new DecisionFailure({ code: "invalid_image" });
         const criteria = Object.fromEntries(request.candidates.map(candidate => [candidate.id, candidate.description]));
         criteria.__abstain = "None of the candidates can be selected reliably from this context.";
@@ -56,7 +56,10 @@ export class JevProvider implements DecisionProvider {
         const nativeImage = jevImage && this.route === "typesafe";
         const state = nativeImage ? { text: request.context, screenshot: assetId } : request.image ?
           [request.context, { type: "image_url", image_url: { url: request.image, detail: "low" } }] : request.context;
-        const body = {
+        const body = this.route === "openai" ? {
+          model: this.model, input: request.image ? [{ role: "user", content: [{ type: "input_text", text: request.context }, { type: "input_image", image_url: request.image }] }] : request.context,
+          questions: [{ type: "choice", name: "decision", instructions: request.instructions, choices: Object.entries(criteria).map(([value, description]) => ({ value, description })) }],
+        } : {
           model: this.model, state,
           ...(nativeImage ? { assets: { [assetId]: {
             type: "image", format: request.image!.startsWith("data:image/png") ? "png" : "jpeg",
@@ -66,7 +69,7 @@ export class JevProvider implements DecisionProvider {
         };
         if (!this.canSend()) throw new DecisionFailure({ code: "settings_changed" });
         if (effectSignal.aborted || signal?.aborted) throw new DecisionFailure({ code: "cancelled" });
-        const response = await this.fetcher(this.route === "openrouter" ? "https://openrouter.ai/api/alpha/decisions" : "https://api.typesafe.ai/v1/systemone", {
+        const response = await this.fetcher(this.route === "openai" ? "https://api.openai.com/v1/decisions" : this.route === "openrouter" ? "https://openrouter.ai/api/alpha/decisions" : "https://api.typesafe.ai/v1/systemone", {
           method: "POST", signal: effectSignal, headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json", ...(nativeImage ? { "TypeSafe-Danger-Zone-Images": "true" } : {}) },
           body: JSON.stringify(body),
         });
@@ -88,7 +91,11 @@ export class JevProvider implements DecisionProvider {
           }
         } finally { reader.releaseLock(); }
         const text = Buffer.concat(chunks).toString("utf8");
-        const result = responseSchema.parse((JSON.parse(text) as unknown));
+        const raw: unknown = JSON.parse(text);
+        const directSchema = z.object({ model: z.string(), answers: z.array(z.object({ type: z.literal("choice"), name: z.literal("decision"), choice: z.string(), probabilities: z.array(z.object({ value: z.string(), probability: z.number().min(0).max(1) })), confidence: z.number().min(0).max(1) })).length(1), usage: z.object({ input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative() }) });
+        const direct = this.route === "openai" ? directSchema.parse(raw) : null;
+        if (direct && new Set(direct.answers[0]!.probabilities.map(p => p.value)).size !== direct.answers[0]!.probabilities.length) throw new DecisionFailure({ code: "invalid_decision" });
+        const result = direct ? responseSchema.parse({ model: direct.model, usage: direct.usage, answers: { decision: { ...direct.answers[0], probabilities: Object.fromEntries(direct.answers[0]!.probabilities.map(p => [p.value, p.probability])) } } }) : responseSchema.parse(raw);
         const answer = result.answers.decision;
         const ids = Object.keys(criteria);
         const modelMatches = result.model === this.model || (this.route === "openrouter" && (
