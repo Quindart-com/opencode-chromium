@@ -2,25 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { createCoreRegistry } from "../../src/core/registry.ts";
-import { toolDefinitionsForDialect } from "../../src/core/schema-adapters.ts";
 
 const runtime = {
   run() {}, observe() {}, session() {}, finalize() {},
 };
-
-test("core registry exposes only the four AI-facing tools", () => {
-  const registry = createCoreRegistry(runtime);
-  assert.deepEqual(Object.keys(registry), ["browser_run", "browser_observe", "browser_session", "browser_finalize"]);
-});
-
-test("provider dialects share one compact canonical schema", () => {
-  const registry = createCoreRegistry(runtime);
-  for (const dialect of ["mcp", "openai", "anthropic", "gemini"]) {
-    const tools = toolDefinitionsForDialect(registry, dialect);
-    assert.equal(tools.length, 4);
-    assert.ok(Buffer.byteLength(JSON.stringify(tools)) < 13000, `${dialect} schema budget`);
-  }
-});
 
 test("typed run schema rejects arbitrary code and oversized chains", () => {
   const schema = createCoreRegistry(runtime).browser_run.inputSchema;

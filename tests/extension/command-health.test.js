@@ -37,15 +37,15 @@ test("expired operations do not start and late completion is explicitly cleaned 
 
 test("finalize preserves a dialog-blocked tab and independently releases safe user tabs", async () => {
   const session = { tabIds: new Set([1, 2, 3]), tabOrigins: new Map([[1, "agent"], [2, "user"], [3, "agent"]]) };
-  const closed = [], untracked = [];
+  const reviewed = [], untracked = [];
   const result = await finalizeOwnedTabs(session, new Map([[3, "handoff"]]), {
     dialog: id => id === 1 ? { type: "beforeunload" } : null,
-    detach: async () => {}, hide: async () => {}, deliver: async () => {}, ungroup: async () => {},
-    untrack: async id => { untracked.push(id); session.tabIds.delete(id); }, close: async id => { closed.push(id); },
+    detach: async () => {}, hide: async () => {}, deliver: async ids => { reviewed.push(...ids); },
+    untrack: async id => { untracked.push(id); session.tabIds.delete(id); },
   });
   assert.equal(result.partial, true);
   assert.deepEqual(result.tabs.map(tab => tab.status), ["blocked", "released", "kept"]);
-  assert.deepEqual(closed, []);
+  assert.deepEqual(reviewed, [2]);
   assert.deepEqual(untracked, [2]);
   assert.deepEqual([...session.tabIds], [1, 3]);
 });

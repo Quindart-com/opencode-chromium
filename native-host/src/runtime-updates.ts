@@ -89,13 +89,13 @@ export async function installRelease(stage: string, version: string) {
 export function createRuntimeUpdater({ dir, install = installRelease, now = Date.now, busy = async () => false, verifiedProfiles = () => [], activate = activateRelease }: { dir: string; install?: typeof installRelease; now?: () => number; busy?: () => Promise<boolean>; verifiedProfiles?: () => readonly string[]; activate?: typeof activateRelease }) {
   const manifestFile = path.join(dir, "runtime.json"), statusFile = path.join(dir, "update-status.json");
   let running: Promise<void>|null = null;
-  function status() {
+  function status({ includeParticipants = true } = {}) {
     const activation = activationAt(manifestFile);
     const supported = !!activation?.root && !activation.followBranch && packagedRuntime(activation.root);
     const update = updateAt(statusFile);
     if (update.state === "activating" && activation?.version === update.targetVersion && !readJournal(dir)) update.state = "ready";
     return { supported, enabled: supported && activation?.autoUpdate !== false, installedVersion: activation?.version ?? null,
-      stagedVersion: activation?.stagedRelease?.version ?? null, ...participantStatus(),
+      stagedVersion: activation?.stagedRelease?.version ?? null, ...(includeParticipants ? participantStatus() : {}),
       ...update, ...(!supported ? { state: "manual", reason: "Development or unmanaged installation; run setup from a published package." } : {}) };
   }
   function participantStatus() {
@@ -112,7 +112,7 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
   }
   const save = (value: UpdateState): void => write(statusFile, { ...value, checkedAt: now() });
   function schedule(target: unknown) {
-    if (releaseVersion(target) && status().enabled && newerRelease(target, activationAt(manifestFile)?.version) && updateAt(statusFile)?.targetVersion !== target) save({ state: "waiting", targetVersion: target });
+    if (releaseVersion(target) && status({ includeParticipants: false }).enabled && newerRelease(target, activationAt(manifestFile)?.version) && updateAt(statusFile)?.targetVersion !== target) save({ state: "waiting", targetVersion: target });
   }
   async function tick(target: unknown) {
     if (running) return running;
@@ -120,7 +120,7 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
     return running;
   }
   async function check(target: unknown) {
-    if (!releaseVersion(target) || !status().enabled) return;
+    if (!releaseVersion(target) || !status({ includeParticipants: false }).enabled) return;
     const initial = activationAt(manifestFile);
     if (!initial || !newerRelease(target, initial.version) && initial.stagedRelease?.version !== target) return;
     const last = updateAt(statusFile);
@@ -170,11 +170,12 @@ export function createIdleUpdateCheck({ updater, nativeVersion, target, active, 
     if (checking || !target()) return;
     checking = true;
     try {
-      if (!updater.status().enabled) return;
+      if (!updater.status({ includeParticipants: false }).enabled) return;
       await updater.tick(target());
       if (active()) { idleSince = now(); return; }
       if (now() - idleSince < quietMs) return;
-      if (!updater.status().enabled || !newerRelease(updater.status().installedVersion, nativeVersion)) return;
+      const state = updater.status({ includeParticipants: false });
+      if (!state.enabled || !newerRelease(state.installedVersion, nativeVersion)) return;
       if (await canReconnect() && !active()) retire();
     } catch { /* Neither update failures nor busy profiles interrupt browsing. */ }
     finally { checking = false; }

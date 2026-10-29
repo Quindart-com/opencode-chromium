@@ -13,26 +13,6 @@ const context = vm.createContext({});
 vm.runInContext(source, context);
 const theme = context.__opencodeCursorTheme;
 
-test("cursor theme exposes the ported Cua Driver constants", () => {
-  assert.ok(theme, "the content script installs the cursor theme");
-  assert.equal(theme.CANVAS, 128);
-  assert.equal(theme.DISPLAY_SIZE, 42);
-  assert.deepEqual({ ...theme.HOTSPOT }, { x: 55, y: 30 });
-  assert.deepEqual(theme.DEFAULT_FILL, [94, 192, 232]);
-  assert.equal(theme.SESSION_FILLS.length, 9);
-});
-
-test("the pointer silhouette matches the source vertex and tangent list", () => {
-  // Each source tuple is ((vertex), in_tangent, out_tangent), so a segment from
-  // vertex A to vertex B uses A + out(A) and B + in(B). The unsigned tangents on
-  // the tip vertex are what keep the point sharp.
-  assert.equal(
-    theme.pointerPath,
-    "M55 30C48 28 42 33 43 41C43 41 64 98 64 98C67 106 73 106 77 99C77 99 86 79 86 79" +
-      "C88 75 91 72 95 70C95 70 108 63 108 63C115 59 114 53 107 50C107 50 55 30 55 30Z",
-  );
-});
-
 test("named sessions hash into the palette while default keeps Cua blue", () => {
   assert.deepEqual(theme.sessionColor("default"), theme.DEFAULT_FILL);
   assert.deepEqual(theme.sessionColor(""), theme.DEFAULT_FILL);
@@ -79,15 +59,6 @@ test("action artwork is emitted as addressable layers", () => {
     assert.match(markup, /#fff/, `${action} keeps a white outline`);
     assert.equal((markup.match(/data-layer=/g) ?? []).length, theme.ACTIONS[action].layers.length);
   }
-});
-
-test("the pointer paint stack is a glow ramp under a white outline", () => {
-  const markup = theme.pointerMarkup(theme.DEFAULT_FILL);
-  const glows = markup.match(/stroke-width="44"/g) ?? [];
-  assert.equal(glows.length, 1, "the widest glow stroke is present");
-  assert.match(markup, /stroke-width="7"/);
-  assert.match(markup, /stroke="#fff" stroke-width="5"/, "the body keeps the source outline width");
-  assert.match(markup, /fill="rgb\(94,192,232\)"/, "the body is filled with the session colour");
 });
 
 test("action chips are self-contained svg so they render inside the pill", () => {

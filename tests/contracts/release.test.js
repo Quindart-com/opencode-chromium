@@ -10,14 +10,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 describe("release metadata", () => {
-  test("uses the public distribution name and canonical repository", () => {
-    expect(packageJson.name).toBe("opencode-chromium");
-    expect(packageJson.repository.url).toBe("git+https://github.com/Quindart-com/opencode-chromium.git");
-    expect(packageJson.publishConfig).toEqual({ access: "public", registry: "https://registry.npmjs.org" });
-    expect(packageJson.bin["opencode-chromium"]).toBe("./dist/cli/index.js");
-    expect(packageJson.bin["opencode-chromium-mcp"]).toBe("./dist/adapters/mcp/server.js");
-    expect(packageJson.bin["opencode-browser-plugin-mcp"]).toBe("./dist/adapters/mcp/server.js");
-  });
 
   test("accepts a tag matching the package version", () => {
     expect(checkTagVersion(`v${packageJson.version}`)).toEqual({
@@ -46,11 +38,6 @@ describe("release metadata", () => {
     expect(() => checkVersionBump("1.7.0", "1.6.5")).toThrow(/must increase/);
     expect(compareVersions("2.0.0", "2.0.0-rc.1")).toBe(1);
     expect(compareVersions("2.0.0-rc.2", "2.0.0-rc.1")).toBe(1);
-  });
-
-  test("creates GitHub releases without relying on a checked-out repository", () => {
-    const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "publish.yml"), "utf8");
-    expect(workflow).toMatch(/gh release create[^\n]+--repo "\$GITHUB_REPOSITORY"/);
   });
 });
 

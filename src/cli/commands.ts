@@ -78,7 +78,7 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
   if (command === "memory" || command === "history") return (await import("./memory.ts")).runMemoryCommand(rest);
 
   if (command === "doctor") {
-    const result = await (await import("./doctor.ts")).runDoctor({ json: has(rest, "--json") });
+    const result = await (await import("./doctor.ts")).runDoctor({ json: has(rest, "--json"), repairRuntime: has(rest, "--repair-runtime") });
     console.log(JSON.stringify(result, null, 2));
     if (!result.ok) process.exitCode = 1;
     return;

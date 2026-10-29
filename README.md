@@ -28,6 +28,7 @@ npx -y opencode-chromium@latest setup --targets codex
 ```
 
 Both use the shared Codex MCP configuration. A native Codex plugin bundles the MCP server and browser skill; see the [Codex guide](docs/codex.md#native-plugin) for marketplace installation.
+The marketplace can track GitHub directly; no local clone is required. See [updates and startup recovery](docs/codex.md#marketplace-updates-and-recovery) if Codex shows an older version or loads the skill without browser tools.
 </details>
 <details><summary><strong>Claude Code</strong></summary>
 
@@ -108,6 +109,8 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later; LibreWolf must expose the matching Remote Agent. Compatible derivatives need individual validation; this does not claim support for every fork. See [Firefox capabilities](docs/firefox.md) and [compatibility](docs/compatibility.md) for transport differences and verification limits.
 
 Named profiles choose the browser. Agents keep the same four tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Sessions own their tabs, targets are checked against the live page, and uploads require confirmation by default. [Profiles](docs/profiles.md) · [Security](docs/security.md).
+
+Finalization leaves every tab open in a blue group for human review. Existing pages can be claimed with the user's permission, provided they are ungrouped and unclaimed; tabs in another agent's group are excluded.
 
 <details><summary><strong>Visual checks, frames and debugging</strong></summary>
 
