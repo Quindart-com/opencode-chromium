@@ -85,6 +85,10 @@ export async function installRelease(stage: string, version: string) {
   validateRelease(root, version);
   await run([path.join(root, "dist/cli/index.js"), "version"], root, 15000);
 }
+export async function installGlobalRelease(version: string) {
+  if (!releaseVersion(version)) throw new Error("Invalid production release");
+  await run([npmCli(), "install", "--global", "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "opencode-chromium@" + version], process.cwd());
+}
 
 export function createRuntimeUpdater({ dir, install = installRelease, now = Date.now, busy = async () => false, verifiedProfiles = () => [], activate = activateRelease }: { dir: string; install?: typeof installRelease; now?: () => number; busy?: () => Promise<boolean>; verifiedProfiles?: () => readonly string[]; activate?: typeof activateRelease }) {
   const manifestFile = path.join(dir, "runtime.json"), statusFile = path.join(dir, "update-status.json");
@@ -114,24 +118,25 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
   function schedule(target: unknown) {
     if (releaseVersion(target) && status({ includeParticipants: false }).enabled && newerRelease(target, activationAt(manifestFile)?.version) && updateAt(statusFile)?.targetVersion !== target) save({ state: "waiting", targetVersion: target });
   }
-  async function tick(target: unknown) {
+  async function tick(target: unknown, { manual = false } = {}) {
     if (running) return running;
-    running = check(target).catch(() => { /* Update failures never interrupt browsing. */ }).finally(() => { running = null; });
+    running = check(target, manual).catch(() => { /* Update failures never interrupt browsing. */ }).finally(() => { running = null; });
     return running;
   }
-  async function check(target: unknown) {
-    if (!releaseVersion(target) || !status({ includeParticipants: false }).enabled) return;
+  async function check(target: unknown, manual: boolean) {
+    const availability = status({ includeParticipants: false });
+    if (!releaseVersion(target) || !availability.supported || !manual && !availability.enabled) return;
     const initial = activationAt(manifestFile);
     if (!initial || !newerRelease(target, initial.version) && initial.stagedRelease?.version !== target) return;
     const last = updateAt(statusFile);
-    if (last?.targetVersion === target && (last.retryAt ?? 0) > now()) return;
+    if (!manual && last?.targetVersion === target && (last.retryAt ?? 0) > now()) return;
     await withRuntimeLock(dir, async () => {
       // This long-lived worker lock is separate from the short launch gate.
       const destination = path.join(dir, "releases", target), root = path.join(destination, "node_modules/opencode-chromium");
       const stage = path.join(dir, `update-stage-${randomUUID()}`);
       try {
         const current = activationAt(manifestFile);
-        if (!current || current.root !== initial.root || current.autoUpdate === false || current.followBranch) return;
+        if (!current || current.root !== initial.root || !manual && current.autoUpdate === false || current.followBranch) return;
         if (!fs.existsSync(destination)) {
           save({ state: "downloading", targetVersion: target });
           fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
@@ -142,7 +147,7 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
         validateRelease(root, target);
         await withRuntimeLock(dir, () => {
           const activation = activationAt(manifestFile);
-          if (!activation || activation.root !== initial.root || activation.autoUpdate === false || activation.followBranch || !newerRelease(target, activation.version)) return;
+          if (!activation || activation.root !== initial.root || !manual && activation.autoUpdate === false || activation.followBranch || !newerRelease(target, activation.version)) return;
           write(manifestFile, { ...activation, stagedRelease: { root, version: target } });
         });
         save({ state: "staged", targetVersion: target });

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { runtimeDir } from "../cli/native-host.ts";
 import { record } from "../shared/values.ts";
-import { type HarnessId,managedConfiguration,planConfiguration } from "./configuration.js";
+import { type HarnessId,managedConfiguration,planConfiguration } from "./configuration.ts";
 import type { FileChange } from "./transaction.js";
 
 export interface Harness {
@@ -40,7 +40,7 @@ export function harnessVersion(binary: string | null): string | null {
   const result = spawnSync(binary, ["--version"], { encoding: "utf8", timeout: 3000, windowsHide: true });
   return result.status === 0 ? result.stdout.match(/\d+\.\d+\.\d+/)?.[0] ?? null : null;
 }
-export function detectHarnesses(home = os.homedir()): Harness[] {
+export function detectHarnesses(home = os.homedir(), { versions = true } = {}): Harness[] {
   const platform = process.platform;
   const desktop = platform === "win32" ? path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "Claude") : path.join(home, "Library", "Application Support", "Claude");
   const specs: Array<[HarnessId, string, string, string, boolean]> = [
@@ -56,7 +56,7 @@ export function detectHarnesses(home = os.homedir()): Harness[] {
     const config = fs.existsSync(filePath);
     const guiPath = id === "claude-desktop" ? platform === "darwin" ? "/Applications/Claude.app" : path.join(process.env.LOCALAPPDATA ?? "", "AnthropicClaude") : id === "codex" ? platform === "darwin" ? "/Applications/Codex.app" : path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Codex") : "";
     return { id, label, configPath: filePath, supported, detected: Boolean(binary || config || guiPath && fs.existsSync(guiPath)),
-      version: harnessVersion(binary), executable: binary, restart: id === "claude-desktop" ? "desktop" : "terminal",
+      version: versions || /\.(cmd|ps1)$/i.test(binary ?? "") ? harnessVersion(binary) : null, executable: binary, restart: id === "claude-desktop" ? "desktop" : "terminal",
       managed: config && managedConfiguration(fs.readFileSync(filePath, "utf8"), id, path.join(runtimeDir(), "plugin.mjs")) };
   });
 }

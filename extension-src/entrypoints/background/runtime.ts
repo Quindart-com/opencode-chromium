@@ -1168,18 +1168,9 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
     const parsed = popupMessageSchema.safeParse(value);
     if (!parsed.success) return false;
     const message = parsed.data;
-    if (["GET_HARNESS_CONNECTIONS", "DISCONNECT_HARNESS", "RECONNECT_NATIVE_HOST"].includes(message.type)) {
+    if (["GET_HARNESS_CONNECTIONS", "DISCONNECT_HARNESS", "RECONNECT_NATIVE_HOST", "START_HARNESS_RECONNECT", "RUN_CONNECTION_DOCTOR", "INSTALL_RUNTIME_UPDATE", "GET_LOCAL_ACTION", "GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message.type)) {
         connectionPanelMessage(message, sender, { extensionId: chrome.runtime.id, panelUrl: chrome.runtime.getURL("/popup.html"), rpc, idle: connectionIdle })
             .then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (["GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message?.type)) {
-        if (sender.tab || sender.id !== chrome.runtime.id) {
-            sendResponse({ error: "Open update settings from the extension panel" });
-            return false;
-        }
-        rpc.request(message.type === "GET_RUNTIME_UPDATES" ? "runtime.updateStatus" : "runtime.updateConfigure", { enabled: message.enabled })
-            .then(result => sendResponse({ result })).catch(() => sendResponse({ error: "Update settings unavailable. Update the local runtime once to enable automatic updates." }));
         return true;
     }
     if (["GET_UPLOAD_SETTINGS", "SET_UPLOAD_SETTINGS", "GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST"].includes(message?.type)) {
@@ -1241,7 +1232,7 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
         const method = decisionMethods[message.type];
         if (!method)
             return false;
-        rpc.request(method, message.type === "TEST_DECISION_CONNECTION" ? { settings: message.settings, ...(message.apiKey ? { apiKey: message.apiKey } : {}) } : message.type === "SET_DECISION_SETTINGS" ? message.settings ?? {} : {})
+        rpc.request(method, message.type === "TEST_DECISION_CONNECTION" ? { settings: message.settings, ...(message.apiKey ? { apiKey: message.apiKey } : {}) } : message.type === "SET_DECISION_SETTINGS" ? message.settings ?? {} : { usage: message.usage })
             .then((result) => sendResponse({ result }))
             .catch((error) => sendResponse({ error: errorMessage(error) }));
         return true;

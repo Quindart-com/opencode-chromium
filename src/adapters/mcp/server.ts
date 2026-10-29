@@ -18,7 +18,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { announceBrowserClient,closeBrowserClients } from "../../browser/client.ts";
+import { announceBrowserClient,closeBrowserClients,resetBrowserClientConnections } from "../../browser/client.ts";
+import { startHarnessControl } from "../../../native-host/src/harness-control.ts";
 import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
 import { identifyHarness } from "../../shared/connections.ts";
 import { createBrowserOperations } from "../../browser/operations/index.ts";
@@ -34,6 +35,7 @@ export const SERVER_NAME = PLUGIN_NAME;
 export const SERVER_INSTRUCTIONS = [
   "Use the four browser tools for UI-only work, connector gaps, and visual verification; prefer structured connectors when available.",
   "Pass a user-named profile on the first useful call, batch find/action/settle/verification in browser_run, and reuse sessionId.",
+  "When authorization is missing or automatic approval review rejects an action, use the harness question tool with Approve and Disapprove. Wait for the human answer, then resume the original authorization path after approval. Do not end the task or bypass a denial with another tool. An actual human refusal requires a new user instruction.",
   "Transport failures run a bounded CLI doctor and return recovery results. Follow those checks; if unresolved, run opencode-chromium doctor --repair-runtime --json before one targeted repair and verification. Never replay an uncertain mutation unchanged.",
   "Page search uses the auto retrieval strategy by default (lexical first, escalating to the active local embedding model); request lexical for lowest latency, semantic to always embed, and deep for reranked multilingual or code-heavy matching.",
   "For a specific tab's deeper network debugging, request browser_observe mode capabilities with pack network, then execute network.inspect inside browser_run; bodies are opt-in and approval-gated.",
@@ -104,6 +106,7 @@ function conciseText(result: unknown) {
     sessionId: record(result).sessionId,
     summary: record(result).summary ?? "Full output is available as the returned artifact resource.",
     artifact: record(result).artifact,
+    ...(record(result).authorization ? { authorization: record(result).authorization } : {}),
     ...contractMetadata(),
   });
 }
@@ -206,36 +209,44 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
   );
 }
 
-export async function registerLegacyTools(server: McpServer, fallbackSessionId: string) {
+export async function registerLegacyTools(server: McpServer, fallbackSessionId: string, runtime = createAgentBrowserRuntime()) {
+  const activity = trackRuntime(runtime);
   const hooks = await createBrowserOperations();
   for (const [name, definition] of Object.entries(hooks.tool ?? {})) {
     if (definition.capabilityOnly === true) continue;
     server.registerTool(name, {
       description: `[Compatibility] ${definition.description}`,
       inputSchema: z.object(definition.args),
-    }, async (args: unknown) => {
+    }, async (args: unknown) => activity.call(async () => {
+      markBrowserClientUsed();
       try {
         const text = await definition.execute(args, { sessionID: fallbackSessionId, sessionId: fallbackSessionId, agent: "mcp-compatibility" });
         return { content: [{ type: "text", text: text ?? "" }], isError: false };
       } catch (error) {
         return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], isError: true };
       }
-    });
+    }));
   }
 }
 
 export async function createServer({ runtime, toolset = "core", fallbackSessionId = `mcp-${randomUUID()}`, memory = memoryEnabledForServer() }: { runtime?: AgentBrowserRuntime; toolset?: string; fallbackSessionId?: string; memory?: boolean } = {}) {
   const server = new McpServer({ name: SERVER_NAME, version: packageVersion() }, { instructions: SERVER_INSTRUCTIONS });
+  const activeRuntime = runtime ?? createAgentBrowserRuntime();
   let stopPresence: (() => void) | undefined;
+  let stopControl: (() => void) | undefined, closed = false;
   const onclose = server.server.onclose;
-  server.server.onclose = () => { stopPresence?.(); onclose?.(); };
+  server.server.onclose = () => { closed = true; stopPresence?.(); stopControl?.(); onclose?.(); };
   server.server.oninitialized = () => {
     const client = server.server.getClientVersion();
     if (client?.name === "managed-supervisor-probe") return;
     stopPresence = startBrowserClientPresence(identifyHarness(client?.name), client?.version, "mcp", announceBrowserClient);
+    void startHarnessControl({ harness: identifyHarness(client?.name), harnessVersion: client?.version, version: PLUGIN_VERSION,
+      idle: () => trackRuntime(activeRuntime).reconnectIdle(), reload: async () => {
+        resetBrowserClientConnections(); await announceBrowserClient(); await server.server.sendToolListChanged();
+      } }).then(control => { if (closed) control.close(); else stopControl = control.close; }).catch(() => {});
   };
-  if (toolset === "core" || toolset === "debug") await registerCoreTools(server, runtime ?? createAgentBrowserRuntime(), fallbackSessionId, { memory });
-  if (toolset === "legacy" || toolset === "debug") await registerLegacyTools(server, fallbackSessionId);
+  if (toolset === "core" || toolset === "debug") await registerCoreTools(server, activeRuntime, fallbackSessionId, { memory });
+  if (toolset === "legacy" || toolset === "debug") await registerLegacyTools(server, fallbackSessionId, activeRuntime);
   return server;
 }
 

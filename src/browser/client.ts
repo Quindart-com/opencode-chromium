@@ -185,6 +185,9 @@ function pooledBrowserClient(ipcPath: string, _options: { timeoutMs?: number } =
 
 export function closeBrowserClients() {
   stopBrowserClientPresence();
+  resetBrowserClientConnections();
+}
+export function resetBrowserClientConnections() {
   for (const client of browserClients.values()) client.close();
   browserClients.clear();
   profileCache.clear();

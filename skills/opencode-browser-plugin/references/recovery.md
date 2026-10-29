@@ -1,5 +1,9 @@
 # Startup and connection recovery
 
+## Human authorization
+
+An automatic approval-review rejection should trigger the harness's human-question tool with Approve / Disapprove, including the action and rejection reason. Keep the workflow pending while the user answers. A new approval resumes the original permission path; it does not authorize bypass through another harness. A closed or expired upload confirmation is UPLOAD_CONFIRMATION_REQUIRED, while an explicit refusal is UPLOAD_USER_DECLINED. Preserve prepared files and existing sessions. An actual human refusal needs a new user instruction.
+
 Check the failing layer before changing an installation. A visible skill is a local file; the MCP process must separately start and advertise its tools. The extension's connected indicator describes its native-host connection, not Codex's MCP startup.
 
 The extension's Harness connections panel reports observed client identity hints, loaded runtime versions, initialization/tool-call evidence and heartbeat freshness. A responding bridge is not proof that a harness registered tools. Use Refresh to obtain current evidence. Guarded Disconnect link closes only the selected browser IPC connection; the harness may reconnect on its next call or heartbeat. Reconnect local bridge preserves tabs and provider keys and requires browser work to finish first. Connection reporting requires a matching runtime; older hosts explicitly report that it is unavailable.

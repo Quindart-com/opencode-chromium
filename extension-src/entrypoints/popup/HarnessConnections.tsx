@@ -1,60 +1,52 @@
 import { useCallback,useEffect,useRef,useState } from "react";
 import { harnessLabels,type ConnectionSnapshot } from "../../../src/shared/connections.ts";
+import type { LocalAction } from "../../../src/shared/local-actions.ts";
 import { t } from "../../i18n";
-import { errorMessage,sendMessage,type NativeStatus } from "./api";
+import { sendMessage,type NativeStatus } from "./api";
+import useLocalAction,{ localActionLabel } from "./useLocalAction";
 
-const doctor = "opencode-chromium doctor --repair-runtime --json";
-export default function HarnessConnections({ status }: { status: NativeStatus }) {
-  const [snapshot, setSnapshot] = useState<ConnectionSnapshot | null>(null);
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<string | null>(null);
-  const operation = useRef(0);
-  const connected = status.state === "connected";
+const targets = ["codex", "opencode", "dsh"] as const;
+const initials = { codex: "C", opencode: "OC", dsh: "DS" };
+export default function HarnessConnections({ status, profileLabel }: { status: NativeStatus; profileLabel?: string | null }) {
+  const [snapshot, setSnapshot] = useState<ConnectionSnapshot | null>(null), [unsupported, setUnsupported] = useState(false);
+  const [bridgeBusy, setBridgeBusy] = useState(false), [bridgeError, setBridgeError] = useState("");
+  const operation = useRef(0), connected = status.state === "connected";
+  const local = useLocalAction();
   const refresh = useCallback(async () => {
     const revision = ++operation.current;
     try {
-      const response = await sendMessage<{ result?: ConnectionSnapshot; error?: string }>({ type: "GET_HARNESS_CONNECTIONS" });
+      const response = await sendMessage<{ result?: ConnectionSnapshot }>({ type: "GET_HARNESS_CONNECTIONS" });
       if (revision !== operation.current) return;
-      setSnapshot(response.result ?? null);
-      setMessage(response.result ? "" : t("connectionsUnsupported"));
-    } catch { if (revision === operation.current) { setSnapshot(null); setMessage(t("connectionsUnavailable")); } }
+      setSnapshot(response.result ?? null); setUnsupported(!response.result?.harnesses);
+    } catch { if (revision === operation.current) { setSnapshot(null); setUnsupported(true); } }
   }, []);
   useEffect(() => {
     if (!connected) { operation.current++; setSnapshot(null); return; }
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 5000);
+    void refresh(); const timer = window.setInterval(() => void refresh(), 3000);
     return () => { window.clearInterval(timer); operation.current++; };
   }, [connected, refresh]);
-  async function control(type: "DISCONNECT_HARNESS" | "RECONNECT_NATIVE_HOST", id?: string) {
-    operation.current++; setBusy(true); setConfirm(null);
-    try {
-      const response = await sendMessage<{ error?: string }>({ type, params: { id } });
-      if (response.error) throw new Error(response.error);
-      setSnapshot(null); setMessage(type === "DISCONNECT_HARNESS" ? t("harnessDisconnected") : t("bridgeReconnecting"));
-      if (type === "DISCONNECT_HARNESS") await refresh();
-    } catch (error) { setMessage(errorMessage(error)); }
-    finally { setBusy(false); }
+  useEffect(() => { if (local.action && !local.working) void refresh(); }, [local.action?.state, local.working, refresh]);
+  async function reconnectBridge() {
+    setBridgeBusy(true); setBridgeError("");
+    try { const response = await sendMessage<{ error?: string }>({ type: "RECONNECT_NATIVE_HOST" }); if (response.error) throw new Error("busy"); }
+    catch { setBridgeError(t("actionBusy")); } finally { setBridgeBusy(false); }
   }
-  const clients = connected ? snapshot?.clients ?? [] : [];
-  return <section className="card harness-connections" aria-labelledby="harness-connections-title">
-    <div className="connection-summary-heading"><h2 id="harness-connections-title">{t("harnessConnections")}</h2><button className="button-mini" disabled={busy || !connected} onClick={() => void refresh()}>{t("refreshConnections")}</button></div>
-    <p className="help-note">{t("connectionLayers")}</p>
-    <dl className="bridge-details"><dt>{t("localBridge")}</dt><dd>{connected ? t("bridgeResponding") : t("bridgeUnavailable")}{snapshot ? ` · v${snapshot.host.version ?? "?"} · PID ${snapshot.host.pid}` : ""}</dd></dl>
-    {connected && !snapshot && <p role="status">{message || t("checkingConnection")}</p>}
-    {snapshot && <>
-      {clients.length === 0 && <p className="connection-empty">{t("noHarnessConnections")}</p>}
-      <ul className="harness-list">{clients.map(client => <li key={client.id} className={`harness-row state-${client.state}`}>
-        <div className="harness-row-title"><strong>{harnessLabels[client.harness] ?? harnessLabels.mcp}</strong><span>{t(client.state === "responding" ? "harnessResponding" : client.state === "stale" ? "harnessStale" : "harnessUnidentified")}</span></div>
-        <p>{client.transport.toUpperCase()} · {t("runtimeVersionLabel")} {client.runtimeVersion ?? "?"}{client.pid ? ` · PID ${client.pid}` : ""}{client.harnessVersion ? ` · ${t("harnessVersionLabel")} ${client.harnessVersion}` : ""}</p>
-        <p>{t(client.phase === "used" ? "harnessToolReceived" : "harnessInitialized")}{client.pending ? ` · ${t("harnessPending", String(client.pending))}` : ""}</p>
-        <p className="help-note">{t("harnessLastSeen", new Date(client.lastSeenAt).toLocaleTimeString())}</p>
-        {confirm === client.id ? <div className="connection-controls"><p>{t("disconnectHarnessConfirm")}</p><button className="button" onClick={() => void control("DISCONNECT_HARNESS", client.id)} disabled={busy}>{t("disconnectBridge")}</button><button className="button-mini" onClick={() => setConfirm(null)}>{t("cancelConnectionAction")}</button></div> : <button className="button-mini" disabled={busy || client.pending > 0} onClick={() => setConfirm(client.id)}>{t("disconnectBridge")}</button>}
-      </li>)}</ul>
-      <p className="help-note">{t("harnessToolsExplanation")}</p>
-    </>}
-    <div className="connection-controls"><button className="button" disabled={busy} onClick={() => void control("RECONNECT_NATIVE_HOST")}>{t("reconnectBridge")}</button><button className="button-mini" onClick={() => { void navigator.clipboard.writeText(doctor).then(() => setMessage(t("doctorCopied")), () => setMessage(t("copyUnavailable"))); }}>{t("copyDoctor")}</button></div>
-    <details className="advanced-details"><summary>{t("reconnectHarnessHelp")}</summary><p>{t("reconnectCodexHelp")}</p><p>{t("reconnectOpenCodeHelp")}</p><p>{t("reconnectDshHelp")}</p><code className="setup-command">{doctor}</code></details>
-    <p role="status" className="feedback">{message}</p>
+  const actions = [local.action, ...(snapshot?.actions ?? [])].filter((value): value is LocalAction => !!value).sort((a, b) => b.updatedAt - a.updatedAt);
+  return <section className="card connection-panel" aria-labelledby="harness-connections-title">
+    <div className="connection-panel-heading"><div><h2 id="harness-connections-title">{t("harnessConnections")}</h2><p className="connection-profile">{profileLabel || t("thisProfile")}</p></div><button type="button" className="icon-button" aria-label={t("refreshConnections")} title={t("refreshConnections")} onClick={() => void refresh()}>↻</button></div>
+    <div className="bridge-strip"><span className={"status-dot " + (connected ? "is-online" : "is-offline")} /><span>{t(connected ? "bridgeReady" : "bridgeUnavailable")}</span><span className="bridge-version">{snapshot?.host.version ? "v" + snapshot.host.version : status.nativeHostVersion ? "v" + status.nativeHostVersion : ""}</span><button type="button" className="icon-button" disabled={bridgeBusy} aria-label={t("reconnectBridge")} title={t("reconnectBridge")} onClick={() => void reconnectBridge()}>↻</button></div>
+    <ul className="agent-rows">{targets.map(target => {
+      const links = snapshot?.clients.filter(client => client.harness === target) ?? [], alive = connected && links.some(client => client.state === "responding"), pending = links.some(client => client.pending > 0);
+      const availability = snapshot?.harnesses?.find(row => row.harness === target), installed = availability?.installed || links.length > 0;
+      const job = actions.find(action => action.kind === "reconnect" && action.target === target), working = !!job && ["queued", "running"].includes(job.state);
+      const unknown = connected && unsupported, checking = connected && !snapshot && !unsupported;
+      const state = pending || working ? "busy" : alive ? "online" : unknown || checking ? "unknown" : !installed && snapshot?.harnesses ? "absent" : "offline";
+      const stateLabel = state === "online" ? "statusConnected" : state === "busy" ? "statusBusy" : state === "unknown" ? checking ? "checkingConnection" : "statusUnknown" : state === "absent" ? "statusNotInstalled" : "statusDisconnected";
+      const version = availability?.version ?? links.find(link => link.harnessVersion)?.harnessVersion;
+      return <li className="agent-row" key={target}><div className={"agent-icon agent-" + target} aria-hidden="true">{initials[target]}</div><div className="agent-identity"><strong>{harnessLabels[target]}</strong><div><span className={"connection-badge badge-" + state}><i />{t(stateLabel)}</span>{version && <small>v{version}</small>}</div>{job && !working && job.state !== "succeeded" && <p className="agent-feedback" role="status">{localActionLabel(job)}</p>}</div><button type="button" className={"button-mini agent-action" + (!alive ? " action-primary" : "")} disabled={!connected || unknown || checking || !installed || pending || working} aria-label={t(alive ? "reconnectNamed" : "connectNamed", harnessLabels[target])} onClick={() => void local.start("START_HARNESS_RECONNECT", { target })}>{working ? t("actionRunning") : t(alive ? "reconnectAgent" : "connectAgent")}</button></li>;
+    })}</ul>
+    {unsupported && connected && <div className="connection-upgrade"><span>{t("connectionUpgrade")}</span><button type="button" className="button-mini action-primary" disabled={local.working} onClick={() => void local.start("INSTALL_RUNTIME_UPDATE")}>{t("updateCli")}</button></div>}
+    <div className="connection-panel-footer"><span>{t("agentsKeepRunning")}</span><button type="button" className="text-button" disabled={!connected || local.working || unsupported} onClick={() => void local.start("RUN_CONNECTION_DOCTOR")}>{t("runConnectionChecks")}</button></div>
+    {(local.feedback || bridgeError) && <p className={"action-feedback " + (local.error || local.action?.state === "failed" ? "is-error" : local.action?.state === "waiting" ? "is-waiting" : "")} role="status">{bridgeError || local.feedback}</p>}
   </section>;
 }

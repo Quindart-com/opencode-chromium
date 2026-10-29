@@ -26,6 +26,7 @@ export class RpcRelay {
   #coordinated = new Set<RpcSocket>();
   #connections = new HarnessConnections<RpcSocket>();
   #canDisconnect: () => boolean;
+  #connectionDetails: () => Record<string, unknown>;
   #admit: (() => Promise<() => void>) | undefined;
   #pendingRequests = new Map<number, PendingRequest>();
   #pendingBySocket = new Map<RpcSocket, Set<number>>();
@@ -34,13 +35,14 @@ export class RpcRelay {
   #onProfile: ((profile: ProfileHello) => void) | undefined;
   #localHandler: ((method: string, params: Record<string, unknown>) => unknown | Promise<unknown>) | undefined;
   #hostPending = new Map<number, { resolve(value: unknown): void; reject(error: unknown): void; timer: ReturnType<typeof setTimeout> }>();
-  constructor({ extensionWriter, state, onProfile, localHandler, admit, canDisconnect = () => true }: { extensionWriter: ExtensionWriter; state: RelayState; onProfile?(profile: ProfileHello): void; localHandler?(method: string, params: Record<string, unknown>): unknown | Promise<unknown>; admit?(): Promise<() => void>; canDisconnect?(): boolean }) {
+  constructor({ extensionWriter, state, onProfile, localHandler, admit, canDisconnect = () => true, connectionDetails = () => ({}) }: { extensionWriter: ExtensionWriter; state: RelayState; onProfile?(profile: ProfileHello): void; localHandler?(method: string, params: Record<string, unknown>): unknown | Promise<unknown>; admit?(): Promise<() => void>; canDisconnect?(): boolean; connectionDetails?(): Record<string, unknown> }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
     this.#onProfile = onProfile;
     this.#localHandler = localHandler;
     this.#admit = admit;
     this.#canDisconnect = canDisconnect;
+    this.#connectionDetails = connectionDetails;
   }
 
   flushMemory() {
@@ -300,7 +302,7 @@ export class RpcRelay {
           if (this.#pendingRequests.size || this.#hostPending.size || !this.#canDisconnect()) throw new Error("Browser commands are still running. Finish them before disconnecting.");
           socket.destroy(); this.#removeClient(socket);
         }
-        await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, result: this.#connections.snapshot(this.#state.nativeHostVersion, socket => this.#pendingBySocket.get(socket)?.size ?? 0) });
+        await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, result: { ...this.#connections.snapshot(this.#state.nativeHostVersion, socket => this.#pendingBySocket.get(socket)?.size ?? 0), ...this.#connectionDetails() } });
       } catch (error) { await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, error: { code: -32000, message: error instanceof Error ? error.message : "Connection action failed" } }); }
       return;
     }

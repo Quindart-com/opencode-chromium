@@ -17,6 +17,7 @@ export default function ConnectionSummary({ status, onProfiles }: { status: Nati
     }).catch(() => {});
     return () => { active = false; };
   }, [connected]);
+  if (connected) return <HarnessConnections status={status} profileLabel={profile?.profileLabel} />;
   async function copySetup() {
     try { await navigator.clipboard.writeText(setupCommand); setCopyState(t("welcomeCopied")); }
     catch { setCopyState(t("copyUnavailable")); }

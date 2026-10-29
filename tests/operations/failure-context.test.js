@@ -72,3 +72,22 @@ test("the page is only re-read when the action may have changed something", () =
   assert.equal(shouldReobservePage({ uncertain: false, readOnly: false, hasTarget: true }), false, "a certain outcome needs no second look");
   assert.equal(shouldReobservePage(), false, "the predicate never throws on missing input");
 });
+
+test("missing upload authorization requests a human choice; an explicit refusal remains distinct", async () => {
+  const runtime = createAgentBrowserRuntime();
+  try {
+    const result = await runtime.failure("prepared-work", Object.assign(new Error("Upload confirmation was not completed"), { code: "UPLOAD_CONFIRMATION_REQUIRED", uncertain: false, retryable: false }));
+    assert.equal(result.sessionId, "prepared-work");
+    assert.equal(result.error.authorization.required, true);
+    assert.deepEqual(result.error.authorization.options, ["Approve", "Disapprove"]);
+    assert.match(result.error.authorization.instruction, /native question tool/);
+    assert.match(result.error.authorization.instruction, /original authorization flow/);
+    const compact = runtime.compact({ ok: false, status: "authorization_required", authorization: result.error.authorization, detail: "fixture ".repeat(1500) }, "prepared-work", 512);
+    assert.equal(compact.truncated, true);
+    assert.deepEqual(compact.authorization.options, ["Approve", "Disapprove"], "compaction must retain the human question");
+    const declined = errorDetails(Object.assign(new Error("User declined"), { code: "UPLOAD_USER_DECLINED" }));
+    assert.equal(declined.authorization.required, false);
+    assert.equal(declined.authorization.state, "declined");
+    assert.equal(declined.retryable, false);
+  } finally { runtime.close(); }
+});

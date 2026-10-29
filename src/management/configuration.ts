@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import { parse as parseToml,stringify as stringifyToml } from "smol-toml";
 import { record } from "../shared/values.ts";
-import { deepSeekManaged,planDeepSeek } from "./deepseek.js";
+import { deepSeekManaged,planDeepSeek } from "./deepseek.ts";
 
 export const SERVER_ID = "opencode-browser-plugin";
 export type HarnessId = "codex" | "opencode" | "opencode-mcp" | "claude-code" | "claude-desktop" | "dsh";

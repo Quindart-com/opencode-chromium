@@ -195,7 +195,7 @@
     "message": "Показать активность"
   },
   "thisProfile": {
-    "message": "Этот профиль"
+    "message": "Этот профиль браузера"
   },
   "allProfiles": {
     "message": "Все профили"
@@ -273,7 +273,7 @@
     "message": "Читать примечания к выпуску"
   },
   "connectAgent": {
-    "message": "Подключите агента для программирования"
+    "message": "Подключить"
   },
   "runTerminal": {
     "message": "Запустите команду в терминале. Настройка подключит найденные поддерживаемые инструменты и зарегистрирует локальный компонент браузера."
@@ -1198,5 +1198,149 @@
   },
   "harnessToolsExplanation": {
     "message": "Инициализация и свежий сигнал подтверждают связь с браузером. Регистрацией и доступностью инструментов управляет сам агент."
+  },
+  "usageProvider": {
+    "message": "Сервис"
+  },
+  "usagePeriod": {
+    "message": "Период"
+  },
+  "usageAllProviders": {
+    "message": "Все сервисы"
+  },
+  "usageCurrentProvider": {
+    "message": "Текущий сервис"
+  },
+  "usageLast7": {
+    "message": "Последние 7 дней"
+  },
+  "usageLast30": {
+    "message": "Последние 30 дней"
+  },
+  "usageLastWeek": {
+    "message": "Прошлая неделя"
+  },
+  "usageLastYear": {
+    "message": "Прошлый год"
+  },
+  "usageAllTime": {
+    "message": "За всё время"
+  },
+  "usageInput": {
+    "message": "Входные токены"
+  },
+  "usageOutput": {
+    "message": "Выходные токены"
+  },
+  "usageTrend": {
+    "message": "Расход токенов"
+  },
+  "usageNoData": {
+    "message": "Нет данных за этот период"
+  },
+  "usageServices": {
+    "message": "Сравнение сервисов"
+  },
+  "usageUnattributed": {
+    "message": "Ранее · не определено"
+  },
+  "usageLocalHistory": {
+    "message": "Тесты: $1 · расход известен: $2/$3 вызовов · UTC"
+  },
+  "usageSavingsGlobal": {
+    "message": "Локальная экономия · все сервисы за сеанс"
+  },
+  "usageAccountingIncomplete": {
+    "message": "Отсутствующие отчёты не входят в суммы токенов и стоимости."
+  },
+  "statusConnected": {
+    "message": "Подключено"
+  },
+  "statusDisconnected": {
+    "message": "Отключено"
+  },
+  "statusNotInstalled": {
+    "message": "Не установлено"
+  },
+  "statusUnknown": {
+    "message": "Нужно обновление"
+  },
+  "statusBusy": {
+    "message": "В работе"
+  },
+  "bridgeReady": {
+    "message": "CLI доступен"
+  },
+  "reconnectAgent": {
+    "message": "Переподключить"
+  },
+  "reconnectNamed": {
+    "message": "Переподключить $1"
+  },
+  "connectNamed": {
+    "message": "Подключить $1"
+  },
+  "connectionUpgrade": {
+    "message": "Обновите CLI для просмотра статуса агентов."
+  },
+  "updateCli": {
+    "message": "Обновить CLI"
+  },
+  "agentsKeepRunning": {
+    "message": "Сеансы остаются открытыми"
+  },
+  "runConnectionChecks": {
+    "message": "Диагностика"
+  },
+  "actionQueued": {
+    "message": "Запуск…"
+  },
+  "actionRunning": {
+    "message": "Выполняется…"
+  },
+  "actionReconnected": {
+    "message": "Инструменты браузера обновлены"
+  },
+  "actionBusy": {
+    "message": "Ожидание текущего действия браузера"
+  },
+  "actionWaiting": {
+    "message": "Готово к следующему ходу агента"
+  },
+  "actionUnreachable": {
+    "message": "Связь с агентом не отвечает"
+  },
+  "actionHealthy": {
+    "message": "Проверки соединения пройдены"
+  },
+  "actionNeedsAttention": {
+    "message": "Одна из связей требует проверки"
+  },
+  "actionUpdated": {
+    "message": "Установлен последний стабильный CLI"
+  },
+  "actionUpdateWaiting": {
+    "message": "Обновление готово; активация после работы браузера"
+  },
+  "actionUnmanaged": {
+    "message": "Для этой установки обновления недоступны"
+  },
+  "actionFailed": {
+    "message": "Не удалось выполнить действие. Повторите попытку."
+  },
+  "actionUnavailable": {
+    "message": "Помощник локальных действий недоступен."
+  },
+  "actionStatusUnavailable": {
+    "message": "Ожидание локального статуса…"
+  },
+  "actionUpdating": {
+    "message": "Обновление CLI…"
+  },
+  "checkInstallUpdates": {
+    "message": "Проверить и установить обновления"
+  },
+  "updateAutomaticHelp": {
+    "message": "CLI обновляется в фоне. Работающие агенты и ключи сохраняются."
   }
 }

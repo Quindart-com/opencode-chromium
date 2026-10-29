@@ -6,7 +6,9 @@ import { execFileSync } from "node:child_process";
 import { parse as parseToml } from "smol-toml";
 import { manageSetup, formatSetupResult } from "../../src/management/setup.ts";
 import type { Harness } from "../../src/management/harnesses.ts";
-import { inspectHarnessSkills } from "../../src/cli/skills.ts";
+import { directoryHash,inspectHarnessSkills } from "../../src/cli/skills.ts";
+import { planSkills } from "../../src/management/skills.ts";
+import { applyTransaction } from "../../src/management/transaction.ts";
 import { managedConfiguration } from "../../src/management/configuration.ts";
 
 function fixture() {
@@ -163,3 +165,19 @@ test("setup help is noninteractive and never creates runtime or client files", (
     expect(fs.existsSync(f.dir)).toBe(false);
   } finally { fs.rmSync(f.home, { recursive: true, force: true }); }
 }, 20000);
+
+test("skill upgrades retain transaction backups without reporting them as stale instructions", () => {
+  const f = fixture();
+  try {
+    const source = path.join(f.root, "skills/opencode-browser-plugin");
+    applyTransaction(planSkills(f.root, ["opencode"], false, f.home));
+    fs.appendFileSync(path.join(source, "SKILL.md"), "\nUpdated recovery guidance.\n");
+    const applied = applyTransaction(planSkills(f.root, ["opencode"], false, f.home));
+    expect(applied.backups.length).toBeGreaterThan(0);
+    expect(applied.backups.every(file => fs.existsSync(file))).toBe(true);
+    const target = path.join(f.home, ".agents/skills/opencode-browser-plugin");
+    expect(directoryHash(target).sha256).toBe(directoryHash(source).sha256);
+    fs.appendFileSync(path.join(target, "SKILL.md"), "\nStale edit.\n");
+    expect(directoryHash(target).sha256).not.toBe(directoryHash(source).sha256);
+  } finally { fs.rmSync(f.home, { recursive: true, force: true }); }
+});

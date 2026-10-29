@@ -9,6 +9,7 @@ import type { BrowserOperation } from "../browser/operation-definition.ts";
 import { createBrowserOperations } from "../browser/operations/index.ts";
 import { assertNavigationAllowed,combineUrlPolicyConfig,createUrlPolicy,urlPolicyFromEnv } from "../browser/url-policy.ts";
 import { record } from "../shared/values.ts";
+import { authorizationQuestion } from "../shared/authorization.ts";
 import { partialDispatchError } from "../shared/execution-state.ts";
 import { nodeFrameId } from "../browser/operations/page-state.ts";
 import { ArtifactStore } from "./artifacts.ts";
@@ -355,7 +356,8 @@ export class AgentBrowserRuntime {
       approvalToken,
       expiresAt: new Date(expiresAt).toISOString(),
       reasons,
-      instruction: "Review the chain, then call browser_run with only approvalToken. The immutable stored request will run; no browser action has run yet.",
+      authorization: authorizationQuestion("browser-action"),
+      instruction: "If approval is missing, ask the user Approve / Disapprove with the harness question tool. After approval, call browser_run with only approvalToken. No browser action has run yet.",
     };
   }
 
@@ -905,6 +907,7 @@ export class AgentBrowserRuntime {
       ok: versionedPayload.ok,
       status: versionedPayload.status,
       sessionId,
+      ...(record(payload).authorization ? { authorization: record(payload).authorization } : {}),
       truncated: true,
       summary: versionedPayload.summary ?? `${label} was truncated to a useful inline preview; the complete result is optional at artifact.uri`,
       artifact,
@@ -1021,14 +1024,16 @@ export class AgentBrowserRuntime {
       }
       const mode = request.returnMode ?? "last";
       const selectedResults = mode === "all" ? results : mode === "last" ? results.slice(-1) : results.map(summarizeStepResult);
+      const authorization = results.map(result => record(record(result).error).authorization).find(Boolean);
       return this.compact({
         ok: !failed,
-        status: failed ? "partial" : "completed",
+        status: record(authorization).required === true ? "authorization_required" : failed ? "partial" : "completed",
         sessionId,
         profileId: session.profileId,
         tabId: session.activeTabId,
         summary: `${results.filter((item) => item.ok).length}/${request.steps.length} actions completed`,
         results: selectedResults,
+        ...(authorization ? { authorization } : {}),
         ...(postObservation !== undefined ? { observation: postObservation } : {}),
       }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
     } catch (error) {

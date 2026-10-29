@@ -2,43 +2,56 @@ import { t } from "../../i18n";
 import { useEffect, useState } from "react";
 import { sendMessage } from "./api";
 import type { DecisionSettings } from "./decision-types";
+import type { UsagePeriod,UsageProvider } from "../../../src/shared/decision-usage.ts";
+import UsageTrend from "./UsageTrend";
 
+const service = (route: string) => route === "openai" ? "OpenAI Platform" : route === "openrouter" ? "OpenRouter" : route === "typesafe" ? "TypeSafe" : t("usageUnattributed");
+const model = (provider: string) => provider === "openai-decisions" ? "Luna" : provider === "jev" ? "Jev" : "";
+const label = (row: Pick<UsageProvider, "route" | "provider">) => service(row.route) + (model(row.provider) ? " · " + model(row.provider) : "");
 export default function DecisionOverview({ onConfigure }: { onConfigure: () => void }) {
   const [status, setStatus] = useState<DecisionSettings | null>(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [provider, setProvider] = useState("current"), [period, setPeriod] = useState<UsagePeriod>("7d");
   useEffect(() => {
-    let active = true;
+    let active = true, sequence = 0;
     async function refresh() {
+      const revision = ++sequence;
       try {
-        const response = await sendMessage<{ result?: DecisionSettings }>({ type: "GET_DECISION_SETTINGS" });
+        const response = await sendMessage<{ result?: DecisionSettings }>({ type: "GET_DECISION_SETTINGS", usage: { provider: provider === "current" ? undefined : provider, period } });
         if (!response.result) throw new Error("unavailable");
-        if (active) { setStatus(response.result); setError(""); }
-      } catch { if (active) setError(t("usageUnavailable")); }
+        if (active && revision === sequence) { setStatus(response.result); setError(""); setLoading(false); }
+      } catch { if (active && revision === sequence) { setError(t("usageUnavailable")); setLoading(false); } }
     }
     void refresh(); const timer = window.setInterval(() => void refresh(), 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
-  const usage = status?.usage;
-  const efficiency = status?.efficiency;
+  }, [provider, period]);
+  const usage = loading || error ? undefined : status?.usage, efficiency = status?.efficiency;
   const number = (value?: number) => value === undefined ? "—" : value.toLocaleString();
-  const avoided = efficiency ? efficiency.skipped + efficiency.cacheHits + efficiency.coalesced + efficiency.budgetSkipped : undefined;
-  const providerSelected = status && status.provider !== "off";
-  const model = status?.provider === "openai-decisions" ? "OpenAI Luna" : "Jev";
-  return <section className="decision-overview" aria-labelledby="jev-usage-heading">
-    <div className="decision-overview-heading"><h2 id="jev-usage-heading">{t("decisionAssistance")}</h2><button type="button" className="button-mini" onClick={onConfigure}>{t("configure")}</button></div>
-    <p className="decision-model">{!status ? error ? t("notConnected") : t("loading") : providerSelected ? model : t("localSearch")}</p>
-    <p className="help-note">{error || (!status ? t("checkingConfiguration") : status.ready ? t("connectedThrough", status.route === "openrouter" ? "OpenRouter" : status.route === "openai" ? "OpenAI Platform" : "TypeSafe") : providerSelected && status.shareText ? t("assistanceNeedsConnection") : t("assistanceOff"))}</p>
-    <details className="usage-details"><summary>{t("usagePerformance")}</summary>
-    <dl className="decision-usage">
-      <div><dt>{t("calls")}</dt><dd>{number(usage?.calls)}</dd></div>
-      <div><dt>{t("selectedAbstained")}</dt><dd>{usage ? `${number(usage.selected)} / ${number(usage.abstained)}` : "—"}</dd></div>
-      <div><dt>{t("tokens")}</dt><dd>{usage ? `${number(usage.inputTokens)} / ${number(usage.outputTokens)}` : "—"}</dd></div>
-      <div><dt>{t("reportedCost")}</dt><dd>{usage?.costReportedCalls ? `$${usage.reportedCost.toFixed(6)}` : t("notReported")}</dd></div>
-      <div><dt>{t("responseTime")}</dt><dd>{usage?.calls ? `${Math.round(usage.averageMs)} / ${Math.round(usage.lastMs)} ms` : "—"}</dd></div>
-      <div><dt>{t("callsAvoided")}</dt><dd>{number(avoided)}</dd></div>
+  return <section className="decision-overview" aria-labelledby="decision-usage-heading">
+    <div className="decision-overview-heading"><h2 id="decision-usage-heading">{t("decisionAssistance")}</h2><button type="button" className="button-mini" onClick={onConfigure}>{t("configure")}</button></div>
+    <div className="decision-provider-line"><span className={"status-dot " + (status?.ready ? "is-online" : "is-offline")} /><strong>{status && status.provider !== "off" ? label(status) : t("localSearch")}</strong><span className="help-note">{!status ? t("loading") : status.ready ? t("statusConnected") : status.provider !== "off" && status.shareText ? t("assistanceNeedsConnection") : t("assistanceOff")}</span></div>
+    <div className="usage-filters">
+      <label>{t("usageProvider")}<select aria-label={t("usageProvider")} value={provider} onChange={event => { setLoading(true); setProvider(event.target.value); }}>
+        <option value="current">{t("usageCurrentProvider")}{status ? " · " + label(status) : ""}</option>
+        <option value="all">{t("usageAllProviders")}</option>
+        {(status?.usage?.providers ?? []).map(row => <option key={row.id} value={row.id}>{label(row)}</option>)}
+      </select></label>
+      <label>{t("usagePeriod")}<select aria-label={t("usagePeriod")} value={period} onChange={event => { setLoading(true); setPeriod(event.target.value as UsagePeriod); }}>
+        <option value="7d">{t("usageLast7")}</option><option value="30d">{t("usageLast30")}</option><option value="last-week">{t("usageLastWeek")}</option><option value="last-year">{t("usageLastYear")}</option><option value="all">{t("usageAllTime")}</option>
+      </select></label>
+    </div>
+    {error && <p role="alert" className="action-error">{error}</p>}
+    <dl className="usage-metrics">
+      <div><dt>{t("usageInput")}</dt><dd>{number(usage?.inputTokens)}</dd></div><div><dt>{t("usageOutput")}</dt><dd>{number(usage?.outputTokens)}</dd></div>
+      <div><dt>{t("calls")}</dt><dd>{number(usage?.calls)}</dd></div><div><dt>{t("reportedCost")}</dt><dd className={usage?.costReportedCalls ? "" : "metric-unreported"}>{usage?.costReportedCalls ? "$" + usage.reportedCost.toFixed(6) : t("notReported")}</dd></div>
     </dl>
-    <p className="provider-test-help">{usage ? t("usageReport", [String(usage.tests), String(usage.usageReportedCalls), String(usage.calls), String(usage.costReportedCalls), String(usage.window)]) : t("usageDetails")}</p>
-    {efficiency ? <p className="provider-test-help">{t("efficiencyReport", [number(efficiency.skipped), number(efficiency.cacheHits), number(efficiency.coalesced), number(efficiency.budgetSkipped)])}</p> : null}
-    </details>
+    {usage?.daily && <UsageTrend days={usage.daily} />}
+    {usage?.providers && <div className="usage-comparison"><h3>{t("usageServices")}</h3><table><thead><tr><th>{t("usageProvider")}</th><th>{t("calls")}</th><th>{t("usageInput")}</th><th>{t("usageOutput")}</th></tr></thead><tbody>
+      {usage.providers.map(row => <tr key={row.id} className={usage.selectedProvider === row.id ? "is-selected" : ""}><th scope="row"><button type="button" onClick={() => { setLoading(true); setProvider(row.id); }}>{service(row.route)}{model(row.provider) && <small>{model(row.provider)}</small>}</button></th><td>{number(row.calls)}</td><td>{number(row.inputTokens)}</td><td>{number(row.outputTokens)}</td></tr>)}
+    </tbody></table></div>}
+    <p className="usage-footnote">{usage ? t("usageLocalHistory", [String(usage.tests), String(usage.usageReportedCalls), String(usage.calls)]) : t("loading")}{usage?.calls ? " · " + Math.round(usage.averageMs) + " ms" : ""}</p>
+    {usage && usage.costReportedCalls < usage.calls && <p className="usage-footnote">{t("usageAccountingIncomplete")}</p>}
+    {efficiency && <details className="advanced-details"><summary>{t("usageSavingsGlobal")}</summary><p className="help-note">{t("efficiencyReport", [number(efficiency.skipped), number(efficiency.cacheHits), number(efficiency.coalesced), number(efficiency.budgetSkipped)])}</p></details>}
   </section>;
 }

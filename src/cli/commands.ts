@@ -44,6 +44,18 @@ function has(argv: string[], flag: string) {
 
 export async function dispatchCommand(argv = process.argv.slice(2)) {
   const [command = "doctor", ...rest] = argv;
+  if (command === "local-action") {
+    const { runLocalActionJob } = await import("../../native-host/src/local-actions.ts");
+    console.log(JSON.stringify(await runLocalActionJob(valueAfter(rest, "--job") ?? "", runtimeDir()), null, 2)); return;
+  }
+  if (command === "harness" && rest[0] === "reconnect") {
+    const { reconnectHarness } = await import("../management/harness-reconnect.ts");
+    console.log(JSON.stringify(await reconnectHarness(rest[1], runtimeDir()), null, 2)); return;
+  }
+  if (command === "updates" && rest[0] === "install") {
+    const { installPublishedUpdate } = await import("../management/manual-update.ts");
+    console.log(JSON.stringify(await installPublishedUpdate(runtimeDir()), null, 2)); return;
+  }
   if (command === "dev-extension") {
     if (has(rest, "--help")) { console.log("Build and refresh the stable unpacked extension without changing the production runtime:\n  opencode-chromium dev-extension --source <checkout> [--output <existing-extension-directory>] [--dry-run]\nReload the unpacked extension at the returned extensionPath after the build."); return; }
     console.log(JSON.stringify(await publishDevelopmentExtension({ root: valueAfter(rest, "--source") ?? process.cwd(), dir: runtimeDir(), output: valueAfter(rest, "--output"), dryRun: has(rest, "--dry-run") }), null, 2));

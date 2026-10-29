@@ -195,7 +195,7 @@
     "message": "显示活动范围"
   },
   "thisProfile": {
-    "message": "此配置文件"
+    "message": "此浏览器配置"
   },
   "allProfiles": {
     "message": "所有配置文件"
@@ -273,7 +273,7 @@
     "message": "阅读发行说明"
   },
   "connectAgent": {
-    "message": "连接您的编程智能体"
+    "message": "连接"
   },
   "runTerminal": {
     "message": "在终端中运行此命令。设置程序会连接找到的受支持工具并注册浏览器的本地主机。"
@@ -1198,5 +1198,149 @@
   },
   "harnessToolsExplanation": {
     "message": "初始化和实时心跳可确认浏览器连接。工具注册和可用性由代理自身控制。"
+  },
+  "usageProvider": {
+    "message": "服务"
+  },
+  "usagePeriod": {
+    "message": "时间范围"
+  },
+  "usageAllProviders": {
+    "message": "所有服务"
+  },
+  "usageCurrentProvider": {
+    "message": "当前服务"
+  },
+  "usageLast7": {
+    "message": "最近 7 天"
+  },
+  "usageLast30": {
+    "message": "最近 30 天"
+  },
+  "usageLastWeek": {
+    "message": "上周"
+  },
+  "usageLastYear": {
+    "message": "去年"
+  },
+  "usageAllTime": {
+    "message": "全部时间"
+  },
+  "usageInput": {
+    "message": "输入令牌"
+  },
+  "usageOutput": {
+    "message": "输出令牌"
+  },
+  "usageTrend": {
+    "message": "令牌用量"
+  },
+  "usageNoData": {
+    "message": "此时间范围内没有用量"
+  },
+  "usageServices": {
+    "message": "服务对比"
+  },
+  "usageUnattributed": {
+    "message": "早期记录 · 未归属"
+  },
+  "usageLocalHistory": {
+    "message": "测试：$1 · 已报告用量：$2/$3 次调用 · UTC"
+  },
+  "usageSavingsGlobal": {
+    "message": "本地节省 · 本次会话所有服务"
+  },
+  "usageAccountingIncomplete": {
+    "message": "缺失的服务商报告不会计入令牌和费用总计。"
+  },
+  "statusConnected": {
+    "message": "已连接"
+  },
+  "statusDisconnected": {
+    "message": "已断开"
+  },
+  "statusNotInstalled": {
+    "message": "未安装"
+  },
+  "statusUnknown": {
+    "message": "需要更新"
+  },
+  "statusBusy": {
+    "message": "工作中"
+  },
+  "bridgeReady": {
+    "message": "CLI 已就绪"
+  },
+  "reconnectAgent": {
+    "message": "重新连接"
+  },
+  "reconnectNamed": {
+    "message": "重新连接 $1"
+  },
+  "connectNamed": {
+    "message": "连接 $1"
+  },
+  "connectionUpgrade": {
+    "message": "更新 CLI 以查看代理状态。"
+  },
+  "updateCli": {
+    "message": "更新 CLI"
+  },
+  "agentsKeepRunning": {
+    "message": "会话保持打开"
+  },
+  "runConnectionChecks": {
+    "message": "运行诊断"
+  },
+  "actionQueued": {
+    "message": "正在启动…"
+  },
+  "actionRunning": {
+    "message": "正在处理…"
+  },
+  "actionReconnected": {
+    "message": "浏览器工具已刷新"
+  },
+  "actionBusy": {
+    "message": "等待当前浏览器操作完成"
+  },
+  "actionWaiting": {
+    "message": "已准备好，等待代理下一轮"
+  },
+  "actionUnreachable": {
+    "message": "代理连接没有响应"
+  },
+  "actionHealthy": {
+    "message": "连接检查已通过"
+  },
+  "actionNeedsAttention": {
+    "message": "仍有连接需要处理"
+  },
+  "actionUpdated": {
+    "message": "已安装最新正式版 CLI"
+  },
+  "actionUpdateWaiting": {
+    "message": "更新已准备好，将在浏览器工作空闲时启用"
+  },
+  "actionUnmanaged": {
+    "message": "此安装方式不支持更新"
+  },
+  "actionFailed": {
+    "message": "无法完成操作，请重试。"
+  },
+  "actionUnavailable": {
+    "message": "本地操作助手不可用。"
+  },
+  "actionStatusUnavailable": {
+    "message": "正在等待本地进度…"
+  },
+  "actionUpdating": {
+    "message": "正在更新 CLI…"
+  },
+  "checkInstallUpdates": {
+    "message": "检查并安装更新"
+  },
+  "updateAutomaticHelp": {
+    "message": "CLI 将在后台更新，运行中的代理和已保存的密钥会保留。"
   }
 }

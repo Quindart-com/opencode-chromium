@@ -1,8 +1,8 @@
+import type { UsageReport } from "../../../src/shared/decision-usage.ts";
 export type DecisionSettings = {
   provider: "off" | "jev" | "openai-decisions"; route: "typesafe" | "openrouter" | "openai";
   shareText: boolean; shareImages: boolean; keyEnv: string; ready?: boolean; credentialConfigured?: boolean;
-  usage?: { calls: number; selected: number; abstained: number; tests: number; inputTokens: number; outputTokens: number;
-    reportedCost: number; costReportedCalls: number; usageReportedCalls: number; averageMs: number; lastMs: number; window: string };
+  usage?: UsageReport;
   efficiency?: { skipped: number; cacheHits: number; coalesced: number; budgetSkipped: number; called: number;
     lastSkipReason: string | null; cacheEntries: number; inFlight: number };
 };

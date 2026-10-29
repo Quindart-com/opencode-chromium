@@ -1,3 +1,4 @@
+import type { LocalAction } from "./local-actions.ts";
 export const harnessLabels = { codex: "Codex", opencode: "OpenCode", dsh: "DeepSeek Harness", claude: "Claude", mcp: "MCP client", sdk: "JavaScript / CLI" } as const;
 export type HarnessKind = keyof typeof harnessLabels;
 export interface ClientIdentity {
@@ -20,6 +21,8 @@ export interface ConnectionSnapshot {
   observedAt: number;
   host: { version: string | null; pid: number };
   clients: HarnessConnection[];
+  harnesses?: Array<{ harness: "codex" | "opencode" | "dsh"; installed: boolean; configured: boolean; version: string | null }>;
+  actions?: LocalAction[];
 }
 
 /** Client names are hints, never authority. Do not forward arbitrary names or paths. */

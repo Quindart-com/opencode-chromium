@@ -25,6 +25,7 @@ import { runtimeDirectory,withRuntimeLock } from "./runtime-lifecycle.ts";
 import { createParticipant,participantBusy,participants,processAlive,readJournal } from "./runtime-participants.ts";
 import { runActivationCoordinator } from "./runtime-coordinator.ts";
 import { createIdleUpdateCheck,createRuntimeUpdater,probeRuntimeActivity } from "./runtime-updates.ts";
+import { createLocalActions } from "./local-actions.ts";
 import { embedMemoryTexts,handleSemanticHostMethod,rankPageUnits } from "./semantic-search.ts";
 import { rankInputSchema } from "./semantic-types.ts";
 import { createUploadFiles } from "./uploads.ts";
@@ -89,6 +90,7 @@ try {
   log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
 const uploadFiles = createUploadFiles();
+const localActions = createLocalActions();
 const firefoxHost = createFirefoxHost({ getProfile: () => state.profile, onEvent: (tabId, method, params) => {
   void relay.requestExtension("firefox.event", { tabId, method, params }).catch(() => {});
 } });
@@ -98,7 +100,12 @@ const relay: RpcRelay = new RpcRelay({
   onProfile: registerProfile,
   admit: async () => { await hostActivity.enter(); return () => hostActivity.leave(); },
   canDisconnect: () => !participants(runtimeDirectory()).some(row => processAlive(row.pid) && participantBusy(row)),
+  connectionDetails: () => ({ harnesses: localActions.harnesses(), actions: localActions.status() }),
   localHandler: async (method, params): Promise<unknown> => {
+    if (method === "connections.reconnect") return localActions.start("reconnect", params.target);
+    if (method === "connections.diagnose") return localActions.start("diagnose");
+    if (method === "runtime.updateNow") return localActions.start("update");
+    if (method === "runtime.actionStatus") return localActions.status(typeof params.id === "string" ? params.id : undefined);
     const firefox = await firefoxHost(method, params);
     if (firefox !== undefined) return firefox;
     if (method.startsWith("uploads.")) return uploadFiles(method, params);

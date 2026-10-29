@@ -40,6 +40,16 @@ let harnessConnections = { observedAt: Date.now(), host: { version: fixtureVersi
 ] };
 const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
+harnessConnections.harnesses = [{ harness: "codex", installed: true, configured: true, version: "1.2.3" }, { harness: "opencode", installed: true, configured: true, version: "2.0.0" }, { harness: "dsh", installed: true, configured: true, version: "0.2.0" }];
+harnessConnections.actions = [];
+const localJobs = new Map();
+fs.mkdirSync(process.env.AGENT_BROWSER_PROVIDER_DIR, { recursive: true });
+const usageRows = [];
+for (let day = 0; day < 7; day++) for (const [route, provider, tokens] of [["openrouter", "jev", 100], ["openrouter", "openai-decisions", 900], ["openai", "openai-decisions", 50]]) {
+  usageRows.push({ at: Date.now() - day * 86400000, route, provider, purpose: "select", status: "selected", elapsedMs: 120, usage: { input_tokens: tokens, output_tokens: 0 } });
+}
+usageRows.push({ at: Date.UTC(new Date().getUTCFullYear() - 1, 5, 1), route: "openai", provider: "openai-decisions", purpose: "select", status: "selected", elapsedMs: 200, usage: { input_tokens: 1200000, output_tokens: 333 } });
+fs.writeFileSync(path.join(process.env.AGENT_BROWSER_PROVIDER_DIR, "usage.jsonl"), usageRows.map(row => JSON.stringify(row)).join("\n") + "\n");
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = (${JSON.stringify(fixtureMessages)})[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getURL: value => value, getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
@@ -49,6 +59,19 @@ const server = http.createServer(async (req, res) => {
       const message = JSON.parse(text);
       let result;
       if (message.type === "GET_HARNESS_CONNECTIONS") result = { result: harnessConnections };
+      else if (["START_HARNESS_RECONNECT", "RUN_CONNECTION_DOCTOR", "INSTALL_RUNTIME_UPDATE"].includes(message.type)) {
+        const job = { id: randomUUID(), kind: message.type === "START_HARNESS_RECONNECT" ? "reconnect" : message.type === "INSTALL_RUNTIME_UPDATE" ? "update" : "diagnose", target: message.params?.target, state: "queued", code: "queued", updatedAt: Date.now() };
+        localJobs.set(job.id, job); harnessConnections.actions.unshift(job);
+        setTimeout(() => {
+          job.state = job.kind === "update" ? "waiting" : "succeeded"; job.code = job.kind === "update" ? "update_waiting" : job.kind === "diagnose" ? "healthy" : "refreshed"; job.updatedAt = Date.now();
+          if (job.kind === "reconnect") {
+            const row = harnessConnections.clients.find(client => client.harness === job.target);
+            if (row) { row.state = "responding"; row.lastSeenAt = Date.now(); }
+          }
+        }, 200);
+        result = { result: job };
+      }
+      else if (message.type === "GET_LOCAL_ACTION") result = { result: localJobs.get(message.params.id) ?? null };
       else if (message.type === "DISCONNECT_HARNESS") { harnessConnections = { ...harnessConnections, clients: harnessConnections.clients.filter(client => client.id !== message.params.id) }; result = { result: harnessConnections }; }
       else if (message.type === "RECONNECT_NATIVE_HOST") result = { result: { reconnecting: true } };
       else if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
@@ -62,7 +85,7 @@ const server = http.createServer(async (req, res) => {
         else throw new Error("Unexpected fixture method");
         result = { ok: true, result };
       } else if (message.type === "GET_PROFILE" || message.type === "GET_PROFILE_DETAILS") result = { profile: { profileId: "primary", profileLabel: storeFixture ? "Example browser" : "Primary" } };
-      else if (message.type === "GET_DECISION_SETTINGS") result = { result: { ...decisionSettings, usage: decisionUsage() } };
+      else if (message.type === "GET_DECISION_SETTINGS") result = { result: { ...decisionSettings, usage: decisionUsage({ provider: message.usage?.provider ?? decisionSettings.route + ":" + decisionSettings.provider, period: message.usage?.period ?? "7d" }) } };
       else if (message.type === "SET_DECISION_SETTINGS") {
         decisionSettings = { ...message.settings, ready: message.settings.shareText };
         result = { result: decisionSettings };
@@ -127,18 +150,39 @@ try {
   const connections = page.getByRole("region", { name: "Harness connections", exact: true });
   await connections.getByText("Codex", { exact: true }).waitFor();
   await connections.getByText("DeepSeek Harness", { exact: true }).waitFor();
-  await connections.getByText("Heartbeat overdue", { exact: true }).waitFor();
-  await connections.getByText("Tool call received", { exact: true }).waitFor();
+  await connections.getByText("OpenCode", { exact: true }).waitFor();
+  assert.equal(await connections.locator(".agent-row").count(), 3, "all named harnesses are always visible");
+  await connections.locator(".badge-online").waitFor();
+  assert.equal(await connections.locator(".badge-online").count(), 1);
+  assert.equal(await connections.locator(".badge-offline").count(), 2);
+  const badge = connections.locator(".badge-online");
+  assert.notEqual(await badge.evaluate(element => getComputedStyle(element).color), await connections.locator(".agent-identity strong").first().evaluate(element => getComputedStyle(element).color), "connected status has a distinct visible color");
   await page.screenshot({ path: path.join(root, "reports", "popup-harness-connections.png"), fullPage: true });
-  await connections.getByRole("button", { name: "Copy doctor command", exact: true }).click();
-  assert.equal(await page.evaluate(() => globalThis.fixtureCopiedText), "opencode-chromium doctor --repair-runtime --json");
+  await connections.screenshot({ path: path.join(root, "reports", "popup-connections-card.png"), animations: "disabled" });
   const dshRow = connections.locator("li", { hasText: "DeepSeek Harness" });
-  await dshRow.getByRole("button", { name: "Disconnect link", exact: true }).click();
-  await dshRow.getByText(/The harness stays open/).waitFor();
-  await dshRow.getByRole("button", { name: "Disconnect link", exact: true }).click();
-  await dshRow.waitFor({ state: "detached" });
+  await dshRow.getByRole("button", { name: "Connect DeepSeek Harness", exact: true }).click();
+  await dshRow.getByText("Connected", { exact: true }).waitFor();
   await connections.getByText("Codex", { exact: true }).waitFor();
-  assert.equal(harnessConnections.clients.length, 1, "disconnect targets only the selected bridge");
+  assert.equal(harnessConnections.clients.length, 2, "reconnect preserves existing links");
+  assert.equal(harnessConnections.clients.find(client => client.harness === "codex").state, "responding");
+  await connections.getByRole("button", { name: "Run checks", exact: true }).click();
+  await connections.getByText("Connection checks passed", { exact: true }).waitFor();
+  assert.equal(await connections.getByText("Copy doctor command", { exact: true }).count(), 0);
+  const dashboard = page.locator(".decision-overview");
+  await page.waitForFunction(() => document.querySelector(".usage-metrics dd")?.textContent === "700");
+  await dashboard.getByRole("combobox", { name: "Service", exact: true }).selectOption("openai:openai-decisions");
+  await page.waitForFunction(() => document.querySelector(".usage-metrics dd")?.textContent === "350");
+  await dashboard.getByRole("combobox", { name: "Period", exact: true }).selectOption("last-year");
+  await page.waitForFunction(() => document.querySelector(".usage-metrics dd")?.textContent === (1200000).toLocaleString());
+  assert.equal(await dashboard.locator(".usage-metrics dd").first().evaluate(element => { const range = document.createRange(); range.selectNodeContents(element); return range.getClientRects().length; }), 1, "usage numbers must not stack vertically");
+  await dashboard.getByRole("combobox", { name: "Period", exact: true }).selectOption("7d");
+  await dashboard.getByRole("combobox", { name: "Service", exact: true }).selectOption("all");
+  await page.waitForFunction(() => document.querySelector(".usage-metrics dd")?.textContent === (7350).toLocaleString());
+  assert.equal(await dashboard.locator(".usage-comparison tbody tr").count(), 3);
+  await dashboard.getByRole("img", { name: "Token usage", exact: true }).waitFor();
+  await page.screenshot({ path: path.join(root, "reports", "popup-usage-providers.png"), fullPage: true });
+  await dashboard.screenshot({ path: path.join(root, "reports", "popup-usage-card.png"), animations: "disabled" });
+  await dashboard.getByRole("combobox", { name: "Service", exact: true }).selectOption("current");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
   assert.equal(await page.locator("#memory-replays").textContent(), "0");
   assert.equal(await page.locator("#memory-success").textContent(), "—");
@@ -148,11 +192,11 @@ try {
   );
   await page.screenshot({ path: path.join(root, "reports", "popup-replay-note.png"), fullPage: true });
   await page.getByRole("heading", { name: "Update your local browser tools" }).waitFor();
-  assert.match(await page.locator(".update-command").textContent(), /opencode-chromium@1.9.1/);
+  assert.equal(await page.locator(".update-command").count(), 0);
   await page.screenshot({ path: path.join(root, "reports", "popup-version-notice.png"), fullPage: true });
-  await page.getByText("How to update", { exact: true }).click();
-  await page.getByRole("button", { name: "Copy update command" }).click();
-  assert.equal(await page.evaluate(() => globalThis.fixtureCopiedText), "npm install -g opencode-chromium@1.9.1");
+  await page.locator(".version-notice").getByRole("button", { name: "Update CLI", exact: true }).click();
+  await page.locator(".version-notice").getByText("Update ready; activates when browser work is idle", { exact: true }).waitFor();
+  assert.equal([...localJobs.values()].filter(job => job.kind === "update").length, 1);
   await page.getByRole("button", { name: "Remind me in a week" }).click();
   await page.waitForFunction(() => !document.querySelector(".version-notice"));
   await page.reload();
@@ -287,9 +331,9 @@ try {
       assert.ok(Math.max(...measuredWidths) - Math.min(...measuredWidths) < 1, `all views share a stable width at ${width}px ${theme}`);
     }
   }
-  decisionSettings = { ...decisionSettings, provider: "openai-decisions", shareText: true, ready: false };
+  decisionSettings = { ...decisionSettings, provider: "openai-decisions", route: "openai", shareText: true, ready: false };
   await page.reload();
-  await page.getByText("OpenAI Luna", { exact: true }).waitFor();
+  await page.locator(".decision-provider-line").getByText("OpenAI Platform · Luna", { exact: true }).waitFor();
   await page.getByText("Connection needed.", { exact: false }).waitFor();
   versionStatus.state = "disconnected";
   versionStatus.error = "Native bridge unavailable.";

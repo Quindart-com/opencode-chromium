@@ -40,7 +40,7 @@ export async function saveAndTestProvider(params: unknown, fetcher: typeof fetch
     purpose: "verify", context: "Connection test: select the ready option.",
     instructions: "Select ready.", candidates: [{ id: "ready", description: "Ready" }],
   });
-  recordDecision(result, "test");
+  recordDecision(result, "test", false, settings);
   const check = { elapsedMs: result.elapsedMs, authMs, model: result.model, usage: result.usage };
   if (result.status !== "selected" || result.candidateId !== "ready") return { ...check, ok: false,
     message: messages[result.reason ?? ""] ?? "The decision test failed. Settings were not changed; try again later." };

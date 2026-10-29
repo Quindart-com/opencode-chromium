@@ -195,7 +195,7 @@
     "message": "Show activity for"
   },
   "thisProfile": {
-    "message": "This profile"
+    "message": "This browser profile"
   },
   "allProfiles": {
     "message": "All profiles"
@@ -273,7 +273,7 @@
     "message": "Read the release notes"
   },
   "connectAgent": {
-    "message": "Connect your coding agent"
+    "message": "Connect"
   },
   "runTerminal": {
     "message": "Run this in a terminal. Setup connects the supported harnesses it finds and registers the browser’s native host."
@@ -1198,5 +1198,149 @@
   },
   "harnessToolsExplanation": {
     "message": "Initialization and a live heartbeat confirm the browser link. Tool registration and availability inside the harness are controlled by that harness."
+  },
+  "usageProvider": {
+    "message": "Service"
+  },
+  "usagePeriod": {
+    "message": "Period"
+  },
+  "usageAllProviders": {
+    "message": "All services"
+  },
+  "usageCurrentProvider": {
+    "message": "Current service"
+  },
+  "usageLast7": {
+    "message": "Last 7 days"
+  },
+  "usageLast30": {
+    "message": "Last 30 days"
+  },
+  "usageLastWeek": {
+    "message": "Last week"
+  },
+  "usageLastYear": {
+    "message": "Last year"
+  },
+  "usageAllTime": {
+    "message": "All time"
+  },
+  "usageInput": {
+    "message": "Input tokens"
+  },
+  "usageOutput": {
+    "message": "Output tokens"
+  },
+  "usageTrend": {
+    "message": "Token usage"
+  },
+  "usageNoData": {
+    "message": "No usage in this period"
+  },
+  "usageServices": {
+    "message": "Compare services"
+  },
+  "usageUnattributed": {
+    "message": "Earlier · unassigned"
+  },
+  "usageLocalHistory": {
+    "message": "Tests: $1 · usage reported: $2/$3 calls · UTC"
+  },
+  "usageSavingsGlobal": {
+    "message": "Local savings · all services this session"
+  },
+  "usageAccountingIncomplete": {
+    "message": "Missing provider reports are excluded from token and cost totals."
+  },
+  "statusConnected": {
+    "message": "Connected"
+  },
+  "statusDisconnected": {
+    "message": "Disconnected"
+  },
+  "statusNotInstalled": {
+    "message": "Not installed"
+  },
+  "statusUnknown": {
+    "message": "Needs update"
+  },
+  "statusBusy": {
+    "message": "Working"
+  },
+  "bridgeReady": {
+    "message": "CLI ready"
+  },
+  "reconnectAgent": {
+    "message": "Reconnect"
+  },
+  "reconnectNamed": {
+    "message": "Reconnect $1"
+  },
+  "connectNamed": {
+    "message": "Connect $1"
+  },
+  "connectionUpgrade": {
+    "message": "Update the CLI to show agent status."
+  },
+  "updateCli": {
+    "message": "Update CLI"
+  },
+  "agentsKeepRunning": {
+    "message": "Your sessions stay open"
+  },
+  "runConnectionChecks": {
+    "message": "Run checks"
+  },
+  "actionQueued": {
+    "message": "Starting…"
+  },
+  "actionRunning": {
+    "message": "Working…"
+  },
+  "actionReconnected": {
+    "message": "Browser tools refreshed"
+  },
+  "actionBusy": {
+    "message": "Waiting for the current browser step"
+  },
+  "actionWaiting": {
+    "message": "Ready for the next agent turn"
+  },
+  "actionUnreachable": {
+    "message": "Agent link is not responding"
+  },
+  "actionHealthy": {
+    "message": "Connection checks passed"
+  },
+  "actionNeedsAttention": {
+    "message": "A connection still needs attention"
+  },
+  "actionUpdated": {
+    "message": "Latest production CLI installed"
+  },
+  "actionUpdateWaiting": {
+    "message": "Update ready; activates when browser work is idle"
+  },
+  "actionUnmanaged": {
+    "message": "Updates are unavailable for this installation"
+  },
+  "actionFailed": {
+    "message": "Could not complete this action. Try again."
+  },
+  "actionUnavailable": {
+    "message": "The local action helper is unavailable."
+  },
+  "actionStatusUnavailable": {
+    "message": "Waiting for local progress…"
+  },
+  "actionUpdating": {
+    "message": "Updating CLI…"
+  },
+  "checkInstallUpdates": {
+    "message": "Check and install updates"
+  },
+  "updateAutomaticHelp": {
+    "message": "The CLI updates in the background. Running agents and saved keys are preserved."
   }
 }

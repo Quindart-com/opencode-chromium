@@ -195,7 +195,7 @@
     "message": "Mostrar atividade de"
   },
   "thisProfile": {
-    "message": "Este perfil"
+    "message": "Este perfil do navegador"
   },
   "allProfiles": {
     "message": "Todos os perfis"
@@ -273,7 +273,7 @@
     "message": "Ler as notas da versão"
   },
   "connectAgent": {
-    "message": "Conecte seu agente de programação"
+    "message": "Conectar"
   },
   "runTerminal": {
     "message": "Execute este comando em um terminal. A configuração conecta as ferramentas compatíveis encontradas e registra o host nativo do navegador."
@@ -1198,5 +1198,149 @@
   },
   "harnessToolsExplanation": {
     "message": "A inicialização e um sinal recente confirmam o link do navegador. O registro e a disponibilidade das ferramentas são controlados pelo próprio agente."
+  },
+  "usageProvider": {
+    "message": "Serviço"
+  },
+  "usagePeriod": {
+    "message": "Período"
+  },
+  "usageAllProviders": {
+    "message": "Todos os serviços"
+  },
+  "usageCurrentProvider": {
+    "message": "Serviço atual"
+  },
+  "usageLast7": {
+    "message": "Últimos 7 dias"
+  },
+  "usageLast30": {
+    "message": "Últimos 30 dias"
+  },
+  "usageLastWeek": {
+    "message": "Semana passada"
+  },
+  "usageLastYear": {
+    "message": "Ano passado"
+  },
+  "usageAllTime": {
+    "message": "Todo o histórico"
+  },
+  "usageInput": {
+    "message": "Tokens de entrada"
+  },
+  "usageOutput": {
+    "message": "Tokens de saída"
+  },
+  "usageTrend": {
+    "message": "Consumo de tokens"
+  },
+  "usageNoData": {
+    "message": "Sem uso neste período"
+  },
+  "usageServices": {
+    "message": "Comparar serviços"
+  },
+  "usageUnattributed": {
+    "message": "Anterior · sem atribuição"
+  },
+  "usageLocalHistory": {
+    "message": "Testes: $1 · uso informado: $2/$3 chamadas · UTC"
+  },
+  "usageSavingsGlobal": {
+    "message": "Economia local · todos os serviços nesta sessão"
+  },
+  "usageAccountingIncomplete": {
+    "message": "Relatórios ausentes são excluídos dos totais de tokens e custo."
+  },
+  "statusConnected": {
+    "message": "Conectado"
+  },
+  "statusDisconnected": {
+    "message": "Desconectado"
+  },
+  "statusNotInstalled": {
+    "message": "Não instalado"
+  },
+  "statusUnknown": {
+    "message": "Requer atualização"
+  },
+  "statusBusy": {
+    "message": "Em andamento"
+  },
+  "bridgeReady": {
+    "message": "CLI pronto"
+  },
+  "reconnectAgent": {
+    "message": "Reconectar"
+  },
+  "reconnectNamed": {
+    "message": "Reconectar $1"
+  },
+  "connectNamed": {
+    "message": "Conectar $1"
+  },
+  "connectionUpgrade": {
+    "message": "Atualize o CLI para ver o estado dos agentes."
+  },
+  "updateCli": {
+    "message": "Atualizar CLI"
+  },
+  "agentsKeepRunning": {
+    "message": "Suas sessões continuam abertas"
+  },
+  "runConnectionChecks": {
+    "message": "Diagnosticar"
+  },
+  "actionQueued": {
+    "message": "Iniciando…"
+  },
+  "actionRunning": {
+    "message": "Em andamento…"
+  },
+  "actionReconnected": {
+    "message": "Ferramentas do navegador recarregadas"
+  },
+  "actionBusy": {
+    "message": "Aguardando a ação atual do navegador"
+  },
+  "actionWaiting": {
+    "message": "Pronto para o próximo turno do agente"
+  },
+  "actionUnreachable": {
+    "message": "A conexão do agente não responde"
+  },
+  "actionHealthy": {
+    "message": "Diagnóstico concluído"
+  },
+  "actionNeedsAttention": {
+    "message": "Uma conexão precisa de atenção"
+  },
+  "actionUpdated": {
+    "message": "CLI de produção mais recente instalado"
+  },
+  "actionUpdateWaiting": {
+    "message": "Atualização pronta; ativa quando o navegador estiver livre"
+  },
+  "actionUnmanaged": {
+    "message": "Atualizações indisponíveis para esta instalação"
+  },
+  "actionFailed": {
+    "message": "Não foi possível concluir. Tente novamente."
+  },
+  "actionUnavailable": {
+    "message": "O assistente de ações locais está indisponível."
+  },
+  "actionStatusUnavailable": {
+    "message": "Aguardando o progresso local…"
+  },
+  "actionUpdating": {
+    "message": "Atualizando CLI…"
+  },
+  "checkInstallUpdates": {
+    "message": "Buscar e instalar atualizações"
+  },
+  "updateAutomaticHelp": {
+    "message": "O CLI atualiza em segundo plano. Os agentes e as chaves são preservados."
   }
 }

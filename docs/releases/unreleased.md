@@ -1,10 +1,14 @@
 # Unreleased
 
-- Replace the ambiguous extension status with a verified local-bridge indicator and a harness connection panel showing identity hints, versions, process IDs, heartbeats, initialization/tool-call evidence and pending commands.
-- Add extension-only refresh, confirmed disconnect and safe bridge reconnect controls, with CLI doctor guidance. Preserve browser tabs and provider credentials; protect active requests, sessions and approvals.
-- Announce initialized MCP and OpenCode clients, expire missed heartbeats visibly, and stop presence when adapters unload.
-- Prevent delayed old native-port callbacks from breaking a replacement connection, and stop empty extension sessions from blocking runtime updates.
-- Give consented image decision fallback a bounded five-second allowance while preserving the shorter text-decision deadline.
-- Correct OpenCode V2 package detection, directory registration and native tool-transform compatibility.
-- Add fresh development-extension publication to the existing unpacked path, with a build fingerprint, backup and rollback. Keep production runtime selection intact and repair source checkout/merge sync hooks.
-- Translate the connection controls and status wording into all six shipped locales.
+- Replace the ambiguous connection panel with always-visible, colored Codex/OpenCode/DeepSeek rows and a separate verified CLI bridge status.
+- Add direct scoped plugin reconnect, bridge reconnect and connection checks through tracked background CLI jobs. Preserve running harnesses, unrelated agents, retained tabs and provider keys; guard active calls and approvals across contexts sharing a process.
+- Add background CLI update buttons, progress and deferred activation. Validate stable official npm releases, preserve automatic-update preferences and refresh owned agent guidance.
+- Separate decision usage by provider/service, retain reliable legacy attribution, and add date filters, complete historical totals, a token chart and a comparison table.
+- Guide agents to ask Approve / Disapprove after automatic authorization rejection. Distinguish missed upload confirmation from explicit human refusal and preserve the original consent boundary and immutable approval tokens.
+- Preserve authorization guidance in compact tool responses and label session-wide request savings separately from provider accounting.
+- Announce initialized clients, surface stale links, ignore delayed callbacks from replaced native ports and remove empty finalized extension sessions that blocked updates.
+- Give consented image fallback a bounded five-second allowance while preserving the shorter text deadline.
+- Correct OpenCode V2 package detection, directory setup and native tool-transform compatibility.
+- Rebuild and publish development extensions to the existing unpacked path with a fingerprint, backup and rollback. Repair checkout/merge sync hooks without switching production runtime selection.
+- Preserve skill backups without treating them as stale active instructions. Translate the new UI in all six shipped locales.
+- Extend real browser/native-host verification for the full extension-to-CLI-to-MCP refresh path and isolate fixture harness configuration; retry only disposable pre-action cold startup once with diagnostics.
