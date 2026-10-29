@@ -217,6 +217,8 @@ npx -y opencode-chromium@latest uninstall --targets codex
 ```
 
 Use `--config harness-id=/absolute/path` for a custom configuration. Existing aliases, package names, profiles, and runtime data remain supported. [Troubleshooting](docs/troubleshooting.md).
+
+The extension distinguishes a responding local bridge from harness connections. Its connection panel shows observed agent links, versions and heartbeat health, with guarded disconnect/reconnect controls and a CLI doctor command. See [connection health](docs/connection-health.md).
 </details>
 
 <details><summary><strong>Develop and release</strong></summary>
@@ -231,6 +233,8 @@ bun run check:firefox
 ```
 
 Both extensions share WXT/React source. Separate output directories prevent one build replacing the other. Forward version bumps on `master` trigger npm and store release workflows. Mozilla submissions can remain pending review before publication. [Architecture](docs/architecture.md) · [Firefox publishing](docs/firefox.md).
+
+For a stale unpacked extension, run `bun src/cli/index.ts dev-extension --source /absolute/checkout --output /absolute/loaded/extension`, then reload it in the browser. This refreshes the existing extension path and labels the build with its source fingerprint while retaining production runtime selection. See [local development builds](docs/connection-health.md#refresh-a-stale-unpacked-extension).
 </details>
 
 Questions and ideas: [Discussions](https://github.com/Quindart-com/opencode-chromium/discussions). Bugs: [Issues](https://github.com/Quindart-com/opencode-chromium/issues). [MIT license](LICENSE).

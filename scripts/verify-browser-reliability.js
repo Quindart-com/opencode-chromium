@@ -182,7 +182,20 @@ try {
   assert.equal(page.url(), beforeUnloadUrl);
   await page.evaluate(() => { window.onbeforeunload = null; });
   checked("beforeunload cancellation through the independent recovery path");
+  const panel = await fixture.context.newPage();
+  await panel.goto(`chrome-extension://${fixture.extensionId}/popup.html`);
+  const connectionControl = message => panel.evaluate(value => chrome.runtime.sendMessage(value), message);
+  const inventory = await connectionControl({ type: "GET_HARNESS_CONNECTIONS" });
+  assert.ok(inventory.result.clients.some(client => client.harness === "sdk" && client.phase === "used" && client.state === "responding"));
+  const connectionId = inventory.result.clients.find(client => client.harness === "sdk").id;
+  const protectedDisconnect = await connectionControl({ type: "DISCONNECT_HARNESS", params: { id: connectionId } });
+  assert.match(protectedDisconnect.error, /Finish browser work/);
   await call("browser_finalize", {});
+  const disconnected = await connectionControl({ type: "DISCONNECT_HARNESS", params: { id: connectionId } });
+  assert.ok(disconnected.result, JSON.stringify(disconnected));
+  assert.ok(!disconnected.result.clients.some(client => client.id === connectionId));
+  await panel.close();
+  checked("real connection inventory, active-work protection and targeted idle disconnect");
   fs.mkdirSync("reports", { recursive: true });
   fs.writeFileSync("reports/browser-reliability.json", JSON.stringify({ ok: true, checks }, null, 2));
 } finally {

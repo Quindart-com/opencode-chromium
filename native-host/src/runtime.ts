@@ -97,6 +97,7 @@ const relay: RpcRelay = new RpcRelay({
   extensionWriter: (message: unknown) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
   admit: async () => { await hostActivity.enter(); return () => hostActivity.leave(); },
+  canDisconnect: () => !participants(runtimeDirectory()).some(row => processAlive(row.pid) && participantBusy(row)),
   localHandler: async (method, params): Promise<unknown> => {
     const firefox = await firefoxHost(method, params);
     if (firefox !== undefined) return firefox;

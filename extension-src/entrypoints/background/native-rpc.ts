@@ -41,9 +41,11 @@ export class NativeRpc {
     if (this.#port) return;
     try {
       this.#port = this.options.chrome.runtime.connectNative(this.options.hostName);
-      this.options.status({ state: "connected", error: null, nextRetryMs: null, versionChecked: false, nativeHostVersion: null, clientVersions: [], unknownClientVersion: false });
-      this.#port.onMessage.addListener((message: unknown) => { void this.#handleMessage(message); });
-      this.#port.onDisconnect.addListener(() => {
+      this.options.status({ state: "connecting", error: null, nextRetryMs: null, versionChecked: false, nativeHostVersion: null, clientVersions: [], unknownClientVersion: false });
+      const port = this.#port;
+      port.onMessage.addListener((message: unknown) => { if (this.#port === port) void this.#handleMessage(message); });
+      port.onDisconnect.addListener(() => {
+        if (this.#port !== port) return;
         this.options.disconnected();
         const error = this.options.chrome.runtime.lastError;
         this.#port = null;
@@ -56,6 +58,18 @@ export class NativeRpc {
       this.options.status({ state: "disconnected", error: String(error instanceof Error ? error.message : error) });
       this.#scheduleReconnect();
     }
+  }
+
+  reconnect(): void {
+    if (!this.idle()) throw new Error("Browser commands are still running");
+    const port = this.#port;
+    this.#port = null;
+    if (this.#reconnectTimer) clearTimeout(this.#reconnectTimer);
+    this.#reconnectTimer = null;
+    port?.disconnect();
+    this.options.disconnected();
+    this.options.status({ state: "reconnecting", nativeHostVersion: null, clientVersions: [], versionChecked: false });
+    this.connect();
   }
 
   async notify(method: string, params: object): Promise<void> {
@@ -80,7 +94,9 @@ export class NativeRpc {
 
   heartbeat(): void {
     if (!this.#port) { this.connect(); return; }
+    const port = this.#port;
     void this.request("ping", { time: new Date().toISOString() }).catch(error => {
+      if (this.#port !== port) return;
       this.options.status({ state: "disconnected", error: String(error instanceof Error ? error.message : error) });
       this.#rejectPending("Native host heartbeat failed");
       this.#port?.disconnect(); this.#port = null; this.#scheduleReconnect();
@@ -129,6 +145,6 @@ export class NativeRpc {
     if (!pending) return;
     this.#pending.delete(message.id); clearTimeout(pending.timeout);
     if (message.error) pending.reject(Object.assign(new Error(String(record(message.error).message ?? "RPC error")), record(record(message.error).data)));
-    else pending.resolve(message.result);
+    else { this.options.status({ state: "connected", error: null, nextRetryMs: null }); pending.resolve(message.result); }
   }
 }

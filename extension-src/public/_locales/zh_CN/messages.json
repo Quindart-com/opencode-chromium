@@ -6,7 +6,7 @@
     "message": "将 OpenCode、Codex 和 MCP 智能体连接到浏览器，搜索网页、填写表单、截图并使用本地操作记忆。"
   },
   "connected": {
-    "message": "已连接"
+    "message": "桥接已连接"
   },
   "checking": {
     "message": "正在检查"
@@ -354,7 +354,7 @@
     "message": "请从浏览器工具栏打开扩展程序以检查连接。"
   },
   "runtimeConnected": {
-    "message": "运行时已连接"
+    "message": "本地桥接已连接"
   },
   "checkingConnection": {
     "message": "正在检查连接"
@@ -363,7 +363,7 @@
     "message": "连接浏览器"
   },
   "runtimeExplanation": {
-    "message": "扩展已连接到本地运行时。请在智能体中选择此配置文件。浏览器工具会单独报告标签页状态和待处理对话框。"
+    "message": "原生进程正在响应。请查看下方的代理连接，确认哪些代理链接处于活动状态。"
   },
   "runtimeChecking": {
     "message": "正在查找本地运行时。您的设置保留在此设备上。"
@@ -1105,5 +1105,98 @@
   },
   "postUpdateMaster": {
     "message": "当前工作完成后，运行设置并重新连接一次 MCP。未来兼容更新会在后台下载，并在所有浏览器会话结束后切换，同时保持受管理的 MCP 连接。固定版本的命令和开发检出仍由您控制。"
+  },
+  "harnessConnections": {
+    "message": "代理连接"
+  },
+  "refreshConnections": {
+    "message": "刷新"
+  },
+  "connectionLayers": {
+    "message": "分别检查本地桥接和每个代理连接。"
+  },
+  "localBridge": {
+    "message": "扩展 ↔ 本地桥接"
+  },
+  "bridgeResponding": {
+    "message": "有响应"
+  },
+  "bridgeUnavailable": {
+    "message": "无响应"
+  },
+  "connectionsUnsupported": {
+    "message": "连接详情需要更新本地运行时。请运行设置，然后重新连接代理。"
+  },
+  "connectionsUnavailable": {
+    "message": "无法检查连接详情。请运行下方的诊断命令。"
+  },
+  "noHarnessConnections": {
+    "message": "未检测到代理连接。桥接已连接不代表 Codex、OpenCode 或 DeepSeek 已加载工具。"
+  },
+  "harnessResponding": {
+    "message": "已收到心跳"
+  },
+  "harnessStale": {
+    "message": "心跳已超时"
+  },
+  "harnessUnidentified": {
+    "message": "旧版客户端 · 无法识别身份"
+  },
+  "runtimeVersionLabel": {
+    "message": "运行时"
+  },
+  "harnessVersionLabel": {
+    "message": "代理"
+  },
+  "harnessToolReceived": {
+    "message": "已收到工具调用"
+  },
+  "harnessInitialized": {
+    "message": "已初始化 · 尚未检测到工具调用"
+  },
+  "harnessPending": {
+    "message": "$1 个待处理"
+  },
+  "harnessLastSeen": {
+    "message": "最近心跳：$1"
+  },
+  "disconnectHarnessConfirm": {
+    "message": "要断开此浏览器连接吗？代理将保持运行，并可能在下次请求或心跳时重新连接。请先完成其浏览器任务。"
+  },
+  "disconnectBridge": {
+    "message": "断开连接"
+  },
+  "cancelConnectionAction": {
+    "message": "取消"
+  },
+  "harnessDisconnected": {
+    "message": "浏览器连接已断开。请从代理重新连接，或再次调用浏览器工具。"
+  },
+  "bridgeReconnecting": {
+    "message": "正在重新连接本地桥接…"
+  },
+  "reconnectBridge": {
+    "message": "重新连接本地桥接"
+  },
+  "copyDoctor": {
+    "message": "复制诊断命令"
+  },
+  "doctorCopied": {
+    "message": "已复制诊断命令。"
+  },
+  "reconnectHarnessHelp": {
+    "message": "重新连接代理"
+  },
+  "reconnectCodexHelp": {
+    "message": "Codex：在插件设置中停用并启用此插件，以重新加载 MCP 工具。可能需要新建聊天。"
+  },
+  "reconnectOpenCodeHelp": {
+    "message": "OpenCode：运行 opencode reload。现有会话将在下一步采用新配置。"
+  },
+  "reconnectDshHelp": {
+    "message": "DeepSeek Harness：重新加载 MCP 插件，或重新打开已配置的配置文件。"
+  },
+  "harnessToolsExplanation": {
+    "message": "初始化和实时心跳可确认浏览器连接。工具注册和可用性由代理自身控制。"
   }
 }

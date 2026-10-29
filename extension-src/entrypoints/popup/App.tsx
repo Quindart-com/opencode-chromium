@@ -16,7 +16,7 @@ type ViewName = "overview" | "profiles" | "settings";
 
 function statusClass(state: string): string {
   if (state === "connected") return "pill-ok";
-  if (state === "reconnecting" || state === "unknown") return "pill-warn";
+  if (state === "connecting" || state === "reconnecting" || state === "unknown") return "pill-warn";
   return "pill-bad";
 }
 
@@ -74,7 +74,7 @@ function useNativeStatus(): NativeStatus {
 
 function Header({ status }: { status: NativeStatus }): React.JSX.Element {
   const state = status.state ?? "unknown";
-  const statusText = state === "connected" ? t("connected") : state === "unknown" ? t("checking") : state === "reconnecting" ? t("reconnecting") : t("notConnected");
+  const statusText = state === "connected" ? t("connected") : state === "unknown" || state === "connecting" ? t("checking") : state === "reconnecting" ? t("reconnecting") : t("notConnected");
 
   return (
     <header id="app-header">
@@ -82,7 +82,7 @@ function Header({ status }: { status: NativeStatus }): React.JSX.Element {
       <div id="app-identity">
         <h1>OpenCode Browser</h1>
         <p id="app-subtitle">
-          <span id="app-version">v{browser.runtime.getManifest().version}</span> · {t("localAutomation")}
+          <span id="app-version">v{browser.runtime.getManifest().version_name ?? browser.runtime.getManifest().version}</span> · {t("localAutomation")}
         </p>
       </div>
       <div id="status-pill" className={`pill ${statusClass(state)}`} role="status">

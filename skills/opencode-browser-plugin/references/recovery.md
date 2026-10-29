@@ -2,6 +2,10 @@
 
 Check the failing layer before changing an installation. A visible skill is a local file; the MCP process must separately start and advertise its tools. The extension's connected indicator describes its native-host connection, not Codex's MCP startup.
 
+The extension's Harness connections panel reports observed client identity hints, loaded runtime versions, initialization/tool-call evidence and heartbeat freshness. A responding bridge is not proof that a harness registered tools. Use Refresh to obtain current evidence. Guarded Disconnect link closes only the selected browser IPC connection; the harness may reconnect on its next call or heartbeat. Reconnect local bridge preserves tabs and provider keys and requires browser work to finish first. Connection reporting requires a matching runtime; older hosts explicitly report that it is unavailable.
+
+For an unpacked extension stuck on an old version, inspect its exact Loaded from path. Browser reload does not compile source. From the intended source checkout, run `bun src/cli/index.ts dev-extension --source <checkout> --output <loaded-extension-directory>` and reload the extension. The dev label includes a source fingerprint; publication retains a backup and does not change the production runtime selection. Source checkout/merge hooks refresh an explicitly linked development path through sync.
+
 ## Skill visible, browser tools missing
 
 1. Read the installed plugin's `.mcp.json` if available to identify its package version and command. Run the bundled diagnostic using the absolute path to this skill's `scripts/diagnose-mcp.mjs`:

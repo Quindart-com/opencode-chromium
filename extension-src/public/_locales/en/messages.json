@@ -6,7 +6,7 @@
     "message": "Connect OpenCode, Codex and MCP agents to your browser for page search, forms, screenshots and local action memory."
   },
   "connected": {
-    "message": "Connected"
+    "message": "Bridge connected"
   },
   "checking": {
     "message": "Checking"
@@ -354,7 +354,7 @@
     "message": "Open the extension from your browser toolbar to check the connection."
   },
   "runtimeConnected": {
-    "message": "Runtime connected"
+    "message": "Local bridge connected"
   },
   "checkingConnection": {
     "message": "Checking connection"
@@ -363,7 +363,7 @@
     "message": "Connect your browser"
   },
   "runtimeExplanation": {
-    "message": "The extension is connected to your local runtime. Choose this profile in your agent. Tab health and pending browser dialogs are reported separately by the browser tools."
+    "message": "The native host is responding. Check Harness connections below to see which agent links are alive."
   },
   "runtimeChecking": {
     "message": "Looking for the local runtime. Your settings stay on this device."
@@ -1105,5 +1105,98 @@
   },
   "postUpdateMaster": {
     "message": "Run setup and reconnect MCP once after current work finishes. Future compatible updates download in the background and switch when all browser sessions finish, keeping managed MCP connections open. Pinned commands and development checkouts stay under your control."
+  },
+  "harnessConnections": {
+    "message": "Harness connections"
+  },
+  "refreshConnections": {
+    "message": "Refresh"
+  },
+  "connectionLayers": {
+    "message": "The local bridge and each agent connection are checked separately."
+  },
+  "localBridge": {
+    "message": "Extension ↔ local bridge"
+  },
+  "bridgeResponding": {
+    "message": "Responding"
+  },
+  "bridgeUnavailable": {
+    "message": "Not responding"
+  },
+  "connectionsUnsupported": {
+    "message": "Connection details need an updated local runtime. Run setup, then reconnect your agent."
+  },
+  "connectionsUnavailable": {
+    "message": "Connection details could not be checked. Run the doctor command below."
+  },
+  "noHarnessConnections": {
+    "message": "No harness connection observed. A connected bridge does not mean Codex, OpenCode or DeepSeek has loaded its tools."
+  },
+  "harnessResponding": {
+    "message": "Heartbeat received"
+  },
+  "harnessStale": {
+    "message": "Heartbeat overdue"
+  },
+  "harnessUnidentified": {
+    "message": "Older client · identity unavailable"
+  },
+  "runtimeVersionLabel": {
+    "message": "Runtime"
+  },
+  "harnessVersionLabel": {
+    "message": "Harness"
+  },
+  "harnessToolReceived": {
+    "message": "Tool call received"
+  },
+  "harnessInitialized": {
+    "message": "Initialized · no tool call observed yet"
+  },
+  "harnessPending": {
+    "message": "$1 pending"
+  },
+  "harnessLastSeen": {
+    "message": "Last heartbeat: $1"
+  },
+  "disconnectHarnessConfirm": {
+    "message": "Disconnect this browser link? The harness stays open and may reconnect on its next request or heartbeat. Finish its browser work first."
+  },
+  "disconnectBridge": {
+    "message": "Disconnect link"
+  },
+  "cancelConnectionAction": {
+    "message": "Cancel"
+  },
+  "harnessDisconnected": {
+    "message": "Browser link disconnected. Reconnect from the harness or run another browser call."
+  },
+  "bridgeReconnecting": {
+    "message": "Reconnecting the local bridge…"
+  },
+  "reconnectBridge": {
+    "message": "Reconnect local bridge"
+  },
+  "copyDoctor": {
+    "message": "Copy doctor command"
+  },
+  "doctorCopied": {
+    "message": "Doctor command copied."
+  },
+  "reconnectHarnessHelp": {
+    "message": "Reconnect an agent"
+  },
+  "reconnectCodexHelp": {
+    "message": "Codex: disable and enable this plugin in Plugins settings to reload its MCP tools. A new chat may be required."
+  },
+  "reconnectOpenCodeHelp": {
+    "message": "OpenCode: run opencode reload. Existing sessions adopt the configuration at the next step."
+  },
+  "reconnectDshHelp": {
+    "message": "DeepSeek Harness: reload its MCP plugin or reopen the configured profile."
+  },
+  "harnessToolsExplanation": {
+    "message": "Initialization and a live heartbeat confirm the browser link. Tool registration and availability inside the harness are controlled by that harness."
   }
 }

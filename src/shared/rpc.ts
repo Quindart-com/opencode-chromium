@@ -8,6 +8,7 @@ export const rpcMessageSchema = z.looseObject({
   result: z.unknown().optional(),
   error: z.object({ code: z.number(), message: z.string(), data: z.unknown().optional() }).optional(),
   clientVersion: z.string().optional(),
+  clientInfo: z.unknown().optional(),
   coordinated: z.boolean().optional(),
 });
 export type RpcMessage = z.output<typeof rpcMessageSchema>;

@@ -14,6 +14,7 @@ import { installClient } from "./install.ts";
 import { runtimeDir } from "./native-host.ts";
 import { linkClientSurfaces,linkRuntime,runtimeStatus,syncRuntime,writeLaunchers } from "./runtime-link.ts";
 import { uninstallClient } from "./uninstall.ts";
+import { developmentExtensionSource,publishDevelopmentExtension } from "../management/development-extension.ts";
 
 
 async function runtimeBusy() {
@@ -43,6 +44,19 @@ function has(argv: string[], flag: string) {
 
 export async function dispatchCommand(argv = process.argv.slice(2)) {
   const [command = "doctor", ...rest] = argv;
+  if (command === "dev-extension") {
+    if (has(rest, "--help")) { console.log("Build and refresh the stable unpacked extension without changing the production runtime:\n  opencode-chromium dev-extension --source <checkout> [--output <existing-extension-directory>] [--dry-run]\nReload the unpacked extension at the returned extensionPath after the build."); return; }
+    console.log(JSON.stringify(await publishDevelopmentExtension({ root: valueAfter(rest, "--source") ?? process.cwd(), dir: runtimeDir(), output: valueAfter(rest, "--output"), dryRun: has(rest, "--dry-run") }), null, 2));
+    return;
+  }
+  if (command === "sync" && !readActivation(runtimeDir())?.followBranch) {
+    const source = developmentExtensionSource(runtimeDir());
+    if (source && path.resolve(source) === path.resolve(packageRoot())) {
+      const result = await publishDevelopmentExtension({ root: source, dir: runtimeDir(), dryRun: has(rest, "--dry-run") });
+      if (!has(rest, "--quiet")) console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+  }
   if (command === "updates") {
     const { createRuntimeUpdater } = await import("../../native-host/src/runtime-updates.ts");
     const updater = createRuntimeUpdater({ dir: runtimeDir() });

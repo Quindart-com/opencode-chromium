@@ -1268,3 +1268,13 @@ input, select, .button, button { max-width: 100%; }
   .decision-overview-heading { flex-wrap: wrap; }
 }
 #app-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; }
+.harness-list { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 10px; }
+.harness-row { border: 1px solid var(--surface-border); border-radius: 10px; padding: 12px; min-width: 0; }
+.harness-row.state-stale { border-color: #a86b00; }
+.harness-row-title { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.harness-row-title > span { font-size: 12px; }
+.harness-row p { overflow-wrap: anywhere; font-size: 12px; margin: 6px 0; }
+.bridge-details { margin: 12px 0; display: grid; gap: 4px; }
+.bridge-details dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.connection-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.connection-controls p { flex-basis: 100%; }

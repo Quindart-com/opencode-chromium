@@ -27,13 +27,13 @@ function executable(name: string): string | null {
   }
   return null;
 }
-function version(binary: string | null): string | null {
+export function harnessVersion(binary: string | null): string | null {
   if (!binary) return null;
   if (/\.(cmd|ps1)$/.test(binary)) {
     const command = path.basename(binary).replace(/\.(cmd|ps1)$/, "");
-    const packageName = ({ opencode: "opencode-ai", codex: "@openai/codex", claude: "@anthropic-ai/claude-code", dsh: "@deepseek-ai/dsh" } as Record<string, string>)[command];
-    if (packageName) {
-      try { return record(JSON.parse(fs.readFileSync(path.join(path.dirname(binary), "node_modules", packageName, "package.json"), "utf8")) as unknown).version as string; } catch { return null; }
+    const packages = ({ opencode: ["@opencode/cli", "opencode-ai"], codex: ["@openai/codex"], claude: ["@anthropic-ai/claude-code"], dsh: ["@deepseek-ai/dsh"] } as Record<string, string[]>)[command] ?? [];
+    for (const packageName of packages) {
+      try { return record(JSON.parse(fs.readFileSync(path.join(path.dirname(binary), "node_modules", packageName, "package.json"), "utf8")) as unknown).version as string; } catch { /* Try the supported legacy package. */ }
     }
     return null;
   }
@@ -56,7 +56,7 @@ export function detectHarnesses(home = os.homedir()): Harness[] {
     const config = fs.existsSync(filePath);
     const guiPath = id === "claude-desktop" ? platform === "darwin" ? "/Applications/Claude.app" : path.join(process.env.LOCALAPPDATA ?? "", "AnthropicClaude") : id === "codex" ? platform === "darwin" ? "/Applications/Codex.app" : path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Codex") : "";
     return { id, label, configPath: filePath, supported, detected: Boolean(binary || config || guiPath && fs.existsSync(guiPath)),
-      version: version(binary), executable: binary, restart: id === "claude-desktop" ? "desktop" : "terminal",
+      version: harnessVersion(binary), executable: binary, restart: id === "claude-desktop" ? "desktop" : "terminal",
       managed: config && managedConfiguration(fs.readFileSync(filePath, "utf8"), id, path.join(runtimeDir(), "plugin.mjs")) };
   });
 }

@@ -18,7 +18,9 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { closeBrowserClients } from "../../browser/client.ts";
+import { announceBrowserClient,closeBrowserClients } from "../../browser/client.ts";
+import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
+import { identifyHarness } from "../../shared/connections.ts";
 import { createBrowserOperations } from "../../browser/operations/index.ts";
 import { artifactUriTemplate } from "../../core/artifacts.ts";
 import { createCoreRegistry,createMemoryRegistry } from "../../core/registry.ts";
@@ -167,6 +169,7 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
       outputSchema: mcpSchema(definition.outputSchema),
       annotations: definition.annotations,
     }, async (args: unknown) => activity.call(async () => {
+      markBrowserClientUsed();
       try {
         const parsed = definition.inputSchema.parse(args ?? {});
         const result = definition.outputSchema.parse(await definition.execute(parsed, { sessionID: fallbackSessionId, sessionId: fallbackSessionId, agent: "mcp" }));
@@ -223,6 +226,14 @@ export async function registerLegacyTools(server: McpServer, fallbackSessionId: 
 
 export async function createServer({ runtime, toolset = "core", fallbackSessionId = `mcp-${randomUUID()}`, memory = memoryEnabledForServer() }: { runtime?: AgentBrowserRuntime; toolset?: string; fallbackSessionId?: string; memory?: boolean } = {}) {
   const server = new McpServer({ name: SERVER_NAME, version: packageVersion() }, { instructions: SERVER_INSTRUCTIONS });
+  let stopPresence: (() => void) | undefined;
+  const onclose = server.server.onclose;
+  server.server.onclose = () => { stopPresence?.(); onclose?.(); };
+  server.server.oninitialized = () => {
+    const client = server.server.getClientVersion();
+    if (client?.name === "managed-supervisor-probe") return;
+    stopPresence = startBrowserClientPresence(identifyHarness(client?.name), client?.version, "mcp", announceBrowserClient);
+  };
   if (toolset === "core" || toolset === "debug") await registerCoreTools(server, runtime ?? createAgentBrowserRuntime(), fallbackSessionId, { memory });
   if (toolset === "legacy" || toolset === "debug") await registerLegacyTools(server, fallbackSessionId);
   return server;

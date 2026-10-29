@@ -12,6 +12,8 @@ It includes a dependency-free MCP startup probe, targeted npm-cache repair, and
 separate recovery steps for an unresponsive or inaccessible native host. The skill
 and this helper remain available even when the MCP server cannot start.
 
+The **Harness connections** panel distinguishes a responding native bridge from an initialized agent link and a received tool call. Check each client's version and heartbeat, then use its guarded link controls or copied doctor command. See [connection health and stale unpacked builds](connection-health.md) for the exact evidence and recovery steps.
+
 ## discovery
 
 Covers: browser setup succeeds (the native host is installed and the

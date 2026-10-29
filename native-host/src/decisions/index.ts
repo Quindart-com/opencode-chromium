@@ -14,9 +14,11 @@ export async function decide(request: DecisionRequest, signal?: AbortSignal): Pr
   if (signal?.aborted) return { status: "abstained", elapsedMs: 0, reason: "cancelled" };
   if (request.image && !reserveImageRequest()) return { status: "unavailable", elapsedMs: 0, reason: "image_budget_exhausted" };
   const model = providerModel(settings, !!request.image)!;
-  const identity = `${settings.provider}:${settings.route}:${settings.shareText}:${settings.shareImages}:${model}`;
+  // Screenshot decisions need a separate bounded allowance; text ranking stays fast.
+  const timeoutMs = request.image ? 5000 : DEFAULT_DECISION_TIMEOUT_MS;
+  const identity = `${settings.provider}:${settings.route}:${settings.shareText}:${settings.shareImages}:${model}:${timeoutMs}`;
   if (!cached || cached.key !== key || cached.route !== identity) cached = { key, route: identity,
-    provider: new JevProvider(key, fetch, model, DEFAULT_DECISION_TIMEOUT_MS, settings.route, () => {
+    provider: new JevProvider(key, fetch, model, timeoutMs, settings.route, () => {
       const current = getProviderSettings();
       return current.provider === settings.provider && current.route === settings.route && current.keyEnv === settings.keyEnv &&
         current.shareText && current.shareImages === settings.shareImages && providerKey(current) === key;

@@ -3,6 +3,7 @@ import { profileHelloSchema,rpcMessageSchema,type ProfileHello,type RpcId,type R
 import { record } from "../../src/shared/values.ts";
 import { writeFrame } from "./framing.ts";
 import type { ProfileRegistration } from "./profile-registry.ts";
+import { HarnessConnections } from "./connections.ts";
 type RpcSocket = Pick<Writable, "write" | "on" | "destroy">;
 export interface RelayState { startedAt: string; ipcPath?: string; profile: (ProfileRegistration & { uploadConsentVersion?: number }) | null; nativeHostVersion?: string; lastExtensionMessageAt?: string }
 type PendingRequest = { socket: RpcSocket; clientId: RpcId; timeout: ReturnType<typeof setTimeout> };
@@ -23,6 +24,8 @@ export class RpcRelay {
   #clients = new Set<RpcSocket>();
   #clientVersions = new Map<RpcSocket, string | null>();
   #coordinated = new Set<RpcSocket>();
+  #connections = new HarnessConnections<RpcSocket>();
+  #canDisconnect: () => boolean;
   #admit: (() => Promise<() => void>) | undefined;
   #pendingRequests = new Map<number, PendingRequest>();
   #pendingBySocket = new Map<RpcSocket, Set<number>>();
@@ -31,12 +34,13 @@ export class RpcRelay {
   #onProfile: ((profile: ProfileHello) => void) | undefined;
   #localHandler: ((method: string, params: Record<string, unknown>) => unknown | Promise<unknown>) | undefined;
   #hostPending = new Map<number, { resolve(value: unknown): void; reject(error: unknown): void; timer: ReturnType<typeof setTimeout> }>();
-  constructor({ extensionWriter, state, onProfile, localHandler, admit }: { extensionWriter: ExtensionWriter; state: RelayState; onProfile?(profile: ProfileHello): void; localHandler?(method: string, params: Record<string, unknown>): unknown | Promise<unknown>; admit?(): Promise<() => void> }) {
+  constructor({ extensionWriter, state, onProfile, localHandler, admit, canDisconnect = () => true }: { extensionWriter: ExtensionWriter; state: RelayState; onProfile?(profile: ProfileHello): void; localHandler?(method: string, params: Record<string, unknown>): unknown | Promise<unknown>; admit?(): Promise<() => void>; canDisconnect?(): boolean }) {
     this.#extensionWriter = extensionWriter;
     this.#state = state;
     this.#onProfile = onProfile;
     this.#localHandler = localHandler;
     this.#admit = admit;
+    this.#canDisconnect = canDisconnect;
   }
 
   flushMemory() {
@@ -66,6 +70,7 @@ export class RpcRelay {
   }
 
   #removeClient(socket: RpcSocket) {
+    this.#connections.remove(socket);
     this.#clients.delete(socket);
     this.#coordinated.delete(socket);
     if (this.#clientVersions.delete(socket)) this.#broadcastVersions();
@@ -118,11 +123,12 @@ export class RpcRelay {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Reload the updated extension to enable upload confirmation; no files were uploaded");
       return;
     }
-    if (message?.method?.startsWith("uploads.") || message?.method?.startsWith("firefox.") || message?.method?.startsWith("runtime.update")) {
+    if (message?.method?.startsWith("connections.") || message?.method?.startsWith("uploads.") || message?.method?.startsWith("firefox.") || message?.method?.startsWith("runtime.update")) {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "This operation is restricted to the extension");
       return;
     }
     const observer = message?.method === "runtime.activity";
+    if (!observer) this.#connections.touch(socket, message.clientInfo, message.clientVersion, this.#pendingBySocket.get(socket)?.size ?? 0, message.method !== "host.status");
     if (!observer && typeof message?.clientVersion === "string" && /^\d{1,5}\.\d{1,5}\.\d{1,5}(?:\.\d{1,5})?(?:-[a-zA-Z0-9.-]{1,40})?$/.test(message.clientVersion) && this.#clientVersions.get(socket) !== message.clientVersion) {
       this.#clientVersions.set(socket, message.clientVersion);
       this.#broadcastVersions();
@@ -286,6 +292,18 @@ export class RpcRelay {
 
   async #respondToExtensionRequest(message: RpcMessage) {
     if (!message.method) return;
+    if (message.method === "connections.list" || message.method === "connections.disconnect") {
+      try {
+        if (message.method === "connections.disconnect") {
+          const socket = this.#connections.find(message.params.id);
+          if (!socket) throw new Error("Connection has already closed. Refresh the connection list.");
+          if (this.#pendingRequests.size || this.#hostPending.size || !this.#canDisconnect()) throw new Error("Browser commands are still running. Finish them before disconnecting.");
+          socket.destroy(); this.#removeClient(socket);
+        }
+        await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, result: this.#connections.snapshot(this.#state.nativeHostVersion, socket => this.#pendingBySocket.get(socket)?.size ?? 0) });
+      } catch (error) { await this.#extensionWriter({ jsonrpc: JSON_RPC_VERSION, id: message.id, error: { code: -32000, message: error instanceof Error ? error.message : "Connection action failed" } }); }
+      return;
+    }
     if (message.method === "ping") {
       await this.#extensionWriter({
         jsonrpc: JSON_RPC_VERSION,

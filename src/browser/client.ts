@@ -8,6 +8,7 @@ import { PLUGIN_VERSION } from "../core/versions.ts";
 import { BrowserRuntimeError } from "../core/errors.ts";
 import { isRecord,record } from "../shared/values.ts";
 import { reconciledTab,runRecoveryDoctor,sessionTabs,transportFailure } from "./recovery.ts";
+import { browserClientIdentity,stopBrowserClientPresence } from "./client-identity.ts";
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const PROFILE_STATUS_TIMEOUT_MS = 1000;
@@ -160,7 +161,7 @@ export class BrowserHostClient {
         this.#settle(id, () => reject(new Error(`Timed out waiting for browser host response to ${method}`)));
       }, timeoutMs);
       this.#pending.set(id, { method, resolve, reject, timeout });
-      writeFrame(socket, { jsonrpc: "2.0", method, params: { ...params, deadlineAt: record(params).deadlineAt ?? Date.now() + Math.max(1, timeoutMs - Math.min(1000, timeoutMs / 5)) }, id, clientVersion: PLUGIN_VERSION, coordinated: process.env.OPENCODE_BROWSER_COORDINATED === "1" }).catch((error) => {
+      writeFrame(socket, { jsonrpc: "2.0", method, params: { ...params, deadlineAt: record(params).deadlineAt ?? Date.now() + Math.max(1, timeoutMs - Math.min(1000, timeoutMs / 5)) }, id, clientVersion: PLUGIN_VERSION, clientInfo: browserClientIdentity(), coordinated: process.env.OPENCODE_BROWSER_COORDINATED === "1" }).catch((error) => {
         this.#settle(id, () => reject(error));
         this.#disconnect(error);
       });
@@ -183,9 +184,15 @@ function pooledBrowserClient(ipcPath: string, _options: { timeoutMs?: number } =
 }
 
 export function closeBrowserClients() {
+  stopBrowserClientPresence();
   for (const client of browserClients.values()) client.close();
   browserClients.clear();
   profileCache.clear();
+}
+
+/** Announce idle initialized harnesses too; skill installation alone is not a connection. */
+export async function announceBrowserClient() {
+  await Promise.allSettled(readProfileRegistrations().map(profile => pooledBrowserClient(profile.ipcPath).request("host.status", {}, { timeoutMs: 1500 })));
 }
 
 export function invalidateBrowserProfileCache() {

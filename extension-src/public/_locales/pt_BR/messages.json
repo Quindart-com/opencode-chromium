@@ -6,7 +6,7 @@
     "message": "Conecte OpenCode, Codex e agentes MCP ao navegador para pesquisar, preencher formulários, capturar telas e salvar ações."
   },
   "connected": {
-    "message": "Conectado"
+    "message": "Ponte conectada"
   },
   "checking": {
     "message": "Verificando"
@@ -354,7 +354,7 @@
     "message": "Abra a extensão na barra do navegador para verificar a conexão."
   },
   "runtimeConnected": {
-    "message": "Ambiente conectado"
+    "message": "Ponte local conectada"
   },
   "checkingConnection": {
     "message": "Verificando conexão"
@@ -363,7 +363,7 @@
     "message": "Conecte seu navegador"
   },
   "runtimeExplanation": {
-    "message": "A extensão está conectada ao ambiente local. Escolha este perfil no agente. As ferramentas do navegador informam separadamente o estado das abas e os diálogos pendentes."
+    "message": "O host nativo está respondendo. Confira as conexões dos agentes abaixo para ver os links ativos."
   },
   "runtimeChecking": {
     "message": "Procurando o ambiente local. Suas configurações permanecem neste dispositivo."
@@ -1105,5 +1105,98 @@
   },
   "postUpdateMaster": {
     "message": "Após o trabalho atual, execute a configuração e reconecte o MCP uma vez. Futuras atualizações compatíveis são baixadas em segundo plano e aplicadas após o término das sessões, mantendo abertas as conexões MCP gerenciadas. Comandos fixados e cópias de desenvolvimento continuam sob seu controle."
+  },
+  "harnessConnections": {
+    "message": "Conexões dos agentes"
+  },
+  "refreshConnections": {
+    "message": "Atualizar"
+  },
+  "connectionLayers": {
+    "message": "A ponte local e cada conexão de agente são verificadas separadamente."
+  },
+  "localBridge": {
+    "message": "Extensão ↔ ponte local"
+  },
+  "bridgeResponding": {
+    "message": "Respondendo"
+  },
+  "bridgeUnavailable": {
+    "message": "Sem resposta"
+  },
+  "connectionsUnsupported": {
+    "message": "Os detalhes exigem um runtime local atualizado. Execute a configuração e reconecte o agente."
+  },
+  "connectionsUnavailable": {
+    "message": "Não foi possível verificar as conexões. Execute o comando de diagnóstico abaixo."
+  },
+  "noHarnessConnections": {
+    "message": "Nenhuma conexão de agente observada. Uma ponte conectada não confirma que Codex, OpenCode ou DeepSeek carregaram as ferramentas."
+  },
+  "harnessResponding": {
+    "message": "Sinal recebido"
+  },
+  "harnessStale": {
+    "message": "Sinal atrasado"
+  },
+  "harnessUnidentified": {
+    "message": "Cliente antigo · identidade indisponível"
+  },
+  "runtimeVersionLabel": {
+    "message": "Runtime"
+  },
+  "harnessVersionLabel": {
+    "message": "Agente"
+  },
+  "harnessToolReceived": {
+    "message": "Chamada de ferramenta recebida"
+  },
+  "harnessInitialized": {
+    "message": "Inicializado · nenhuma chamada de ferramenta observada"
+  },
+  "harnessPending": {
+    "message": "$1 pendentes"
+  },
+  "harnessLastSeen": {
+    "message": "Último sinal: $1"
+  },
+  "disconnectHarnessConfirm": {
+    "message": "Desconectar este link do navegador? O agente continuará aberto e poderá se reconectar na próxima solicitação ou sinal. Conclua primeiro o trabalho dele no navegador."
+  },
+  "disconnectBridge": {
+    "message": "Desconectar link"
+  },
+  "cancelConnectionAction": {
+    "message": "Cancelar"
+  },
+  "harnessDisconnected": {
+    "message": "Link do navegador desconectado. Reconecte pelo agente ou faça outra chamada ao navegador."
+  },
+  "bridgeReconnecting": {
+    "message": "Reconectando a ponte local…"
+  },
+  "reconnectBridge": {
+    "message": "Reconectar ponte local"
+  },
+  "copyDoctor": {
+    "message": "Copiar comando de diagnóstico"
+  },
+  "doctorCopied": {
+    "message": "Comando de diagnóstico copiado."
+  },
+  "reconnectHarnessHelp": {
+    "message": "Reconectar um agente"
+  },
+  "reconnectCodexHelp": {
+    "message": "Codex: desative e ative este plugin nas configurações de plugins para recarregar as ferramentas MCP. Uma nova conversa pode ser necessária."
+  },
+  "reconnectOpenCodeHelp": {
+    "message": "OpenCode: execute opencode reload. As sessões existentes adotam a configuração na próxima etapa."
+  },
+  "reconnectDshHelp": {
+    "message": "DeepSeek Harness: recarregue o plugin MCP ou reabra o perfil configurado."
+  },
+  "harnessToolsExplanation": {
+    "message": "A inicialização e um sinal recente confirmam o link do navegador. O registro e a disponibilidade das ferramentas são controlados pelo próprio agente."
   }
 }

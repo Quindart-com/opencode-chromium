@@ -12,6 +12,7 @@ import { managedConfiguration,nativeCodexPluginEnabled,type HarnessId } from "./
 import { detectHarnesses,planHarness,type Harness } from "./harnesses.js";
 import { selectHarnesses } from "./menu.js";
 import { offerRestart } from "./restart.js";
+import { opencodeV2Launcher } from "./opencode-v2.ts";
 import { planSkills } from "./skills.js";
 import { applyTransaction,type FileChange } from "./transaction.js";
 import { ensureManagedRelease,supervisorFiles } from "./supervisor.ts";
@@ -75,6 +76,10 @@ export async function manageSetup(argv: string[], remove = false, environment: S
     for (const kind of ["host", "mcp", "plugin"] as const) {
       const filePath = path.join(dir, `${kind}.mjs`);
       changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: launcherSource(kind) });
+    }
+    if (selected.includes("opencode")) {
+      const filePath = path.join(dir, "v2", "index.ts");
+      changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: opencodeV2Launcher });
     }
     const filePath = path.join(dir, "runtime.json");
     const existing = fs.existsSync(filePath) ? parseRuntimeActivation(JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown) : null;

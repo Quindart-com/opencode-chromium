@@ -34,6 +34,10 @@ let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUT
 if (storeFixture) decisionSettings = { ...decisionSettings, provider: "off", shareText: false, ready: false };
 let uploadSettings = { allowWithoutConfirmation: false };
 let runtimeUpdates = { supported: true, enabled: true, state: "waiting", targetVersion: "1.9.3", installedVersion: "1.9.2" };
+let harnessConnections = { observedAt: Date.now(), host: { version: fixtureVersion, pid: 42 }, clients: [
+  { id: "fixture-codex", harness: "codex", harnessVersion: "1.2.3", runtimeVersion: "1.10.1", transport: "mcp", pid: 43, phase: "used", connectedAt: Date.now(), lastSeenAt: Date.now(), lastActionAt: Date.now(), pending: 0, state: "responding" },
+  { id: "fixture-dsh", harness: "dsh", harnessVersion: "0.2.0", runtimeVersion: "1.9.4", transport: "mcp", pid: 44, phase: "initialized", connectedAt: Date.now() - 60000, lastSeenAt: Date.now() - 60000, lastActionAt: null, pending: 0, state: "stale" },
+] };
 const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
@@ -44,7 +48,10 @@ const server = http.createServer(async (req, res) => {
       for await (const chunk of req) text += chunk;
       const message = JSON.parse(text);
       let result;
-      if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
+      if (message.type === "GET_HARNESS_CONNECTIONS") result = { result: harnessConnections };
+      else if (message.type === "DISCONNECT_HARNESS") { harnessConnections = { ...harnessConnections, clients: harnessConnections.clients.filter(client => client.id !== message.params.id) }; result = { result: harnessConnections }; }
+      else if (message.type === "RECONNECT_NATIVE_HOST") result = { result: { reconnecting: true } };
+      else if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
       else if (message.type === "GET_RUNTIME_UPDATES") result = { result: runtimeUpdates };
       else if (message.type === "SET_RUNTIME_UPDATES") { runtimeUpdates = { ...runtimeUpdates, enabled: message.enabled }; result = { result: runtimeUpdates }; }
       else if (message.type === "SET_UPLOAD_SETTINGS") { uploadSettings = { allowWithoutConfirmation: message.allowWithoutConfirmation === true }; result = { result: uploadSettings }; }
@@ -117,6 +124,21 @@ try {
   }, fixtureMessages);
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   console.log("Popup loaded");
+  const connections = page.getByRole("region", { name: "Harness connections", exact: true });
+  await connections.getByText("Codex", { exact: true }).waitFor();
+  await connections.getByText("DeepSeek Harness", { exact: true }).waitFor();
+  await connections.getByText("Heartbeat overdue", { exact: true }).waitFor();
+  await connections.getByText("Tool call received", { exact: true }).waitFor();
+  await page.screenshot({ path: path.join(root, "reports", "popup-harness-connections.png"), fullPage: true });
+  await connections.getByRole("button", { name: "Copy doctor command", exact: true }).click();
+  assert.equal(await page.evaluate(() => globalThis.fixtureCopiedText), "opencode-chromium doctor --repair-runtime --json");
+  const dshRow = connections.locator("li", { hasText: "DeepSeek Harness" });
+  await dshRow.getByRole("button", { name: "Disconnect link", exact: true }).click();
+  await dshRow.getByText(/The harness stays open/).waitFor();
+  await dshRow.getByRole("button", { name: "Disconnect link", exact: true }).click();
+  await dshRow.waitFor({ state: "detached" });
+  await connections.getByText("Codex", { exact: true }).waitFor();
+  assert.equal(harnessConnections.clients.length, 1, "disconnect targets only the selected bridge");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
   assert.equal(await page.locator("#memory-replays").textContent(), "0");
   assert.equal(await page.locator("#memory-success").textContent(), "—");
@@ -134,7 +156,7 @@ try {
   await page.getByRole("button", { name: "Remind me in a week" }).click();
   await page.waitForFunction(() => !document.querySelector(".version-notice"));
   await page.reload();
-  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Connected");
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Bridge connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "snooze persists across popup reopen");
   await page.getByText("Activity and memory statistics", { exact: true }).click();
   await page.selectOption("#statistics-scope", "all");
@@ -246,7 +268,7 @@ try {
   versionStatus.nativeHostVersion = "1.9.1";
   versionStatus.clientVersions = ["1.9.1"];
   await page.reload();
-  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Connected");
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Bridge connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "matching versions clear the notice");
   const reviewDirectory = path.join(root, "reports", "popup-review");
   fs.mkdirSync(reviewDirectory, { recursive: true });
