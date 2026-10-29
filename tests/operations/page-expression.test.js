@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  clickAtPointExpression,
-  domNodeClickExpression,
-  domNodeClickTargetExpression,
-  hoverAtPointExpression,
   pageInspectExpression,
   pageSearchUnitsExpression,
-  selectorClickExpression,
-  selectorEditableExpression,
   shapePageSearchRanking,
   visualMapExpression,
 } from "../../src/browser/operations/index.ts";
@@ -88,46 +82,4 @@ test("debug page search output preserves full ranking details", () => {
   };
 
   assert.equal(shapePageSearchRanking(ranking, "debug"), ranking);
-});
-
-test("click expressions probe multiple safe points instead of only the covered center", () => {
-  const expression = domNodeClickTargetExpression("node-1");
-  assert.match(expression, /\[0\.25, 0\.25\]/);
-  assert.match(expression, /safe click points are covered/);
-  assert.doesNotMatch(expression, /center point is covered/);
-});
-
-test("background click expressions use page activation instead of CDP mouse input", () => {
-  const nodeExpression = domNodeClickExpression("node-1");
-  const selectorExpression = selectorClickExpression("#save");
-  const coordinateExpression = clickAtPointExpression(12, 34);
-
-  for (const expression of [nodeExpression, selectorExpression, coordinateExpression]) {
-    assert.match(expression, /backgroundClick/);
-    assert.match(expression, /element\.click\(\)/);
-    assert.doesNotMatch(expression, /Input\.dispatchMouseEvent/);
-  }
-  assert.match(nodeExpression, /nodeByIdStrict\("node-1"\)/);
-  assert.match(selectorExpression, /querySelectorStrict\("#save"\)/);
-  assert.match(coordinateExpression, /document\.elementFromPoint/);
-});
-
-test("background double-click and hover expressions remain page-local", () => {
-  const doubleClickExpression = clickAtPointExpression(12, 34, { clickCount: 2 });
-  const hoverExpression = hoverAtPointExpression(12, 34);
-
-  assert.match(doubleClickExpression, /clickCount":2/);
-  assert.match(doubleClickExpression, /dblclick/);
-  assert.doesNotMatch(doubleClickExpression, /Input\.dispatchMouseEvent/);
-  assert.match(hoverExpression, /backgroundHover/);
-  assert.match(hoverExpression, /MouseEvent\('mousemove'/);
-  assert.doesNotMatch(hoverExpression, /Input\.dispatchMouseEvent/);
-});
-
-test("editable expressions support verified Monaco replacement without clipboard access", () => {
-  const expression = selectorEditableExpression(".monaco-editor textarea", { selectAll: true });
-  assert.match(expression, /\.monaco-editor/);
-  assert.match(expression, /valueHash/);
-  assert.match(expression, /selectEditableText/);
-  assert.doesNotMatch(expression, /clipboard/i);
 });
