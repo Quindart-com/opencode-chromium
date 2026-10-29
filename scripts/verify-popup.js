@@ -12,6 +12,7 @@ import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js
 import { decisionUsage } from "../native-host/dist/decisions/usage.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const fixtureMessages = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(root, "extension-src/public/_locales/en/messages.json"), "utf8"))).map(([key, value]) => [key, value.message]));
 const storeFixture = process.argv.includes("--store-fixture");
 const fixtureVersion = storeFixture ? JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version : "1.9.1";
 fs.mkdirSync(path.join(root, "reports"), { recursive: true });
@@ -37,7 +38,7 @@ const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getURL: value => value, getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
+    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = (${JSON.stringify(fixtureMessages)})[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getURL: value => value, getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
     if (req.url === "/rpc") {
       let text = "";
       for await (const chunk of req) text += chunk;
@@ -103,16 +104,16 @@ try {
   page.setDefaultTimeout(15000);
   const errors = [];
   page.on("pageerror", (error) => { errors.push(error.message); console.error(error.message); });
-  await page.addInitScript(() => {
+  await page.addInitScript((messages) => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { globalThis.fixtureCopiedText = text; } } });
-    globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
+    globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = messages[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
       id: "fixture",
         getURL: value => value,
       getManifest: () => ({ version: "1.9.1" }),
       connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }),
       sendMessage: (message) => fetch("/rpc", { method: "POST", body: JSON.stringify(message) }).then((response) => response.json()),
     } };
-  });
+  }, fixtureMessages);
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   console.log("Popup loaded");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
@@ -120,7 +121,7 @@ try {
   assert.equal(await page.locator("#memory-success").textContent(), "—");
   assert.equal(
     await page.locator("#memory-replay-note").textContent(),
-    "Skipped 3 remembered recipes. Most often: no close enough match (2).",
+    "Skipped remembered recipes: 3. Most often: no close enough match (2).",
   );
   await page.screenshot({ path: path.join(root, "reports", "popup-replay-note.png"), fullPage: true });
   await page.getByRole("heading", { name: "Update your local browser tools" }).waitFor();

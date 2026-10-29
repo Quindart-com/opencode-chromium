@@ -54,7 +54,10 @@ describe("popup privacy surface", () => {
   test("connection view masks the profile id and hides cache paths by default", () => {
     const view = fs.readFileSync(path.join(popupDir, "ConnectionView.tsx"), "utf8");
     expect(view).toMatch(/maskIdentifier/);
-    expect(view).toMatch(/Developer details/);
+    expect(view).toContain('<details id="semantic-dev-details" className="dev-details">');
+    expect(view).toContain('<summary>{t("developerDetails")}</summary>');
+    const messages = JSON.parse(fs.readFileSync(path.join(root, "extension-src", "public", "_locales", "en", "messages.json"), "utf8"));
+    expect(messages.developerDetails.message).toBe("Developer details");
     expect(view).not.toMatch(/\{profile\?\.profileId\s*\?\?/);
     expect(view).not.toMatch(/semantic-cache-path/);
     expect(view).toMatch(/GET_SEMANTIC_DIAGNOSTICS/);

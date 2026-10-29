@@ -45,3 +45,6 @@ html { scrollbar-color: var(--muted) var(--canvas); }
 @media (prefers-color-scheme: dark) { :root { --canvas: #101722; --surface: #1a2433; --text: #eff3fc; --muted: #b2bfd4; --line: #3c4b60; --blue: #9aacff; --soft: #25345c; --focus: #a9b8ff; } .primary { background: #4568df; border-color: #4568df; } }
 @media (max-width: 600px) { main { padding: 24px; } .intro { padding-top: 36px; } .command { align-items: stretch; flex-direction: column; } .command button { align-self: flex-start; } .next { flex-direction: column; align-items: flex-start; } footer, footer nav { gap: 16px; } }
 @media (prefers-reduced-motion: no-preference) { .intro h1 { animation: settle-in .6s cubic-bezier(.16,1,.3,1) both; } @keyframes settle-in { from { filter: blur(2px); clip-path: inset(0 0 6%); } to { filter: none; clip-path: inset(0); } } }
+
+footer nav { flex-wrap: wrap; }
+footer label { min-width: 0; }

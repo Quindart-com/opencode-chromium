@@ -10,6 +10,8 @@ const screenshots = path.join(root, "reports", "onboarding-review");
 fs.mkdirSync(screenshots, { recursive: true });
 const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 const state = { showReleaseNotes: true };
+const locale = JSON.parse(fs.readFileSync(path.join(extension, "_locales", "en", "messages.json"), "utf8"));
+const fixtureMessages = Object.fromEntries(Object.entries(locale).map(([key, value]) => [key, value.message]));
 buildUpdatePage();
 const server = http.createServer(async (request, response) => {
   if (request.url?.startsWith("/updates/")) {
@@ -30,7 +32,7 @@ const server = http.createServer(async (request, response) => {
   if (!file.startsWith(extension + path.sep) || !fs.existsSync(file)) { response.writeHead(404).end(); return; }
   const content = fs.readFileSync(file);
   response.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(file)] ?? "application/octet-stream");
-  response.end(path.extname(file) === ".html" ? content.toString().replace("<head>", `<head><script>globalThis.chrome={runtime:{id:'fixture',getManifest:()=>({version:${JSON.stringify(version)}}),getURL:p=>p},action:{openPopup:async()=>{document.documentElement.dataset.panelOpened='true'}},storage:{local:{get:async()=>fetch('/preferences').then(r=>r.json()),set:async v=>fetch('/preferences',{method:'POST',body:JSON.stringify(v)})}}};</script>`) : content);
+  response.end(path.extname(file) === ".html" ? content.toString().replace("<head>", `<head><script>globalThis.chrome={i18n:{getUILanguage:()=>"en",getMessage:(key,values)=>{let result=(${JSON.stringify(fixtureMessages)})[key]||key;for(const [index,value] of (Array.isArray(values)?values:values===undefined?[]:[values]).entries())result=result.replaceAll("$"+(index+1),value);return result}},runtime:{id:'fixture',getManifest:()=>({version:${JSON.stringify(version)}}),getURL:p=>p},action:{openPopup:async()=>{document.documentElement.dataset.panelOpened='true'}},storage:{local:{get:async()=>fetch('/preferences').then(r=>r.json()),set:async v=>fetch('/preferences',{method:'POST',body:JSON.stringify(v)})}}};</script>`) : content);
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
