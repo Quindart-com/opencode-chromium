@@ -32,6 +32,7 @@ export const SERVER_NAME = PLUGIN_NAME;
 export const SERVER_INSTRUCTIONS = [
   "Use the four browser tools for UI-only work, connector gaps, and visual verification; prefer structured connectors when available.",
   "Pass a user-named profile on the first useful call, batch find/action/settle/verification in browser_run, and reuse sessionId.",
+  "Transport failures run a bounded CLI doctor and return recovery results. Follow those checks; if unresolved, run opencode-chromium doctor --repair-runtime --json before one targeted repair and verification. Never replay an uncertain mutation unchanged.",
   "Page search uses the auto retrieval strategy by default (lexical first, escalating to the active local embedding model); request lexical for lowest latency, semantic to always embed, and deep for reranked multilingual or code-heavy matching.",
   "For a specific tab's deeper network debugging, request browser_observe mode capabilities with pack network, then execute network.inspect inside browser_run; bodies are opt-in and approval-gated.",
   "Only claim an existing tab after the user's explicit request or permission. browser_session action open with scope user lists ungrouped, unclaimed tabs; grouped or owned tabs cannot be claimed. Prefer new-tab otherwise.",
@@ -291,6 +292,14 @@ export async function main(argv = process.argv.slice(2)) {
   if (options.help) {
     process.stdout.write("Usage: opencode-chromium-mcp [--transport=stdio|http] [--toolset=core|legacy|debug] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN] [--allowed-origin=PATTERN] [--blocked-origin=PATTERN]\n");
     return;
+  }
+  if (process.env.OPENCODE_BROWSER_COORDINATED === "1") {
+    void import("../../management/marketplace.ts").then(async ({ refreshBrowserMarketplace }) => {
+      const { packageInfo } = await import("../../cli/version.ts");
+      const { runtimeDir } = await import("../../cli/native-host.ts");
+      const info = packageInfo();
+      if (!fs.existsSync(path.join(info.root, "src"))) await refreshBrowserMarketplace({ version: info.version, dir: runtimeDir() });
+    }).catch(() => {});
   }
   const runtime = createAgentBrowserRuntime({
     urlPolicyConfig: {

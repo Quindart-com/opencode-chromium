@@ -67,6 +67,7 @@ let restoringSessions = 0;
 const sessions = new Map<string, ExtensionSession>();
 const attachedTabs = new Map<number, string>();
 const commandHealth = new CommandHealth();
+const creationRequestIds = new Map<number, string>();
 const firefoxFrameRouting = new FirefoxFrameRouting((tabId, method, params, timeoutMs) => sendCdpCommand(tabId, method, params, timeoutMs));
 const frameRouting = new FrameRouting((tabId, method, params, timeoutMs, sessionId) => sendCdpCommand(tabId, method, params, timeoutMs, sessionId));
 const cdpEventsByTabId = new Map<number, CdpEvent[]>();
@@ -303,6 +304,7 @@ function normalizeKeepItem(item: KeepItem): {
 function normalizeTab<T extends object>(tab: Browser.tabs.Tab, extra: T = {} as T) {
     const owner = tab.id !== undefined && Number.isInteger(tab.id) ? findTabOwner(tab.id) : null;
     return {
+        ...(tab.id !== undefined && creationRequestIds.has(tab.id) ? { creationRequestId: creationRequestIds.get(tab.id) } : {}),
         id: tab.id,
         title: tab.title ?? null,
         url: tab.url ?? null,
@@ -474,6 +476,7 @@ async function untrackTab(sessionId: string, tabId: number) {
     const session = sessions.get(sessionId);
     if (!session)
         return;
+    creationRequestIds.delete(tabId);
     session.tabIds.delete(tabId);
     session.tabOrigins.delete(tabId);
     if (session.activeTabId === tabId)
@@ -942,6 +945,7 @@ rpc.register("createTab", async (params) => {
     }
     if (tab.id === undefined)
         throw new Error("Could not identify browser tab");
+    if (params.creationRequestId) creationRequestIds.set(tab.id, params.creationRequestId);
     await trackTab(id, tab.id, "agent");
     return normalizeTab(tab);
 });
@@ -1106,6 +1110,7 @@ if (!IS_FIREFOX)
     installChromiumEvents({ chrome, cdpEventTabId, traceBuffers, MAX_TRACE_CHUNKS, recordCdpEvent, attachedTabs });
 installNavigationPolicy({ chrome, findOwner: findTabOwner, trackTab, getTab, stopLoading: tabId => sendCdpCommand(tabId, "Page.stopLoading", {}, 2000) });
 chrome.tabs.onRemoved.addListener((tabId) => {
+    creationRequestIds.delete(tabId);
     attachedTabs.delete(tabId);
     commandHealth.removed(tabId);
     frameRouting.forget(tabId);

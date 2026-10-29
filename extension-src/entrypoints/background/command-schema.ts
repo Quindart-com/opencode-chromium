@@ -17,6 +17,7 @@ const keepSchema = z.union([z.int(), z.object({
         status: z.optional(z.enum(["handoff", "deliverable"])),
     })]);
 export const commandParamsSchema = z.looseObject({
+    creationRequestId: z.optional(z.string()),
     session_id: z.optional(z.string()), sessionId: z.optional(z.string()), turn_id: z.optional(z.string()), turnId: z.optional(z.string()),
     frameId: z.optional(z.string()), deadlineAt: z.optional(z.number()),
     tabId: z.optional(z.int()), tab_id: z.optional(z.int()), target: z.optional(z.object({ tabId: z.optional(z.int()) })),

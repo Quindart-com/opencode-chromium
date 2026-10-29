@@ -59,10 +59,11 @@ export function errorDetails(error: unknown) {
   return {
     code,
     message: clip(message, FAILURE_MESSAGE_LIMIT),
-    hint: failureHint(code),
+    hint: fields.recovery ? "Read recovery results from the automatic CLI doctor. If unhealthy, run opencode-chromium doctor --repair-runtime --json and repair the reported layer; inspect uncertain actions before retrying." : failureHint(code),
     retryable: Boolean(fields.retryable ?? (timeout || disconnected)),
     uncertain: Boolean(fields.uncertain ?? (timeout || disconnected)),
     ...(typeof fields.executionState === "string" ? { executionState: fields.executionState } : {}),
     ...(fields.details ? { details: fields.details } : {}),
+    ...(fields.recovery ? { recovery: fields.recovery } : {}),
   };
 }

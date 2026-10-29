@@ -36,6 +36,8 @@ To refresh that Git source:
 codex plugin marketplace upgrade quindart-browser
 ```
 
+Production setup and managed MCP startup run this supported refresh automatically once per new runtime version when the native browser plugin is enabled from `quindart-browser`. A missing CLI or failed network refresh leaves the manual command available. The runtime never edits Codex's installed-plugin cache or unrelated marketplace configuration.
+
 Reopen Codex's plugin browser, choose **Quindart Browser**, and install/update the
 displayed release. Start a new chat after reconnecting. Updating npm or the managed
 runtime does not refresh Codex's plugin listing. A development checkout on an old
