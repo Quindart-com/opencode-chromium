@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage, formatBytes, memoryCall, MB, type MemoryStatus, type MemoryProfiles } from "./api";
 
@@ -14,17 +15,17 @@ const EMPTY_COUNTS: MemoryStatus["counts"] = {
 // feature that is simply not wired up. Legacy reasons from older hosts stay
 // mapped so historical rows keep reading correctly.
 const REPLAY_SKIP_LABELS: Record<string, string> = {
-  below_similarity: "no close enough match",
-  below_confidence: "no close enough match",
-  negative_lesson: "that recipe failed before",
-  step_count_mismatch: "a different number of steps was requested",
-  recipe_mismatch: "the requested steps changed",
-  hostname_mismatch: "the request was for a different site",
-  action_mismatch: "the requested actions changed",
-  target_mismatch: "the requested targets changed",
-  missing_runtime_value: "a typed value was missing",
-  missing_runtime_url: "a URL was missing",
-  approval_required: "the recipe needs your approval",
+  below_similarity: t("skipNoMatch"),
+  below_confidence: t("skipNoMatch"),
+  negative_lesson: t("skipPriorFailure"),
+  step_count_mismatch: t("skipSteps"),
+  recipe_mismatch: t("skipRecipe"),
+  hostname_mismatch: t("skipSite"),
+  action_mismatch: t("skipActions"),
+  target_mismatch: t("skipTargets"),
+  missing_runtime_value: t("skipValue"),
+  missing_runtime_url: t("skipUrl"),
+  approval_required: t("skipApproval"),
 };
 
 function dominantSkipReason(reasons: Record<string, number> | undefined): [string, number] | null {
@@ -49,7 +50,7 @@ function MemoryChart({ daily }: { daily: MemoryStatus["recent_daily"] }): React.
   const barWidth = Math.min(12, (plotWidth / Math.max(1, days.length)) * 0.6);
 
   return (
-    <div className="memory-chart" aria-label="Confirmed versus failed actions per day">
+    <div className="memory-chart" aria-label={t("chartLabel")}>
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img">
         {days.map((day, index) => {
           const x = pad + (index / Math.max(1, days.length - 1)) * plotWidth;
@@ -94,7 +95,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
       const profileIds = scope === "all" ? null : scope === "current" ? known?.currentProfileId ? [known.currentProfileId] : null : scope === "unknown" ? [] : selectedProfiles;
       const next = await memoryCall<MemoryStatus>("memory.stats", { profileIds, includeUnattributed: scope === "unknown" });
       if (id !== requestId.current) return;
-      if (next.supported === false) throw new Error("Action memory needs a native host with SQLite support.");
+      if (next.supported === false) throw new Error(t("memorySqlite"));
       setStatus(next);
       setLoadError("");
       if (!dirty.current.quota) setQuotaValue(Math.round(next.quota_bytes / MB));
@@ -156,7 +157,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
     setQuotaValue(value);
     if (quotaTimer.current !== null) window.clearTimeout(quotaTimer.current);
     quotaTimer.current = window.setTimeout(() => {
-      void updateConfig({ quota_bytes: value * MB }, `Database limit set to ${formatBytes(value * MB)}.`);
+      void updateConfig({ quota_bytes: value * MB }, t("dbLimitSet", formatBytes(value * MB)));
     }, 300);
   };
 
@@ -177,30 +178,30 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
   const negativeActions = counts.negative_actions_v2 ?? 0;
   const stateLine = status
     ? enabled
-      ? `${v2Actions} unique actions, ${v2Chains} recipes.`
-      : "Enable it to start building action memory."
-    : "Checking memory state...";
+      ? t("memoryCounts", [String(v2Actions), String(v2Chains)])
+      : t("enableStartMemory")
+    : t("memoryStateChecking");
 
   const stats = useMemo(() => [
-    ["memory-success", replayRate === null ? "—" : `${replayRate}%`, "replay success"],
-    ["memory-actions", v2Actions, "unique actions"],
-    ["memory-chains", v2Chains, "recipes"],
-    ["memory-replays", replayAttempts, "replays"],
-    ["memory-steps-reused", usage?.steps_reused ?? 0, "steps reused"],
+    ["memory-success", replayRate === null ? "—" : `${replayRate}%`, t("replaySuccess")],
+    ["memory-actions", v2Actions, t("uniqueActions")],
+    ["memory-chains", v2Chains, t("recipes")],
+    ["memory-replays", replayAttempts, t("replays")],
+    ["memory-steps-reused", usage?.steps_reused ?? 0, t("stepsReused")],
   ] as const, [v2Actions, v2Chains, replayRate, replayAttempts, usage?.steps_reused]);
 
   const secondaryStats = useMemo(() => [
-    ["memory-executions", executions, "total executions"],
-    ["memory-negatives", negativeActions, "negative lessons"],
-    ["memory-indexed", indexed, "indexed"],
-    ["memory-awaiting", unindexed, unindexed === 1 ? "awaiting index" : "awaiting index"],
+    ["memory-executions", executions, t("executions")],
+    ["memory-negatives", negativeActions, t("negativeLessons")],
+    ["memory-indexed", indexed, t("indexed")],
+    ["memory-awaiting", unindexed, unindexed === 1 ? t("awaitingIndex") : t("awaitingIndex")],
   ] as const, [executions, negativeActions, indexed, unindexed]);
 
   const healthLine = useMemo(() => {
     if (!status) return "";
-    if (status.health === "embedding_errors") return `Embedding errors: ${status.last_embedding_error ?? "unknown"}`;
-    if (unindexed > 0) return `Memory index ${indexed} ready · ${unindexed} awaiting embeddings`;
-    return `Memory index ready (${indexed})`;
+    if (status.health === "embedding_errors") return t("embeddingErrors", status.last_embedding_error ?? t("modelUnknown"));
+    if (unindexed > 0) return t("memoryIndexPending", [String(indexed), String(unindexed)]);
+    return t("memoryIndexReady", String(indexed));
   }, [status, indexed, unindexed]);
 
   const replayLine = useMemo(() => {
@@ -208,12 +209,11 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
     const skipped = usage?.replay_rejections ?? usage?.replay_fallbacks ?? 0;
     if (skipped > 0) {
       const dominant = dominantSkipReason(usage?.replay_rejections_by_reason);
-      const noun = skipped === 1 ? "recipe" : "recipes";
-      if (!dominant) return `Skipped ${skipped} remembered ${noun}.`;
+      if (!dominant) return t("skipCount", String(skipped));
       const label = REPLAY_SKIP_LABELS[dominant[0]] ?? dominant[0];
-      return `Skipped ${skipped} remembered ${noun}. Most often: ${label} (${dominant[1]}).`;
+      return t("skipCountReason", [String(skipped), label, String(dominant[1])]);
     }
-    if (replayAttempts === 0 && v2Chains > 0) return "No replay attempted yet — repeating a stored recipe on the same site replays it automatically.";
+    if (replayAttempts === 0 && v2Chains > 0) return t("replayNotAttempted");
     return "";
   }, [status, enabled, usage?.replay_fallbacks, usage?.replay_rejections, usage?.replay_rejections_by_reason, replayAttempts, v2Chains]);
 
@@ -223,24 +223,24 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
       <div className="card memory-card memory-control-card">
         <div className="memory-head">
           <div>
-            <h2>Action memory</h2>
-            <span className="memory-state-line">Save successful browser actions locally to speed up repeat tasks.</span>
+            <h2>{t("actionMemory")}</h2>
+            <span className="memory-state-line">{t("memoryDescription")}</span>
           </div>
         </div>
         <span id="memory-state-line" className="visually-hidden" aria-live="polite">{stateLine}</span>
         <div className="memory-actions memory-toggle-actions">
-          <button id="memory-enable" className="button button-primary" type="button" disabled={!status || memoryBusy || enabled} onClick={() => void runMemoryAction("memory.enable", "Action memory enabled.")}>Enable memory</button>
-          <button id="memory-disable" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.disable", "Action memory disabled.")}>Disable memory</button>
+          <button id="memory-enable" className="button button-primary" type="button" disabled={!status || memoryBusy || enabled} onClick={() => void runMemoryAction("memory.enable", t("memoryEnabled"))}>{t("enableMemory")}</button>
+          <button id="memory-disable" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.disable", t("memoryDisabled"))}>{t("disableMemory")}</button>
         </div>
       </div>
 
       <details className="card memory-card memory-settings-details">
-        <summary>Storage limit</summary>
+        <summary>{t("storageLimit")}</summary>
         <div className="memory-head">
           <div>
-            <h2 id="quota-heading">Storage limit</h2>
+            <h2 id="quota-heading">{t("storageLimit")}</h2>
             <span id="quota-caption" className="memory-state-line">
-              {powerUser ? "Expanded storage enabled — up to 10 GB." : "Standard limit. Turn on expanded storage to raise it."}
+              {powerUser ? t("expandedEnabled") : t("standardLimit")}
             </span>
           </div>
           <span id="quota-now" className="quota-now">{formatBytes(quotaBytes)}</span>
@@ -260,65 +260,65 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         />
         <div className="quota-scale"><span>100 MB</span><span>2.5 GB</span><span>5 GB</span><span>10 GB</span></div>
         <label className="checkbox-row power-row">
-          <input id="power-user" type="checkbox" checked={powerUser} disabled={!status || memoryBusy} onChange={(event) => void updateConfig({ power_user: event.target.checked }, event.target.checked ? "Expanded storage enabled — the limit can now reach 10 GB." : "Expanded storage disabled — the standard limit is restored.")} />
-          <span>Expanded storage — allow up to 10 GB</span>
+          <input id="power-user" type="checkbox" checked={powerUser} disabled={!status || memoryBusy} onChange={(event) => void updateConfig({ power_user: event.target.checked }, event.target.checked ? t("storageExpanded") : t("storageStandard"))} />
+          <span>{t("expandedStorage")}</span>
         </label>
-        {powerUser && <p id="power-note" className="help-note">Expanded storage can use more disk space.</p>}
+        {powerUser && <p id="power-note" className="help-note">{t("expandedStorageHelp")}</p>}
         <div className="quota-track"><div id="quota-fill" className="quota-fill" style={{ width: `${quotaFill}%` }} /></div>
-        <p id="quota-usage" className="help-note">{formatBytes(bytesUsed)} of {formatBytes(quotaBytes)} used</p>
+        <p id="quota-usage" className="help-note">{t("quotaUsage", [formatBytes(bytesUsed), formatBytes(quotaBytes)])}</p>
       </details>
 
       <details className="card memory-card memory-settings-details">
-        <summary>Cleanup</summary>
+        <summary>{t("cleanup")}</summary>
         <div className="memory-head">
           <div>
-            <h2>Cleanup</h2>
-            <span className="memory-state-line">Unsuccessful actions age out automatically. Confirmed actions remain.</span>
+            <h2>{t("cleanup")}</h2>
+            <span className="memory-state-line">{t("cleanupHelp")}</span>
           </div>
         </div>
         <div className="memory-actions">
-          <label className="purge-label" htmlFor="purge-days">Remove after</label>
+          <label className="purge-label" htmlFor="purge-days">{t("removeAfter")}</label>
           <input id="purge-days" className="purge-days" type="number" min="1" max="365" value={purgeDays} disabled={!status || memoryBusy} onChange={(event) => { dirty.current.purge = true; setPurgeDays(Number(event.target.value)); }} onBlur={() => {
-            if (Number.isInteger(purgeDays) && purgeDays >= 1 && purgeDays <= 365) void updateConfig({ purge_days: purgeDays }, `Negative lessons purge after ${purgeDays} days.`);
-            else setMemoryFeedback("Purge period must be between 1 and 365 days.");
+            if (Number.isInteger(purgeDays) && purgeDays >= 1 && purgeDays <= 365) void updateConfig({ purge_days: purgeDays }, t("purgeAfter", String(purgeDays)));
+            else setMemoryFeedback(t("purgeInvalid"));
           }} />
-          <span className="purge-unit">days</span>
-          <button id="prune-now" className="button" type="button" disabled={!status || memoryBusy} onClick={() => void runMemoryAction("memory.prune", "Cleanup complete.")}>Clean up now</button>
+          <span className="purge-unit">{t("days")}</span>
+          <button id="prune-now" className="button" type="button" disabled={!status || memoryBusy} onClick={() => void runMemoryAction("memory.prune", t("cleanupComplete"))}>{t("cleanupNow")}</button>
         </div>
       </details>
 
       </> : <div className="card memory-card">
         <div className="memory-head">
           <div>
-            <h2>Replay and memory</h2>
-            <span className="memory-state-line">Shared action memory · statistics by browser profile.</span>
+            <h2>{t("replayMemory")}</h2>
+            <span className="memory-state-line">{t("memoryStatsHelp")}</span>
           </div>
         </div>
-        <p className="help-note">{loadError ? "Memory is unavailable. Reconnect the native host." : !status ? "Checking memory state…" : enabled ? "Memory is on. Saved actions help with repeat tasks." : "Memory is off. Enable it in Settings to save repeat tasks."}</p>
-        <details className="usage-details"><summary>Activity and memory statistics</summary>
-        <label className="field-label" htmlFor="statistics-scope">Show activity for</label>
+        <p className="help-note">{loadError ? t("memoryUnavailable") : !status ? t("memoryChecking") : enabled ? t("memoryOn") : t("memoryOff")}</p>
+        <details className="usage-details"><summary>{t("activityStats")}</summary>
+        <label className="field-label" htmlFor="statistics-scope">{t("showActivity")}</label>
         <select id="statistics-scope" value={scope} disabled={!profiles || !status?.capabilities?.profileStatistics} onChange={(event) => { ++requestId.current; setStatus(null); setScope(event.target.value); }}>
-          <option value="current">This profile</option>
-          <option value="all">All profiles</option>
-          <option value="selected">Selected profiles</option>
-          <option value="unknown">Older, unassigned activity</option>
+          <option value="current">{t("thisProfile")}</option>
+          <option value="all">{t("allProfiles")}</option>
+          <option value="selected">{t("selectedProfiles")}</option>
+          <option value="unknown">{t("oldActivity")}</option>
         </select>
-        {scope === "selected" ? <fieldset className="profile-options"><legend>Profiles to include</legend>{profiles?.profiles.map((profile, index) => <label className="checkbox-row" key={profile.profileId}><input type="checkbox" checked={selectedProfiles.includes(profile.profileId)} onChange={(event) => { ++requestId.current; setStatus(null); setSelectedProfiles((previous) => event.target.checked ? [...previous, profile.profileId] : previous.filter((id) => id !== profile.profileId)); }} />{profile.profileLabel || profile.browserName || `Profile ${index + 1}`}{profile.profileId === profiles.currentProfileId ? " (this profile)" : ""}</label>)}</fieldset> : null}
-        <p className="help-note">{!status ? "Loading statistics…" : !status.capabilities?.profileStatistics || !profiles ? "This host provides totals for all profiles. Update the native host to filter them." : scope === "current" ? `This profile: ${profiles.profiles.find((item) => item.profileId === profiles.currentProfileId)?.profileLabel || "current browser profile"}` : scope === "selected" ? `${selectedProfiles.length} profiles selected. Shared actions count once.` : scope === "unknown" ? "History saved before profile tracking was added." : "All profiles, including older unassigned activity."}</p>
+        {scope === "selected" ? <fieldset className="profile-options"><legend>{t("profilesInclude")}</legend>{profiles?.profiles.map((profile, index) => <label className="checkbox-row" key={profile.profileId}><input type="checkbox" checked={selectedProfiles.includes(profile.profileId)} onChange={(event) => { ++requestId.current; setStatus(null); setSelectedProfiles((previous) => event.target.checked ? [...previous, profile.profileId] : previous.filter((id) => id !== profile.profileId)); }} />{profile.profileLabel || profile.browserName || t("profileNumber", String(index + 1))}{profile.profileId === profiles.currentProfileId ? t("thisProfileSuffix") : ""}</label>)}</fieldset> : null}
+        <p className="help-note">{!status ? t("loadingStats") : !status.capabilities?.profileStatistics || !profiles ? t("hostTotals") : scope === "current" ? t("currentProfileValue", profiles.profiles.find((item) => item.profileId === profiles.currentProfileId)?.profileLabel || t("currentBrowserProfile")) : scope === "selected" ? t("selectedCount", String(selectedProfiles.length)) : scope === "unknown" ? t("oldHistory") : t("allHistory")}</p>
         <dl className="decision-usage memory-usage">
           {[...stats, ...secondaryStats].map(([id, value, label]) => <div key={id}><dt>{label}</dt><dd id={id}>{status ? value : "—"}</dd></div>)}
         </dl>
         <p id="memory-health" className="help-note">{healthLine}</p>
         {replayLine ? <p id="memory-replay-note" className="help-note">{replayLine}</p> : null}
         <div className="memory-actions">
-          <button id="memory-reindex" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.reindex", "Memory index rebuilt.")}>Rebuild memory index</button>
+          <button id="memory-reindex" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.reindex", t("indexRebuilt"))}>{t("rebuildIndex")}</button>
         </div>
         <MemoryChart daily={status?.recent_daily} />
-        <p className="help-note">{status?.observedAt ? `Updated ${new Date(status.observedAt).toLocaleTimeString()} · chart days use UTC` : "Waiting for statistics…"}</p>
+        <p className="help-note">{status?.observedAt ? t("statsUpdated", new Date(status.observedAt).toLocaleTimeString()) : t("waitingStats")}</p>
         </details>
       </div>}
       <p id="memory-feedback" className="feedback" role="status">{memoryFeedback}</p>
-      {loadError ? <p className="feedback" role="alert">Statistics unavailable: {loadError}{status ? " Showing the last successful update." : ""}</p> : null}
+      {loadError ? <p className="feedback" role="alert">{t("statsUnavailable")}{" "}{loadError}{status ? t("lastSuccessful") : ""}</p> : null}
     </section>
   );
 }

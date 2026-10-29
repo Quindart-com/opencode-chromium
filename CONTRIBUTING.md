@@ -49,6 +49,12 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 - Follow the [subsystem boundaries and migration status](docs/architecture.md). Validate contracts through behavior, including cancellation, failure, dry-run preservation, rollback, and mutation uncertainty.
 - Keep credentials and private benchmark/history inventories outside the checkout. Preserve runtime redaction, privacy behavior, synthetic fixtures, and ordinary secret scanning.
 
+## Test scope
+
+Add tests for distinct failures in production behavior. Extend an existing fixture when it already exercises the affected flow. Avoid tests that only search source code for helper names, repeat package/schema checks, copy SVG coordinates or CSS constants, or assert facts about a mock without calling production code.
+
+Keep coverage for ownership isolation, consent, redaction, startup and update recovery, cancellation, mutation uncertainty, and supported Node/platform behavior. Real browser checks cover DOM interaction and rendering; small unit tests should cover additional boundaries or failure paths instead of repeating that flow.
+
 ## Security-Sensitive Changes
 
 Changes to extension permissions, native messaging, file upload behavior, clipboard access, or CDP execution should explain the security impact in the PR description.

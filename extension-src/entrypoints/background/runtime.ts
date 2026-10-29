@@ -16,6 +16,7 @@ import { createFirefoxAttacher,registerDecisionImageCapture } from "./firefox-br
 import { resolveTabActivation } from "./focus-policy.ts";
 import { CommandHealth } from "./command-health.ts";
 import { finalizeOwnedTabs } from "./finalize-session.ts";
+import { groupReviewTabs } from "./review-group.ts";
 import { FirefoxFrameRouting } from "./firefox-frame-routing.ts";
 import { FrameRouting } from "./frame-routing.ts";
 import { beforeDeadline } from "../../../src/shared/deadline.ts";
@@ -23,7 +24,7 @@ import { NativeRpc } from "./native-rpc.ts";
 import { assertSessionUrl,installNavigationPolicy,updateSessionPolicy } from "./navigation-policy.ts";
 import { openInstallGuide } from "./onboarding.ts";
 import { popupMessageSchema,uploadMessageSchema } from "./popup-schema.ts";
-import { assertTabAccess } from "./tab-ownership.ts";
+import { assertClaimableTab,assertTabAccess,isBrowserInternalUrl,isClaimableTab } from "./tab-ownership.ts";
 import type { ExtensionSession,TabOwner,TraceBuffer } from "./types.ts";
 import { createUploadConsent } from "./upload-consent.ts";
 import { guardedCdp,uploadTargetUrl } from "./upload-gate.ts";
@@ -51,8 +52,6 @@ const DEBUGGER_VERSION = "1.3";
 const KEEPALIVE_ALARM = "opencode-browser-plugin-keepalive";
 const HEARTBEAT_ALARM = "opencode-browser-plugin-heartbeat";
 const SESSION_GROUP_COLOR = "green";
-const DELIVERABLE_GROUP_TITLE = "OpenCode Deliverables";
-const DELIVERABLE_GROUP_COLOR = "blue";
 const MAX_CDP_EVENTS_PER_TAB = 500;
 const MAX_DOWNLOAD_EVENTS = 200;
 const MAX_TRACE_CHUNKS = 80000;
@@ -68,6 +67,7 @@ let restoringSessions = 0;
 const sessions = new Map<string, ExtensionSession>();
 const attachedTabs = new Map<number, string>();
 const commandHealth = new CommandHealth();
+const creationRequestIds = new Map<number, string>();
 const firefoxFrameRouting = new FirefoxFrameRouting((tabId, method, params, timeoutMs) => sendCdpCommand(tabId, method, params, timeoutMs));
 const frameRouting = new FrameRouting((tabId, method, params, timeoutMs, sessionId) => sendCdpCommand(tabId, method, params, timeoutMs, sessionId));
 const cdpEventsByTabId = new Map<number, CdpEvent[]>();
@@ -77,7 +77,6 @@ const cursorArrivalWaiters = new Map<string, () => void>();
 const cursorInjectedTabs = new Set<number>();
 const downloadEvents = createDownloadEvents({ ownerForTab: tabId => findTabOwner(tabId)?.sessionId ?? null, maxEvents: MAX_DOWNLOAD_EVENTS });
 const inlineResponseEventKeys = new Set<string>();
-let deliverableGroupId: number | null = null;
 let profileStatePromise: Promise<ProfileState> | null = null;
 const hostStatus: HostStatus = {
     state: "disconnected",
@@ -295,19 +294,17 @@ function normalizeKeepItem(item: KeepItem): {
     status: "handoff" | "deliverable";
 } {
     const tabId = typeof item === "number" ? item : item.tabId ?? item.tab_id ?? item.tab?.id;
-    const status = typeof item === "number" ? "handoff" : item.status ?? "handoff";
+    const status = typeof item === "number" ? "deliverable" : item.status ?? "deliverable";
     if (typeof tabId !== "number" || !Number.isInteger(tabId))
         throw new Error("Expected keep item tabId");
     if (status !== "handoff" && status !== "deliverable")
         throw new Error(`Unsupported keep status: ${status}`);
     return { tabId, status };
 }
-function isBrowserInternalUrl(url: string | undefined): boolean {
-    return /^(chrome|edge|brave|vivaldi|opera|chrome-extension|moz-extension):/i.test(url ?? "") || (/^about:/i.test(url ?? "") && url !== "about:blank");
-}
 function normalizeTab<T extends object>(tab: Browser.tabs.Tab, extra: T = {} as T) {
     const owner = tab.id !== undefined && Number.isInteger(tab.id) ? findTabOwner(tab.id) : null;
     return {
+        ...(tab.id !== undefined && creationRequestIds.has(tab.id) ? { creationRequestId: creationRequestIds.get(tab.id) } : {}),
         id: tab.id,
         title: tab.title ?? null,
         url: tab.url ?? null,
@@ -441,12 +438,6 @@ async function focusedNormalWindowId() {
     const windows = await chrome.windows.getAll({ windowTypes: ["normal"] }).catch(() => []);
     return (windows.find((window) => window.focused) ?? windows[0])?.id ?? null;
 }
-async function groupTitle(groupId: number) {
-    if (groupId === null || !Number.isInteger(groupId) || groupId < 0 || !chrome.tabGroups)
-        return null;
-    const group = await chrome.tabGroups.get(groupId).catch(() => null);
-    return group?.title ?? null;
-}
 async function ensureSessionGroup(id: string, tabId: number) {
     const session = sessionState(id);
     if (!chrome.tabs.group || !chrome.tabGroups)
@@ -464,32 +455,6 @@ async function ensureSessionGroup(id: string, tabId: number) {
     session.groupId = groupId;
     await chrome.tabGroups.update(groupId, { title: session.name ?? "OpenCode", color: SESSION_GROUP_COLOR }).catch(() => { });
     await persistSessions().catch(() => { });
-    return groupId;
-}
-async function ensureDeliverableGroup(tabId: number) {
-    if (!chrome.tabs.group || !chrome.tabGroups)
-        return null;
-    const tab = await getTab(tabId);
-    const windowId = tab.windowId;
-    let groupId = null;
-    if (deliverableGroupId !== null && Number.isInteger(deliverableGroupId)) {
-        const cachedGroup = await chrome.tabGroups.get(deliverableGroupId).catch(() => null);
-        if (cachedGroup?.title === DELIVERABLE_GROUP_TITLE && cachedGroup.windowId === windowId) {
-            groupId = cachedGroup.id;
-        }
-    }
-    if (!Number.isInteger(groupId) && typeof chrome.tabGroups.query === "function") {
-        const groups = await chrome.tabGroups.query({ windowId }).catch(() => []);
-        groupId = groups.find((group) => group.title === DELIVERABLE_GROUP_TITLE && group.windowId === windowId)?.id ?? null;
-    }
-    if (groupId === null || !Number.isInteger(groupId)) {
-        groupId = await chrome.tabs.group({ tabIds: [tabId] });
-        await chrome.tabGroups.update(groupId, { title: DELIVERABLE_GROUP_TITLE, color: DELIVERABLE_GROUP_COLOR }).catch(() => { });
-    }
-    else {
-        await chrome.tabs.group({ tabIds: [tabId], groupId });
-    }
-    deliverableGroupId = groupId;
     return groupId;
 }
 async function ungroupTab(tabId: number) {
@@ -511,6 +476,7 @@ async function untrackTab(sessionId: string, tabId: number) {
     const session = sessions.get(sessionId);
     if (!session)
         return;
+    creationRequestIds.delete(tabId);
     session.tabIds.delete(tabId);
     session.tabOrigins.delete(tabId);
     if (session.activeTabId === tabId)
@@ -979,6 +945,7 @@ rpc.register("createTab", async (params) => {
     }
     if (tab.id === undefined)
         throw new Error("Could not identify browser tab");
+    if (params.creationRequestId) creationRequestIds.set(tab.id, params.creationRequestId);
     await trackTab(id, tab.id, "agent");
     return normalizeTab(tab);
 });
@@ -987,10 +954,8 @@ rpc.register("claimUserTab", async (params) => {
     const session = sessionState(id);
     updateTurn(session, params);
     const tabId = tabIdFromParams(params);
-    assertTabAccess({ owner: findTabOwner(tabId), sessionId: id, tabId, allowUnowned: true });
     const tab = await getTab(tabId);
-    if (isBrowserInternalUrl(tab.url))
-        throw new Error(`Cannot claim internal browser tab: ${tab.url}`);
+    assertClaimableTab(tab, findTabOwner(tabId));
     assertSessionUrl(session, tab.url ?? "about:blank");
     await trackTab(id, tabId, "user");
     return normalizeTab(tab);
@@ -1045,17 +1010,9 @@ rpc.register("getTab", async (params) => {
 });
 rpc.register("getUserTabs", async () => {
     const tabs = await queryTabs({});
-    const groupTitles = new Map();
-    const normalized = [];
-    for (const tab of tabs.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0)).slice(0, 1000)) {
-        let tabGroup = null;
-        if (Number.isInteger(tab.groupId) && tab.groupId >= 0) {
-            if (!groupTitles.has(tab.groupId))
-                groupTitles.set(tab.groupId, await groupTitle(tab.groupId));
-            tabGroup = groupTitles.get(tab.groupId);
-        }
-        normalized.push(normalizeTab(tab, { tabGroup, claimable: tab.id !== undefined && !findTabOwner(tab.id) && !isBrowserInternalUrl(tab.url) }));
-    }
+    const normalized = tabs.filter(tab => isClaimableTab(tab, tab.id === undefined ? null : findTabOwner(tab.id)))
+        .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0)).slice(0, 1000)
+        .map(tab => normalizeTab(tab, { tabGroup: null, claimable: true }));
     return { tabs: normalized };
 });
 rpc.register("getUserHistory", async (params) => {
@@ -1112,7 +1069,7 @@ rpc.register("finalizeTabs", async (params) => {
         return [normalized.tabId, normalized.status];
     }));
     const result = await finalizeOwnedTabs(session, keep, { blocked: tabId => params.blockedTabs?.find(tab => tab.tabId === tabId)?.reason, dialog: tabId => commandHealth.dialog(tabId), detach: detachTab, hide: hideCursor,
-      deliver: ensureDeliverableGroup, ungroup: ungroupTab, untrack: tabId => untrackTab(id, tabId), close: tabId => chrome.tabs.remove(tabId) });
+      deliver: tabIds => groupReviewTabs(session, tabIds, chrome), untrack: tabId => untrackTab(id, tabId) });
     await persistSessions().catch(() => {});
     return result;
 });
@@ -1153,6 +1110,7 @@ if (!IS_FIREFOX)
     installChromiumEvents({ chrome, cdpEventTabId, traceBuffers, MAX_TRACE_CHUNKS, recordCdpEvent, attachedTabs });
 installNavigationPolicy({ chrome, findOwner: findTabOwner, trackTab, getTab, stopLoading: tabId => sendCdpCommand(tabId, "Page.stopLoading", {}, 2000) });
 chrome.tabs.onRemoved.addListener((tabId) => {
+    creationRequestIds.delete(tabId);
     attachedTabs.delete(tabId);
     commandHealth.removed(tabId);
     frameRouting.forget(tabId);

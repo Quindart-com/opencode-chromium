@@ -1,9 +1,29 @@
+import { t } from "../../i18n";
 import { useEffect, useState } from "react";
 import { sendMessage } from "./api";
 import type { DecisionSettings } from "./decision-types";
 
+const providerMessages = new Map<string, string>([
+  ["Connected. API key and decision model verified.", "providerSuccess"],
+  ["API key rejected. Check the key and selected service.", "providerInvalidKey"],
+  ["This key does not have access to the decision model.", "providerDenied"],
+  ["Add credits or increase your API key's spending limit.", "providerCredit"],
+  ["Service rate limit reached. Try the test again later.", "providerRate"],
+  ["Connection timed out. Check your network and try again.", "providerTimeout"],
+  ["Check your provider settings and API key.", "providerCheck"],
+  ["Invalid provider and service.", "providerCheck"],
+  ["Enter an API key or configure the environment variable in Advanced settings.", "providerNeedKey"],
+  ["OpenRouter is unavailable. Try again later.", "providerUnavailable"],
+  ["Could not reach OpenRouter. Check your network and try again.", "providerNetwork"],
+  ["The decision test failed. Settings were not changed; try again later.", "providerDecisionFail"],
+]);
+const translateProviderMessage = (message: string) => {
+  const key = providerMessages.get(message);
+  return key ? t(key) : message;
+};
+
 const defaults: DecisionSettings = { provider: "off", route: "openrouter", shareText: false, shareImages: false, keyEnv: "OPENROUTER_API_KEY" };
-const selection = (settings: DecisionSettings) => settings.provider === "jev" ? `jev-${settings.route}` : settings.provider;
+const selection = (settings: DecisionSettings) => settings.provider === "jev" ? `jev-${settings.route}` : settings.provider === "openai-decisions" && settings.route === "openai" ? "openai-direct" : settings.provider;
 type TestResult = { ok: boolean; settings?: DecisionSettings; message?: string; elapsedMs?: number; authMs?: number;
   usage?: { input_tokens: number; output_tokens: number; cost?: number } };
 
@@ -25,7 +45,7 @@ export default function ProviderSettings() {
       if (!response.result) throw new Error("unavailable");
       setSettings(response.result); setLoaded(true);
     }).catch(() => {
-      if (!disposed) { setError(true); setMessage("Connect the native host, then reopen Settings."); }
+      if (!disposed) { setError(true); setMessage(t("connectReopen")); }
     });
     void import("wxt/browser").then(async ({ browser }) => {
       const state = await browser.storage.local.get("localModelDeprecationDismissed");
@@ -34,9 +54,9 @@ export default function ProviderSettings() {
     return () => { disposed = true; };
   }, []);
   function choose(value: string) {
-    const route = value === "jev-typesafe" ? "typesafe" : "openrouter";
-    setSettings({ ...settings, provider: value === "off" ? "off" : value === "openai-decisions" ? "openai-decisions" : "jev", route,
-      keyEnv: route === "openrouter" ? "OPENROUTER_API_KEY" : "TYPESAFE_API_KEY", shareImages: false,
+    const route = value === "jev-typesafe" ? "typesafe" : value === "openai-direct" ? "openai" : "openrouter";
+    setSettings({ ...settings, provider: value === "off" ? "off" : value === "openai-decisions" || value === "openai-direct" ? "openai-decisions" : "jev", route,
+      keyEnv: route === "openrouter" ? "OPENROUTER_API_KEY" : route === "openai" ? "OPENAI_API_KEY" : "TYPESAFE_API_KEY", shareImages: false,
       credentialConfigured: route === settings.route && settings.credentialConfigured });
     setApiKey(""); setMessage(""); setTest(null); setError(false);
   }
@@ -46,26 +66,26 @@ export default function ProviderSettings() {
       const next = { ...settings, shareText: enabled, shareImages: enabled && settings.shareImages };
       if (enabled) {
         const response = await sendMessage<{ result?: TestResult }>({ type: "TEST_DECISION_CONNECTION", settings: next, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) });
-        if (!response.result) throw new Error("Could not connect to the native host. Reconnect and try again.");
+        if (!response.result) throw new Error(t("cannotConnect"));
         setTest(response.result); setError(!response.result.ok);
-        setMessage(response.result.message ?? "Connection test failed.");
+        setMessage(response.result.message ? translateProviderMessage(response.result.message) : t("testFailed"));
         if (response.result.ok && response.result.settings) { setSettings(response.result.settings); setApiKey(""); }
       } else {
         const response = await sendMessage<{ result?: DecisionSettings }>({ type: "SET_DECISION_SETTINGS", settings: next });
-        if (!response.result) throw new Error("Could not save. Reconnect the native host and try again.");
-        setSettings(response.result); setApiKey(""); setMessage("Decision assistance is off. Local search and replay stay available.");
+        if (!response.result) throw new Error(t("cannotSaveReconnect"));
+        setSettings(response.result); setApiKey(""); setMessage(t("decisionOff"));
       }
-    } catch (cause) { setError(true); setMessage(cause instanceof Error ? cause.message : "Could not save settings."); }
+    } catch (cause) { setError(true); setMessage(cause instanceof Error ? cause.message : t("cannotSaveSettings")); }
     finally { setBusy(false); }
   }
   async function removeKey() {
     setBusy(true);
     try {
       const response = await sendMessage<{ result?: DecisionSettings }>({ type: "REMOVE_DECISION_KEY" });
-      if (!response.result) throw new Error("Could not remove the stored key.");
+      if (!response.result) throw new Error(t("cannotRemoveKey"));
       setSettings(response.result); setApiKey(""); setTest(null); setError(false);
-      setMessage("Stored key removed. An environment key, if configured, remains available.");
-    } catch { setError(true); setMessage("Could not remove the key. Reconnect and try again."); }
+      setMessage(t("keyRemoved"));
+    } catch { setError(true); setMessage(t("removeKeyFailure")); }
     finally { setBusy(false); }
   }
   async function dismiss() {
@@ -73,53 +93,54 @@ export default function ProviderSettings() {
     await browser.storage.local.set({ localModelDeprecationDismissed: true }); setDismissed(true);
   }
   return <section className="provider-settings" aria-labelledby="decision-heading">
-    <h2 id="decision-heading">Decision assistance</h2>
-    <p className="provider-intro">Find relevant targets and choose saved recipes. Your agent controls the actions; replay keeps its safety checks.</p>
+    <h2 id="decision-heading">{t("decisionAssistance")}</h2>
+    <p className="provider-intro">{t("decisionHelp")}</p>
     <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <div className="provider-field">
-        <label htmlFor="decision-provider">Service</label>
+        <label htmlFor="decision-provider">{t("service")}</label>
         <select id="decision-provider" value={selection(settings)} disabled={!loaded || busy} onChange={event => choose(event.target.value)}>
-          <option value="off">Off · Local search and replay</option>
+          <option value="off">{t("serviceOff")}</option>
           <option value="jev-openrouter">Jev · OpenRouter</option>
           <option value="jev-typesafe">Jev · TypeSafe</option>
           <option value="openai-decisions">OpenAI Luna · OpenRouter</option>
+          <option value="openai-direct">OpenAI Luna · OpenAI Platform</option>
         </select>
       </div>
       {enabled && <>
         <div className="provider-field">
-          <label htmlFor="decision-api-key">API key</label>
+          <label htmlFor="decision-api-key">{t("apiKey")}</label>
           <input id="decision-api-key" type="password" value={apiKey} spellCheck={false} autoComplete="new-password" maxLength={1024}
-            placeholder={settings.credentialConfigured ? "Key saved · Enter a replacement" : "Paste your API key"}
+            placeholder={settings.credentialConfigured ? t("replaceKey") : t("pasteKey")}
             disabled={busy} onChange={event => { setApiKey(event.target.value); setTest(null); setMessage(""); }} aria-describedby="decision-key-help" />
-          <p id="decision-key-help">Saved privately by the native host. Never stored in browser storage or returned to your agent.</p>
+          <p id="decision-key-help">{t("keyPrivacy")}</p>
         </div>
-        <p className="provider-consent">Enabling assistance sends bounded search or replay intent and candidate descriptions to {settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. Your agent remains in control of actions.</p>
-        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>{jev ? "Allow experimental image fallback" : "Allow screenshots for ambiguous visual targets"}<small className="help-note">Off by default. {jev ? "Only after an unsure text decision: one small screenshot may be sent to " : "One bounded screenshot may be sent to "}{settings.route === "openrouter" ? "OpenRouter" : "TypeSafe"}. At most one image request per UTC minute and 20 per UTC day across profiles. Image tokens cost extra; token counts depend on the image.</small></span></label>
+        <p className="provider-consent">{t("providerConsent", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe")}</p>
+        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>{t(jev ? "imageFallback" : "imageScreenshots")}<small className="help-note">{t(jev ? "imageJevNotice" : "imageNotice", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe")}</small></span></label>
         <details className="provider-advanced">
-          <summary>Advanced · Environment variable</summary>
+          <summary>{t("envVariable")}</summary>
           <div className="provider-field">
-            <label htmlFor="decision-key-env">Variable name</label>
+            <label htmlFor="decision-key-env">{t("variableName")}</label>
             <input id="decision-key-env" value={settings.keyEnv} pattern="[A-Z_][A-Z0-9_]*" required spellCheck={false} autoComplete="off" disabled={busy}
               onChange={event => setSettings({ ...settings, keyEnv: event.target.value })} />
-            <p>Optional alternative to a saved key. The variable must exist in the native host’s environment.</p>
+            <p>{t("environmentAlternative")}</p>
           </div>
-          {settings.credentialConfigured && <button type="button" className="provider-dismiss" disabled={busy} onClick={() => void removeKey()}>Remove saved key</button>}
+          {settings.credentialConfigured && <button type="button" className="provider-dismiss" disabled={busy} onClick={() => void removeKey()}>{t("removeKey")}</button>}
         </details>
       </>}
       <div className="provider-save-row">
-        <button className="provider-save" type="submit" disabled={!loaded || busy}>{busy ? "Testing…" : enabled ? "Save & test connection" : "Save settings"}</button>
+        <button className="provider-save" type="submit" disabled={!loaded || busy}>{t(busy ? "testing" : enabled ? "saveTest" : "saveSettings")}</button>
       </div>
-      {enabled && <p className="provider-test-help">Tests your key and selected model with one small, billable synthetic decision.</p>}
+      {enabled && <p className="provider-test-help">{t("testKeyHelp")}</p>}
       <p className={`provider-feedback${error ? " provider-feedback-error" : test?.ok ? " provider-feedback-ok" : ""}`} role="status" aria-live="polite">
-        {message || (!loaded ? "Loading settings…" : settings.ready ? "Decision assistance enabled" : enabled ? "Save and test to enable assistance." : "Local search is active")}
-        {test?.elapsedMs !== undefined && <span className="provider-timing">{test.authMs !== undefined ? `Key check ${Math.round(test.authMs)} ms · ` : ""}Decision {Math.round(test.elapsedMs)} ms
-          {test.usage ? ` · ${test.usage.input_tokens} input tokens${test.usage.cost !== undefined ? ` · $${test.usage.cost.toFixed(6)}` : ""}` : ""}</span>}
+        {message || (!loaded ? t("loadingSettings") : settings.ready ? t("decisionEnabled") : enabled ? t("saveTestEnable") : t("localSearchActive"))}
+        {test?.elapsedMs !== undefined && <span className="provider-timing">{test.authMs !== undefined ? `${t("keyCheck", String(Math.round(test.authMs)))} ` : ""}{t("decision")} {Math.round(test.elapsedMs)} ms
+          {test.usage ? ` · ${t("inputTokens", String(test.usage.input_tokens))}${test.usage.cost !== undefined ? ` · $${test.usage.cost.toFixed(6)}` : ""}` : ""}</span>}
       </p>
     </form>
     {!dismissed && <details className="provider-migration">
-      <summary>Local model migration</summary>
-      <p>Embedded models are deprecated and will move to an optional package. They stay available during migration, with at least 90 days’ notice before removal. Your memory records and cached models are preserved.</p>
-      <button className="provider-dismiss" type="button" onClick={() => void dismiss().catch(() => { setError(true); setMessage("Could not dismiss the notice."); })}>Dismiss notice</button>
+      <summary>{t("modelMigration")}</summary>
+      <p>{t("migrationText")}</p>
+      <button className="provider-dismiss" type="button" onClick={() => void dismiss().catch(() => { setError(true); setMessage(t("dismissFailure")); })}>{t("dismissNotice")}</button>
     </details>}
   </section>;
 }

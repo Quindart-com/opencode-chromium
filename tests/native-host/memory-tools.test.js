@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
-
-const root = path.resolve(process.cwd());
 
 test("memory tools are registered only when the memory flag is on", async () => {
   const { createMemoryRegistry, createCoreRegistry } = await import("../../src/core/registry.ts");
@@ -15,16 +11,15 @@ test("memory tools are registered only when the memory flag is on", async () => 
   assert.ok(memory.memory_query);
   assert.ok(memory.memory_search);
   assert.equal(memory.memory_status.annotations.readOnlyHint, true);
-  assert.equal(memory.memory_search.inputSchema.shape.kind.definitions?.length ?? memory.memory_search.inputSchema.constructor.name, memory.memory_search.inputSchema.constructor.name);
 });
 
 test("memory tools expose inspection-ready schemas", async () => {
   const { createMemoryRegistry } = await import("../../src/core/registry.ts");
   const memory = createMemoryRegistry({});
   const schema = memory.memory_search.inputSchema.shape;
-  assert.equal(schema.query.minLength ?? 1, 1);
+  assert.equal(schema.query.safeParse("").success, false);
   assert.ok(schema.query.maxLength <= 512);
-  assert.ok(schema.limit?.maxValue ?? true);
+  assert.equal(schema.limit.safeParse(21).success, false);
   const querySchema = memory.memory_query.inputSchema.shape;
   assert.ok(querySchema.session_id);
   assert.ok(querySchema.capability);
@@ -42,87 +37,4 @@ test("MCP and OpenCode adapters gate memory tools by the environment", async () 
   assert.equal(memoryEnabledForServer(), true);
   if (previous === undefined) delete process.env.OPENCODE_BROWSER_MEMORY;
   else process.env.OPENCODE_BROWSER_MEMORY = previous;
-});
-
-test("CLI recognizes memory and history aliases", async () => {
-  const source = fs.readFileSync(path.join(root, "src", "cli", "commands.ts"), "utf8");
-  assert.match(source, /command === "memory" \|\| command === "history"/);
-  const cli = fs.readFileSync(path.join(root, "src", "cli", "memory.ts"), "utf8");
-  assert.match(cli, /case "search"/);
-  assert.match(cli, /case "prune"/);
-  assert.match(cli, /case "chains"/);
-  assert.match(cli, /case "delete"/);
-  assert.doesNotMatch(cli, /case "(?:export|import)"|memory (?:export|import)/);
-});
-
-test("consultation policy instructs status-then-search before re-exploration", async () => {
-  const skill = fs.readFileSync(path.join(root, "skills", "opencode-browser-plugin", "SKILL.md"), "utf8");
-  const checkpoint = skill.indexOf("consult local action memory");
-  assert.ok(checkpoint >= 0, "skill contains the memory consultation policy");
-  const policy = skill.slice(checkpoint, checkpoint + 1600);
-  assert.match(policy, /memory_status/);
-  assert.match(policy, /memory_search/);
-  assert.match(policy, /never consult memory for unrelated tasks|Never consult memory for unrelated tasks/);
-  assert.match(policy, /continue normally when memory is absent/);
-});
-
-test("extension surfaces memory settings and dashboard inside the popup", () => {
-  const manifest = JSON.parse(fs.readFileSync(path.join(root, "extension", "manifest.json"), "utf8"));
-  assert.equal(manifest.options_ui, undefined, "no separate options tab; memory lives in the popup");
-  const popupSource = ["App.tsx", "ConnectionView.tsx", "MemoryView.tsx", "api.ts"]
-    .map((file) => fs.readFileSync(path.join(root, "extension-src", "entrypoints", "popup", file), "utf8"))
-    .join("\n");
-  assert.match(popupSource, /Overview/);
-  assert.match(popupSource, /id=\"view-memory\"|id=\"memory-state-line\"/);
-  assert.match(popupSource, /quota-slider/);
-  assert.match(popupSource, /power-user/);
-  assert.match(popupSource, /MemoryChart|memory-chart/);
-  assert.match(popupSource, /memory-enable|memory\.enable/);
-  assert.match(popupSource, /memory-disable|memory\.disable/);
-  assert.doesNotMatch(popupSource, /memory-(?:pause|resume)|memory\.(?:pause|resume)/);
-  assert.match(popupSource, /memory\.stats/);
-  assert.match(popupSource, /memory\.configure/);
-  assert.match(popupSource, /memory\.prune/);
-  assert.doesNotMatch(popupSource, /memory\.(?:export|import)|Export JSON|Import JSON|Share memory/);
-  const background = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "background", "runtime.ts"), "utf8");
-  assert.match(background, /"MEMORY_CALL"/);
-  assert.match(background, /POPUP_MEMORY_METHODS/);
-  assert.match(background, /rpc\.request\(message\.method/);
-  assert.doesNotMatch(background, /memory\.(?:export|import)/);
-  const backgroundEntrypoint = fs.readFileSync(
-    path.join(root, "extension-src", "entrypoints", "background", "index.ts"),
-    "utf8",
-  );
-  assert.match(backgroundEntrypoint, /import ["']\.\/runtime\.ts["']/);
-  assert.doesNotMatch(backgroundEntrypoint, /import\(["']\.\/runtime\.js/);
-  const runtimeChunk = fs.readdirSync(path.join(root, "extension", "chunks")).find((file) => /^runtime-.+\.js$/.test(file));
-  const builtBackground = fs.readFileSync(
-    runtimeChunk ? path.join(root, "extension", "chunks", runtimeChunk) : path.join(root, "extension", "background.js"),
-    "utf8",
-  );
-  assert.match(builtBackground, /MEMORY_CALL/);
-  const css = fs.readFileSync(path.join(root, "extension-src", "entrypoints", "popup", "popup.css"), "utf8");
-  assert.match(css, /view-tab/);
-  assert.match(css, /memory-card/);
-});
-
-test("host handles memory extension methods locally", async () => {
-    const host = fs.readFileSync(path.join(root, "native-host", "src", "runtime.ts"), "utf8");
-  assert.match(host, /memory\.stats/);
-  assert.match(host, /memory\.configure/);
-  assert.match(host, /memory\.enable/);
-  assert.match(host, /memory\.prune/);
-  assert.match(host, /memory\.query/);
-  assert.doesNotMatch(host, /memory\.(?:export|import)/);
-  const relay = fs.readFileSync(path.join(root, "native-host", "src", "rpc-relay.ts"), "utf8");
-  assert.doesNotMatch(relay, /startAgentRequest|noteResponse|completeAgentRequest/);
-});
-
-test("runtime records only high-level steps through the host boundary", () => {
-  const runtime = fs.readFileSync(path.join(root, "src", "core", "runtime.ts"), "utf8");
-  assert.match(runtime, /requestHost\("memory\.recordStep"/);
-  assert.doesNotMatch(runtime, /memory_chain_id|memory_step_index|memory_label/);
-  assert.match(runtime, /memoryChainSequence\+\+/);
-  assert.match(runtime, /executeStepWithPolicy/);
-  assert.match(runtime, /target\.query \? null : target\.selector/);
 });

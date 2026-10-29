@@ -21,6 +21,8 @@ const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "firefox-upload-"));
 // Disable first-run modals only in this disposable profile, as web-ext does.
 fs.writeFileSync(path.join(fixture, "user.js"), 'user_pref("termsofuse.bypassNotification",true);\nuser_pref("datareporting.policy.firstRunURL","");\nuser_pref("startup.homepage_welcome_url","about:blank");\n');
 const file = path.join(fixture, "approved-fixture.txt"); fs.writeFileSync(file, "approved fixture contents");
+const locale = JSON.parse(fs.readFileSync("extension-firefox/_locales/en/messages.json", "utf8"));
+const fixtureMessages = Object.fromEntries(Object.entries(locale).map(([key, value]) => [key, value.message]));
 const windows = new Map(), removed = []; let id = 100, origin, consent, backend, child;
 const native = createUploadFiles();
 const server = http.createServer(async (req, res) => {
@@ -42,12 +44,19 @@ const server = http.createServer(async (req, res) => {
     if (!target.startsWith(path.resolve("extension-firefox") + path.sep)) { res.writeHead(403).end(); return; }
     res.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(target)] ?? "application/octet-stream");
     const content = fs.readFileSync(target);
-    res.end(path.extname(target) === ".html" ? content.toString().replace('<head>', '<head><script>globalThis.chrome={runtime:{sendMessage:m=>fetch("/rpc",{method:"POST",body:JSON.stringify(m)}).then(r=>r.json())}}</script>') : content);
+    const bootstrap = `<script>globalThis.chrome={i18n:{getUILanguage:()=>"en",getMessage:(key,values)=>{let result=(${JSON.stringify(fixtureMessages)})[key]||key;for(const [index,value] of (Array.isArray(values)?values:values===undefined?[]:[values]).entries())result=result.replaceAll("$"+(index+1),value);return result}},runtime:{sendMessage:m=>fetch("/rpc",{method:"POST",body:JSON.stringify(m)}).then(r=>r.json())}}</script>`;
+    res.end(path.extname(target) === ".html" ? content.toString().replace("<head>", "<head>" + bootstrap) : content);
   } catch { res.writeHead(500).end(); }
 });
 await new Promise(resolve => server.listen(0, resolve)); origin = "http://127.0.0.1:" + server.address().port;
 const probe = net.createServer(); await new Promise(resolve => probe.listen(0, "127.0.0.1", resolve)); const port = probe.address().port; await new Promise(resolve => probe.close(resolve));
-const evaluate = async (context, expression) => remoteValue((await backend.send("script.evaluate", { target: { context }, expression, awaitPromise: true })).result);
+const evaluate = async (context, expression) => {
+  try {
+    const result = await backend.send("script.evaluate", { target: { context }, expression, awaitPromise: true });
+    assert.equal(result.type, "success", "Firefox upload fixture evaluation must succeed");
+    return remoteValue(result.result);
+  } catch (error) { throw new Error("Firefox upload fixture script.evaluate failed", { cause: error }); }
+};
 const trustedClick = async (context, label) => {
   const point = await evaluate(context, `(()=>{const e=[...document.querySelectorAll('button')].find(e=>e.textContent===${JSON.stringify(label)});if(!e||e.disabled)return null;const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
   assert.ok(point, "Consent button is ready");
@@ -66,13 +75,27 @@ try {
   consent = createUploadConsent({ chrome: {
     runtime: { id: "fixture-extension", getURL: page => new URL(page, origin + "/").href }, storage: { local: { get: async () => ({}) } },
     windows: { onRemoved: { addListener: callback => removed.push(callback) },
-      create: async ({ url }) => { const context = (await backend.send("browsingContext.create", { type: "tab" })).context, windowId = ++id; windows.set(windowId, { id: windowId, context, token: new URL(url).searchParams.get("token") }); await backend.send("browsingContext.navigate", { context, url, wait: "complete" }); return { id: windowId, tabs: [{ id: windowId }] }; },
+      create: async ({ url }) => {
+        const context = (await backend.send("browsingContext.create", { type: "tab" })).context, windowId = ++id;
+        const window = { id: windowId, context, token: new URL(url).searchParams.get("token"), ready: false };
+        windows.set(windowId, window);
+        await backend.send("browsingContext.navigate", { context, url, wait: "complete" });
+        window.ready = true;
+        return { id: windowId, tabs: [{ id: windowId }] };
+      },
       remove: async windowId => { const window = windows.get(windowId); windows.delete(windowId); if (window) await backend.send("browsingContext.close", { context: window.context }).catch(() => {}); removed.forEach(callback => callback(windowId)); },
     },
   }, describe: files => native("uploads.describe", { files }), snapshot: token => native("uploads.snapshot", { token }), release: token => native("uploads.release", { token }) });
   let object = (await command("Runtime.evaluate", { expression: "document.querySelector('#document')", returnByValue: false })).result.objectId;
   const upload = () => guardedCdp({ method: "DOM.setFileInputFiles", commandParams: { objectId: object, files: [file] }, tabId: 1, consent, getTab: async () => ({ url: await evaluate(website, "location.href") }), inspectTarget: (method, params) => uploadTargetUrl(method, params, command), send: params => command("DOM.setFileInputFiles", params) });
-  const confirmation = async () => { for (let i = 0; i < 100; i++) { const window = [...windows.values()][0]; if (window && await evaluate(window.context, "document.body.innerText.includes('Allow upload')")) return window.context; await new Promise(resolve => setTimeout(resolve, 50)); } throw Error("Consent UI did not become ready"); };
+  const confirmation = async () => {
+    for (let i = 0; i < 100; i++) {
+      const window = [...windows.values()][0];
+      if (window?.ready && await evaluate(window.context, "[...document.querySelectorAll('button')].some(button=>button.textContent==='Allow upload'&&!button.disabled)")) return window.context;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw Error("Consent UI did not become ready");
+  };
   const denied = upload().then(() => "unexpected", error => error.message); let context = await confirmation();
   await evaluate(context, "[...document.querySelectorAll('button')].find(e=>e.textContent==='Allow upload').click()");
   assert.equal(await evaluate(inputContext, "document.querySelector('#document').files.length"), 0);

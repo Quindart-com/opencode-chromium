@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { extensionDisplayName } from "./extension-identity.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -19,7 +20,7 @@ if (packageJson.publishConfig?.access !== "public") errors.push("Package must be
 if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") errors.push("Package must publish to the public npm registry");
 const extensionManifestPath = path.join(root, "extension", "manifest.json");
 const extensionManifest = JSON.parse(fs.readFileSync(extensionManifestPath, "utf8"));
-if (extensionManifest.name !== "opencode-chromium") errors.push(`Extension display name must be opencode-chromium: ${extensionManifest.name}`);
+if (extensionDisplayName(extensionManifest, path.join(root, "extension")) !== "opencode-chromium") errors.push(`Extension display name must be opencode-chromium: ${extensionManifest.name}`);
 if (extensionManifest.version !== packageJson.version) errors.push(`Extension manifest version ${extensionManifest.version} must match package version ${packageJson.version}`);
 if (packageJson.bin?.["opencode-chromium-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("Canonical MCP binary is missing");
 if (packageJson.bin?.["opencode-chromium"] !== "./dist/cli/index.js") errors.push("Canonical CLI binary is missing");

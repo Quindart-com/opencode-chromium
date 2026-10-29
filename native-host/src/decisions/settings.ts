@@ -6,7 +6,7 @@ import { protectKey,revealKey } from "./credentials.js";
 
 export const providerSettingsSchema = z.object({
   provider: z.enum(["off", "jev", "openai-decisions"]).default("off"),
-  route: z.enum(["typesafe", "openrouter"]).default("typesafe"),
+  route: z.enum(["typesafe", "openrouter", "openai"]).default("typesafe"),
   shareText: z.boolean().default(false), shareImages: z.boolean().default(false),
   keyEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/).default("TYPESAFE_API_KEY"),
 });
@@ -14,7 +14,7 @@ export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
 export const LUNA_MODEL = "openai/gpt-6-luna-decisions";
 export function providerModel(settings: ProviderSettings, image = false): string | null {
   if (settings.provider === "jev" && image) return settings.route === "openrouter" ? "typesafe/jev-1.14" : "jev-1.14.0";
-  return settings.provider === "openai-decisions" ? LUNA_MODEL : settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null;
+  return settings.provider === "openai-decisions" ? (settings.route === "openai" ? "gpt-6-luna" : LUNA_MODEL) : settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null;
 }
 export function providerSettingsPath(): string {
   const base = process.env.AGENT_BROWSER_PROVIDER_DIR ?? (process.platform === "win32" ?
@@ -51,7 +51,7 @@ export function getProviderSettings(): ProviderSettings {
 }
 export function configureProvider(settings: unknown): ProviderSettings {
   const validated = providerSettingsSchema.parse(settings);
-  if (validated.provider === "openai-decisions" && validated.route !== "openrouter") throw new Error("Luna requires OpenRouter");
+  if ((validated.provider === "openai-decisions" && validated.route === "typesafe") || (validated.provider === "jev" && validated.route === "openai")) throw new Error("Invalid provider and route");
   const file = providerSettingsPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.tmp`;
@@ -64,7 +64,7 @@ export function configureProvider(settings: unknown): ProviderSettings {
 export function providerStatus() {
   const settings = getProviderSettings();
   const credentialConfigured = Boolean(providerKey(settings));
-  const ready = settings.provider !== "off" && (settings.provider !== "openai-decisions" || settings.route === "openrouter") && settings.shareText && credentialConfigured;
+  const ready = settings.provider !== "off" && (settings.provider !== "openai-decisions" || settings.route !== "typesafe") && (settings.provider !== "jev" || settings.route !== "openai") && settings.shareText && credentialConfigured;
   return { ...settings, ready, credentialConfigured, model: providerModel(settings), imageModel: providerModel(settings, true),
     reason: ready ? null : "Disabled, text sharing not enabled, or credential environment variable missing" };
 }

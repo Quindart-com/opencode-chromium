@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { extensionDisplayName } from "./extension-identity.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -60,7 +61,7 @@ for (const entry of entryNames) {
 
 const manifest = JSON.parse(fs.readFileSync(path.join(extensionDir, "manifest.json"), "utf8"));
 if (manifest.manifest_version !== 3) errors.push("Extension must be Manifest V3");
-if (manifest.name !== "opencode-chromium") errors.push(`Extension display name must be opencode-chromium: ${manifest.name}`);
+if (extensionDisplayName(manifest, extensionDir) !== "opencode-chromium") errors.push(`Extension display name must be opencode-chromium: ${manifest.name}`);
 if (manifest.version !== packageJson.version) errors.push(`Extension manifest version ${manifest.version} must match package version ${packageJson.version}`);
 const permissions = [...(manifest.permissions ?? [])].sort();
 const expected = [...EXPECTED_PERMISSIONS].sort();

@@ -2,7 +2,7 @@
   "mcpServers": {
     "opencode-browser-plugin": {
       "command": "npx",
-      "args": ["-y", "--package", "opencode-chromium@1.10.0", "opencode-chromium-mcp", "--managed"]
+      "args": ["-y", "--package", "opencode-chromium@1.10.1", "opencode-chromium-mcp", "--managed"]
     }
   }
 }
