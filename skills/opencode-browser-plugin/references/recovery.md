@@ -18,6 +18,8 @@ Check the failing layer before changing an installation. A visible skill is a lo
 
 ## Tools exist, browser discovery fails
 
+For transport timeouts, read the automatic CLI doctor's `recovery` result before another browser action. The connection-only check probes the live extension, rather than trusting the host's cached connected flag. A healthy result does not prove that the original mutation failed or succeeded. Inspect that same session's tabs, health and current page before continuing. The runtime does not replay uncertain mutations. If automatic diagnostics cannot complete, run `opencode-chromium doctor --repair-runtime --json` from a permitted local terminal and apply one targeted repair from its checks.
+
 | Error | Recovery |
 | --- | --- |
 | `BROWSER_HOST_UNRESPONSIVE` | Run `opencode-chromium doctor --repair-runtime --json` from the installed release. This removes records belonging to dead, idle processes while retaining unfinished sessions and approvals. Retry once, then reconnect the extension if its host still fails to answer. |
@@ -38,5 +40,7 @@ codex plugin marketplace add Quindart-com/opencode-chromium --ref master --spars
 ```
 
 Refresh an existing snapshot with `codex plugin marketplace upgrade quindart-browser`, reopen the plugin browser, choose Quindart Browser, and install/update the displayed release. An older open development checkout can expose its own older project catalog. GitHub-backed marketplaces still use local snapshots; do not promise that Codex polls a raw GitHub file on every request or immediately adopts every upstream change.
+
+Production setup and coordinated managed MCP startup refresh the configured, enabled `quindart-browser` Git marketplace once per runtime release through that supported CLI command. Concurrent refreshes are coalesced; failed refreshes remain retryable. Development checkouts and other marketplaces are left alone. Codex still owns installation and chat reload timing.
 
 When sharing an unresolved failure, include the error code, versions, operating system, and a synthetic reproduction. Redact local account names, absolute personal paths, profile/session IDs, private URLs, page content, credentials, and raw logs. Follow the main skill's approval rules before posting an issue.

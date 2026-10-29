@@ -37,7 +37,11 @@ try {
   const userId = await userTab("existing"), groupedId = await userTab("user-group"), changedId = await userTab("changed-after-discovery");
   const protectedGroup = await makeGroup([groupedId]);
   const otherSessionId = "other-agent-fixture";
-  const otherId = (await call("browser_session", { sessionId: otherSessionId, action: "new-tab" })).activeTabId;
+  const otherCreated = await call("browser_session", { sessionId: otherSessionId, action: "new-tab" });
+  const otherId = otherCreated.activeTabId;
+  assert.match(otherCreated.result.creationRequestId, /^[a-f0-9-]{36}$/);
+  const otherTabs = await call("browser_session", { sessionId: otherSessionId, action: "open" });
+  assert.equal(otherTabs.result.tabs.find(tab => tab.id === otherId).creationRequestId, otherCreated.result.creationRequestId);
   const ownedUngroupedId = (await call("browser_session", { sessionId: otherSessionId, action: "new-tab" })).activeTabId;
   await worker.evaluate(id => chrome.tabs.ungroup(id), ownedUngroupedId);
   await call("browser_session", { action: "open", name: "Human review" });

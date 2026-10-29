@@ -11,7 +11,7 @@ const providerMessages = new Map<string, string>([
   ["Service rate limit reached. Try the test again later.", "providerRate"],
   ["Connection timed out. Check your network and try again.", "providerTimeout"],
   ["Check your provider settings and API key.", "providerCheck"],
-  ["Luna requires OpenRouter.", "providerLuna"],
+  ["Invalid provider and service.", "providerCheck"],
   ["Enter an API key or configure the environment variable in Advanced settings.", "providerNeedKey"],
   ["OpenRouter is unavailable. Try again later.", "providerUnavailable"],
   ["Could not reach OpenRouter. Check your network and try again.", "providerNetwork"],
@@ -134,7 +134,7 @@ export default function ProviderSettings() {
       <p className={`provider-feedback${error ? " provider-feedback-error" : test?.ok ? " provider-feedback-ok" : ""}`} role="status" aria-live="polite">
         {message || (!loaded ? t("loadingSettings") : settings.ready ? t("decisionEnabled") : enabled ? t("saveTestEnable") : t("localSearchActive"))}
         {test?.elapsedMs !== undefined && <span className="provider-timing">{test.authMs !== undefined ? `${t("keyCheck", String(Math.round(test.authMs)))} ` : ""}{t("decision")} {Math.round(test.elapsedMs)} ms
-          {test.usage ? ` · ${t("inputTokens", String(test.usage.input_tokens))}${test.usage.cost !== undefined ? ` · ${test.usage.cost.toFixed(6)}` : ""}` : ""}</span>}
+          {test.usage ? ` · ${t("inputTokens", String(test.usage.input_tokens))}${test.usage.cost !== undefined ? ` · $${test.usage.cost.toFixed(6)}` : ""}` : ""}</span>}
       </p>
     </form>
     {!dismissed && <details className="provider-migration">

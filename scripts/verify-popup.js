@@ -64,6 +64,7 @@ const server = http.createServer(async (req, res) => {
         const check = await saveAndTestProvider({ settings: message.settings, apiKey: message.apiKey }, async (url, init) => {
           if (new Headers(init.headers).get("Authorization")?.includes("invalid-key-fixture")) return new Response("rejected", { status: 401 });
           if (String(url).endsWith("/key")) return new Response("{}");
+          if (String(url) === "https://api.openai.com/v1/decisions") return Response.json({ model: "gpt-6-luna", answers: [{ type: "choice", name: "decision", choice: "ready", confidence: 0.99, probabilities: [{ value: "ready", probability: 0.99 }, { value: "__abstain", probability: 0.01 }] }], usage: { input_tokens: 22, output_tokens: 0 } });
           return new Response(JSON.stringify({ model: JSON.parse(String(init.body)).model === "openai/gpt-6-luna-decisions" ? "openai/gpt-6-luna-decisions" : "typesafe/jev-1.13-20260917", answers: { decision: {
             type: "choice", choice: "ready", confidence: 0.99, probabilities: { ready: 0.99, __abstain: 0.01 },
           } }, usage: { input_tokens: 22, output_tokens: 0, cost: 0.000001 } }));
@@ -213,6 +214,14 @@ try {
   await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
   await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
   assert.equal(decisionSettings.shareImages, true);
+  await page.selectOption("#decision-provider", "openai-direct");
+  assert.equal(await images.isChecked(), false);
+  await page.locator("#decision-api-key").fill(`fixture-openai-${randomUUID()}`);
+  await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
+  await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
+  assert.equal(decisionSettings.route, "openai");
+  assert.equal(decisionSettings.keyEnv, "OPENAI_API_KEY");
+  assert.equal(await page.locator(".provider-consent").textContent().then(text => text.includes("OpenAI Platform")), true);
   await page.selectOption("#decision-provider", "jev-typesafe");
   assert.equal(await jevImages.isChecked(), false, "switching service resets screenshot consent");
   await page.getByText("Advanced · Environment variable", { exact: true }).click();

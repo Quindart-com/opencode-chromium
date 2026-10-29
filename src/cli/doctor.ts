@@ -10,6 +10,7 @@ import { codexConfigPath,inspectHarnessSkills,STALE_SKILL_MARKER } from "./skill
 import { packageInfo } from "./version.ts";
 import { runtimeDir } from "./native-host.ts";
 import { inspectProjectBrowserPlugin } from "./codex-marketplace.ts";
+import { connectionDoctor } from "./connection-doctor.ts";
 
 const MAX_SCHEMA_BYTES = 13000;
 
@@ -74,6 +75,8 @@ export async function runDoctor({ json = false, repairRuntime = false } = {}) {
       return !fs.readFileSync(config, "utf8").includes(STALE_SKILL_MARKER);
     })(), {}),
   );
+  const connection = await connectionDoctor();
+  checks.push(...connection.checks);
   const report = { ok: checks.every((item) => item.ok), ...info, checks, generatedAt: new Date().toISOString() };
   if (json) return report;
   return report;
