@@ -57,9 +57,10 @@ function testIpcPath(name) {
   return path.join(os.tmpdir(), `opencode-browser-test-${process.pid}-${name}.sock`);
 }
 
-function createFakeProfileHost({ profileId, profileLabel }) {
+function createFakeProfileHost({ profileId, profileLabel, respondToStatus = true, ignoredStatusRequests = 0 }) {
   const ipcPath = testIpcPath(profileId);
   let connections = 0;
+  let statusRequests = 0;
   if (process.platform !== "win32") fs.rmSync(ipcPath, { force: true });
 
   const server = net.createServer((socket) => {
@@ -67,6 +68,8 @@ function createFakeProfileHost({ profileId, profileLabel }) {
     const decoder = new FrameDecoder({
       onMessage: (message) => {
         if (message.method === "host.status") {
+          statusRequests++;
+          if (!respondToStatus || statusRequests <= ignoredStatusRequests) return;
           void writeFrame(socket, {
             jsonrpc: "2.0",
             id: message.id,
@@ -100,6 +103,7 @@ function createFakeProfileHost({ profileId, profileLabel }) {
       resolve({
         ipcPath,
         get connections() { return connections; },
+        get statusRequests() { return statusRequests; },
         close: () => new Promise((done) => server.close(() => {
           if (process.platform !== "win32") fs.rmSync(ipcPath, { force: true });
           done();
@@ -129,6 +133,44 @@ test("discovers and routes to live browser profile hosts", async () => {
     closeBrowserClients();
     await host.close();
     fs.rmSync(registryDir, { recursive: true, force: true });
+    if (previousRegistry === undefined) delete process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
+    else process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = previousRegistry;
+  }
+});
+
+test("an unresponsive registered host gives recovery guidance instead of no browser profile", async () => {
+  const previousRegistry = process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
+  const registryDir = fs.mkdtempSync(path.join(os.tmpdir(), "browser-probe-timeout-"));
+  process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = registryDir;
+  const host = await createFakeProfileHost({ profileId: "slow-profile", profileLabel: "test", respondToStatus: false });
+  try {
+    await assert.rejects(listBrowserProfiles({ fresh: true, timeoutMs: 20 }), error => {
+      assert.equal(error.code, "BROWSER_HOST_UNRESPONSIVE");
+      assert.match(error.message, /doctor --repair-runtime/);
+      assert.equal(error.uncertain, false);
+      return true;
+    });
+    assert.equal(host.statusRequests, 1, "an explicit probe budget must not be expanded by a retry");
+  } finally {
+    closeBrowserClients(); await host.close(); fs.rmSync(registryDir, { recursive: true, force: true });
+    if (previousRegistry === undefined) delete process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
+    else process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = previousRegistry;
+  }
+});
+
+test("a missed default status probe gets one bounded read-only retry", async () => {
+  const previousRegistry = process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
+  const registryDir = fs.mkdtempSync(path.join(os.tmpdir(), "browser-probe-retry-"));
+  process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = registryDir;
+  const host = await createFakeProfileHost({ profileId: "busy-profile", profileLabel: "test", ignoredStatusRequests: 1 });
+  try {
+    const profiles = await listBrowserProfiles({ fresh: true });
+    assert.equal(profiles.length, 1);
+    assert.equal(profiles[0].profileId, "busy-profile");
+    assert.equal(host.statusRequests, 2);
+    assert.equal(host.connections, 1, "the retry should reuse the live host connection");
+  } finally {
+    closeBrowserClients(); await host.close(); fs.rmSync(registryDir, { recursive: true, force: true });
     if (previousRegistry === undefined) delete process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR;
     else process.env.OPENCODE_BROWSER_PROFILE_REGISTRY_DIR = previousRegistry;
   }

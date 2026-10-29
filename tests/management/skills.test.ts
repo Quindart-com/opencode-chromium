@@ -18,6 +18,8 @@ test("selected-client skill dry run preserves an existing skill and never instal
     expect(fs.existsSync(path.join(home, ".codex"))).toBe(false);
     applyTransaction(changes);
     expect(fs.readFileSync(file, "utf8")).toContain("opencode");
+    expect(fs.existsSync(path.join(home, ".agents/skills/opencode-browser-plugin/scripts/diagnose-mcp.mjs"))).toBe(true);
+    expect(fs.existsSync(path.join(home, ".agents/skills/opencode-browser-plugin/references/recovery.md"))).toBe(true);
     expect(applyTransaction(planSkills(process.cwd(), ["opencode"], false, home)).changedFiles).toEqual([]);
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });

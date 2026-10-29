@@ -98,6 +98,8 @@ test("setup preserves an enabled native Codex plugin without adding duplicate MC
     expect((config.mcp_servers as Record<string, unknown>)["opencode-browser-plugin"]).toBeUndefined();
     expect((config.plugins as Record<string, Record<string, unknown>>)["opencode-browser-plugin@quindart-browser"]?.enabled).toBe(true);
     expect(formatSetupResult(result)).toContain("native browser plugin");
+    expect(result.pluginUpdates).toMatchObject([{ id: "codex", command: "codex plugin marketplace upgrade quindart-browser" }]);
+    expect(formatSetupResult(result)).toContain("codex plugin marketplace upgrade quindart-browser");
     const health = inspectHarnessSkills({ harnesses: [{ ...f.rows[0]!, managed: true }], homedir: f.home, source: path.join(f.root, "skills/opencode-browser-plugin") });
     expect(health.clients).toEqual(["codex"]);
     expect(health.nativePlugins).toEqual(["codex"]);

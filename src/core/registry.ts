@@ -182,7 +182,7 @@ export const finalizeInputSchema = z.object({
         ...sessionFields,
         keep: z.array(z.union([
           z.number().int().positive(),
-          z.object({ tabId: z.number().int().positive(), status: z.enum(["handoff", "deliverable"]).optional().describe("'deliverable' moves the tab to the blue OpenCode Deliverables group as a user-facing output; 'handoff' (default) keeps it in the session for later turns.") }),
+          z.object({ tabId: z.number().int().positive(), status: z.enum(["handoff", "deliverable"]).optional().describe("Default: deliverable, open in a blue review group. Explicit handoff retains session ownership for later work.") }),
         ])).max(50).optional(),
         keepEnvironment: z.boolean().optional().describe("Retain applied emulation overrides instead of clearing them."),
       });
@@ -238,14 +238,14 @@ export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" 
       execute: (args, context) => runtime.observe(args, context),
     }),
     browser_session: defineRuntimeTool({
-      description: "Manage a named-profile session. Pass name on open or name to label its tab group.",
+      description: "Manage a named-profile session. Name labels its tab group. scope=user lists only ungrouped, unclaimed tabs; claim-tab needs the user's request or permission.",
       inputSchema: sessionInputSchema,
       outputSchema: resultSchema,
       annotations: { openWorldHint: true },
       execute: (args, context) => runtime.session(args, context),
     }),
     browser_finalize: defineRuntimeTool({
-      description: "Finalize a browser session. 'deliverable' moves a kept tab into the blue OpenCode Deliverables group; 'handoff' (default) keeps a tab inside the session so work can continue in a later turn. Agent-owned unkept tabs close and user-claimed unkept tabs are released.",
+      description: "Finish work: leave all tabs open for human review in a blue group and release ownership. Only explicit keep status 'handoff' retains a tab in the active session.",
       inputSchema: finalizeInputSchema,
       outputSchema: resultSchema,
       annotations: { destructiveHint: true, openWorldHint: true },

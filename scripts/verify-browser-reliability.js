@@ -159,7 +159,7 @@ try {
   assert.equal(nativeDialog?.type, "prompt", nativeDialog ? JSON.stringify(nativeDialog) : JSON.stringify(await promptCall));
   const partial = await raw("browser_finalize", { keep: [mainTabId] });
   assert.equal(partial.status, "partial");
-  assert.ok(partial.result.profiles[profile].tabs.some(tab => tab.tabId === safeTab.activeTabId && tab.status === "closed"));
+  assert.ok(partial.result.profiles[profile].tabs.some(tab => tab.tabId === safeTab.activeTabId && tab.status === "released"));
   await run([{ action: "handleDialog", value: "dismiss" }]);
   await promptCall;
   await waitReadable();

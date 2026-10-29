@@ -4,6 +4,14 @@ Read the matching topic on demand before retrying a failed browser
 connection. Each topic describes the failure it covers and the recovery
 steps to try in order.
 
+## MCP startup and missing tools
+
+If Codex loads the browser skill but exposes no browser tools, start with the
+[bundled recovery guide](../skills/opencode-browser-plugin/references/recovery.md).
+It includes a dependency-free MCP startup probe, targeted npm-cache repair, and
+separate recovery steps for an unresponsive or inaccessible native host. The skill
+and this helper remain available even when the MCP server cannot start.
+
 ## discovery
 
 Covers: browser setup succeeds (the native host is installed and the

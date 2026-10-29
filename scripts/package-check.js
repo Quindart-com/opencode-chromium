@@ -42,6 +42,8 @@ const required = [
   "native-host/dist/runtime.js",
   "native-host/dist/memory/profile-stats.js",
   "skills/opencode-browser-plugin/SKILL.md",
+  "skills/opencode-browser-plugin/scripts/diagnose-mcp.mjs",
+  "skills/opencode-browser-plugin/references/recovery.md",
   "skills/opencode-browser-plugin/agents/openai.yaml",
 ];
 for (const relative of required) if (!fs.existsSync(path.join(root, relative))) throw new Error(`Build/package file is missing: ${relative}`);
