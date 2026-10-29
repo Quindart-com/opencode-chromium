@@ -1,0 +1,1109 @@
+{
+  "extensionName": {
+    "message": "opencode-chromium"
+  },
+  "extensionDescription": {
+    "message": "Connect OpenCode, Codex and MCP agents to your browser for page search, forms, screenshots and local action memory."
+  },
+  "connected": {
+    "message": "Connected"
+  },
+  "checking": {
+    "message": "Checking"
+  },
+  "reconnecting": {
+    "message": "Reconnecting"
+  },
+  "notConnected": {
+    "message": "Not connected"
+  },
+  "localAutomation": {
+    "message": "Local browser automation"
+  },
+  "extensionViews": {
+    "message": "Extension views"
+  },
+  "overview": {
+    "message": "Overview"
+  },
+  "profiles": {
+    "message": "Profiles"
+  },
+  "settings": {
+    "message": "Settings"
+  },
+  "setupGuide": {
+    "message": "Setup guide"
+  },
+  "sourceGithub": {
+    "message": "Source on GitHub"
+  },
+  "uploadTitle": {
+    "message": "Allow file upload?"
+  },
+  "uploadSendOne": {
+    "message": "An agent wants to send this file to:"
+  },
+  "uploadSendMany": {
+    "message": "An agent wants to send these files to:"
+  },
+  "uploadWebsiteWarning": {
+    "message": "The website can read and keep the uploaded files."
+  },
+  "uploadFileLocation": {
+    "message": "File location"
+  },
+  "uploadExpiry": {
+    "message": "This request expires after one minute. Closing the window cancels the upload."
+  },
+  "uploadCancel": {
+    "message": "Cancel upload"
+  },
+  "uploadSaving": {
+    "message": "Saving decision…"
+  },
+  "uploadAllow": {
+    "message": "Allow upload"
+  },
+  "uploadLoading": {
+    "message": "Loading upload request…"
+  },
+  "uploadExpired": {
+    "message": "This upload request has expired. Close this window and request the upload again."
+  },
+  "uploadPreview": {
+    "message": "Preview of $1"
+  },
+  "profilesTitle": {
+    "message": "Choose a browser profile"
+  },
+  "copySetup": {
+    "message": "Copy setup command"
+  },
+  "connectionDetails": {
+    "message": "Connection details"
+  },
+  "chooseProfile": {
+    "message": "Choose a browser profile"
+  },
+  "connectedProfiles": {
+    "message": "Connected browser profiles"
+  },
+  "copySelector": {
+    "message": "Copy agent selector"
+  },
+  "renameProfile": {
+    "message": "Rename this profile (optional)"
+  },
+  "profileLabel": {
+    "message": "Profile label"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "localSearchModels": {
+    "message": "Local search and models"
+  },
+  "searchMeaning": {
+    "message": "Search by meaning"
+  },
+  "enableSemantic": {
+    "message": "Enable semantic retrieval"
+  },
+  "advancedSearch": {
+    "message": "Advanced search settings"
+  },
+  "searchMode": {
+    "message": "Search mode"
+  },
+  "agentCount": {
+    "message": "Agent result count"
+  },
+  "resultDetail": {
+    "message": "Result detail"
+  },
+  "retrievalModels": {
+    "message": "Retrieval models"
+  },
+  "developerDetails": {
+    "message": "Developer details"
+  },
+  "cacheLocation": {
+    "message": "Cache location"
+  },
+  "localModelCache": {
+    "message": "Local model cache"
+  },
+  "decisionAssistance": {
+    "message": "Decision assistance"
+  },
+  "configure": {
+    "message": "Configure"
+  },
+  "usagePerformance": {
+    "message": "Usage and performance"
+  },
+  "calls": {
+    "message": "Call attempts"
+  },
+  "selectedAbstained": {
+    "message": "Selected / abstained"
+  },
+  "tokens": {
+    "message": "Input / output tokens"
+  },
+  "reportedCost": {
+    "message": "Provider-reported cost"
+  },
+  "responseTime": {
+    "message": "Average / last response"
+  },
+  "callsAvoided": {
+    "message": "Calls avoided"
+  },
+  "actionMemory": {
+    "message": "Action memory"
+  },
+  "enableMemory": {
+    "message": "Enable memory"
+  },
+  "disableMemory": {
+    "message": "Disable memory"
+  },
+  "storageLimit": {
+    "message": "Storage limit"
+  },
+  "cleanup": {
+    "message": "Cleanup"
+  },
+  "removeAfter": {
+    "message": "Remove after"
+  },
+  "days": {
+    "message": "days"
+  },
+  "cleanupNow": {
+    "message": "Clean up now"
+  },
+  "replayMemory": {
+    "message": "Replay and memory"
+  },
+  "activityStats": {
+    "message": "Activity and memory statistics"
+  },
+  "showActivity": {
+    "message": "Show activity for"
+  },
+  "thisProfile": {
+    "message": "This profile"
+  },
+  "allProfiles": {
+    "message": "All profiles"
+  },
+  "selectedProfiles": {
+    "message": "Selected profiles"
+  },
+  "oldActivity": {
+    "message": "Older, unassigned activity"
+  },
+  "profilesInclude": {
+    "message": "Profiles to include"
+  },
+  "rebuildIndex": {
+    "message": "Rebuild memory index"
+  },
+  "fileUploads": {
+    "message": "File uploads"
+  },
+  "allowUnconfirmed": {
+    "message": "Allow uploads without confirmation"
+  },
+  "uploadDefault": {
+    "message": "Off by default. Review the file names and destination, then allow or cancel each upload. Closing the request cancels it."
+  },
+  "uploadRisk": {
+    "message": "Turning this on lets agents send any accessible local file, including images and private documents, to websites without asking you. Websites can read and keep the uploaded files. File access restrictions still apply."
+  },
+  "updates": {
+    "message": "Updates"
+  },
+  "help": {
+    "message": "Help"
+  },
+  "privacy": {
+    "message": "Privacy"
+  },
+  "closeGuide": {
+    "message": "Close this guide"
+  },
+  "newRelease": {
+    "message": "New in this release"
+  },
+  "beforeAfter": {
+    "message": "Before and after."
+  },
+  "compareSnapshots": {
+    "message": "Compare page snapshots or pixels to see exactly what changed."
+  },
+  "tabPurpose": {
+    "message": "Tabs with a purpose."
+  },
+  "tabGroups": {
+    "message": "Agents can name their session’s tab group."
+  },
+  "moreContext": {
+    "message": "More page context."
+  },
+  "contextDetails": {
+    "message": "Bounded frame inspection and experimental WebMCP discovery."
+  },
+  "clearerSetup": {
+    "message": "Clearer setup."
+  },
+  "setupDetails": {
+    "message": "Connection guidance, a steadier panel layout and improved harness installation."
+  },
+  "saferSessions": {
+    "message": "Safer sessions."
+  },
+  "saferDetails": {
+    "message": "Scoped downloads, URL policy checks and cleanup of browser overrides."
+  },
+  "readNotes": {
+    "message": "Read the release notes"
+  },
+  "connectAgent": {
+    "message": "Connect your coding agent"
+  },
+  "runTerminal": {
+    "message": "Run this in a terminal. Setup connects the supported harnesses it finds and registers the browser’s native host."
+  },
+  "copyCommand": {
+    "message": "Copy command"
+  },
+  "reopenAgent": {
+    "message": "Then reopen your desktop agent, or reconnect MCP in your terminal client."
+  },
+  "firefoxExtra": {
+    "message": "Firefox and LibreWolf need one extra launch step"
+  },
+  "firefoxInstructions": {
+    "message": "Firefox launch instructions"
+  },
+  "openExtension": {
+    "message": "Open the extension."
+  },
+  "askAgent": {
+    "message": "Ask your agent to browse."
+  },
+  "chooseSharing": {
+    "message": "Choose what you share."
+  },
+  "readyBrowse": {
+    "message": "Ready to browse?"
+  },
+  "checkConnection": {
+    "message": "Check the connection in Overview, then return to your agent."
+  },
+  "openPanel": {
+    "message": "Open extension panel"
+  },
+  "showNotes": {
+    "message": "Show release notes after updates"
+  },
+  "welcomeUpdated": {
+    "message": "Your browser tools, updated."
+  },
+  "welcomeIntro": {
+    "message": "Your browser. Your agent. Connected."
+  },
+  "welcomeChanges": {
+    "message": "Here’s what’s new, and where to find it."
+  },
+  "welcomeDescription": {
+    "message": "Search pages, complete forms and check your work in the browser you already use. Start with one setup command."
+  },
+  "welcomeFirefox": {
+    "message": "Trusted clicks, typing and dialogs require Firefox’s Remote Agent. Enable it on a loopback port, then connect the matching browser profile. The add-on alone cannot provide this control."
+  },
+  "welcomeOverview": {
+    "message": "Overview checks the local runtime. Profiles lets you name this browser, such as “work” or “personal.”"
+  },
+  "welcomeExample": {
+    "message": "Try: “Open example.com in my personal browser and describe the page.”"
+  },
+  "welcomeSharing": {
+    "message": "Settings keeps decision assistance off by default. Screenshot sharing is a separate opt-in; uploads ask for confirmation."
+  },
+  "welcomeReadFailure": {
+    "message": "Could not read your update preference. Try again."
+  },
+  "welcomeCopied": {
+    "message": "Setup command copied."
+  },
+  "welcomeCopyFailure": {
+    "message": "Could not copy. Select the command below and copy it manually."
+  },
+  "welcomeSaved": {
+    "message": "Update preference saved."
+  },
+  "welcomeSaveFailure": {
+    "message": "Could not save your preference. Try again."
+  },
+  "welcomeOpenFailure": {
+    "message": "Open the extension from your browser toolbar to check the connection."
+  },
+  "runtimeConnected": {
+    "message": "Runtime connected"
+  },
+  "checkingConnection": {
+    "message": "Checking connection"
+  },
+  "connectBrowser": {
+    "message": "Connect your browser"
+  },
+  "runtimeExplanation": {
+    "message": "The extension is connected to your local runtime. Choose this profile in your agent. Tab health and pending browser dialogs are reported separately by the browser tools."
+  },
+  "runtimeChecking": {
+    "message": "Looking for the local runtime. Your settings stay on this device."
+  },
+  "runtimeInstall": {
+    "message": "Install the local bridge to connect this extension to your coding agent."
+  },
+  "unnamedProfile": {
+    "message": "Unnamed profile"
+  },
+  "copyUnavailable": {
+    "message": "Copy unavailable. Select the command below instead."
+  },
+  "usageUnavailable": {
+    "message": "Usage unavailable. Connect the native host."
+  },
+  "loading": {
+    "message": "Loading…"
+  },
+  "localSearch": {
+    "message": "Local search"
+  },
+  "checkingConfiguration": {
+    "message": "Checking your configuration…"
+  },
+  "assistanceNeedsConnection": {
+    "message": "Connection needed. Configure the service to enable assistance; local search stays available."
+  },
+  "assistanceOff": {
+    "message": "Cloud assistance is off. Search and replay remain available."
+  },
+  "notReported": {
+    "message": "Not reported"
+  },
+  "usageDetails": {
+    "message": "Only provider-reported tokens and cost are counted. Harness usage is separate."
+  },
+  "selectorHelp": {
+    "message": "Copy a profile selector and give it to your agent. This keeps automation in the browser you choose."
+  },
+  "searchHelp": {
+    "message": "Find relevant page content locally. Keyword search stays available."
+  },
+  "autoSearchHelp": {
+    "message": "Automatic search balances relevance and speed. Most users can keep the defaults."
+  },
+  "memoryDescription": {
+    "message": "Save successful browser actions locally to speed up repeat tasks."
+  },
+  "expandedStorage": {
+    "message": "Expanded storage — allow up to 10 GB"
+  },
+  "expandedStorageHelp": {
+    "message": "Expanded storage can use more disk space."
+  },
+  "cleanupHelp": {
+    "message": "Unsuccessful actions age out automatically. Confirmed actions remain."
+  },
+  "memoryStatsHelp": {
+    "message": "Shared action memory · statistics by browser profile."
+  },
+  "decisionHelp": {
+    "message": "Find relevant targets and choose saved recipes. Your agent controls the actions; replay keeps its safety checks."
+  },
+  "keyPrivacy": {
+    "message": "Saved privately by the native host. Never stored in browser storage or returned to your agent."
+  },
+  "environmentAlternative": {
+    "message": "Optional alternative to a saved key. The variable must exist in the native host’s environment."
+  },
+  "testKeyHelp": {
+    "message": "Tests your key and selected model with one small, billable synthetic decision."
+  },
+  "removeKey": {
+    "message": "Remove saved key"
+  },
+  "envVariable": {
+    "message": "Advanced · Environment variable"
+  },
+  "variableName": {
+    "message": "Variable name"
+  },
+  "modelMigration": {
+    "message": "Local model migration"
+  },
+  "dismissNotice": {
+    "message": "Dismiss notice"
+  },
+  "keepUpdated": {
+    "message": "Keep local browser tools up to date"
+  },
+  "whatsNew": {
+    "message": "What’s new"
+  },
+  "howUpdate": {
+    "message": "How to update"
+  },
+  "copyUpdate": {
+    "message": "Copy update command"
+  },
+  "updateHelp": {
+    "message": "Need help updating?"
+  },
+  "openSetup": {
+    "message": "Open setup instructions"
+  },
+  "remindWeek": {
+    "message": "Remind me in a week"
+  },
+  "snoozed": {
+    "message": "Reminder snoozed. These instructions remain available in Settings."
+  },
+  "service": {
+    "message": "Service"
+  },
+  "serviceOff": {
+    "message": "Off · Local search and replay"
+  },
+  "providerConsent": {
+    "message": "Enabling assistance sends bounded search or replay intent and candidate descriptions to $1. Your agent remains in control of actions."
+  },
+  "imageFallback": {
+    "message": "Allow experimental image fallback"
+  },
+  "imageScreenshots": {
+    "message": "Allow screenshots for ambiguous visual targets"
+  },
+  "imageJevNotice": {
+    "message": "Off by default. Only after an unsure text decision, one small screenshot may be sent to $1. At most one image request per UTC minute and 20 per UTC day across profiles. Image tokens cost extra; token counts depend on the image."
+  },
+  "imageNotice": {
+    "message": "Off by default. One bounded screenshot may be sent to $1. At most one image request per UTC minute and 20 per UTC day across profiles. Image tokens cost extra; token counts depend on the image."
+  },
+  "testing": {
+    "message": "Testing…"
+  },
+  "saveTest": {
+    "message": "Save & test connection"
+  },
+  "saveSettings": {
+    "message": "Save settings"
+  },
+  "memoryUnavailable": {
+    "message": "Memory is unavailable. Reconnect the native host."
+  },
+  "memoryChecking": {
+    "message": "Checking memory state…"
+  },
+  "memoryOn": {
+    "message": "Memory is on. Saved actions help with repeat tasks."
+  },
+  "memoryOff": {
+    "message": "Memory is off. Enable it in Settings to save repeat tasks."
+  },
+  "loadingStats": {
+    "message": "Loading statistics…"
+  },
+  "waitingStats": {
+    "message": "Waiting for statistics…"
+  },
+  "hostTotals": {
+    "message": "This host provides totals for all profiles. Update the native host to filter them."
+  },
+  "oldHistory": {
+    "message": "History saved before profile tracking was added."
+  },
+  "allHistory": {
+    "message": "All profiles, including older unassigned activity."
+  },
+  "memoryEnabled": {
+    "message": "Action memory enabled."
+  },
+  "memoryDisabled": {
+    "message": "Action memory disabled."
+  },
+  "indexRebuilt": {
+    "message": "Memory index rebuilt."
+  },
+  "cleanupComplete": {
+    "message": "Cleanup complete."
+  },
+  "standardLimit": {
+    "message": "Standard limit. Turn on expanded storage to raise it."
+  },
+  "expandedEnabled": {
+    "message": "Expanded storage enabled — up to 10 GB."
+  },
+  "enableStartMemory": {
+    "message": "Enable it to start building action memory."
+  },
+  "memoryStateChecking": {
+    "message": "Checking memory state..."
+  },
+  "thisBrowser": {
+    "message": "This browser profile:"
+  },
+  "defaultLabel": {
+    "message": "Default"
+  },
+  "activeModel": {
+    "message": "Active retrieval model"
+  },
+  "active": {
+    "message": "Active"
+  },
+  "useModel": {
+    "message": "Use"
+  },
+  "onDemand": {
+    "message": "On demand"
+  },
+  "delete": {
+    "message": "Delete"
+  },
+  "status": {
+    "message": "Status"
+  },
+  "host": {
+    "message": "Host"
+  },
+  "lastCheck": {
+    "message": "Last Check"
+  },
+  "profileId": {
+    "message": "Profile ID"
+  },
+  "copy": {
+    "message": "Copy"
+  },
+  "hide": {
+    "message": "Hide"
+  },
+  "reveal": {
+    "message": "Reveal"
+  },
+  "download": {
+    "message": "Download"
+  },
+  "redownload": {
+    "message": "Re-download"
+  },
+  "ready": {
+    "message": "Ready"
+  },
+  "notDownloaded": {
+    "message": "Not downloaded"
+  },
+  "statsUnavailable": {
+    "message": "Statistics unavailable:"
+  },
+  "chartLabel": {
+    "message": "Confirmed versus failed actions per day"
+  },
+  "versionNotice": {
+    "message": "Version update notice"
+  },
+  "extensionLabel": {
+    "message": "Extension"
+  },
+  "copySelectorReady": {
+    "message": "Profile selector copied."
+  },
+  "clipboardUnavailable": {
+    "message": "Clipboard unavailable."
+  },
+  "profileCopied": {
+    "message": "Profile ID copied."
+  },
+  "migrationText": {
+    "message": "Embedded models are deprecated and will move to an optional package. They stay available during migration, with at least 90 days’ notice before removal. Your memory records and cached models are preserved."
+  },
+  "updateInstall": {
+    "message": "Install the CLI version matching your extension after managed agent processes have exited. Running sessions keep their current version."
+  },
+  "storeAutoUpdate": {
+    "message": "Chrome Web Store updates install automatically. Check for an extension update; if the release is still under review, wait for approval. You do not need to downgrade your local tools."
+  },
+  "globalNpm": {
+    "message": "For a global npm installation, run:"
+  },
+  "postUpdate": {
+    "message": "After this first update, reopen your browser and agent app when current work has finished. Then enable automatic updates under Settings → Updates. Managed installations wait for agent processes to exit. Pinned commands and development checkouts stay under your control."
+  },
+  "updateInstallHelp": {
+    "message": "Update the installation used by your native host. If the notice remains after restarting, rerun the native-host setup for that installation."
+  },
+  "connectReopen": {
+    "message": "Connect the native host, then reopen Settings."
+  },
+  "cannotConnect": {
+    "message": "Could not connect to the native host. Reconnect and try again."
+  },
+  "testFailed": {
+    "message": "Connection test failed."
+  },
+  "cannotSaveReconnect": {
+    "message": "Could not save. Reconnect the native host and try again."
+  },
+  "decisionOff": {
+    "message": "Decision assistance is off. Local search and replay stay available."
+  },
+  "cannotSaveSettings": {
+    "message": "Could not save settings."
+  },
+  "cannotRemoveKey": {
+    "message": "Could not remove the stored key."
+  },
+  "keyRemoved": {
+    "message": "Stored key removed. An environment key, if configured, remains available."
+  },
+  "removeKeyFailure": {
+    "message": "Could not remove the key. Reconnect and try again."
+  },
+  "replaceKey": {
+    "message": "Key saved · Enter a replacement"
+  },
+  "pasteKey": {
+    "message": "Paste your API key"
+  },
+  "loadingSettings": {
+    "message": "Loading settings…"
+  },
+  "decisionEnabled": {
+    "message": "Decision assistance enabled"
+  },
+  "saveTestEnable": {
+    "message": "Save and test to enable assistance."
+  },
+  "localSearchActive": {
+    "message": "Local search is active"
+  },
+  "dismissFailure": {
+    "message": "Could not dismiss the notice."
+  },
+  "updatePrefSaved": {
+    "message": "Update preference saved."
+  },
+  "saveTryAgain": {
+    "message": "Could not save. Try again."
+  },
+  "updatesOff": {
+    "message": "Automatic runtime updates are off."
+  },
+  "updateChecks": {
+    "message": "Automatic checks run while the browser is connected. Downloads use npm."
+  },
+  "updateOnce": {
+    "message": "Update the local runtime once to enable automatic updates."
+  },
+  "profileLabelHelp": {
+    "message": "Labels stay local and are used only to pick the right open browser profile."
+  },
+  "loadingModels": {
+    "message": "Loading model options..."
+  },
+  "profileIdUnavailable": {
+    "message": "Profile ID unavailable. Reconnect the browser and try again."
+  },
+  "profileCopyFail": {
+    "message": "Copy unavailable. Reveal the profile ID and copy it manually."
+  },
+  "profileSaved": {
+    "message": "Saved. Pass this profile label to the first useful browser call."
+  },
+  "enableSemanticBusy": {
+    "message": "Enabling semantic retrieval..."
+  },
+  "disableSemanticBusy": {
+    "message": "Disabling semantic retrieval..."
+  },
+  "localRetrievalModel": {
+    "message": "Local retrieval model."
+  },
+  "runtimeScheduled": {
+    "message": "Update scheduled. Waiting for agent sessions to finish."
+  },
+  "runtimeDownloading": {
+    "message": "Downloading a matching runtime in the background."
+  },
+  "runtimeInstalled": {
+    "message": "Matching runtime installed. New agent sessions use it automatically."
+  },
+  "runtimeDeferred": {
+    "message": "Update deferred. The current runtime is still available; another attempt will run later."
+  },
+  "runtimeReconnect": {
+    "message": "Connect the local runtime to check update settings."
+  },
+  "runtimeSaveFail": {
+    "message": "Could not save. Reconnect the local runtime and try again."
+  },
+  "uploadSaveFail": {
+    "message": "Could not save upload preference"
+  },
+  "versionBehind": {
+    "message": "Your extension is behind your local tools"
+  },
+  "checkToolVersion": {
+    "message": "Check your local tool version"
+  },
+  "updateTools": {
+    "message": "Update your local browser tools"
+  },
+  "versionMissing": {
+    "message": "A local component does not report its version, so we cannot check whether everything matches."
+  },
+  "versionMismatch": {
+    "message": "Your installed versions differ. Keeping them aligned helps avoid unexpected browser errors."
+  },
+  "updateCopied": {
+    "message": "Update command copied."
+  },
+  "updateCopyFail": {
+    "message": "Could not copy. Select the command above."
+  },
+  "reminderFail": {
+    "message": "Could not save the reminder. Please try again."
+  },
+  "replaySuccess": {
+    "message": "replay success"
+  },
+  "uniqueActions": {
+    "message": "unique actions"
+  },
+  "recipes": {
+    "message": "recipes"
+  },
+  "replays": {
+    "message": "replays"
+  },
+  "stepsReused": {
+    "message": "steps reused"
+  },
+  "executions": {
+    "message": "total executions"
+  },
+  "negativeLessons": {
+    "message": "negative lessons"
+  },
+  "indexed": {
+    "message": "indexed"
+  },
+  "awaitingIndex": {
+    "message": "awaiting index"
+  },
+  "replayNotAttempted": {
+    "message": "No replay attempted yet — repeating a stored recipe on the same site replays it automatically."
+  },
+  "purgeInvalid": {
+    "message": "Purge period must be between 1 and 365 days."
+  },
+  "storageExpanded": {
+    "message": "Expanded storage enabled — the limit can now reach 10 GB."
+  },
+  "storageStandard": {
+    "message": "Expanded storage disabled — the standard limit is restored."
+  },
+  "thisProfileSuffix": {
+    "message": " (this profile)"
+  },
+  "currentBrowserProfile": {
+    "message": "current browser profile"
+  },
+  "lastSuccessful": {
+    "message": " Showing the last successful update."
+  },
+  "quotaUsage": {
+    "message": "$1 of $2 used"
+  },
+  "apiKey": {
+    "message": "API key"
+  },
+  "exampleLabels": {
+    "message": "work, personal, staging"
+  },
+  "decision": {
+    "message": "Decision"
+  },
+  "localHost": {
+    "message": "Local host"
+  },
+  "recommendedDim": {
+    "message": "$1 dimensions — recommended balance"
+  },
+  "modelDownload": {
+    "message": "Downloading $1 for $2...$3"
+  },
+  "modelReady": {
+    "message": "Ready: $1. Model cache: local."
+  },
+  "modelError": {
+    "message": "Model error: $1."
+  },
+  "modelUnknown": {
+    "message": "unknown error"
+  },
+  "modelWord": {
+    "message": "model"
+  },
+  "deleteModelConfirm": {
+    "message": "Delete local files for $1? They can be downloaded again later."
+  },
+  "downloadingModel": {
+    "message": "Downloading $1..."
+  },
+  "deletingModel": {
+    "message": "Deleting local files for $1..."
+  },
+  "switchModel": {
+    "message": "Switching retrieval to $1..."
+  },
+  "embeddingLabel": {
+    "message": "$1 embedding size"
+  },
+  "connectedThrough": {
+    "message": "Connected through $1"
+  },
+  "copyPath": {
+    "message": "Copy path"
+  },
+  "copied": {
+    "message": "Copied"
+  },
+  "failed": {
+    "message": "Failed"
+  },
+  "profileNumber": {
+    "message": "Profile $1"
+  },
+  "providerSuccess": {
+    "message": "Connected. API key and decision model verified."
+  },
+  "providerInvalidKey": {
+    "message": "API key rejected. Check the key and selected service."
+  },
+  "providerDenied": {
+    "message": "This key does not have access to the decision model."
+  },
+  "providerCredit": {
+    "message": "Add credits or increase your API key's spending limit."
+  },
+  "providerRate": {
+    "message": "Service rate limit reached. Try the test again later."
+  },
+  "providerTimeout": {
+    "message": "Connection timed out. Check your network and try again."
+  },
+  "providerCheck": {
+    "message": "Check your provider settings and API key."
+  },
+  "providerLuna": {
+    "message": "Luna requires OpenRouter."
+  },
+  "providerNeedKey": {
+    "message": "Enter an API key or configure the environment variable in Advanced settings."
+  },
+  "providerUnavailable": {
+    "message": "OpenRouter is unavailable. Try again later."
+  },
+  "providerNetwork": {
+    "message": "Could not reach OpenRouter. Check your network and try again."
+  },
+  "providerDecisionFail": {
+    "message": "The decision test failed. Settings were not changed; try again later."
+  },
+  "skipNoMatch": {
+    "message": "no close enough match"
+  },
+  "skipPriorFailure": {
+    "message": "that recipe failed before"
+  },
+  "skipSteps": {
+    "message": "a different number of steps was requested"
+  },
+  "skipRecipe": {
+    "message": "the requested steps changed"
+  },
+  "skipSite": {
+    "message": "the request was for a different site"
+  },
+  "skipActions": {
+    "message": "the requested actions changed"
+  },
+  "skipTargets": {
+    "message": "the requested targets changed"
+  },
+  "skipValue": {
+    "message": "a typed value was missing"
+  },
+  "skipUrl": {
+    "message": "a URL was missing"
+  },
+  "skipApproval": {
+    "message": "the recipe needs your approval"
+  },
+  "memorySqlite": {
+    "message": "Action memory needs a native host with SQLite support."
+  },
+  "memoryCounts": {
+    "message": "Unique actions: $1 · Recipes: $2"
+  },
+  "memoryIndexReady": {
+    "message": "Memory index ready ($1)"
+  },
+  "memoryIndexPending": {
+    "message": "Memory index: $1 ready · $2 awaiting embeddings"
+  },
+  "embeddingErrors": {
+    "message": "Embedding errors: $1"
+  },
+  "skipCount": {
+    "message": "Skipped remembered recipes: $1."
+  },
+  "skipCountReason": {
+    "message": "Skipped remembered recipes: $1. Most often: $2 ($3)."
+  },
+  "dbLimitSet": {
+    "message": "Database limit set to $1."
+  },
+  "purgeAfter": {
+    "message": "Negative lessons purge after $1 days."
+  },
+  "selectedCount": {
+    "message": "Profiles selected: $1. Shared actions count once."
+  },
+  "currentProfileValue": {
+    "message": "This profile: $1"
+  },
+  "statsUpdated": {
+    "message": "Updated $1 · chart days use UTC"
+  },
+  "strategySet": {
+    "message": "Search mode set to $1..."
+  },
+  "resultCountSet": {
+    "message": "Agent results set to $1..."
+  },
+  "resultDetailSet": {
+    "message": "Result detail set to $1..."
+  },
+  "dimensionSet": {
+    "message": "Embedding size set to $1 dimensions..."
+  },
+  "searchLocalDetail": {
+    "message": "Retrieval runs locally with the active model and falls back to lexical ranking. Deep search loads Qwen on demand; download failures degrade safely."
+  },
+  "usageReport": {
+    "message": "Connection tests: $1. Usage reported for $2/$3 calls; cost for $4/$3. $5."
+  },
+  "efficiencyReport": {
+    "message": "Avoided since the host started: $1 unambiguous rankings, $2 repeated searches, $3 duplicate requests and $4 over the burst limit. Paid decisions only resolve ambiguous rankings."
+  },
+  "keyCheck": {
+    "message": "Key check $1 ms ·"
+  },
+  "inputTokens": {
+    "message": "Input tokens: $1"
+  },
+  "strategyAuto": {
+    "message": "Automatic"
+  },
+  "strategySemantic": {
+    "message": "Semantic"
+  },
+  "strategyLexical": {
+    "message": "Keyword"
+  },
+  "strategyDeep": {
+    "message": "Deep"
+  },
+  "detailLean": {
+    "message": "Lean"
+  },
+  "detailCompact": {
+    "message": "Compact"
+  },
+  "detailDebug": {
+    "message": "Debug"
+  },
+  "modelXs": {
+    "message": "Default English page retrieval with a compact 22.6M parameter Snowflake embedding model. Use lexical or auto explicitly when lower latency is preferred."
+  },
+  "modelM": {
+    "message": "Larger Snowflake retrieval model with stronger relevance at 768 dimensions. Choose it when quality matters more than local disk and memory footprint."
+  },
+  "modelGemma": {
+    "message": "Multilingual on-device embedding model with Matryoshka output dimensions (128/256/512/768). 256 dimensions is the recommended size-to-quality balance."
+  },
+  "modelQwen": {
+    "message": "Current local retrieval stack: Qwen3 embeddings for broad page search plus Qwen3 reranking for the final relevant context."
+  },
+  "noClientVersion": {
+    "message": "No client version reported"
+  },
+  "connectedClients": {
+    "message": "Connected CLI/MCP: $1"
+  },
+  "notConnectedState": {
+    "message": "Not connected"
+  },
+  "profileChecking": {
+    "message": "Checking..."
+  },
+  "profileSaving": {
+    "message": "Saving..."
+  },
+  "deepSearchOnly": {
+    "message": "deep search only"
+  },
+  "memoryUnknown": {
+    "message": "unknown"
+  },
+  "copyProfileHelp": {
+    "message": "Copy unavailable. Reveal the profile ID and copy it manually."
+  },
+  "runtimeStaged": {
+    "message": "Download verified. Checking that every browser session has finished."
+  },
+  "runtimeActivating": {
+    "message": "Switching local tools to the updated runtime."
+  },
+  "runtimeReconnectRequired": {
+    "message": "This release changes the tool connection. Run setup and reconnect MCP once."
+  },
+  "runtimeUpdateHelp": {
+    "message": "Download matching tools in the background and switch when all browser sessions have finished. Managed MCP connections stay open."
+  },
+  "runtimeVersions": {
+    "message": "Selected: $1. Loaded: $2."
+  },
+  "noWorkers": {
+    "message": "no active workers"
+  },
+  "runtimeDownloaded": {
+    "message": "Downloaded: $1."
+  },
+  "runtimeWaiting": {
+    "message": "Waiting on active participants: $1."
+  },
+  "postUpdateMaster": {
+    "message": "Run setup and reconnect MCP once after current work finishes. Future compatible updates download in the background and switch when all browser sessions finish, keeping managed MCP connections open. Pinned commands and development checkouts stay under your control."
+  }
+}

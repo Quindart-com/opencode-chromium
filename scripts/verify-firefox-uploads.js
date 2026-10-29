@@ -21,6 +21,8 @@ const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "firefox-upload-"));
 // Disable first-run modals only in this disposable profile, as web-ext does.
 fs.writeFileSync(path.join(fixture, "user.js"), 'user_pref("termsofuse.bypassNotification",true);\nuser_pref("datareporting.policy.firstRunURL","");\nuser_pref("startup.homepage_welcome_url","about:blank");\n');
 const file = path.join(fixture, "approved-fixture.txt"); fs.writeFileSync(file, "approved fixture contents");
+const locale = JSON.parse(fs.readFileSync("extension-firefox/_locales/en/messages.json", "utf8"));
+const fixtureMessages = Object.fromEntries(Object.entries(locale).map(([key, value]) => [key, value.message]));
 const windows = new Map(), removed = []; let id = 100, origin, consent, backend, child;
 const native = createUploadFiles();
 const server = http.createServer(async (req, res) => {
@@ -42,7 +44,8 @@ const server = http.createServer(async (req, res) => {
     if (!target.startsWith(path.resolve("extension-firefox") + path.sep)) { res.writeHead(403).end(); return; }
     res.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(target)] ?? "application/octet-stream");
     const content = fs.readFileSync(target);
-    res.end(path.extname(target) === ".html" ? content.toString().replace('<head>', '<head><script>globalThis.chrome={runtime:{sendMessage:m=>fetch("/rpc",{method:"POST",body:JSON.stringify(m)}).then(r=>r.json())}}</script>') : content);
+    const bootstrap = `<script>globalThis.chrome={i18n:{getUILanguage:()=>"en",getMessage:(key,values)=>{let result=(${JSON.stringify(fixtureMessages)})[key]||key;for(const [index,value] of (Array.isArray(values)?values:values===undefined?[]:[values]).entries())result=result.replaceAll("$"+(index+1),value);return result}},runtime:{sendMessage:m=>fetch("/rpc",{method:"POST",body:JSON.stringify(m)}).then(r=>r.json())}}</script>`;
+    res.end(path.extname(target) === ".html" ? content.toString().replace("<head>", "<head>" + bootstrap) : content);
   } catch { res.writeHead(500).end(); }
 });
 await new Promise(resolve => server.listen(0, resolve)); origin = "http://127.0.0.1:" + server.address().port;

@@ -1,15 +1,16 @@
+import { t } from "../../i18n";
 import { useEffect, useRef, useState } from "react";
 import { sendMessage } from "./api";
 
 type Updates = { supported: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; stagedVersion?: string; loadedVersions?: string[]; blockerCount?: number; reason?: string };
 const labels: Record<string, string> = {
-  waiting: "Update scheduled. Waiting for agent sessions to finish.",
-  downloading: "Downloading a matching runtime in the background.",
-  staged: "Download verified. Checking that every browser session has finished.",
-  activating: "Switching local tools to the updated runtime.",
-  reconnect_required: "This release changes the tool connection. Run setup and reconnect MCP once.",
-  ready: "Matching runtime installed. New agent sessions use it automatically.",
-  retry: "Update deferred. The current runtime is still available; another attempt will run later.",
+  waiting: t("runtimeScheduled"),
+  downloading: t("runtimeDownloading"),
+  staged: t("runtimeStaged"),
+  activating: t("runtimeActivating"),
+  reconnect_required: t("runtimeReconnectRequired"),
+  ready: t("runtimeInstalled"),
+  retry: t("runtimeDeferred"),
 };
 export default function RuntimeUpdates() {
   const [updates, setUpdates] = useState<Updates | null>(null);
@@ -24,7 +25,7 @@ export default function RuntimeUpdates() {
       try {
         const response = await sendMessage<{ result?: Updates; error?: string }>({ type: "GET_RUNTIME_UPDATES" });
         if (!disposed && !saving.current && observed === revision.current) { setUpdates(response.result ?? null); setMessage(response.error ?? ""); }
-      } catch { if (!disposed) setMessage("Connect the local runtime to check update settings."); }
+      } catch { if (!disposed) setMessage(t("runtimeReconnect")); }
     }
     void refresh(); const timer = window.setInterval(() => void refresh(), 10000);
     return () => { disposed = true; window.clearInterval(timer); };
@@ -37,17 +38,17 @@ export default function RuntimeUpdates() {
     setBusy(true);
     try {
       const response = await sendMessage<{ result?: Updates; error?: string }>({ type: "SET_RUNTIME_UPDATES", enabled });
-      if (response.result) { setUpdates(response.result); setMessage("Update preference saved."); }
-      else { setUpdates(previous); setMessage(response.error ?? "Could not save. Try again."); }
-    } catch { setUpdates(previous); setMessage("Could not save. Reconnect the local runtime and try again."); }
+      if (response.result) { setUpdates(response.result); setMessage(t("updatePrefSaved")); }
+      else { setUpdates(previous); setMessage(response.error ?? t("saveTryAgain")); }
+    } catch { setUpdates(previous); setMessage(t("runtimeSaveFail")); }
     finally { saving.current = false; revision.current++; setBusy(false); }
   }
   return <section className="card" aria-labelledby="runtime-updates-title">
-    <h2 id="runtime-updates-title">Updates</h2>
-    <label className="checkbox-row"><input type="checkbox" checked={updates?.enabled ?? false} disabled={busy || !updates?.supported} onChange={event => void configure(event.target.checked)} /><span>Keep local browser tools up to date<small className="help-note">Download matching tools in the background and switch when all browser sessions have finished. Managed MCP connections stay open.</small></span></label>
-    <p className="help-note">{updates?.supported ? !updates.enabled ? "Automatic runtime updates are off." : labels[updates.state ?? ""] ?? "Automatic checks run while the browser is connected. Downloads use npm." : updates?.reason ?? "Update the local runtime once to enable automatic updates."}</p>
+    <h2 id="runtime-updates-title">{t("updates")}</h2>
+    <label className="checkbox-row"><input type="checkbox" checked={updates?.enabled ?? false} disabled={busy || !updates?.supported} onChange={event => void configure(event.target.checked)} /><span>{t("keepUpdated")}<small className="help-note">{t("runtimeUpdateHelp")}</small></span></label>
+    <p className="help-note">{updates?.supported ? !updates.enabled ? t("updatesOff") : labels[updates.state ?? ""] ?? t("updateChecks") : updates?.reason ?? t("updateOnce")}</p>
     <p role="status" className="feedback">{message}</p>
-    {updates?.supported && <p className="help-note">Selected: {updates.installedVersion ?? "unknown"}. Loaded: {updates.loadedVersions?.join(", ") || "no active workers"}.{updates.stagedVersion ? ` Downloaded: ${updates.stagedVersion}.` : ""}{updates.blockerCount ? ` Waiting on ${updates.blockerCount} active participant(s).` : ""}</p>}
-    <a href="https://quindart-com.github.io/opencode-chromium/updates/" target="_blank" rel="noopener noreferrer">What’s new</a>
+    {updates?.supported && <p className="help-note">{t("runtimeVersions", [updates.installedVersion ?? t("memoryUnknown"), updates.loadedVersions?.join(", ") || t("noWorkers")])}{updates.stagedVersion ? " " + t("runtimeDownloaded", updates.stagedVersion) : ""}{updates.blockerCount ? " " + t("runtimeWaiting", String(updates.blockerCount)) : ""}</p>}
+    <a href="https://quindart-com.github.io/opencode-chromium/updates/" target="_blank" rel="noopener noreferrer">{t("whatsNew")}</a>
   </section>;
 }

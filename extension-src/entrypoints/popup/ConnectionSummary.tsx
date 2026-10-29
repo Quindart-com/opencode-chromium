@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import { useEffect, useState } from "react";
 import { sendMessage, type NativeStatus, type Profile } from "./api";
 
@@ -16,21 +17,21 @@ export default function ConnectionSummary({ status, onProfiles }: { status: Nati
     return () => { active = false; };
   }, [connected]);
   async function copySetup() {
-    try { await navigator.clipboard.writeText(setupCommand); setCopyState("Setup command copied."); }
-    catch { setCopyState("Copy unavailable. Select the command below instead."); }
+    try { await navigator.clipboard.writeText(setupCommand); setCopyState(t("welcomeCopied")); }
+    catch { setCopyState(t("copyUnavailable")); }
   }
   return <section className={`connection-summary${connected ? " is-connected" : ""}`} aria-labelledby="connection-summary-heading">
     <div className="connection-summary-heading">
-      <h2 id="connection-summary-heading">{connected ? "Runtime connected" : checking ? "Checking connection" : "Connect your browser"}</h2>
-      {connected && <button type="button" className="button-mini" onClick={onProfiles}>Profiles</button>}
+      <h2 id="connection-summary-heading">{connected ? t("runtimeConnected") : checking ? t("checkingConnection") : t("connectBrowser")}</h2>
+      {connected && <button type="button" className="button-mini" onClick={onProfiles}>{t("profiles")}</button>}
     </div>
-    <p>{connected ? "The extension is connected to your local runtime. Choose this profile in your agent. Tab health and pending browser dialogs are reported separately by the browser tools." : checking ? "Looking for the local runtime. Your settings stay on this device." : "Install the local bridge to connect this extension to your coding agent."}</p>
-    {connected && <p className="current-profile">This browser profile: <strong>{profile?.profileLabel || "Unnamed profile"}</strong></p>}
+    <p>{connected ? t("runtimeExplanation") : checking ? t("runtimeChecking") : t("runtimeInstall")}</p>
+    {connected && <p className="current-profile">{t("thisBrowser")}{" "}<strong>{profile?.profileLabel || t("unnamedProfile")}</strong></p>}
     {!connected && !checking && <>
       <code className="setup-command">{setupCommand}</code>
-      <div className="setup-actions"><button type="button" className="button button-primary" onClick={() => void copySetup()}>Copy setup command</button><a href="https://github.com/Quindart-com/opencode-chromium#get-started" target="_blank" rel="noopener noreferrer">Setup guide</a></div>
+      <div className="setup-actions"><button type="button" className="button button-primary" onClick={() => void copySetup()}>{t("copySetup")}</button><a href="https://github.com/Quindart-com/opencode-chromium#get-started" target="_blank" rel="noopener noreferrer">{t("setupGuide")}</a></div>
       <p className="setup-feedback" role="status">{copyState}</p>
     </>}
-    {status.error && <details className="connection-diagnostics"><summary>Connection details</summary><p>{status.error}</p></details>}
+    {status.error && <details className="connection-diagnostics"><summary>{t("connectionDetails")}</summary><p>{status.error}</p></details>}
   </section>;
 }
