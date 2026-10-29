@@ -12,6 +12,7 @@ import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js
 import { decisionUsage } from "../native-host/dist/decisions/usage.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const fixtureMessages = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(root, "extension-src/public/_locales/en/messages.json"), "utf8"))).map(([key, value]) => [key, value.message]));
 const storeFixture = process.argv.includes("--store-fixture");
 const fixtureVersion = storeFixture ? JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version : "1.9.1";
 fs.mkdirSync(path.join(root, "reports"), { recursive: true });
@@ -37,7 +38,7 @@ const previousProviderDir = process.env.AGENT_BROWSER_PROVIDER_DIR;
 process.env.AGENT_BROWSER_PROVIDER_DIR = path.join(fixture, "providers");
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getURL: value => value, getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
+    if (req.url === "/fixture-bootstrap.js") { res.setHeader("Content-Type", "text/javascript"); res.end(`globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = (${JSON.stringify(fixtureMessages)})[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({localModelDeprecationDismissed:${storeFixture}}), set: async () => {} } }, runtime: { id: "fixture", getURL: value => value, getManifest: () => ({version:${JSON.stringify(fixtureVersion)}}), connect: () => ({onMessage:{addListener(){}},onDisconnect:{addListener(){}},disconnect(){}}), sendMessage: message => fetch("/rpc", {method:"POST",body:JSON.stringify(message)}).then(r=>r.json()) } };`); return; }
     if (req.url === "/rpc") {
       let text = "";
       for await (const chunk of req) text += chunk;
@@ -63,6 +64,7 @@ const server = http.createServer(async (req, res) => {
         const check = await saveAndTestProvider({ settings: message.settings, apiKey: message.apiKey }, async (url, init) => {
           if (new Headers(init.headers).get("Authorization")?.includes("invalid-key-fixture")) return new Response("rejected", { status: 401 });
           if (String(url).endsWith("/key")) return new Response("{}");
+          if (String(url) === "https://api.openai.com/v1/decisions") return Response.json({ model: "gpt-6-luna", answers: [{ type: "choice", name: "decision", choice: "ready", confidence: 0.99, probabilities: [{ value: "ready", probability: 0.99 }, { value: "__abstain", probability: 0.01 }] }], usage: { input_tokens: 22, output_tokens: 0 } });
           return new Response(JSON.stringify({ model: JSON.parse(String(init.body)).model === "openai/gpt-6-luna-decisions" ? "openai/gpt-6-luna-decisions" : "typesafe/jev-1.13-20260917", answers: { decision: {
             type: "choice", choice: "ready", confidence: 0.99, probabilities: { ready: 0.99, __abstain: 0.01 },
           } }, usage: { input_tokens: 22, output_tokens: 0, cost: 0.000001 } }));
@@ -103,16 +105,16 @@ try {
   page.setDefaultTimeout(15000);
   const errors = [];
   page.on("pageerror", (error) => { errors.push(error.message); console.error(error.message); });
-  await page.addInitScript(() => {
+  await page.addInitScript((messages) => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { globalThis.fixtureCopiedText = text; } } });
-    globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
+    globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = messages[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
       id: "fixture",
         getURL: value => value,
       getManifest: () => ({ version: "1.9.1" }),
       connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }),
       sendMessage: (message) => fetch("/rpc", { method: "POST", body: JSON.stringify(message) }).then((response) => response.json()),
     } };
-  });
+  }, fixtureMessages);
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   console.log("Popup loaded");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
@@ -120,7 +122,7 @@ try {
   assert.equal(await page.locator("#memory-success").textContent(), "—");
   assert.equal(
     await page.locator("#memory-replay-note").textContent(),
-    "Skipped 3 remembered recipes. Most often: no close enough match (2).",
+    "Skipped remembered recipes: 3. Most often: no close enough match (2).",
   );
   await page.screenshot({ path: path.join(root, "reports", "popup-replay-note.png"), fullPage: true });
   await page.getByRole("heading", { name: "Update your local browser tools" }).waitFor();
@@ -212,6 +214,14 @@ try {
   await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
   await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
   assert.equal(decisionSettings.shareImages, true);
+  await page.selectOption("#decision-provider", "openai-direct");
+  assert.equal(await images.isChecked(), false);
+  await page.locator("#decision-api-key").fill(`fixture-openai-${randomUUID()}`);
+  await page.getByRole("button", { name: "Save & test connection", exact: true }).click();
+  await page.getByText("Connected. API key and decision model verified.", { exact: false }).waitFor();
+  assert.equal(decisionSettings.route, "openai");
+  assert.equal(decisionSettings.keyEnv, "OPENAI_API_KEY");
+  assert.equal(await page.locator(".provider-consent").textContent().then(text => text.includes("OpenAI Platform")), true);
   await page.selectOption("#decision-provider", "jev-typesafe");
   assert.equal(await jevImages.isChecked(), false, "switching service resets screenshot consent");
   await page.getByText("Advanced · Environment variable", { exact: true }).click();

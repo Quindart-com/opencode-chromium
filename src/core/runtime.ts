@@ -16,6 +16,7 @@ import { createCapabilityRegistry } from "./capabilities.ts";
 import { cleanupSessionEnvironment } from "./environment-cleanup.ts";
 import { BrowserRuntimeError } from "./errors.ts";
 import { errorDetails,shouldReobservePage } from "./failure-context.ts";
+import { runRecoveryDoctor } from "../browser/recovery.ts";
 import { createLogger } from "./logging.ts";
 import { createObservationOperations } from "./observation-diffs.ts";
 import { fitInlinePreview,summarizeAccessibilitySnapshot,summarizeNetworkEvents } from './observation-projection.ts';
@@ -910,7 +911,12 @@ export class AgentBrowserRuntime {
     };
   }
 
-  failure(sessionId: string, error: unknown, extra: Record<string, unknown> = {}) {
+  async failure(sessionId: string, error: unknown, extra: Record<string, unknown> = {}) {
+    const fields = record(error);
+    if (!fields.recovery && ["BROWSER_HOST_UNRESPONSIVE", "BROWSER_HOST_ACCESS_DENIED"].includes(String(fields.code)) && process.env.OPENCODE_BROWSER_SKIP_RECOVERY !== "1") {
+      const recovery = await runRecoveryDoctor(this.sessions.get(sessionId)?.profileId);
+      Object.assign(error instanceof Error ? error : {}, { recovery });
+    }
     const detail = errorDetails(error);
     return {
       ...contractMetadata(),

@@ -16,7 +16,7 @@ export async function saveAndTestProvider(params: unknown, fetcher: typeof fetch
   const parsed = inputSchema.safeParse(params);
   if (!parsed.success) return { ok: false, message: "Check your provider settings and API key.", elapsedMs: 0 };
   const { settings, apiKey } = parsed.data;
-  if (settings.provider === "openai-decisions" && settings.route !== "openrouter") return { ok: false, message: "Luna requires OpenRouter.", elapsedMs: 0 };
+  if ((settings.provider === "openai-decisions" && settings.route === "typesafe") || (settings.provider === "jev" && settings.route === "openai")) return { ok: false, message: "Invalid provider and service.", elapsedMs: 0 };
   if (settings.provider === "off") { configureProvider(settings); return { ok: true, settings: providerStatus() }; }
   const key = apiKey ?? providerKey(settings);
   if (!key) return { ok: false, message: "Enter an API key or configure the environment variable in Advanced settings.", elapsedMs: 0 };

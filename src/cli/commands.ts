@@ -78,7 +78,13 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
   if (command === "memory" || command === "history") return (await import("./memory.ts")).runMemoryCommand(rest);
 
   if (command === "doctor") {
-    const result = await (await import("./doctor.ts")).runDoctor({ json: has(rest, "--json") });
+    if (has(rest, "--connection-only")) {
+      const result = await (await import("./connection-doctor.ts")).connectionDoctor({ profileId: valueAfter(rest, "--profile"), repairRuntime: has(rest, "--repair-runtime") });
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    const result = await (await import("./doctor.ts")).runDoctor({ json: has(rest, "--json"), repairRuntime: has(rest, "--repair-runtime") });
     console.log(JSON.stringify(result, null, 2));
     if (!result.ok) process.exitCode = 1;
     return;

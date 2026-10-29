@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   errorMessage,
@@ -12,6 +13,15 @@ import {
 } from "./api";
 import { maskIdentifier } from "./privacy";
 
+const knownModelDescriptions = new Map<string, string>([
+  ["Default English page retrieval with a compact 22.6M parameter Snowflake embedding model. Use lexical or auto explicitly when lower latency is preferred.", "modelXs"],
+  ["Larger Snowflake retrieval model with stronger relevance at 768 dimensions. Choose it when quality matters more than local disk and memory footprint.", "modelM"],
+  ["Multilingual on-device embedding model with Matryoshka output dimensions (128/256/512/768). 256 dimensions is the recommended size-to-quality balance.", "modelGemma"],
+  ["Current local retrieval stack: Qwen3 embeddings for broad page search plus Qwen3 reranking for the final relevant context.", "modelQwen"],
+]);
+const strategyKeys: Record<string, string> = { auto: "strategyAuto", semantic: "strategySemantic", lexical: "strategyLexical", deep: "strategyDeep", lean: "detailLean", compact: "detailCompact", debug: "detailDebug" };
+const translateStrategy = (value: string) => strategyKeys[value] ? t(strategyKeys[value]!) : value;
+
 type ConnectionViewProps = { status: NativeStatus; view?: "profiles" | "settings" };
 
 function statusText(status: NativeStatus): string {
@@ -25,11 +35,11 @@ function semanticStatusText(semantic: SemanticState): string {
   if (load.state === "loading") {
     const progress = Number.isFinite(load.progress) ? ` ${load.progress}%` : "";
     const component = load.component ? ` ${load.component}` : "";
-    return `Downloading ${component ?? "model"} for ${model?.label ?? load.modelId ?? "model"}...${progress}`;
+    return t("modelDownload", [component.trim() || t("modelWord"), model?.label ?? load.modelId ?? t("modelWord"), progress]);
   }
-  if (load.state === "ready") return `Ready: ${model?.label ?? load.modelId ?? "model"}. Model cache: local.`;
-  if (load.state === "error") return `Model error: ${load.error ?? "unknown error"}.`;
-  return "Retrieval runs locally with the active model and falls back to lexical ranking. Deep search loads Qwen on demand; download failures degrade safely.";
+  if (load.state === "ready") return t("modelReady", model?.label ?? load.modelId ?? t("modelWord"));
+  if (load.state === "error") return t("modelError", load.error ?? t("modelUnknown"));
+  return t("searchLocalDetail");
 }
 
 export default function ConnectionView({ status, view = "profiles" }: ConnectionViewProps): React.JSX.Element {
@@ -37,10 +47,10 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
   const [selectedProfile, setSelectedProfile] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLabel, setProfileLabel] = useState("");
-  const [profileHelp, setProfileHelp] = useState("Labels stay local and are used only to pick the right open browser profile.");
+  const [profileHelp, setProfileHelp] = useState(t("profileLabelHelp"));
   const [profileBusy, setProfileBusy] = useState(false);
   const [semantic, setSemantic] = useState<SemanticState | null>(null);
-  const [semanticHelp, setSemanticHelp] = useState("Loading model options...");
+  const [semanticHelp, setSemanticHelp] = useState(t("loadingModels"));
   const [semanticBusy, setSemanticBusy] = useState(false);
   const [profileIdRevealed, setProfileIdRevealed] = useState<string | null>(null);
   const [cacheCopyState, setCacheCopyState] = useState<"idle" | "copied" | "error">("idle");
@@ -64,9 +74,9 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
 
   async function copyProfileId() {
     const id = await revealProfileId();
-    if (!id) { setProfileHelp("Profile ID unavailable. Reconnect the browser and try again."); return; }
-    try { await navigator.clipboard.writeText(id); setProfileHelp("Profile ID copied."); }
-    catch { setProfileHelp("Copy unavailable. Reveal the profile ID and copy it manually."); }
+    if (!id) { setProfileHelp(t("profileIdUnavailable")); return; }
+    try { await navigator.clipboard.writeText(id); setProfileHelp(t("profileCopied")); }
+    catch { setProfileHelp(t("profileCopyFail")); }
   }
 
   async function copyCachePath() {
@@ -138,7 +148,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setProfileBusy(true);
-    setProfileHelp("Saving...");
+    setProfileHelp(t("profileSaving"));
     try {
       const response = await sendMessage<{ profile?: Profile; error?: string }>({ type: "SET_PROFILE_LABEL", label: profileLabel });
       const error = responseError(response);
@@ -147,7 +157,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
         setProfile(response.profile);
         setProfileLabel(response.profile.profileLabel ?? "");
       }
-      setProfileHelp("Saved. Pass this profile label to the first useful browser call.");
+      setProfileHelp(t("profileSaved"));
     } catch (error) {
       setProfileHelp(errorMessage(error));
     } finally {
@@ -175,52 +185,52 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
   function toggleSemantic(next: boolean) {
     void updateSemantic(
       { type: "SET_SEMANTIC_SETTINGS", enabled: next, modelId: activeModelId, preload: next },
-      next ? "Enabling semantic retrieval..." : "Disabling semantic retrieval...",
+      next ? t("enableSemanticBusy") : t("disableSemanticBusy"),
     );
   }
 
   function setStrategyPreference(strategy: string) {
     void updateSemantic(
       { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: activeModelId, strategyPreference: strategy },
-      `Search mode set to ${strategy}...`,
+      t("strategySet", translateStrategy(strategy)),
     );
   }
 
   function setAgentResultCount(count: number) {
     void updateSemantic(
       { type: "SET_SEMANTIC_SETTINGS", enabled, modelId: activeModelId, agentResultCount: count },
-      `Agent results set to ${count}...`,
+      t("resultCountSet", String(count)),
     );
   }
 
   function setAgentResultDetail(detail: string) {
     void updateSemantic(
       { type: "SET_SEMANTIC_SETTINGS", enabled, modelId: activeModelId, agentResultDetail: detail },
-      `Result detail set to ${detail}...`,
+      t("resultDetailSet", translateStrategy(detail)),
     );
   }
 
   function setEmbeddingDims(model: SemanticModel, dims: number) {
     void updateSemantic(
       { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: model.id, embeddingDims: dims, preload: true },
-      `Embedding size set to ${dims} dimensions...`,
+      t("dimensionSet", String(dims)),
     );
   }
 
   function useModel(model: SemanticModel) {
     void updateSemantic(
       { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: model.id, preload: true },
-      `Switching retrieval to ${model.label}...`,
+      t("switchModel", model.label),
     );
   }
 
   function prepareModel(model: SemanticModel) {
-    void updateSemantic({ type: "PREPARE_SEMANTIC_MODEL", modelId: model.id }, `Downloading ${model.label}...`);
+    void updateSemantic({ type: "PREPARE_SEMANTIC_MODEL", modelId: model.id }, t("downloadingModel", model.label));
   }
 
   function deleteModel(model: SemanticModel) {
-    if (window.confirm(`Delete local files for ${model.label}? They can be downloaded again later.`)) {
-      void updateSemantic({ type: "DELETE_SEMANTIC_MODEL", modelId: model.id }, `Deleting local files for ${model.label}...`);
+    if (window.confirm(t("deleteModelConfirm", model.label))) {
+      void updateSemantic({ type: "DELETE_SEMANTIC_MODEL", modelId: model.id }, t("deletingModel", model.label));
     }
   }
 
@@ -234,17 +244,17 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
       <div key={model.id} className={`model-card${isActive ? " active" : ""}`} data-model-id={model.id}>
         <div className="model-head">
           <span className="model-name">{model.label}</span>
-          {model.default === true ? <span className="badge badge-default">Default</span> : null}
-          <span className={`badge ${cached ? "badge-ok" : "badge-neutral"}`}>{cached ? "Ready" : "Not downloaded"}</span>
+          {model.default === true ? <span className="badge badge-default">{t("defaultLabel")}</span> : null}
+          <span className={`badge ${cached ? "badge-ok" : "badge-neutral"}`}>{cached ? t("ready") : t("notDownloaded")}</span>
         </div>
         <div className="model-meta">
           {model.parameters ?? "n/a"} · {model.dimensions ?? "n/a"}-dim · ctx {model.contextLength ?? "512"}
-          {isAdaptive ? "" : " · deep search only"}
+          {isAdaptive ? "" : ` · ${t("deepSearchOnly")}`}
         </div>
-        <div className="model-desc">{model.description ?? "Local retrieval model."}</div>
+        <div className="model-desc">{model.description ? (knownModelDescriptions.has(model.description) ? t(knownModelDescriptions.get(model.description)!) : model.description) : t("localRetrievalModel")}</div>
         {model.benchmark?.value ? <div className="model-bench">{model.benchmark.label}: {model.benchmark.value}</div> : null}
         {dims.length > 0 ? (
-          <div className="dim-selector" role="radiogroup" aria-label={`${model.label} embedding size`}>
+          <div className="dim-selector" role="radiogroup" aria-label={t("embeddingLabel", model.label)}>
             {dims.map((dim) => (
               <button
                 key={dim}
@@ -258,12 +268,12 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
                 {dim}
               </button>
             ))}
-            <span className="dim-note">{model.defaultDimensions}-dim — recommended balance</span>
+            <span className="dim-note">{t("recommendedDim", String(model.defaultDimensions))}</span>
           </div>
         ) : null}
         <div className="model-actions">
           {isAdaptive && isActive ? (
-            <span className="model-active-note" aria-label="Active retrieval model">Active</span>
+            <span className="model-active-note" aria-label={t("activeModel")}>{t("active")}</span>
           ) : null}
           {isAdaptive && !isActive ? (
             <button
@@ -272,11 +282,10 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
               disabled={busyForModel}
               onClick={() => useModel(model)}
             >
-              Use
-            </button>
+              {t("useModel")}{" "}</button>
           ) : null}
           {!isAdaptive ? (
-            <span className="model-active-note">On demand</span>
+            <span className="model-active-note">{t("onDemand")}</span>
           ) : null}
           <button
             type="button"
@@ -284,7 +293,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             disabled={busyForModel}
             onClick={() => prepareModel(model)}
           >
-            {cached ? "Re-download" : "Download"}
+            {cached ? t("redownload") : t("download")}
           </button>
           <button
             type="button"
@@ -292,8 +301,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             disabled={busyForModel || !cached}
             onClick={() => deleteModel(model)}
           >
-            Delete
-          </button>
+            {t("delete")}{" "}</button>
         </div>
         {loading && load?.modelId === model.id ? (
           <div className="model-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number.isFinite(load?.progress) ? load?.progress : undefined}>
@@ -308,24 +316,24 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
     <section id="view-connection" className="view">
       {view === "profiles" ? <>
       <details className="card connection-details" aria-labelledby="connection-title">
-        <summary><h2 id="connection-title">Connection details</h2></summary>
+        <summary><h2 id="connection-title">{t("connectionDetails")}</h2></summary>
         <dl id="connection-list">
           <div>
-            <dt>Status</dt>
+            <dt>{t("status")}</dt>
             <dd id="status-detail">{statusText(status)}</dd>
           </div>
           <div>
-            <dt>Host</dt>
+            <dt>{t("host")}</dt>
             <dd id="host">{status.hostName ?? "com.opencode.browser.plugin"}</dd>
           </div>
           <div>
-            <dt>Last Check</dt>
+            <dt>{t("lastCheck")}</dt>
             <dd id="last-checked">{status.lastChecked ? new Date(status.lastChecked).toLocaleString() : "-"}</dd>
           </div>
           <div>
-            <dt>Profile ID</dt>
+            <dt>{t("profileId")}</dt>
             <dd id="profile-id" className="mono profile-id-row">
-              <span className="mono-value">{displayedProfileId || "Checking..."}</span>
+              <span className="mono-value">{displayedProfileId || t("profileChecking")}</span>
               <button
                 type="button"
                 className="button-mini"
@@ -334,36 +342,36 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
                   else void revealProfileId();
                 }}
               >
-                {profileIdRevealed ? "Hide" : "Reveal"}
+                {profileIdRevealed ? t("hide") : t("reveal")}
               </button>
-              <button type="button" className="button-mini" onClick={() => void copyProfileId()}>Copy</button>
+              <button type="button" className="button-mini" onClick={() => void copyProfileId()}>{t("copy")}</button>
             </dd>
           </div>
         </dl>
       </details>
 
       <div className="card" aria-labelledby="profile-title">
-        <h2 id="profile-title">Choose a browser profile</h2>
-        <label htmlFor="connected-profile">Connected browser profiles</label>
+        <h2 id="profile-title">{t("chooseProfile")}</h2>
+        <label htmlFor="connected-profile">{t("connectedProfiles")}</label>
         <select id="connected-profile" value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)}>
-          {connectedProfiles?.profiles.filter((item) => item.connected).map((item, index) => <option key={item.profileId} value={item.profileId}>{item.profileLabel || item.browserName || "Profile " + (index + 1)}{item.profileId === connectedProfiles.currentProfileId ? " (this profile)" : ""}</option>)}
+          {connectedProfiles?.profiles.filter((item) => item.connected).map((item, index) => <option key={item.profileId} value={item.profileId}>{item.profileLabel || item.browserName || t("profileNumber", String(index + 1))}{item.profileId === connectedProfiles.currentProfileId ? t("thisProfileSuffix") : ""}</option>)}
         </select>
-        <p className="help-note">Copy a profile selector and give it to your agent. This keeps automation in the browser you choose.</p>
-        <button className="button" type="button" disabled={!selectedProfile} onClick={() => { void navigator.clipboard.writeText(JSON.stringify({ profile: selectedProfile })).then(() => setProfileHelp("Profile selector copied."), () => setProfileHelp("Clipboard unavailable.")); }}>Copy agent selector</button>
-        <details className="advanced-details"><summary>Rename this profile (optional)</summary>
+        <p className="help-note">{t("selectorHelp")}</p>
+        <button className="button" type="button" disabled={!selectedProfile} onClick={() => { void navigator.clipboard.writeText(JSON.stringify({ profile: selectedProfile })).then(() => setProfileHelp(t("copySelectorReady")), () => setProfileHelp(t("clipboardUnavailable"))); }}>{t("copySelector")}</button>
+        <details className="advanced-details"><summary>{t("renameProfile")}</summary>
         <form id="profile-form" onSubmit={saveProfile}>
-          <label htmlFor="profile-label">Profile label</label>
+          <label htmlFor="profile-label">{t("profileLabel")}</label>
           <div className="input-row">
             <input
               id="profile-label"
               name="profile-label"
               type="text"
               maxLength={80}
-              placeholder="work, personal, staging"
+              placeholder={t("exampleLabels")}
               value={profileLabel}
               onChange={(event) => setProfileLabel(event.target.value)}
             />
-            <button type="submit" className="button button-primary" disabled={profileBusy}>Save</button>
+            <button type="submit" className="button button-primary" disabled={profileBusy}>{t("save")}</button>
           </div>
           <p id="profile-help">{profileHelp}</p>
         </form>
@@ -373,18 +381,18 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
       </> : <>
 
       <details className="card search-settings" aria-labelledby="semantic-title">
-        <summary><h2 id="semantic-title">Local search and models</h2></summary>
+        <summary><h2 id="semantic-title">{t("localSearchModels")}</h2></summary>
         <div className="semantic-toggle-row">
           <div className="semantic-toggle-copy">
-            <span className="semantic-toggle-title">Search by meaning</span>
-            <span className="semantic-toggle-sub">Find relevant page content locally. Keyword search stays available.</span>
+            <span className="semantic-toggle-title">{t("searchMeaning")}</span>
+            <span className="semantic-toggle-sub">{t("searchHelp")}</span>
           </div>
           <button
             id="semantic-enabled"
             type="button"
             role="switch"
             aria-checked={enabled}
-            aria-label="Enable semantic retrieval"
+            aria-label={t("enableSemantic")}
             className={`switch${enabled ? " on" : ""}`}
             disabled={semanticBusy}
             onClick={() => toggleSemantic(!enabled)}
@@ -392,13 +400,13 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             <span className="switch-knob" />
           </button>
         </div>
-        <p className="help-note">Automatic search balances relevance and speed. Most users can keep the defaults.</p>
-        <details className="advanced-details"><summary>Advanced search settings</summary>
-        <div className="strategy-row" role="radiogroup" aria-label="Search mode">
-          <span className="strategy-label">Search mode</span>
+        <p className="help-note">{t("autoSearchHelp")}</p>
+        <details className="advanced-details"><summary>{t("advancedSearch")}</summary>
+        <div className="strategy-row" role="radiogroup" aria-label={t("searchMode")}>
+          <span className="strategy-label">{t("searchMode")}</span>
           {["auto", "semantic", "lexical", "deep"].map((strategy) => (
             <button
-              key={strategy}
+              key={translateStrategy(strategy)}
               type="button"
               role="radio"
               aria-checked={(settings.strategyPreference ?? "auto") === strategy}
@@ -412,8 +420,8 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
         </div>
         <div>
           <div className="advanced-row">
-            <span className="advanced-label">Agent result count</span>
-            <div role="radiogroup" aria-label="Agent result count">
+            <span className="advanced-label">{t("agentCount")}</span>
+            <div role="radiogroup" aria-label={t("agentCount")}>
               {[3, 5, 8, 12, 20].map((count) => (
                 <button
                   key={count}
@@ -430,11 +438,11 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             </div>
           </div>
           <div className="advanced-row">
-            <span className="advanced-label">Result detail</span>
-            <div role="radiogroup" aria-label="Result detail">
+            <span className="advanced-label">{t("resultDetail")}</span>
+            <div role="radiogroup" aria-label={t("resultDetail")}>
               {["lean", "compact", "debug"].map((detail) => (
                 <button
-                  key={detail}
+                  key={translateStrategy(detail)}
                   type="button"
                   role="radio"
                   aria-checked={(settings.agentResultDetail ?? "lean") === detail}
@@ -448,19 +456,19 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             </div>
           </div>
         </div>
-        <div id="semantic-model-list" className="model-list" aria-label="Retrieval models">
+        <div id="semantic-model-list" className="model-list" aria-label={t("retrievalModels")}>
           {adaptiveModels.map(renderModelCard)}
           {deepModel ? renderModelCard(deepModel) : null}
         </div>
         </details>
         <p id="semantic-help">{semanticHelp}</p>
         <details id="semantic-dev-details" className="dev-details">
-          <summary>Developer details</summary>
+          <summary>{t("developerDetails")}</summary>
           <div className="dev-details-row">
-            <span className="dev-details-label">Cache location</span>
-            <span className="dev-details-value">Local model cache</span>
+            <span className="dev-details-label">{t("cacheLocation")}</span>
+            <span className="dev-details-value">{t("localModelCache")}</span>
             <button type="button" className="button-mini" onClick={() => void copyCachePath()}>
-              {cacheCopyState === "copied" ? "Copied" : cacheCopyState === "error" ? "Failed" : "Copy path"}
+              {cacheCopyState === "copied" ? t("copied") : cacheCopyState === "error" ? t("failed") : t("copyPath")}
             </button>
           </div>
         </details>

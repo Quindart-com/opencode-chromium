@@ -2,11 +2,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readProfileRegistrations } from "../../native-host/src/profile-registry.ts";
+import { participants,participantBusy,processAlive,reapParticipants } from "../../native-host/src/runtime-participants.ts";
 import { createBrowserAgent } from "../adapters/sdk/index.ts";
 import { errorMessage } from "../core/errors.ts";
 import { firefoxHealth } from "./firefox.ts";
 import { codexConfigPath,inspectHarnessSkills,STALE_SKILL_MARKER } from "./skills.ts";
 import { packageInfo } from "./version.ts";
+import { runtimeDir } from "./native-host.ts";
+import { inspectProjectBrowserPlugin } from "./codex-marketplace.ts";
+import { connectionDoctor } from "./connection-doctor.ts";
 
 const MAX_SCHEMA_BYTES = 13000;
 
@@ -14,7 +18,7 @@ function check(name: string, ok: unknown, details: Record<string, unknown> = {})
   return { name, ok: Boolean(ok), ...details };
 }
 
-export async function runDoctor({ json = false } = {}) {
+export async function runDoctor({ json = false, repairRuntime = false } = {}) {
   const info = packageInfo();
   const dist = path.join(info.root, "dist");
   const artifactDir = process.env.AGENT_BROWSER_ARTIFACT_DIR ?? process.env.OPENCODE_BROWSER_ARTIFACT_DIR ?? path.join(os.tmpdir(), "opencode-browser-plugin-artifacts");
@@ -46,6 +50,17 @@ export async function runDoctor({ json = false } = {}) {
     } catch (error) { checks.push(check("firefox-remote-agent", false, { profileId: profile.profileId, message: errorMessage(error) })); }
   }
   const skillHealth = inspectHarnessSkills();
+  const projectPlugin = inspectProjectBrowserPlugin(info.version);
+  if (projectPlugin) checks.push(check("codex-project-marketplace", projectPlugin.ok, projectPlugin));
+  try {
+    const before = participants(runtimeDir());
+    if (repairRuntime) reapParticipants(runtimeDir());
+    const rows = repairRuntime ? participants(runtimeDir()) : before;
+    const staleIdle = rows.filter(row => !processAlive(row.pid) && !participantBusy(row)).length;
+    checks.push(check("runtime-participants", staleIdle === 0, { count: rows.length, staleIdle,
+      removed: before.length - rows.length, repairCommand: "opencode-chromium doctor --repair-runtime --json",
+      message: "Repair removes only dead, idle process records. Sessions and approvals are retained." }));
+  } catch { checks.push(check("runtime-participants", false, { message: "Runtime process metadata could not be read. Preserve it and inspect locally before repairing." })); }
   const skillInstallCommand = skillHealth.clients.length ? "opencode-chromium setup --targets " + skillHealth.clients.join(",") : "opencode-chromium setup --all";
   const staleSkillTargets = skillHealth.skills.filter(skill => !skill.parity).map(skill => skill.path);
   checks.push(
@@ -60,6 +75,8 @@ export async function runDoctor({ json = false } = {}) {
       return !fs.readFileSync(config, "utf8").includes(STALE_SKILL_MARKER);
     })(), {}),
   );
+  const connection = await connectionDoctor();
+  checks.push(...connection.checks);
   const report = { ok: checks.every((item) => item.ok), ...info, checks, generatedAt: new Date().toISOString() };
   if (json) return report;
   return report;

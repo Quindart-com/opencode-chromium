@@ -1,20 +1,24 @@
 import net from "node:net";
+import { randomUUID } from "node:crypto";
 import { FrameDecoder,writeFrame } from "../../native-host/src/framing.ts";
 import { defaultIpcPath } from "../../native-host/src/ipc-path.ts";
 import { normalizeProfileRegistration,profileRegistryDir,readProfileRegistrations,type ProfileRegistration } from "../../native-host/src/profile-registry.ts";
 import { ProfileSelectionError,type BrowserProfile } from "../core/profiles.ts";
 import { PLUGIN_VERSION } from "../core/versions.ts";
+import { BrowserRuntimeError } from "../core/errors.ts";
 import { isRecord,record } from "../shared/values.ts";
+import { reconciledTab,runRecoveryDoctor,sessionTabs,transportFailure } from "./recovery.ts";
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const PROFILE_STATUS_TIMEOUT_MS = 1000;
+const PROFILE_STATUS_RETRY_TIMEOUT_MS = 3000;
 const PROFILE_CACHE_TTL_MS = 750;
 
 const browserClients = new Map<string, BrowserHostClient>();
 const profileCache = new Map<string, { at: number; profiles: ConnectedProfile[] }>();
 interface ConnectedProfile extends ProfileRegistration { host: { connected: boolean; ipcClients: number | null; startedAt: string | null; lastExtensionMessageAt: string | null } }
 interface ProfileOptions { timeoutMs?: number; includeInternal?: boolean; fresh?: boolean }
-interface RequestOptions extends ProfileOptions { profileId?: string | null; ipcPath?: string }
+interface RequestOptions extends ProfileOptions { profileId?: string | null; ipcPath?: string; recover?: boolean }
 interface Pending { method: string; resolve(value: unknown): void; reject(error: unknown): void; timeout: ReturnType<typeof setTimeout> }
 
 export class BrowserHostRpcError extends Error {
@@ -92,7 +96,7 @@ export class BrowserHostClient {
         }
       });
       socket.on("error", (error) => {
-        const wrapped = new Error(`Could not connect to the agent browser host at ${this.ipcPath}: ${error.message}`);
+        const wrapped = Object.assign(new Error(`Could not connect to the agent browser host at ${this.ipcPath}: ${error.message}`, { cause: error }), { code: (error as NodeJS.ErrnoException).code });
         if (!connected) reject(wrapped);
         this.#disconnect(wrapped);
       });
@@ -156,7 +160,7 @@ export class BrowserHostClient {
         this.#settle(id, () => reject(new Error(`Timed out waiting for browser host response to ${method}`)));
       }, timeoutMs);
       this.#pending.set(id, { method, resolve, reject, timeout });
-      writeFrame(socket, { jsonrpc: "2.0", method, params: { ...params, deadlineAt: record(params).deadlineAt ?? Date.now() + Math.max(1, timeoutMs - 10000) }, id, clientVersion: PLUGIN_VERSION, coordinated: process.env.OPENCODE_BROWSER_COORDINATED === "1" }).catch((error) => {
+      writeFrame(socket, { jsonrpc: "2.0", method, params: { ...params, deadlineAt: record(params).deadlineAt ?? Date.now() + Math.max(1, timeoutMs - Math.min(1000, timeoutMs / 5)) }, id, clientVersion: PLUGIN_VERSION, coordinated: process.env.OPENCODE_BROWSER_COORDINATED === "1" }).catch((error) => {
         this.#settle(id, () => reject(error));
         this.#disconnect(error);
       });
@@ -257,12 +261,29 @@ export async function listBrowserProfiles(options: ProfileOptions = {}) {
     profiles = cached.profiles;
   } else {
     const registrations = readProfileRegistrations();
-    const settled = await Promise.allSettled(registrations.map((registration) => statusForRegistration(registration, timeoutMs)));
+    const settled = await Promise.allSettled(registrations.map(async registration => {
+      try { return await statusForRegistration(registration, timeoutMs); }
+      catch (error) {
+        // A status read is safe to repeat. Give a busy host one bounded chance
+        // to answer; explicit caller budgets and mutations are never retried here.
+        if (options.timeoutMs !== undefined || !(error instanceof Error) || !/Timed out waiting for browser host response to host[.]status/.test(error.message)) throw error;
+        return statusForRegistration(registration, PROFILE_STATUS_RETRY_TIMEOUT_MS);
+      }
+    }));
     profiles = [];
     for (let index = 0; index < settled.length; index += 1) {
       const result = settled[index];
       if (result?.status === "fulfilled") profiles.push(result.value);
       // A busy live host can miss a probe; only the owner removes its registration.
+    }
+    if (registrations.length && !profiles.length) {
+      const failures = settled.filter(result => result.status === "rejected").map(result => result.reason as unknown);
+      const denied = failures.some(error => ["EPERM", "EACCES"].includes(String(record(error).code)));
+      const timedOut = failures.some(error => error instanceof Error && /Timed out/.test(error.message));
+      if (denied || timedOut) throw new BrowserRuntimeError(denied ?
+        "A browser host is registered, but this process cannot access it. Allow the local host connection or run the MCP server outside the restricted sandbox; reinstalling the extension will not grant access." :
+        "A browser host is registered but did not answer its status probe. Run opencode-chromium doctor --repair-runtime --json, then retry; if it persists, reconnect the extension.",
+      { code: denied ? "BROWSER_HOST_ACCESS_DENIED" : "BROWSER_HOST_UNRESPONSIVE", retryable: !denied, uncertain: false });
     }
     profiles.sort((first, second) => String(first.profileLabel ?? first.profileId).localeCompare(String(second.profileLabel ?? second.profileId)));
     profileCache.set(cacheKey, { at: Date.now(), profiles });
@@ -301,10 +322,28 @@ export async function browserRequest(method: string, params: Record<string, unkn
   const profile = options.ipcPath ? null : await resolveBrowserProfile(requestedProfileId, options);
   const ipcPath = options.ipcPath ?? profile?.ipcPath;
   if (!ipcPath) throw new Error("Browser profile has no native host connection");
+  const client = pooledBrowserClient(ipcPath, options);
+  const creationRequestId = method === "createTab" ? randomUUID() : undefined;
+  let before: Record<string, unknown>[] | null = null;
   try {
-    return await pooledBrowserClient(ipcPath, options).request(method, params, options);
+    if (method === "createTab") {
+      before = sessionTabs(await client.request("getTabs", params, { timeoutMs: 2500 }));
+      if (!before) throw new Error("Could not establish the session's tab state before creation");
+    }
+    return await client.request(method, creationRequestId ? { ...params, creationRequestId } : params, options);
   } catch (error) {
     invalidateBrowserProfileCache();
+    if (options.recover !== false && process.env.OPENCODE_BROWSER_SKIP_RECOVERY !== "1" && transportFailure(error)) {
+      const recovery = await runRecoveryDoctor(profile?.profileId ?? requestedProfileId);
+      if (method === "createTab" && before) {
+        try {
+          const after = sessionTabs(await client.request("getTabs", { ...params, deadlineAt: Date.now() + 2000 }, { timeoutMs: 2500 }));
+          const tab = after && reconciledTab(before, after, creationRequestId!);
+          if (tab) return { ...tab, recovery: { ...recovery, status: "reconciled", next: "The original tab was found; creation was not repeated." } };
+        } catch { /* Ambiguous or unavailable state never authorizes another create. */ }
+      }
+      Object.assign(error instanceof Error ? error : {}, { recovery, retryable: false });
+    }
     throw error;
   }
 }

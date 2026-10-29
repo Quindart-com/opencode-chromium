@@ -10,6 +10,8 @@ import UploadSettings from "./UploadSettings";
 import ConnectionSummary from "./ConnectionSummary";
 import RuntimeUpdates from "./RuntimeUpdates";
 
+const t = (key: "connected" | "checking" | "reconnecting" | "notConnected" | "localAutomation" | "extensionViews" | "overview" | "profiles" | "settings" | "setupGuide" | "sourceGithub") => browser.i18n.getMessage(key);
+
 type ViewName = "overview" | "profiles" | "settings";
 
 function statusClass(state: string): string {
@@ -72,7 +74,7 @@ function useNativeStatus(): NativeStatus {
 
 function Header({ status }: { status: NativeStatus }): React.JSX.Element {
   const state = status.state ?? "unknown";
-  const statusText = state === "connected" ? "Connected" : state === "unknown" ? "Checking" : state === "reconnecting" ? "Reconnecting" : "Not connected";
+  const statusText = state === "connected" ? t("connected") : state === "unknown" ? t("checking") : state === "reconnecting" ? t("reconnecting") : t("notConnected");
 
   return (
     <header id="app-header">
@@ -80,7 +82,7 @@ function Header({ status }: { status: NativeStatus }): React.JSX.Element {
       <div id="app-identity">
         <h1>OpenCode Browser</h1>
         <p id="app-subtitle">
-          <span id="app-version">v{browser.runtime.getManifest().version}</span> · Local browser automation
+          <span id="app-version">v{browser.runtime.getManifest().version}</span> · {t("localAutomation")}
         </p>
       </div>
       <div id="status-pill" className={`pill ${statusClass(state)}`} role="status">
@@ -93,7 +95,7 @@ function Header({ status }: { status: NativeStatus }): React.JSX.Element {
 
 function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: ViewName) => void }): React.JSX.Element {
   return (
-    <nav className="view-tabs" role="tablist" aria-label="Extension views">
+    <nav className="view-tabs" role="tablist" aria-label={t("extensionViews")}>
       {(["overview", "profiles", "settings"] as const).map((view) => {
         const isActive = view === active;
         return (
@@ -116,7 +118,7 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
             type="button"
             onClick={() => onChange(view)}
           >
-            {view === "overview" ? "Overview" : view === "profiles" ? "Profiles" : "Settings"}
+            {t(view)}
           </button>
         );
       })}
@@ -147,9 +149,9 @@ export default function App(): React.JSX.Element {
         {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><RuntimeUpdates /><ConnectionView status={nativeStatus} view="settings" /></>}
       </div>
       <footer id="app-footer">
-        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">Setup guide</a>
+        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">{t("setupGuide")}</a>
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
-          Source on GitHub
+          {t("sourceGithub")}
         </a>
       </footer>
     </main>

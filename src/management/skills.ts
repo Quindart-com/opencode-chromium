@@ -18,7 +18,7 @@ export function skillDirectories(targets: HarnessId[], home?: string): string[] 
 /** Skill changes join the configuration transaction, including dry runs. */
 export function planSkills(root: string, targets: HarnessId[], remove = false, home?: string): FileChange[] {
   const source = path.join(root, "skills", "opencode-browser-plugin");
-  const files = ["SKILL.md", "agents/openai.yaml"];
+  const files = ["SKILL.md", "agents/openai.yaml", "scripts/diagnose-mcp.mjs", "references/recovery.md"];
   return skillDirectories(targets, home).flatMap(directory => files.map(relative => {
     const filePath = path.join(directory, "opencode-browser-plugin", relative);
     const before = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null;

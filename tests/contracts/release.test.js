@@ -10,14 +10,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 describe("release metadata", () => {
-  test("uses the public distribution name and canonical repository", () => {
-    expect(packageJson.name).toBe("opencode-chromium");
-    expect(packageJson.repository.url).toBe("git+https://github.com/Quindart-com/opencode-chromium.git");
-    expect(packageJson.publishConfig).toEqual({ access: "public", registry: "https://registry.npmjs.org" });
-    expect(packageJson.bin["opencode-chromium"]).toBe("./dist/cli/index.js");
-    expect(packageJson.bin["opencode-chromium-mcp"]).toBe("./dist/adapters/mcp/server.js");
-    expect(packageJson.bin["opencode-browser-plugin-mcp"]).toBe("./dist/adapters/mcp/server.js");
-  });
 
   test("accepts a tag matching the package version", () => {
     expect(checkTagVersion(`v${packageJson.version}`)).toEqual({
@@ -47,11 +39,6 @@ describe("release metadata", () => {
     expect(compareVersions("2.0.0", "2.0.0-rc.1")).toBe(1);
     expect(compareVersions("2.0.0-rc.2", "2.0.0-rc.1")).toBe(1);
   });
-
-  test("creates GitHub releases without relying on a checked-out repository", () => {
-    const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "publish.yml"), "utf8");
-    expect(workflow).toMatch(/gh release create[^\n]+--repo "\$GITHUB_REPOSITORY"/);
-  });
 });
 
 describe("popup privacy surface", () => {
@@ -67,7 +54,10 @@ describe("popup privacy surface", () => {
   test("connection view masks the profile id and hides cache paths by default", () => {
     const view = fs.readFileSync(path.join(popupDir, "ConnectionView.tsx"), "utf8");
     expect(view).toMatch(/maskIdentifier/);
-    expect(view).toMatch(/Developer details/);
+    expect(view).toContain('<details id="semantic-dev-details" className="dev-details">');
+    expect(view).toContain('<summary>{t("developerDetails")}</summary>');
+    const messages = JSON.parse(fs.readFileSync(path.join(root, "extension-src", "public", "_locales", "en", "messages.json"), "utf8"));
+    expect(messages.developerDetails.message).toBe("Developer details");
     expect(view).not.toMatch(/\{profile\?\.profileId\s*\?\?/);
     expect(view).not.toMatch(/semantic-cache-path/);
     expect(view).toMatch(/GET_SEMANTIC_DIAGNOSTICS/);

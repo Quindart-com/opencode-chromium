@@ -1267,3 +1267,4 @@ input, select, .button, button { max-width: 100%; }
   .view-tab { padding-inline: 6px; }
   .decision-overview-heading { flex-wrap: wrap; }
 }
+#app-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; }
