@@ -14,6 +14,7 @@ import { decisionSearch } from "./decisions/search.ts";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.ts";
 import { createFirefoxHost } from "./firefox/backend.ts";
 import { FrameDecoder,writeFrame } from "./framing.ts";
+import { configureNetworkFamilyFallback } from "./network-policy.ts";
 import { instanceIpcPath,isUnixSocketPath } from "./ipc-path.ts";
 import { memoryCommandSchema } from "./memory/commands.ts";
 import { EmbedQueue,MemoryStore,embeddingEnabled } from "./memory/index.ts";
@@ -33,6 +34,7 @@ import { handleVisualHostMethod } from "./visual-map.ts";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
 const PROTOCOL_VERSION = "1";
+configureNetworkFamilyFallback();
 
 const ipcPath = instanceIpcPath();
 const nativeHostVersion = z.string().parse(record(JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as unknown).version);

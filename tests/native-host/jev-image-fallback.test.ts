@@ -35,14 +35,47 @@ afterEach(() => {
 function network(textConfidence = 0.4, httpStatus = 200) {
   globalThis.fetch = (async (_url, init) => {
     const body = JSON.parse(String(init?.body)); calls.push(body);
-    const visual = Array.isArray(body.state), confidence = visual ? 0.95 : textConfidence;
+    const visual = Array.isArray(body.input ?? body.state), confidence = visual ? 0.95 : textConfidence;
     if (httpStatus !== 200) return new Response("unavailable", { status: httpStatus });
+    if (body.input !== undefined) return Response.json({ model: body.model, answers: [{ type: "choice", name: "decision", choice: "b", confidence,
+      probabilities: [{ value: "a", probability: 0.02 }, { value: "b", probability: 0.95 }, { value: "__abstain", probability: 0.03 }] }], usage: { input_tokens: visual ? 500 : 100, output_tokens: 0 } });
     return new Response(JSON.stringify({ model: body.model, answers: { decision: { type: "choice", choice: "b", confidence,
       probabilities: { a: 0.02, b: 0.95, __abstain: 0.03 } } }, usage: { input_tokens: visual ? 500 : 100, output_tokens: 0 } }));
   }) as typeof fetch;
 }
 const search = (capture = async () => { captures++; return image; }) => decisionSearch({ query, units,
   decisionState: JSON.stringify([1, "https://fixture.test/", 1000, 800, 0, 0, 1]), pageFingerprint: query, tabId: 7 }, async () => ({ results: units }), capture);
+
+for (const route of ["openai", "openrouter"] as const) {
+  test(`Luna via ${route} caches confident text without capturing or sending screenshots`, async () => {
+    configureProvider({ ...settings, provider: "openai-decisions", route });
+    network(0.95);
+    expect((await search())?.decision).toMatchObject({ status: "selected", candidateId: "b" });
+    expect((await search())?.decision).toMatchObject({ status: "selected", origin: "cache" });
+    expect(calls.length).toBe(1); expect(captures).toBe(0);
+    expect(typeof (calls[0].input ?? calls[0].state)).toBe("string");
+  });
+
+  test(`Luna via ${route} escalates only uncertain text and validates fresh pixels before image-cache reuse`, async () => {
+    configureProvider({ ...settings, provider: "openai-decisions", route });
+    network(); await search(); await search();
+    expect(calls.length).toBe(2); expect(captures).toBe(2);
+    expect(typeof (calls[0].input ?? calls[0].state)).toBe("string");
+    expect(Array.isArray(calls[1].input ?? calls[1].state)).toBe(true);
+    const changed = new PNG({ width: 320, height: 280 }); changed.data.fill(255);
+    const result = await search(async () => { captures++; return `data:image/png;base64,${PNG.sync.write(changed).toString("base64")}`; });
+    expect(calls.length).toBe(2); expect(result?.decision).toMatchObject({ status: "abstained", reason: "image_budget_exhausted" });
+  });
+
+  test(`Luna via ${route} never captures on provider errors or when the image quota is exhausted`, async () => {
+    configureProvider({ ...settings, provider: "openai-decisions", route });
+    for (const status of [401, 402, 429, 500]) { query = randomUUID(); network(0.4, status); await search(); }
+    expect(calls.length).toBe(4); expect(captures).toBe(0);
+    reserveImageRequest(); query = randomUUID(); network();
+    expect((await search())?.decision).toMatchObject({ reason: "image_budget_exhausted" });
+    expect(captures).toBe(0);
+  });
+}
 
 test("Jev asks text first, then one image only on a valid unsure answer", async () => {
   network(); const result = await search();

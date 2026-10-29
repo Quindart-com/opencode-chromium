@@ -1,5 +1,8 @@
 # Unreleased
 
+- Make Luna decision ranking try text before experimental image fallback, reuse confident text results, and capture only for a valid uncertain answer. Preserve fresh-pixel checks and the total search deadline.
+- Prevent high-latency Node connection failures by allowing one second per address-family attempt inside the standalone native host. Preserve longer custom settings, both IP families, TLS verification and harness processes. Document the small service/component latency benchmark.
+
 - Replace the ambiguous connection panel with always-visible, colored Codex/OpenCode/DeepSeek rows and a separate verified CLI bridge status.
 - Add direct scoped plugin reconnect, bridge reconnect and connection checks through tracked background CLI jobs. Preserve running harnesses, unrelated agents, retained tabs and provider keys; guard active calls and approvals across contexts sharing a process.
 - Add background CLI update buttons, progress and deferred activation. Validate stable official npm releases, preserve automatic-update preferences and refresh owned agent guidance.
