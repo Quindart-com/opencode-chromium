@@ -96,10 +96,13 @@ try {
     }
     throw Error("Consent UI did not become ready");
   };
-  const denied = upload().then(() => "unexpected", error => error.message); let context = await confirmation();
+  const denied = upload().then(() => null, error => error); let context = await confirmation();
   await evaluate(context, "[...document.querySelectorAll('button')].find(e=>e.textContent==='Allow upload').click()");
   assert.equal(await evaluate(inputContext, "document.querySelector('#document').files.length"), 0);
-  await trustedClick(context, "Cancel upload"); assert.match(await denied, /Upload refused/);
+  await trustedClick(context, "Cancel upload");
+  const refusal = await denied;
+  assert.equal(refusal?.code, "UPLOAD_USER_DECLINED");
+  assert.match(refusal.message, /user declined.*no files were uploaded/);
   const stale = upload().then(() => "unexpected", error => error.message); context = await confirmation();
   await evaluate(inputContext, "document.querySelector('#document').replaceWith(document.querySelector('#document').cloneNode(true))");
   await trustedClick(context, "Allow upload"); assert.match(await stale, /detached|document changed|no such (node|element)/i);

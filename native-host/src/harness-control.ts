@@ -10,7 +10,13 @@ import { safeClientVersion,type HarnessKind } from "../../src/shared/connections
 import { record } from "../../src/shared/values.ts";
 
 export interface HarnessControlRecord { id: string; pid: number; harness: HarnessKind; version: string; harnessVersion: string | null; socket: string; token: string; updatedAt: number }
-const ownSocket = (id: string) => process.platform === "win32" ? "\\\\.\\pipe\\opencode-browser-agent-" + id : path.join(os.tmpdir(), "opencode-browser-agent-" + id + ".sock");
+function ownSocket(id: string) {
+  if (process.platform === "win32") return "\\\\.\\pipe\\opencode-browser-agent-" + id;
+  const name = "ocb-" + id.replaceAll("-", "") + ".sock", candidate = path.join(os.tmpdir(), name);
+  // macOS limits sockaddr_un paths to 104 bytes, including the terminator.
+  // Its per-user temporary directory can consume most of that allowance.
+  return Buffer.byteLength(candidate) < 100 ? candidate : path.join("/tmp", name);
+}
 const validId = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9-]{36}$/.test(value);
 export function harnessControls(dir = runtimeDirectory()): HarnessControlRecord[] {
   const folder = path.join(dir, "harness-links");

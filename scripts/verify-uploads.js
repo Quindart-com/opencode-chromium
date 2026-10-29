@@ -81,7 +81,7 @@ try {
     }
     throw new Error("Upload confirmation did not open");
   }
-  const denied = upload().then(() => "unexpected", error => error.message);
+  const denied = upload().then(() => null, error => error);
   let confirmation = await requestPage();
   assert.equal(await website.locator("#document").evaluate(input => input.files.length), 0);
   assert.equal(await confirmation.getByText("private-document.txt", { exact: true }).count(), 1);
@@ -91,7 +91,9 @@ try {
   await confirmation.getByRole("button", { name: "Allow upload", exact: true }).evaluate(button => button.click());
   assert.equal(await website.locator("#document").evaluate(input => input.files.length), 0);
   await confirmation.getByRole("button", { name: "Cancel upload", exact: true }).click();
-  assert.match(await denied, /Upload refused/);
+  const refusal = await denied;
+  assert.equal(refusal?.code, "UPLOAD_USER_DECLINED");
+  assert.match(refusal.message, /user declined.*no files were uploaded/);
   assert.equal(await website.locator("#document").evaluate(input => input.files.length), 0);
   const approved = upload();
   confirmation = await requestPage();
