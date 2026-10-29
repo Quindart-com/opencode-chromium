@@ -1295,8 +1295,10 @@ input, select, .button, button { max-width: 100%; }
 .agent-rows { list-style: none; padding: 0; margin: 10px 0; }
 .agent-row { display: flex; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--surface-border); }
 .agent-row:last-child { border-bottom: 0; }
-.agent-icon { width: 32px; height: 32px; border: 1px solid var(--surface-border); border-radius: 9px; background: var(--surface-raised); display: grid; place-items: center; font-weight: 700; font-size: 11px; color: var(--accent); flex: none; }
-.agent-codex { background: var(--text); color: var(--surface); }
+.agent-icon { width: 32px; height: 32px; border: 1px solid var(--surface-border); border-radius: 9px; background: #fff; display: grid; place-items: center; overflow: hidden; flex: none; }
+.agent-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.agent-opencode { background: #131010; }
+.agent-dsh img { width: 24px; height: 24px; }
 .agent-identity { flex: 1; min-width: 0; }
 .agent-identity > strong { font-size: 13px; line-height: 1.35; }
 .agent-identity > div { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 5px; }

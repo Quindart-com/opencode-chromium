@@ -113,7 +113,7 @@ const server = http.createServer(async (req, res) => {
     }
     const file = path.resolve(root, "extension", "." + new URL(req.url, "http://localhost").pathname);
     if (!file.startsWith(path.join(root, "extension") + path.sep)) { res.writeHead(403).end(); return; }
-    const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(file)];
+    const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml" }[path.extname(file)];
     res.setHeader("Content-Type", type ?? "application/octet-stream");
     const data = fs.readFileSync(file);
     res.end(process.argv.includes("--serve") && path.extname(file) === ".html" ? data.toString().replace("<head>", '<head><script src="/fixture-bootstrap.js"></script>') : data);
@@ -158,6 +158,8 @@ try {
   const badge = connections.locator(".badge-online");
   assert.notEqual(await badge.evaluate(element => getComputedStyle(element).color), await connections.locator(".agent-identity strong").first().evaluate(element => getComputedStyle(element).color), "connected status has a distinct visible color");
   await page.screenshot({ path: path.join(root, "reports", "popup-harness-connections.png"), fullPage: true });
+  assert.equal(await connections.locator(".agent-icon img").count(), 3, "each harness has an icon");
+  await page.waitForFunction(() => [...document.querySelectorAll('.agent-icon img')].every(image => image.complete && image.naturalWidth > 0));
   await connections.screenshot({ path: path.join(root, "reports", "popup-connections-card.png"), animations: "disabled" });
   const dshRow = connections.locator("li", { hasText: "DeepSeek Harness" });
   await dshRow.getByRole("button", { name: "Connect DeepSeek Harness", exact: true }).click();

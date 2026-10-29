@@ -1,5 +1,7 @@
 # Unreleased
 
+- Show the official Codex, OpenCode and DeepSeek Harness icons in the connection panel.
+
 - Make Luna decision ranking try text before experimental image fallback, reuse confident text results, and capture only for a valid uncertain answer. Preserve fresh-pixel checks and the total search deadline.
 - Prevent high-latency Node connection failures by allowing one second per address-family attempt inside the standalone native host. Preserve longer custom settings, both IP families, TLS verification and harness processes. Document the small service/component latency benchmark.
 
