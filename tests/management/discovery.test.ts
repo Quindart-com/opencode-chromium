@@ -27,7 +27,9 @@ test("custom executable discovery distinguishes installations from stale configu
     const desktop = path.join(root, "custom-claude-desktop.exe"); fs.writeFileSync(desktop, "fixture");
     process.env[harnessEnv("claude-desktop", "EXECUTABLE")] = desktop;
     rows = detectHarnesses(root, { versions: false });
-    expect(rows.find(row => row.id === "claude-desktop")?.installed).toBe(true);
+    expect(rows.find(row => row.id === "claude-desktop")).toMatchObject({
+      installed: process.platform !== "linux", supported: process.platform !== "linux",
+    });
     expect(rows.find(row => row.id === "claude-code")?.installed).toBe(false);
     set("OPENCODE_BROWSER_BRAVE_EXECUTABLE", binary);
     set("OPENCODE_BROWSER_BRAVE_USER_DATA_DIR", path.join(root, "browser-profile"));
