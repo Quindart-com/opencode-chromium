@@ -14,6 +14,7 @@ import { decisionSearch } from "./decisions/search.ts";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.ts";
 import { createFirefoxHost } from "./firefox/backend.ts";
 import { FrameDecoder,writeFrame } from "./framing.ts";
+import { configureNetworkFamilyFallback } from "./network-policy.ts";
 import { instanceIpcPath,isUnixSocketPath } from "./ipc-path.ts";
 import { memoryCommandSchema } from "./memory/commands.ts";
 import { EmbedQueue,MemoryStore,embeddingEnabled } from "./memory/index.ts";
@@ -25,6 +26,7 @@ import { runtimeDirectory,withRuntimeLock } from "./runtime-lifecycle.ts";
 import { createParticipant,participantBusy,participants,processAlive,readJournal } from "./runtime-participants.ts";
 import { runActivationCoordinator } from "./runtime-coordinator.ts";
 import { createIdleUpdateCheck,createRuntimeUpdater,probeRuntimeActivity } from "./runtime-updates.ts";
+import { createLocalActions } from "./local-actions.ts";
 import { embedMemoryTexts,handleSemanticHostMethod,rankPageUnits } from "./semantic-search.ts";
 import { rankInputSchema } from "./semantic-types.ts";
 import { createUploadFiles } from "./uploads.ts";
@@ -32,6 +34,7 @@ import { handleVisualHostMethod } from "./visual-map.ts";
 
 const PLUGIN_NAME = "opencode-browser-plugin";
 const PROTOCOL_VERSION = "1";
+configureNetworkFamilyFallback();
 
 const ipcPath = instanceIpcPath();
 const nativeHostVersion = z.string().parse(record(JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as unknown).version);
@@ -89,6 +92,7 @@ try {
   log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
 const uploadFiles = createUploadFiles();
+const localActions = createLocalActions();
 const firefoxHost = createFirefoxHost({ getProfile: () => state.profile, onEvent: (tabId, method, params) => {
   void relay.requestExtension("firefox.event", { tabId, method, params }).catch(() => {});
 } });
@@ -97,7 +101,13 @@ const relay: RpcRelay = new RpcRelay({
   extensionWriter: (message: unknown) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
   admit: async () => { await hostActivity.enter(); return () => hostActivity.leave(); },
+  canDisconnect: () => !participants(runtimeDirectory()).some(row => processAlive(row.pid) && participantBusy(row)),
+  connectionDetails: () => ({ harnesses: localActions.harnesses(), actions: localActions.status() }),
   localHandler: async (method, params): Promise<unknown> => {
+    if (method === "connections.reconnect") return localActions.start("reconnect", params.target);
+    if (method === "connections.diagnose") return localActions.start("diagnose");
+    if (method === "runtime.updateNow") return localActions.start("update");
+    if (method === "runtime.actionStatus") return localActions.status(typeof params.id === "string" ? params.id : undefined);
     const firefox = await firefoxHost(method, params);
     if (firefox !== undefined) return firefox;
     if (method.startsWith("uploads.")) return uploadFiles(method, params);
@@ -268,6 +278,15 @@ async function retireAtGate(requireJournal = true) {
 }
 const updateTimer = setInterval(() => { void checkRuntimeUpdate(); }, 1000);
 updateTimer.unref?.();
+// Catalog repair must work even when no Codex MCP process can start.
+const syncMarketplace = async () => {
+  if (shutdownStarted || fs.existsSync(new URL("../../src", import.meta.url)) || !updater.status({ includeParticipants: false }).enabled) return;
+  try { const { refreshBrowserMarketplace } = await import("../../src/management/marketplace.ts"); await refreshBrowserMarketplace({ version: nativeHostVersion, dir: runtimeDirectory() }); }
+  catch { /* Keep browser work serving; the next bounded check retries. */ }
+};
+void syncMarketplace();
+const marketplaceTimer = setInterval(() => { void syncMarketplace(); }, 5 * 60 * 1000);
+marketplaceTimer.unref();
 const retirementTimer = setInterval(() => { void retireAtGate(); }, 100);
 retirementTimer.unref();
 const activityWatcher = fs.watch(path.join(runtimeDirectory(), "participants"), (_event, file) => {
@@ -280,6 +299,7 @@ function shutdownHost(reason: string|undefined, exitCode = 0) {
   shutdownStarted = true;
   clearInterval(updateTimer);
   clearInterval(retirementTimer);
+  clearInterval(marketplaceTimer);
   activityWatcher.close();
   hostActivity.close();
   log(reason ?? "Native host shutting down");

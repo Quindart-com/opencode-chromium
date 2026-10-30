@@ -224,7 +224,7 @@ export interface RuntimePort {
 export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" | "session" | "finalize">, { memory: _memory = false } = {}) {
   return {
     browser_run: defineRuntimeTool({
-      description: "Run an action chain with settle and post-observation.",
+      description: "Run an action chain with settle and post-observation. If authorization is blocked, ask Approve / Disapprove with the harness question tool.",
       inputSchema: runInputSchema,
       outputSchema: resultSchema,
       annotations: { destructiveHint: true, openWorldHint: true },

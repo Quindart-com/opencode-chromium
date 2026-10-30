@@ -13,6 +13,9 @@ import { memoryEnabledForServer } from "../../memory/index.ts";
 import { record } from "../../shared/values.ts";
 import { imageCandidates,sanitizeImages } from "../image-content.ts";
 import { trackRuntime } from "../runtime-activity.ts";
+import { announceBrowserClient,resetBrowserClientConnections } from "../../browser/client.ts";
+import { startHarnessControl } from "../../../native-host/src/harness-control.ts";
+import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
 
 
 
@@ -21,7 +24,7 @@ type OpenCodeOptions = RuntimeOptions & { runtime?: AgentBrowserRuntime; memory?
 type NativeTool = ReturnType<typeof nativeTool>;
 interface OpenCodeContext { runtime?: AgentBrowserRuntime; logger?: Pick<ReturnType<typeof createLogger>, "info">;
   tools?: { add?(name: string, tool: NativeTool): unknown | Promise<unknown> };
-  tool?: { add?(name: string, tool: NativeTool): unknown | Promise<unknown>; transform?(input: { name: string; tool: NativeTool; codemode: boolean }): unknown | Promise<unknown> };
+  tool?: { reload?(): unknown | Promise<unknown>; add?(name: string, tool: NativeTool): unknown | Promise<unknown>; transform?(input: (editor: { add(tool: { name: string; description: string; input: unknown; execute(input: unknown, context: BrowserContext): Promise<unknown> }): unknown }) => unknown): unknown | Promise<unknown> };
   addTool?(name: string, tool: NativeTool): unknown | Promise<unknown>;
 }
 const IMAGE_ATTACHMENT_LIMIT = 4;
@@ -73,6 +76,7 @@ function concise(result: unknown) {
     sessionId: record(result).sessionId,
     summary: record(result).summary ?? "The complete result is available through the artifact URI.",
     artifact: record(result).artifact,
+    ...(record(result).authorization ? { authorization: record(result).authorization } : {}),
   });
 }
 
@@ -88,6 +92,7 @@ function nativeTool(name: string, definition: RuntimeTool, runtime: AgentBrowser
     annotations: definition.annotations,
     codemode: false,
     async execute(args: unknown, context: BrowserContext = {}) {
+      markBrowserClientUsed();
       const result = await trackRuntime(runtime).call(() => dispatchBrowserTool({ [name]: definition }, name, args, {
         ...context,
         agent: "opencode-v2",
@@ -146,7 +151,8 @@ async function registerWithContext(ctx: OpenCodeContext, name: string, tool: Nat
   if (typeof ctx?.tool?.add === "function") return ctx.tool.add(name, tool);
   if (typeof ctx?.addTool === "function") return ctx.addTool(name, tool);
   if (typeof ctx?.tool?.transform === "function") {
-    return ctx.tool.transform({ name, tool, codemode: false });
+    return ctx.tool.transform(editor => editor.add({ name, description: tool.description, input: tool.inputSchema,
+      async execute(input, context) { const result = await tool.execute(input, context); return { content: result.output, attachments: result.attachments }; } }));
   }
   throw new Error("This OpenCode context cannot register custom tools. Install the standard server plugin or configure the browser MCP server.");
 }
@@ -160,11 +166,17 @@ export async function createOpenCodeSetup(ctx: OpenCodeContext = {}, options: Op
     await registerWithContext(ctx, name, tool);
   }
   logger.info("OpenCode V2 browser tools registered", { plugin: PLUGIN_NAME, tools: Object.keys(tools) });
+  trackRuntime(runtime);
+  const stopPresence = startBrowserClientPresence("opencode", null, "plugin", announceBrowserClient);
+  const control = await startHarnessControl({ harness: "opencode", version: PLUGIN_VERSION, idle: () => trackRuntime(runtime).reconnectIdle(),
+    reload: async () => { resetBrowserClientConnections(); await announceBrowserClient(); await ctx.tool?.reload?.(); } }).catch(() => null);
 
   let closed = false;
   const cleanup = async () => {
     if (closed) return;
     closed = true;
+    stopPresence();
+    control?.close();
     trackRuntime(runtime).close();
     runtime.close();
     logger.info("OpenCode V2 browser tools cleaned up", { plugin: PLUGIN_NAME });

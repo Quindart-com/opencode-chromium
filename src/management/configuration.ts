@@ -4,10 +4,11 @@ import path from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import { parse as parseToml,stringify as stringifyToml } from "smol-toml";
 import { record } from "../shared/values.ts";
-import { deepSeekManaged,planDeepSeek } from "./deepseek.js";
+import { deepSeekManaged,planDeepSeek } from "./deepseek.ts";
 
 export const SERVER_ID = "opencode-browser-plugin";
-export type HarnessId = "codex" | "opencode" | "opencode-mcp" | "claude-code" | "claude-desktop" | "dsh";
+import type { HarnessId } from "../shared/harnesses.ts";
+export type { HarnessId };
 export interface ConfigOptions {
   client: HarnessId;
   serverPath: string;
@@ -28,6 +29,8 @@ function ownPlugin(entry: unknown, expected: string): boolean {
   let resolved = raw;
   try { if (raw.startsWith("file:")) resolved = fileURLToPath(raw); } catch { return false; }
   if (expected && path.resolve(resolved) === path.resolve(expected)) return true;
+  // The managed V2 directory and legacy file launcher represent the same plugin.
+  if (expected && path.basename(expected) === "plugin.mjs" && path.resolve(resolved) === path.join(path.dirname(path.resolve(expected)), "v2")) return true;
   try {
     return record(JSON.parse(fs.readFileSync(path.join(resolved, "package.json"), "utf8")) as unknown).name === "opencode-chromium";
   } catch { return false; }
@@ -118,7 +121,7 @@ export function planConfiguration(before: string, options: ConfigOptions): strin
   for (const name of [key, otherKey]) if (config[name] !== undefined && !Array.isArray(config[name])) throw new Error(`Invalid ${name} array`);
   const plugins = [...(config[key] as unknown[] ?? []), ...(config[otherKey] as unknown[] ?? [])]
     .filter(entry => !ownPlugin(entry, options.serverPath));
-  if (installing && options.client === "opencode") plugins.push(pathToFileURL(path.resolve(options.serverPath)).href);
+  if (installing && options.client === "opencode") plugins.push(pathToFileURL(path.resolve(major >= 2 && path.basename(options.serverPath) === "plugin.mjs" ? path.join(path.dirname(options.serverPath), "v2") : options.serverPath)).href);
   after = set(after, [key], plugins);
   if (config[otherKey] !== undefined) after = set(after, [otherKey], undefined);
   const mcp = object(config.mcp);

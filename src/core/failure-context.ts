@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { record } from "../shared/values.ts";
 import { errorMessage } from "./errors.ts";
+import { authorizationForError } from "../shared/authorization.ts";
 
 // A failure has to say what went wrong and what to try next, and little else:
 // the code, a bounded message, and one actionable hint. Provider messages can be
@@ -18,7 +19,10 @@ const FAILURE_HINTS: Record<string, string> = {
   STALE_TARGET: "Re-read the page and use a fresh nodeId, selector, or coordinates.",
   TIMEOUT: "The browser did not answer in time. Check health and dialogs; the action may have run.",
   BROWSER_OPERATION_FAILED: "Re-read the page before retrying; do not repeat the same step unchanged.",
-  APPROVAL_REQUIRED: "Review the chain, then call browser_run with only the approvalToken.",
+  APPROVAL_REQUIRED: "Ask Approve / Disapprove with the harness question tool; approval resumes with only approvalToken.",
+  UPLOAD_CONFIRMATION_REQUIRED: "Ask the user Approve / Disapprove with the harness question tool, then resume the original upload approval flow.",
+  UPLOAD_NOT_AUTHORIZED: "Ask the user whether to approve this upload. Resume its original authorization flow only after approval.",
+  UPLOAD_USER_DECLINED: "The user declined the upload. Keep the prepared files and wait for a new user instruction.",
   PROFILE_DISCONNECTED: "Reconnect the browser profile, then retry.",
   UNSUPPORTED_ACTION: "Use one of the actions listed in the tool description.",
   TAB_NOT_FOUND: "List tabs and choose an existing tabId.",
@@ -56,12 +60,14 @@ export function errorDetails(error: unknown) {
   const disconnected = /disconnect|closed target|(?:session|connection|socket|host).+(?:closed|ended)|websocket/i.test(message);
   const validation = error instanceof z.ZodError || /requires |invalid |unsupported |must |missing/i.test(message);
   const code = String(fields.code ?? (timeout ? "TIMEOUT" : validation ? "INVALID_REQUEST" : "BROWSER_OPERATION_FAILED"));
+  const authorization = authorizationForError(code);
   return {
     code,
     message: clip(message, FAILURE_MESSAGE_LIMIT),
     hint: fields.recovery ? "Read recovery results from the automatic CLI doctor. If unhealthy, run opencode-chromium doctor --repair-runtime --json and repair the reported layer; inspect uncertain actions before retrying." : failureHint(code),
     retryable: Boolean(fields.retryable ?? (timeout || disconnected)),
     uncertain: Boolean(fields.uncertain ?? (timeout || disconnected)),
+    ...(authorization ? { authorization } : {}),
     ...(typeof fields.executionState === "string" ? { executionState: fields.executionState } : {}),
     ...(fields.details ? { details: fields.details } : {}),
     ...(fields.recovery ? { recovery: fields.recovery } : {}),

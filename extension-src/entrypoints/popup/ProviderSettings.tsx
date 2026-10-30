@@ -1,6 +1,7 @@
 import { t } from "../../i18n";
 import { useEffect, useState } from "react";
 import { sendMessage } from "./api";
+import { decisionChoices,decisionFamilies,decisionServices,decisionChoice } from "../../../src/shared/decision-catalog.ts";
 import type { DecisionSettings } from "./decision-types";
 
 const providerMessages = new Map<string, string>([
@@ -23,7 +24,7 @@ const translateProviderMessage = (message: string) => {
 };
 
 const defaults: DecisionSettings = { provider: "off", route: "openrouter", shareText: false, shareImages: false, keyEnv: "OPENROUTER_API_KEY" };
-const selection = (settings: DecisionSettings) => settings.provider === "jev" ? `jev-${settings.route}` : settings.provider === "openai-decisions" && settings.route === "openai" ? "openai-direct" : settings.provider;
+const selection = (settings: DecisionSettings) => decisionChoice(settings)?.id ?? "off";
 type TestResult = { ok: boolean; settings?: DecisionSettings; message?: string; elapsedMs?: number; authMs?: number;
   usage?: { input_tokens: number; output_tokens: number; cost?: number } };
 
@@ -54,11 +55,15 @@ export default function ProviderSettings() {
     return () => { disposed = true; };
   }, []);
   function choose(value: string) {
-    const route = value === "jev-typesafe" ? "typesafe" : value === "openai-direct" ? "openai" : "openrouter";
-    setSettings({ ...settings, provider: value === "off" ? "off" : value === "openai-decisions" || value === "openai-direct" ? "openai-decisions" : "jev", route,
-      keyEnv: route === "openrouter" ? "OPENROUTER_API_KEY" : route === "openai" ? "OPENAI_API_KEY" : "TYPESAFE_API_KEY", shareImages: false,
-      credentialConfigured: route === settings.route && settings.credentialConfigured });
+    const choice = decisionChoices.find(item => item.id === value), route = choice?.route ?? settings.route;
+    setSettings({ ...settings, provider: choice?.provider ?? "off", route, keyEnv: decisionServices[route].keyEnv, shareImages: false,
+      textModel: undefined, imageModelOverride: undefined, ready: false,
+      credentialConfigured: settings.credentialRoutes?.includes(route) ?? (route === settings.route && settings.credentialConfigured) });
     setApiKey(""); setMessage(""); setTest(null); setError(false);
+  }
+  function editSettings(patch: Partial<DecisionSettings>) {
+    setSettings(current => ({ ...current, ...patch, ready: false }));
+    setMessage(""); setTest(null);
   }
   async function save() {
     setBusy(true); setError(false); setMessage(""); setTest(null);
@@ -100,10 +105,7 @@ export default function ProviderSettings() {
         <label htmlFor="decision-provider">{t("service")}</label>
         <select id="decision-provider" value={selection(settings)} disabled={!loaded || busy} onChange={event => choose(event.target.value)}>
           <option value="off">{t("serviceOff")}</option>
-          <option value="jev-openrouter">Jev · OpenRouter</option>
-          <option value="jev-typesafe">Jev · TypeSafe</option>
-          <option value="openai-decisions">OpenAI Luna · OpenRouter</option>
-          <option value="openai-direct">OpenAI Luna · OpenAI Platform</option>
+          {decisionChoices.map(choice => <option key={choice.id} value={choice.id}>{choice.provider === "openai-decisions" ? "OpenAI " : ""}{decisionFamilies[choice.provider]} · {decisionServices[choice.route].label}</option>)}
         </select>
       </div>
       {enabled && <>
@@ -111,19 +113,21 @@ export default function ProviderSettings() {
           <label htmlFor="decision-api-key">{t("apiKey")}</label>
           <input id="decision-api-key" type="password" value={apiKey} spellCheck={false} autoComplete="new-password" maxLength={1024}
             placeholder={settings.credentialConfigured ? t("replaceKey") : t("pasteKey")}
-            disabled={busy} onChange={event => { setApiKey(event.target.value); setTest(null); setMessage(""); }} aria-describedby="decision-key-help" />
+            disabled={busy} onChange={event => { setApiKey(event.target.value); editSettings({}); }} aria-describedby="decision-key-help" />
           <p id="decision-key-help">{t("keyPrivacy")}</p>
         </div>
         <p className="provider-consent">{t("providerConsent", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe")}</p>
-        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => setSettings({ ...settings, shareImages: event.target.checked })} /><span>{t(jev ? "imageFallback" : "imageScreenshots")}<small className="help-note">{t(jev ? "imageJevNotice" : "imageNotice", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe")}</small></span></label>
+        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => editSettings({ shareImages: event.target.checked })} /><span>{t(jev ? "imageFallback" : "imageScreenshots")}<small className="help-note">{t(jev ? "imageJevNotice" : "imageNotice", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe")}</small></span></label>
         <details className="provider-advanced">
-          <summary>{t("envVariable")}</summary>
+          <summary>{t("decisionAdvanced")}</summary>
           <div className="provider-field">
             <label htmlFor="decision-key-env">{t("variableName")}</label>
             <input id="decision-key-env" value={settings.keyEnv} pattern="[A-Z_][A-Z0-9_]*" required spellCheck={false} autoComplete="off" disabled={busy}
-              onChange={event => setSettings({ ...settings, keyEnv: event.target.value })} />
+              onChange={event => editSettings({ keyEnv: event.target.value })} />
             <p>{t("environmentAlternative")}</p>
           </div>
+          <div className="provider-field"><label htmlFor="decision-text-model">{t("decisionTextModel")}</label><input id="decision-text-model" value={settings.textModel ?? ""} placeholder={decisionChoice(settings)?.model} disabled={busy} pattern="[A-Za-z0-9_/.+\-]{1,100}" maxLength={100} onChange={event => editSettings({ textModel: event.target.value || undefined })} /><p>{t("decisionModelHelp")}</p></div>
+          {settings.shareImages && <div className="provider-field"><label htmlFor="decision-image-model">{t("decisionImageModel")}</label><input id="decision-image-model" value={settings.imageModelOverride ?? ""} placeholder={decisionChoice(settings)?.imageModel} disabled={busy} pattern="[A-Za-z0-9_/.+\-]{1,100}" maxLength={100} onChange={event => editSettings({ imageModelOverride: event.target.value || undefined })} /></div>}
           {settings.credentialConfigured && <button type="button" className="provider-dismiss" disabled={busy} onClick={() => void removeKey()}>{t("removeKey")}</button>}
         </details>
       </>}

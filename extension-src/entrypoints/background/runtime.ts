@@ -21,6 +21,7 @@ import { FirefoxFrameRouting } from "./firefox-frame-routing.ts";
 import { FrameRouting } from "./frame-routing.ts";
 import { beforeDeadline } from "../../../src/shared/deadline.ts";
 import { NativeRpc } from "./native-rpc.ts";
+import { connectionPanelMessage } from "./connection-panel.ts";
 import { assertSessionUrl,installNavigationPolicy,updateSessionPolicy } from "./navigation-policy.ts";
 import { openInstallGuide } from "./onboarding.ts";
 import { popupMessageSchema,uploadMessageSchema } from "./popup-schema.ts";
@@ -210,7 +211,8 @@ function applyHostVersions(value: unknown) {
     broadcastNativeStatus();
 }
 rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });
-rpc.register("runtime.canReconnect", async () => ({ idle: restoringSessions === 0 && rpc.idle() && sessions.size === 0 && attachedTabs.size === 0 && commandHealth.idle() && traceBuffers.size === 0 }));
+const connectionIdle = () => restoringSessions === 0 && ![...sessions.values()].some(session => session.tabIds.size > 0) && attachedTabs.size === 0 && commandHealth.idle() && traceBuffers.size === 0;
+rpc.register("runtime.canReconnect", async () => ({ idle: rpc.idle() && connectionIdle() }));
 async function updateVersionBadge() {
     const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
     if (!chrome.action?.setBadgeText)
@@ -1070,6 +1072,7 @@ rpc.register("finalizeTabs", async (params) => {
     }));
     const result = await finalizeOwnedTabs(session, keep, { blocked: tabId => params.blockedTabs?.find(tab => tab.tabId === tabId)?.reason, dialog: tabId => commandHealth.dialog(tabId), detach: detachTab, hide: hideCursor,
       deliver: tabIds => groupReviewTabs(session, tabIds, chrome), untrack: tabId => untrackTab(id, tabId) });
+    if (!session.tabIds.size) sessions.delete(id);
     await persistSessions().catch(() => {});
     return result;
 });
@@ -1165,13 +1168,9 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
     const parsed = popupMessageSchema.safeParse(value);
     if (!parsed.success) return false;
     const message = parsed.data;
-    if (["GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message?.type)) {
-        if (sender.tab || sender.id !== chrome.runtime.id) {
-            sendResponse({ error: "Open update settings from the extension panel" });
-            return false;
-        }
-        rpc.request(message.type === "GET_RUNTIME_UPDATES" ? "runtime.updateStatus" : "runtime.updateConfigure", { enabled: message.enabled })
-            .then(result => sendResponse({ result })).catch(() => sendResponse({ error: "Update settings unavailable. Update the local runtime once to enable automatic updates." }));
+    if (["GET_HARNESS_CONNECTIONS", "DISCONNECT_HARNESS", "RECONNECT_NATIVE_HOST", "START_HARNESS_RECONNECT", "RUN_CONNECTION_DOCTOR", "INSTALL_RUNTIME_UPDATE", "GET_LOCAL_ACTION", "GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message.type)) {
+        connectionPanelMessage(message, sender, { extensionId: chrome.runtime.id, panelUrl: chrome.runtime.getURL("/popup.html"), rpc, idle: connectionIdle })
+            .then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));
         return true;
     }
     if (["GET_UPLOAD_SETTINGS", "SET_UPLOAD_SETTINGS", "GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST"].includes(message?.type)) {
@@ -1233,7 +1232,7 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
         const method = decisionMethods[message.type];
         if (!method)
             return false;
-        rpc.request(method, message.type === "TEST_DECISION_CONNECTION" ? { settings: message.settings, ...(message.apiKey ? { apiKey: message.apiKey } : {}) } : message.type === "SET_DECISION_SETTINGS" ? message.settings ?? {} : {})
+        rpc.request(method, message.type === "TEST_DECISION_CONNECTION" ? { settings: message.settings, ...(message.apiKey ? { apiKey: message.apiKey } : {}) } : message.type === "SET_DECISION_SETTINGS" ? message.settings ?? {} : { usage: message.usage })
             .then((result) => sendResponse({ result }))
             .catch((error) => sendResponse({ error: errorMessage(error) }));
         return true;
@@ -1254,6 +1253,7 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
         rpc.request("semantic.setSettings", {
             enabled: message.enabled === true,
             modelId: typeof message.modelId === "string" ? message.modelId : undefined,
+            deepModelId: typeof message.deepModelId === "string" ? message.deepModelId : undefined,
             preload: message.preload === true,
             embeddingDims: Number.isInteger(message.embeddingDims) ? message.embeddingDims : undefined,
             strategyPreference: typeof message.strategyPreference === "string" ? message.strategyPreference : undefined,

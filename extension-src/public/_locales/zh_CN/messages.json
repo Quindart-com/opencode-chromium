@@ -6,7 +6,7 @@
     "message": "将 OpenCode、Codex 和 MCP 智能体连接到浏览器，搜索网页、填写表单、截图并使用本地操作记忆。"
   },
   "connected": {
-    "message": "已连接"
+    "message": "桥接已连接"
   },
   "checking": {
     "message": "正在检查"
@@ -195,7 +195,7 @@
     "message": "显示活动范围"
   },
   "thisProfile": {
-    "message": "此配置文件"
+    "message": "此浏览器配置"
   },
   "allProfiles": {
     "message": "所有配置文件"
@@ -273,7 +273,7 @@
     "message": "阅读发行说明"
   },
   "connectAgent": {
-    "message": "连接您的编程智能体"
+    "message": "连接"
   },
   "runTerminal": {
     "message": "在终端中运行此命令。设置程序会连接找到的受支持工具并注册浏览器的本地主机。"
@@ -354,7 +354,7 @@
     "message": "请从浏览器工具栏打开扩展程序以检查连接。"
   },
   "runtimeConnected": {
-    "message": "运行时已连接"
+    "message": "本地桥接已连接"
   },
   "checkingConnection": {
     "message": "正在检查连接"
@@ -363,7 +363,7 @@
     "message": "连接浏览器"
   },
   "runtimeExplanation": {
-    "message": "扩展已连接到本地运行时。请在智能体中选择此配置文件。浏览器工具会单独报告标签页状态和待处理对话框。"
+    "message": "原生进程正在响应。请查看下方的代理连接，确认哪些代理链接处于活动状态。"
   },
   "runtimeChecking": {
     "message": "正在查找本地运行时。您的设置保留在此设备上。"
@@ -1105,5 +1105,269 @@
   },
   "postUpdateMaster": {
     "message": "当前工作完成后，运行设置并重新连接一次 MCP。未来兼容更新会在后台下载，并在所有浏览器会话结束后切换，同时保持受管理的 MCP 连接。固定版本的命令和开发检出仍由您控制。"
+  },
+  "harnessConnections": {
+    "message": "代理连接"
+  },
+  "refreshConnections": {
+    "message": "刷新"
+  },
+  "connectionLayers": {
+    "message": "分别检查本地桥接和每个代理连接。"
+  },
+  "localBridge": {
+    "message": "扩展 ↔ 本地桥接"
+  },
+  "bridgeResponding": {
+    "message": "有响应"
+  },
+  "bridgeUnavailable": {
+    "message": "无响应"
+  },
+  "connectionsUnsupported": {
+    "message": "连接详情需要更新本地运行时。请运行设置，然后重新连接代理。"
+  },
+  "connectionsUnavailable": {
+    "message": "无法检查连接详情。请运行下方的诊断命令。"
+  },
+  "noHarnessConnections": {
+    "message": "未检测到代理连接。桥接已连接不代表 Codex、OpenCode 或 DeepSeek 已加载工具。"
+  },
+  "harnessResponding": {
+    "message": "已收到心跳"
+  },
+  "harnessStale": {
+    "message": "心跳已超时"
+  },
+  "harnessUnidentified": {
+    "message": "旧版客户端 · 无法识别身份"
+  },
+  "runtimeVersionLabel": {
+    "message": "运行时"
+  },
+  "harnessVersionLabel": {
+    "message": "代理"
+  },
+  "harnessToolReceived": {
+    "message": "已收到工具调用"
+  },
+  "harnessInitialized": {
+    "message": "已初始化 · 尚未检测到工具调用"
+  },
+  "harnessPending": {
+    "message": "$1 个待处理"
+  },
+  "harnessLastSeen": {
+    "message": "最近心跳：$1"
+  },
+  "disconnectHarnessConfirm": {
+    "message": "要断开此浏览器连接吗？代理将保持运行，并可能在下次请求或心跳时重新连接。请先完成其浏览器任务。"
+  },
+  "disconnectBridge": {
+    "message": "断开连接"
+  },
+  "cancelConnectionAction": {
+    "message": "取消"
+  },
+  "harnessDisconnected": {
+    "message": "浏览器连接已断开。请从代理重新连接，或再次调用浏览器工具。"
+  },
+  "bridgeReconnecting": {
+    "message": "正在重新连接本地桥接…"
+  },
+  "reconnectBridge": {
+    "message": "重新连接本地桥接"
+  },
+  "copyDoctor": {
+    "message": "复制诊断命令"
+  },
+  "doctorCopied": {
+    "message": "已复制诊断命令。"
+  },
+  "reconnectHarnessHelp": {
+    "message": "重新连接代理"
+  },
+  "reconnectCodexHelp": {
+    "message": "Codex：在插件设置中停用并启用此插件，以重新加载 MCP 工具。可能需要新建聊天。"
+  },
+  "reconnectOpenCodeHelp": {
+    "message": "OpenCode：运行 opencode reload。现有会话将在下一步采用新配置。"
+  },
+  "reconnectDshHelp": {
+    "message": "DeepSeek Harness：重新加载 MCP 插件，或重新打开已配置的配置文件。"
+  },
+  "harnessToolsExplanation": {
+    "message": "初始化和实时心跳可确认浏览器连接。工具注册和可用性由代理自身控制。"
+  },
+  "usageProvider": {
+    "message": "服务"
+  },
+  "usagePeriod": {
+    "message": "时间范围"
+  },
+  "usageAllProviders": {
+    "message": "所有服务"
+  },
+  "usageCurrentProvider": {
+    "message": "当前服务"
+  },
+  "usageLast7": {
+    "message": "最近 7 天"
+  },
+  "usageLast30": {
+    "message": "最近 30 天"
+  },
+  "usageLastWeek": {
+    "message": "上周"
+  },
+  "usageLastYear": {
+    "message": "去年"
+  },
+  "usageAllTime": {
+    "message": "全部时间"
+  },
+  "usageInput": {
+    "message": "输入令牌"
+  },
+  "usageOutput": {
+    "message": "输出令牌"
+  },
+  "usageTrend": {
+    "message": "令牌用量"
+  },
+  "usageNoData": {
+    "message": "此时间范围内没有用量"
+  },
+  "usageServices": {
+    "message": "服务对比"
+  },
+  "usageUnattributed": {
+    "message": "早期记录 · 未归属"
+  },
+  "usageLocalHistory": {
+    "message": "测试：$1 · 已报告用量：$2/$3 次调用 · UTC"
+  },
+  "usageSavingsGlobal": {
+    "message": "本地节省 · 本次会话所有服务"
+  },
+  "usageAccountingIncomplete": {
+    "message": "缺失的服务商报告不会计入令牌和费用总计。"
+  },
+  "statusConnected": {
+    "message": "已连接"
+  },
+  "statusDisconnected": {
+    "message": "已断开"
+  },
+  "statusNotInstalled": {
+    "message": "未安装"
+  },
+  "statusUnknown": {
+    "message": "需要更新"
+  },
+  "statusBusy": {
+    "message": "工作中"
+  },
+  "bridgeReady": {
+    "message": "CLI 已就绪"
+  },
+  "reconnectAgent": {
+    "message": "重新连接"
+  },
+  "reconnectNamed": {
+    "message": "重新连接 $1"
+  },
+  "connectNamed": {
+    "message": "连接 $1"
+  },
+  "connectionUpgrade": {
+    "message": "更新 CLI 以查看代理状态。"
+  },
+  "updateCli": {
+    "message": "更新 CLI"
+  },
+  "agentsKeepRunning": {
+    "message": "会话保持打开"
+  },
+  "runConnectionChecks": {
+    "message": "运行诊断"
+  },
+  "actionQueued": {
+    "message": "正在启动…"
+  },
+  "actionRunning": {
+    "message": "正在处理…"
+  },
+  "actionReconnected": {
+    "message": "浏览器工具已刷新"
+  },
+  "actionBusy": {
+    "message": "等待当前浏览器操作完成"
+  },
+  "actionWaiting": {
+    "message": "已准备好，等待代理下一轮"
+  },
+  "actionUnreachable": {
+    "message": "代理连接没有响应"
+  },
+  "actionHealthy": {
+    "message": "连接检查已通过"
+  },
+  "actionNeedsAttention": {
+    "message": "仍有连接需要处理"
+  },
+  "actionUpdated": {
+    "message": "已安装最新正式版 CLI"
+  },
+  "actionUpdateWaiting": {
+    "message": "更新已准备好，将在浏览器工作空闲时启用"
+  },
+  "actionUnmanaged": {
+    "message": "此安装方式不支持更新"
+  },
+  "actionFailed": {
+    "message": "无法完成操作，请重试。"
+  },
+  "actionUnavailable": {
+    "message": "本地操作助手不可用。"
+  },
+  "actionStatusUnavailable": {
+    "message": "正在等待本地进度…"
+  },
+  "actionUpdating": {
+    "message": "正在更新 CLI…"
+  },
+  "checkInstallUpdates": {
+    "message": "检查并安装更新"
+  },
+  "updateAutomaticHelp": {
+    "message": "CLI 将在后台更新，运行中的代理和已保存的密钥会保留。"
+  },
+  "noHarnessesDetected": {
+    "message": "未检测到支持的智能体。"
+  },
+  "statusAmbiguous": {
+    "message": "Claude 客户端未识别"
+  },
+  "connectionTroubleshooting": {
+    "message": "连接帮助"
+  },
+  "decisionAdvanced": {
+    "message": "高级设置"
+  },
+  "decisionTextModel": {
+    "message": "文本模型（可选）"
+  },
+  "decisionImageModel": {
+    "message": "图像模型（可选）"
+  },
+  "decisionModelHelp": {
+    "message": "留空以使用建议的模型。自定义模型必须支持所选服务的决策 API。"
+  },
+  "actionPluginReload": {
+    "message": "在 Codex 中打开此插件的“管理”菜单，先停用，再重新启用。"
+  },
+  "catalogInvalid": {
+    "message": "无法加载自定义模型目录。内置模型仍然可用。"
   }
 }

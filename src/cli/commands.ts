@@ -10,10 +10,11 @@ import { activateChannel,readActivation } from "../management/channels.ts";
 import { formatSetupResult,manageSetup } from "../management/setup.ts";
 import { packageRoot } from "./config.ts";
 import { configureClient } from "./configure.ts";
-import { installClient } from "./install.ts";
+import { installClient,SUPPORTED_CLIENTS } from "./install.ts";
 import { runtimeDir } from "./native-host.ts";
 import { linkClientSurfaces,linkRuntime,runtimeStatus,syncRuntime,writeLaunchers } from "./runtime-link.ts";
 import { uninstallClient } from "./uninstall.ts";
+import { developmentExtensionSource,publishDevelopmentExtension } from "../management/development-extension.ts";
 
 
 async function runtimeBusy() {
@@ -43,6 +44,31 @@ function has(argv: string[], flag: string) {
 
 export async function dispatchCommand(argv = process.argv.slice(2)) {
   const [command = "doctor", ...rest] = argv;
+  if (command === "local-action") {
+    const { runLocalActionJob } = await import("../../native-host/src/local-actions.ts");
+    console.log(JSON.stringify(await runLocalActionJob(valueAfter(rest, "--job") ?? "", runtimeDir()), null, 2)); return;
+  }
+  if (command === "harness" && rest[0] === "reconnect") {
+    const { reconnectHarness } = await import("../management/harness-reconnect.ts");
+    console.log(JSON.stringify(await reconnectHarness(rest[1], runtimeDir()), null, 2)); return;
+  }
+  if (command === "updates" && rest[0] === "install") {
+    const { installPublishedUpdate } = await import("../management/manual-update.ts");
+    console.log(JSON.stringify(await installPublishedUpdate(runtimeDir()), null, 2)); return;
+  }
+  if (command === "dev-extension") {
+    if (has(rest, "--help")) { console.log("Build and refresh the stable unpacked extension without changing the production runtime:\n  opencode-chromium dev-extension --source <checkout> [--output <existing-extension-directory>] [--dry-run]\nReload the unpacked extension at the returned extensionPath after the build."); return; }
+    console.log(JSON.stringify(await publishDevelopmentExtension({ root: valueAfter(rest, "--source") ?? process.cwd(), dir: runtimeDir(), output: valueAfter(rest, "--output"), dryRun: has(rest, "--dry-run") }), null, 2));
+    return;
+  }
+  if (command === "sync" && !readActivation(runtimeDir())?.followBranch) {
+    const source = developmentExtensionSource(runtimeDir());
+    if (source && path.resolve(source) === path.resolve(packageRoot())) {
+      const result = await publishDevelopmentExtension({ root: source, dir: runtimeDir(), dryRun: has(rest, "--dry-run") });
+      if (!has(rest, "--quiet")) console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+  }
   if (command === "updates") {
     const { createRuntimeUpdater } = await import("../../native-host/src/runtime-updates.ts");
     const updater = createRuntimeUpdater({ dir: runtimeDir() });
@@ -117,7 +143,7 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
   if (["install", "configure", "uninstall"].includes(command)) {
     const client = valueAfter(rest, "--client");
     if (!client) throw new Error(`${command} requires --client opencode|opencode-mcp|codex|skills`);
-    if (!["codex", "opencode", "opencode-mcp", "claude-code", "claude-desktop", "dsh", "skills"].includes(client)) throw new Error("Unsupported client");
+    if (!SUPPORTED_CLIENTS.includes(client)) throw new Error("Unsupported client");
     const options: ClientInstallOptions = { client: client as ClientInstallOptions["client"], config: valueAfter(rest, "--config"), dryRun: has(rest, "--dry-run"), serverPath: valueAfter(rest, "--server") };
     const result = command === "install" ? installClient(options) : command === "configure" ? configureClient(options) : uninstallClient(options);
     const { before: _before, after: _after, ...publicResult } = record(result);

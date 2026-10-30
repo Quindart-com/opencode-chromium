@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { chromiumExtensionFixture } from "./fixtures/chromium-extension.js";
+import { McpWorker } from "../native-host/src/runtime-worker.ts";
+import { harnessControls } from "../native-host/src/harness-control.ts";
 
 const server = http.createServer((req, res) => {
   res.setHeader("Content-Type", "text/html");
@@ -21,7 +23,7 @@ const server = http.createServer((req, res) => {
     <script>alpha.onclick=()=>chosen.textContent='Alpha';beta.onclick=()=>chosen.textContent='Beta';shadow.attachShadow({mode:'open'}).innerHTML='<button>Shadow control</button>';</script>`);
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-let fixture, agent;
+let fixture, agent, mcp;
 const checks = [];
 const checked = name => { checks.push(name); console.log("Verified:", name); };
 try {
@@ -182,10 +184,56 @@ try {
   assert.equal(page.url(), beforeUnloadUrl);
   await page.evaluate(() => { window.onbeforeunload = null; });
   checked("beforeunload cancellation through the independent recovery path");
+  const panel = await fixture.context.newPage();
+  await panel.goto(`chrome-extension://${fixture.extensionId}/popup.html`);
+  const connectionControl = message => panel.evaluate(value => chrome.runtime.sendMessage(value), message);
+  const inventory = await connectionControl({ type: "GET_HARNESS_CONNECTIONS" });
+  assert.ok(inventory.result.clients.some(client => client.harness === "sdk" && client.phase === "used" && client.state === "responding"));
+  const connectionId = inventory.result.clients.find(client => client.harness === "sdk").id;
+  const protectedDisconnect = await connectionControl({ type: "DISCONNECT_HARNESS", params: { id: connectionId } });
+  assert.match(protectedDisconnect.error, /Finish browser work/);
+  let toolListChanges = 0;
+  const runtimeDir = path.join(fixture.fixture, "runtime");
+  const mcpEnv = { ...process.env, OPENCODE_BROWSER_RUNTIME_DIR: runtimeDir, OPENCODE_BROWSER_MEMORY: "0", AGENT_BROWSER_SESSION_ID: "connection-control-fixture",
+    CODEX_HOME: path.join(fixture.fixture, "codex"), DSH_HOME: path.join(fixture.fixture, "dsh"), XDG_CONFIG_HOME: path.join(fixture.fixture, ".config"), CLAUDE_CONFIG_DIR: path.join(fixture.fixture, "claude") };
+  mcp = new McpWorker(process.cwd(), [], mcpEnv, message => { if (message.method === "notifications/tools/list_changed") toolListChanges++; });
+  await mcp.initialize({ protocolVersion: "2026-07-28", capabilities: {}, clientInfo: { name: "codex-control-fixture", version: "1.0" } });
+  for (let attempt = 0; attempt < 60 && !harnessControls(runtimeDir).some(row => row.harness === "codex"); attempt++) await new Promise(resolve => setTimeout(resolve, 50));
+  assert.ok(harnessControls(runtimeDir).some(row => row.harness === "codex"), "the managed test worker owns a control endpoint before any CLI action");
+  const mcpCall = async (name, args) => {
+    const response = await mcp.request("tools/call", { name, arguments: args }, undefined, 20000);
+    assert.ok(!response.error, JSON.stringify(response));
+    return response.result.structuredContent ?? JSON.parse(response.result.content.find(item => item.type === "text").text);
+  };
+  const retained = await mcpCall("browser_run", { profile, sessionId: "retained-control-fixture", tab: { mode: "new" }, memoryMode: "off",
+    steps: [{ action: "navigate", url: origin }], postObserve: { mode: "inspect", target: { selector: "#chosen" } } });
+  assert.equal(retained.ok, true, JSON.stringify(retained));
+  const started = await connectionControl({ type: "START_HARNESS_RECONNECT", params: { target: "codex" } });
+  assert.ok(started.result?.id, JSON.stringify(started));
+  let completed = started.result;
+  for (let attempt = 0; attempt < 100 && ["queued", "running"].includes(completed.state); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    completed = (await connectionControl({ type: "GET_LOCAL_ACTION", params: { id: started.result.id } })).result;
+  }
+  assert.equal(completed.state, "succeeded", JSON.stringify(completed));
+  assert.equal(completed.code, "refreshed"); assert.ok(toolListChanges > 0, "the harness receives the standard MCP catalog-refresh notification");
+  const kept = await mcpCall("browser_observe", { profile, sessionId: "retained-control-fixture", mode: "inspect", target: { selector: "#chosen" } });
+  assert.equal(kept.ok, true, JSON.stringify(kept));
+  const afterRefresh = await connectionControl({ type: "GET_HARNESS_CONNECTIONS" });
+  assert.ok(afterRefresh.result.clients.some(client => client.id === connectionId), "other agents keep their existing browser socket");
+  const retainedFinal = await mcpCall("browser_finalize", { profile, sessionId: "retained-control-fixture" });
+  assert.equal(retainedFinal.ok, true);
+  checked("extension button -> detached CLI -> scoped live MCP tool refresh, retained tabs and unrelated-agent continuity");
   await call("browser_finalize", {});
+  const disconnected = await connectionControl({ type: "DISCONNECT_HARNESS", params: { id: connectionId } });
+  assert.ok(disconnected.result, JSON.stringify(disconnected));
+  assert.ok(!disconnected.result.clients.some(client => client.id === connectionId));
+  await panel.close();
+  checked("real connection inventory, active-work protection and targeted idle disconnect");
   fs.mkdirSync("reports", { recursive: true });
   fs.writeFileSync("reports/browser-reliability.json", JSON.stringify({ ok: true, checks }, null, 2));
 } finally {
+  mcp?.close();
   agent?.close();
   await fixture?.cleanup();
   server.closeAllConnections(); await new Promise(resolve => server.close(resolve));

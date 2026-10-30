@@ -2,9 +2,10 @@ import type { Browser } from "wxt/browser";
 import { record } from "../../../src/shared/values.ts";
 import type { UploadDependencies,UploadInfo,UploadMessage } from "./types.ts";
 
+type UploadDecision = "approved" | "declined" | "closed" | "timed_out" | "unavailable";
 interface PendingUpload extends UploadInfo {
   destination: string;
-  resolve(allowed: boolean): void;
+  resolve(allowed: UploadDecision): void;
   timer: ReturnType<typeof setTimeout>;
   windowId?: number;
   tabId?: number;
@@ -21,7 +22,7 @@ export function createUploadConsent({ chrome, describe, snapshot, release, timeo
   chrome.tabs?.onRemoved?.addListener(releaseTab);
   chrome.tabs?.onUpdated?.addListener((tabId, changes) => { if (changes.url) releaseTab(tabId); });
   const ownPage = (sender: Browser.runtime.MessageSender, page: "/popup.html" | "/upload-confirm.html") => sender.id === chrome.runtime.id && sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL(page);
-  const settle = (token: string, allowed: boolean) => {
+  const settle = (token: string, allowed: UploadDecision) => {
     const request = pending.get(token);
     if (!request) return false;
     pending.delete(token); clearTimeout(request.timer);
@@ -30,7 +31,7 @@ export function createUploadConsent({ chrome, describe, snapshot, release, timeo
     return true;
   };
   chrome.windows.onRemoved.addListener(windowId => {
-    for (const [token, request] of pending) if (request.windowId === windowId) settle(token, false);
+    for (const [token, request] of pending) if (request.windowId === windowId) settle(token, "closed");
   });
   return {
     async withFiles<T>(files: string[], destination: string, upload: (files: string[]) => Promise<T>, tabId?: number): Promise<T> {
@@ -40,8 +41,8 @@ export function createUploadConsent({ chrome, describe, snapshot, release, timeo
         const settings = await chrome.storage.local.get(SETTINGS_KEY);
         if (record(settings[SETTINGS_KEY]).allowWithoutConfirmation !== true) {
           if (pending.size >= 3) throw new Error("Too many pending uploads; wait for a user decision");
-          const allowed = new Promise<boolean>(resolve => {
-            const timer = setTimeout(() => settle(info.token, false), timeoutMs);
+          const allowed = new Promise<UploadDecision>(resolve => {
+            const timer = setTimeout(() => settle(info.token, "timed_out"), timeoutMs);
             pending.set(info.token, { ...info, destination, resolve, timer });
           });
           try {
@@ -49,8 +50,11 @@ export function createUploadConsent({ chrome, describe, snapshot, release, timeo
             const request = pending.get(info.token);
             if (request) { request.windowId = window?.id; request.tabId = window?.tabs?.[0]?.id; }
             else if (window?.id) void chrome.windows.remove(window.id).catch(() => {});
-          } catch { settle(info.token, false); }
-          if (!await allowed) throw new Error("Upload refused, closed, or timed out; no files were uploaded");
+          } catch { settle(info.token, "unavailable"); }
+          const decision = await allowed;
+          if (decision !== "approved") throw Object.assign(new Error(decision === "declined" ? "The user declined this upload; no files were uploaded" : "Upload confirmation was not completed; no files were uploaded"), {
+            code: decision === "declined" ? "UPLOAD_USER_DECLINED" : "UPLOAD_CONFIRMATION_REQUIRED", uncertain: false, retryable: false, details: { authorizationReason: decision },
+          });
         }
         const prepared = await snapshot(info.token);
         const result = await upload(prepared.files);
@@ -77,7 +81,7 @@ export function createUploadConsent({ chrome, describe, snapshot, release, timeo
       if (message.type === "GET_UPLOAD_REQUEST") return { destination: request.destination, files: request.files.map(({ name, size, preview, path }) => ({ name, size, preview, path })) };
       if (message.type === "RESOLVE_UPLOAD_REQUEST") {
         if (typeof message.allow !== "boolean") throw new Error("Expected a user decision");
-        settle(message.token, message.allow);
+        settle(message.token, message.allow ? "approved" : "declined");
         return { resolved: true };
       }
       throw new Error("Unsupported upload message");

@@ -53,6 +53,16 @@ test("native OpenCode 1.18 module loading exposes the four core tools", async ()
   }
 });
 
+test("native OpenCode V2 uses the editor callback and projects browser results", async () => {
+  const registered = [];
+  const cleanup = await createOpenCodeSetup({ tool: { transform: callback => callback({ add: tool => registered.push(tool) }) }, logger: { info() {} } }, { memory: false });
+  try {
+    assert.deepEqual(registered.map(tool => tool.name), ["browser_run", "browser_observe", "browser_session", "browser_finalize"]);
+    const response = await registered.find(tool => tool.name === "browser_observe").execute({ mode: "capabilities" }, { sessionId: "fixture" });
+    assert.equal(JSON.parse(response.content).ok, true);
+  } finally { await cleanup(); }
+});
+
 test("MCP options and instructions are provider-neutral", () => {
   assert.equal(SERVER_NAME, "opencode-browser-plugin");
   assert.match(SERVER_INSTRUCTIONS, /browser_run/);

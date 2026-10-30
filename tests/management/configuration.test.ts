@@ -2,10 +2,12 @@ import { test, expect } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { planConfiguration, nativeCodexPluginEnabled, managedConfiguration } from "../../src/management/configuration.ts";
 import { applyTransaction } from "../../src/management/transaction.ts";
+import { harnessVersion } from "../../src/management/harnesses.ts";
 
 test("JSONC comments survive native/MCP migration and repeated setup", () => {
   const before = '{\n // retain my comment\n "plugins": ["opencode-chromium@1.7.2", "other"],\n "mcp": {"opencode-browser-plugin": {"type":"local"}}\n}';
@@ -19,6 +21,19 @@ test("JSONC comments survive native/MCP migration and repeated setup", () => {
 test("malformed configurations cannot be planned", () => {
   expect(() => planConfiguration('{broken', { client: "opencode", serverPath: "x" })).toThrow();
   expect(() => planConfiguration('[invalid', { client: "codex", serverPath: "x" })).toThrow();
+});
+
+test("OpenCode V2 migrates file launchers to one directory and detects its current Windows package", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-v2-detect-"));
+  try {
+    const pkg = path.join(root, "node_modules/@opencode/cli"); fs.mkdirSync(pkg, { recursive: true });
+    fs.writeFileSync(path.join(pkg, "package.json"), '{"version":"2.0.30"}');
+    expect(harnessVersion(path.join(root, "opencode.ps1"))).toBe("2.0.30");
+    const serverPath = path.join(root, "runtime/plugin.mjs");
+    const after = planConfiguration(JSON.stringify({ plugin: ["other", serverPath], plugins: [path.join(root, "runtime/v2")] }), { client: "opencode", serverPath, version: "2.0.30" });
+    expect(parse(after).plugins).toEqual(["other", pathToFileURL(path.join(root, "runtime/v2")).href]);
+    expect(parse(after).plugin).toBeUndefined();
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 test("Codex comments, unrelated servers, and custom timeouts survive", () => {
   const before = '# retain\n[mcp_servers.other]\ncommand="keep"\n[mcp_servers.opencode-browser-plugin]\ncommand="old"\nargs=["old"]\ntool_timeout_sec=321\n';

@@ -1,0 +1,59 @@
+import { expect,test } from "bun:test";
+import { EventEmitter } from "node:events";
+import { HarnessConnections } from "../../native-host/src/connections.ts";
+import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
+import { FrameDecoder } from "../../native-host/src/framing.ts";
+import { identifyHarness } from "../../src/shared/connections.ts";
+
+test("Claude Code and Desktop are identified separately; generic Claude remains ambiguous", () => {
+  expect(identifyHarness("claude-code")).toBe("claude-code");
+  expect(identifyHarness("Claude Desktop")).toBe("claude-desktop");
+  expect(identifyHarness("claude-ai")).toBe("claude");
+});
+
+test("connection inventory excludes arbitrary metadata and marks missing heartbeats stale", () => {
+  let now = 1000;
+  const connections = new HarnessConnections<object>(() => now), socket = {};
+  connections.touch(socket, { harness: "codex", harnessVersion: "1.2.3", transport: "mcp", pid: 42, phase: "initialized", apiKey: "private", cwd: "private" }, "1.10.1", 0, false);
+  let row = connections.snapshot("1.10.1", () => 0).clients[0]!;
+  expect(row.harness).toBe("codex"); expect(row.phase).toBe("initialized");
+  expect(JSON.stringify(row)).not.toContain("private"); expect(row.lastActionAt).toBeNull();
+  now += 45001;
+  expect(connections.snapshot("1.10.1", () => 0).clients[0]!.state).toBe("stale");
+  connections.touch(socket, { harness: "codex", transport: "mcp", pid: 42, phase: "used" }, "1.10.1", 0, true);
+  row = connections.snapshot("1.10.1", () => 1).clients[0]!;
+  expect(row.state).toBe("responding"); expect(row.pending).toBe(1); expect(row.phase).toBe("used");
+  connections.touch(socket, { harness: "codex", transport: "mcp", pid: 42, phase: "initialized" }, "1.10.1", 0, false);
+  expect(connections.snapshot("1.10.1", () => 0).clients[0]!.phase).toBe("used");
+  connections.remove(socket); expect(connections.snapshot("1.10.1", () => 0).clients).toEqual([]);
+});
+
+test("only the extension may inspect and disconnect identified bridge sockets, with pending commands protected", async () => {
+  const extension: any[] = [], client: any[] = [];
+  const decoder = new FrameDecoder({ onMessage: message => client.push(message) });
+  const socket = new EventEmitter() as any;
+  socket.write = (buffer: Buffer, callback: () => void) => { decoder.push(buffer); callback?.(); return true; };
+  let destroyed = false;
+  socket.destroy = () => { destroyed = true; socket.emit("close"); };
+  let runtimeIdle = true;
+  const relay = new RpcRelay({ state: { startedAt: "fixture", profile: null, nativeHostVersion: "1.10.1" }, extensionWriter: value => { extension.push(value); }, canDisconnect: () => runtimeIdle });
+  relay.addClient(socket);
+  await relay.handleClientMessage(socket, { method: "host.status", id: 1, clientVersion: "1.10.1", clientInfo: { harness: "dsh", transport: "mcp", pid: 42 } });
+  await relay.handleExtensionMessage({ method: "connections.list", id: 2 });
+  const id = extension.at(-1).result.clients[0].id;
+  expect(extension.at(-1).result.clients[0].harness).toBe("dsh");
+  await relay.handleClientMessage(socket, { method: "connections.disconnect", id: 3, params: { id } });
+  expect(client.at(-1).error.message).toContain("restricted"); expect(destroyed).toBe(false);
+  await relay.handleClientMessage(socket, { method: "getTabs", id: 4, params: { session_id: "fixture" } });
+  const command = extension.at(-1);
+  await relay.handleExtensionMessage({ method: "connections.disconnect", id: 5, params: { id } });
+  expect(extension.at(-1).error.message).toContain("still running"); expect(destroyed).toBe(false);
+  await relay.handleExtensionMessage({ id: command.id, result: {} });
+  runtimeIdle = false;
+  await relay.handleExtensionMessage({ method: "connections.disconnect", id: 7, params: { id } });
+  expect(extension.at(-1).error.message).toContain("still running"); expect(destroyed).toBe(false);
+  runtimeIdle = true;
+  await relay.handleExtensionMessage({ method: "connections.disconnect", id: 6, params: { id } });
+  expect(destroyed).toBe(true); expect(extension.at(-1).result.clients).toEqual([]);
+  relay.shutdown();
+});

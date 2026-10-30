@@ -10,6 +10,7 @@ import { codexConfigPath,inspectHarnessSkills,STALE_SKILL_MARKER } from "./skill
 import { packageInfo } from "./version.ts";
 import { runtimeDir } from "./native-host.ts";
 import { inspectProjectBrowserPlugin } from "./codex-marketplace.ts";
+import { inspectBrowserMarketplace } from "../management/marketplace.ts";
 import { connectionDoctor } from "./connection-doctor.ts";
 
 const MAX_SCHEMA_BYTES = 13000;
@@ -50,6 +51,8 @@ export async function runDoctor({ json = false, repairRuntime = false } = {}) {
     } catch (error) { checks.push(check("firefox-remote-agent", false, { profileId: profile.profileId, message: errorMessage(error) })); }
   }
   const skillHealth = inspectHarnessSkills();
+  const installedPlugin = inspectBrowserMarketplace(info.version);
+  if (installedPlugin.enabled) checks.push(check("codex-installed-plugin", ["installed", "pinned", "custom_source"].includes(installedPlugin.status), installedPlugin));
   const projectPlugin = inspectProjectBrowserPlugin(info.version);
   if (projectPlugin) checks.push(check("codex-project-marketplace", projectPlugin.ok, projectPlugin));
   try {

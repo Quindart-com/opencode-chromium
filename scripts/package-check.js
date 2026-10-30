@@ -5,14 +5,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GRANULAR_OPERATION_COUNT, GRANULAR_OPERATION_NAMES, createBrowserOperations } from "../src/browser/operations/index.ts";
 import { createBrowserAgent } from "../src/adapters/sdk/index.ts";
+import { syncReleaseMetadata } from "./sync-release-metadata.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+syncReleaseMetadata(root, { check: true });
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const metadataErrors = [];
 const plugin = JSON.parse(fs.readFileSync(path.join(root, ".codex-plugin/plugin.json"), "utf8"));
 const mcp = JSON.parse(fs.readFileSync(path.join(root, plugin.mcpServers), "utf8"));
-if (plugin.version !== packageJson.version) metadataErrors.push("Native Codex plugin version must match package version");
-if (!mcp.mcpServers?.[plugin.name]?.args?.includes(`${packageJson.name}@${packageJson.version}`)) metadataErrors.push("Native Codex MCP launcher must use the matching published runtime");
+const pluginServer = mcp.mcpServers?.[plugin.name];
+if (pluginServer?.command !== "node" || !pluginServer?.args?.includes("--input-type=module") || !pluginServer.args.some(arg => typeof arg === "string" && arg.includes("MCP_RUNTIME_SETUP_REQUIRED"))) metadataErrors.push("Native Codex MCP must start the installed local runtime without npm or network installation during handshake");
 for (const relative of [plugin.skills, plugin.mcpServers, plugin.interface.logo]) {
   const resolved = path.resolve(root, relative);
   if (!resolved.startsWith(root + path.sep) || !fs.existsSync(resolved)) metadataErrors.push(`Native Codex plugin resource is missing or outside the package: ${relative}`);

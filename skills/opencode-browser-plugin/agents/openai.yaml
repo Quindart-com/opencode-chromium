@@ -13,7 +13,3 @@ dependencies:
       value: "opencode-browser-plugin"
       description: "MCP server exposing browser_run, browser_observe, browser_session, and browser_finalize"
       transport: "stdio"
-      command:
-        - "npx"
-        - "-y"
-        - "opencode-chromium-mcp"

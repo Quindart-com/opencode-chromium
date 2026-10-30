@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { localModelCatalog,mergeModelCatalog,type VisualModel } from "./model-catalog.ts";
 import { z } from "zod";
 import { record } from "../../src/shared/values.ts";
 
@@ -10,7 +11,7 @@ const SETTINGS_VERSION = 1;
 const DEFAULT_MODEL_ID = "grounding-dino-tiny";
 const MODEL_CACHE_ENV = "OPENCODE_BROWSER_VISUAL_DIR";
 
-export const VISUAL_MODELS = [
+export const VISUAL_MODELS: VisualModel[] = [
   {
     id: DEFAULT_MODEL_ID,
     label: "Grounding DINO Tiny ONNX",
@@ -73,7 +74,8 @@ async function configureTransformersCache() {
 }
 
 function modelById(modelId: string | undefined) {
-  const model = VISUAL_MODELS.find(model => model.id === modelId) ?? VISUAL_MODELS[0];
+  const models = mergeModelCatalog(VISUAL_MODELS, localModelCatalog().visual);
+  const model = models.find(model => model.id === modelId) ?? models[0];
   if (!model) throw new Error("No visual models are configured");
   return model;
 }
@@ -107,10 +109,8 @@ function writeJsonAtomic(filePath: fs.PathLike, value: { version: number; enable
 
 export function getVisualSettings() {
   const filePath = settingsPath();
-  if (!settingsCache || settingsCachePath !== filePath) {
-    settingsCache = normalizeSettings(readJsonIfPresent(filePath) ?? {});
-    settingsCachePath = filePath;
-  }
+  settingsCache = normalizeSettings(readJsonIfPresent(filePath) ?? {});
+  settingsCachePath = filePath;
   return settingsCache;
 }
 
@@ -127,7 +127,7 @@ function cachePathForModelId(modelId: string) {
 }
 
 function visualModelsStatus() {
-  return VISUAL_MODELS.map((model) => ({
+  return mergeModelCatalog(VISUAL_MODELS, localModelCatalog().visual).map((model) => ({
     ...model,
     cache: {
       cached: fs.existsSync(cachePathForModelId(model.model)),
@@ -140,6 +140,7 @@ export function visualStatus() {
   return {
     settings: getVisualSettings(),
     models: visualModelsStatus(),
+    catalogStatus: localModelCatalog().status,
     cacheDir: modelCacheDir(),
     load: { ...loadState },
   };

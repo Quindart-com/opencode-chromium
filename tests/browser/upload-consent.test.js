@@ -49,7 +49,12 @@ test("cancel, closing the window, and timeout each release files without uploadi
     const f = fixture(action === "timeout" ? 10 : 1000);
     let sent = false;
     const upload = f.consent.withFiles(["photo.png"], "https://example.test", async () => { sent = true; });
-    const rejected = assert.rejects(upload, /no files were uploaded/);
+    const rejected = assert.rejects(upload, error => {
+      assert.match(error.message, /no files were uploaded/);
+      assert.equal(error.code, action === "cancel" ? "UPLOAD_USER_DECLINED" : "UPLOAD_CONFIRMATION_REQUIRED");
+      assert.equal(error.details.authorizationReason, action === "cancel" ? "declined" : action === "close" ? "closed" : "timed_out");
+      return true;
+    });
     await tick();
     if (action === "cancel") await f.consent.message({ type: "RESOLVE_UPLOAD_REQUEST", token: "request", allow: false }, f.sender);
     if (action === "close") f.closed();

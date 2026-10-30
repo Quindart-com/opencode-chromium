@@ -47,6 +47,7 @@ export function directoryHash(directory: string) {
   const files: string[] = [];
   function walk(current: string) {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (/\.bak-[0-9a-f-]{36}$/.test(entry.name)) continue;
       const absolute = path.join(current, entry.name);
       if (entry.isDirectory()) walk(absolute);
       else files.push(path.relative(directory, absolute).replaceAll(path.sep, "/"));

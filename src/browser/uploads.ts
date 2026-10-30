@@ -35,6 +35,7 @@ function attributesMap(attributes: string[] = []) {
 }
 
 function fileUploadError(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error && String(error.code).startsWith("UPLOAD_")) return error;
   const message = error instanceof Error ? error.message : String(error);
   if (/Upload refused|File changed|Upload destination changed|Upload approval expired/.test(message)) {
     return Object.assign(new Error(message), { code: "UPLOAD_NOT_AUTHORIZED", uncertain: false, retryable: false });

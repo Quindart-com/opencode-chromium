@@ -3,15 +3,13 @@ import path from "node:path";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { BROWSERS,browserIds,executableCandidates } from "../../dist/cli/browsers.js";
 
 // Screenshot only: installed browser, fresh headless profile, fixed synthetic
 // fixture. stdout stays inside the parent process; no account/provider access.
 const directory = path.dirname(fileURLToPath(import.meta.url));
-const candidates = process.platform === "win32" ? [
-  path.join(process.env.ProgramFiles ?? "C:/Program Files", "BraveSoftware/Brave-Browser/Application/brave.exe"),
-  path.join(process.env["ProgramFiles(x86)"] ?? "C:/Program Files (x86)", "Microsoft/Edge/Application/msedge.exe"),
-  path.join(process.env.ProgramFiles ?? "C:/Program Files", "Google/Chrome/Application/chrome.exe"),
-] : [process.env.BENCHMARK_BROWSER_BIN];
+const candidates = process.env.BENCHMARK_BROWSER_BIN ? [process.env.BENCHMARK_BROWSER_BIN] :
+  browserIds().filter(id => BROWSERS[id].engine !== "gecko").flatMap(executableCandidates);
 const executablePath = candidates.find(candidate => candidate && fs.existsSync(candidate));
 const fixtureFile = path.join(directory, "accuracy-settings.json");
 const fixture = JSON.parse(fs.readFileSync(fixtureFile, "utf8"));

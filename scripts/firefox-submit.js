@@ -23,7 +23,8 @@ zip.addFile(path.join(root, "src/browser/url-policy.ts"), "src/browser/url-polic
 for (const name of ["package.json", "bun.lock", "wxt.config.ts", "tsconfig.json", "LICENSE"]) zip.addFile(path.join(root, name), name, archiveOptions);
 zip.addBuffer(Buffer.from(`Firefox source build — OpenCode Browser Plugin ${version}\n\nPrerequisites: Bun 1.3.6 and Node.js 22. Extract this source archive into an empty directory.\n\n1. bun install --frozen-lockfile --ignore-scripts\n2. bunx wxt build -b firefox --mv3\n\nThe complete unpacked Firefox add-on is written to extension-firefox/.\nNo environment variables, credentials, network services, or private source are required for the build.\nThe lockfile pins dependencies. WXT compiles the included TypeScript/React sources and static assets.\n`), "BUILD.txt", archiveOptions);
 await new Promise((resolve, reject) => { const stream = fs.createWriteStream(sourceFile); stream.on("error", reject).on("close", resolve); zip.outputStream.on("error", reject).pipe(stream); zip.end(); });
-if (process.argv.includes("--dry-run")) {
+const dryRun = process.argv.includes("--dry-run");
+if (dryRun && !process.argv.includes("--verify-credentials")) {
   console.log(JSON.stringify({ ok: true, dryRun: true, version, sourceFile: path.basename(sourceFile), credentialsConfigured: Boolean(process.env.WEB_EXT_API_KEY && process.env.WEB_EXT_API_SECRET) }));
 } else {
   const issuer = process.env.WEB_EXT_API_KEY, secret = process.env.WEB_EXT_API_SECRET;
@@ -45,7 +46,8 @@ if (process.argv.includes("--dry-run")) {
     alreadySubmitted = body.results.some(item => item.version === version);
     next = body.next;
   }
-  if (alreadySubmitted) console.log(JSON.stringify({ ok: true, version, status: "already_submitted", message: "Check AMO review status; this does not imply publication." }));
+  if (dryRun) console.log(JSON.stringify({ ok: true, dryRun: true, version, credentialsVerified: true, alreadySubmitted, sourceFile: path.basename(sourceFile) }));
+  else if (alreadySubmitted) console.log(JSON.stringify({ ok: true, version, status: "already_submitted", message: "Check AMO review status; this does not imply publication." }));
   else {
     execFileSync(process.execPath, [path.join(root, "node_modules/web-ext/bin/web-ext.js"), "sign", "--source-dir", path.join(root, "extension-firefox"), "--channel", "listed", "--amo-metadata", path.join(root, "scripts/firefox-metadata.json"), "--upload-source-code", sourceFile, "--artifacts-dir", out, "--approval-timeout", "0", "--no-input", "--no-config-discovery"], { cwd: root, stdio: "inherit" });
     console.log(JSON.stringify({ ok: true, version, status: "submitted", message: "AMO review may be pending. Submission success does not imply public availability." }));

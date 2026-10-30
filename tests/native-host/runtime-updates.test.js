@@ -11,6 +11,7 @@ import { createRuntimeUpdater, createIdleUpdateCheck, releaseVersion } from "../
 import { resolveRuntime, activeRuntimeLeases, withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
 import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
 import { FrameDecoder } from "../../native-host/src/framing.ts";
+import { installPublishedUpdate,publishedVersion } from "../../src/management/manual-update.ts";
 
 function release(root, version) {
   fs.mkdirSync(root, { recursive: true });
@@ -50,6 +51,24 @@ test("live leases and busy profiles allow staging but defer activation", async (
     const second = createRuntimeUpdater({ dir: f.dir, busy: async () => true, install: async () => assert.fail("Busy browser must not install") });
     await second.tick("1.9.3"); assert.equal(second.status().state, "waiting");
   } finally { f.cleanup(); }
+});
+
+test("a manual update stages while automatic updates are off, preserves the preference and waits for active agents", async () => {
+  const f = fixture({ busy: async () => true }), globals = [];
+  try {
+    await f.updater.configure(false);
+    const result = await installPublishedUpdate(f.dir, { latest: async () => "1.9.3", updater: f.updater, globalInstall: async version => { globals.push(version); }, refreshSkills: () => 0, refreshMarketplace: async () => ({ status: "not_configured" }) });
+    assert.equal(result.code, "update_waiting"); assert.deepEqual(globals, ["1.9.3"]);
+    const activation = JSON.parse(fs.readFileSync(f.manifest));
+    assert.equal(activation.autoUpdate, false); assert.equal(activation.root, f.root); assert.equal(activation.stagedRelease.version, "1.9.3");
+    assert.equal(f.installs(), 1);
+  } finally { f.cleanup(); }
+});
+
+test("manual installation accepts only a stable version of the official package", async () => {
+  await assert.rejects(publishedVersion(async () => ({ name: "another-package", version: "1.9.3" })));
+  await assert.rejects(publishedVersion(async () => ({ name: "opencode-chromium", version: "1.9.4-dev.1" })));
+  assert.equal(await publishedVersion(async () => ({ name: "opencode-chromium", version: "1.9.4" })), "1.9.4");
 });
 test("a new agent starting during download defers activation, then reuses the validated download", async () => {
   const f = fixture(); let installs = 0;

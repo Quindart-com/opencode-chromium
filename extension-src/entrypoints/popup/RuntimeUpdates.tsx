@@ -1,6 +1,7 @@
 import { t } from "../../i18n";
 import { useEffect, useRef, useState } from "react";
 import { sendMessage } from "./api";
+import useLocalAction from "./useLocalAction";
 
 type Updates = { supported: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; stagedVersion?: string; loadedVersions?: string[]; blockerCount?: number; reason?: string };
 const labels: Record<string, string> = {
@@ -13,6 +14,7 @@ const labels: Record<string, string> = {
   retry: t("runtimeDeferred"),
 };
 export default function RuntimeUpdates() {
+  const local = useLocalAction();
   const [updates, setUpdates] = useState<Updates | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,7 +31,7 @@ export default function RuntimeUpdates() {
     }
     void refresh(); const timer = window.setInterval(() => void refresh(), 10000);
     return () => { disposed = true; window.clearInterval(timer); };
-  }, []);
+  }, [local.action?.state]);
   async function configure(enabled: boolean) {
     if (saving.current) return;
     const previous = updates;
@@ -45,6 +47,8 @@ export default function RuntimeUpdates() {
   }
   return <section className="card" aria-labelledby="runtime-updates-title">
     <h2 id="runtime-updates-title">{t("updates")}</h2>
+    <button type="button" className="button button-primary" disabled={busy || local.working} onClick={() => void local.start("INSTALL_RUNTIME_UPDATE")}>{t(local.working ? "actionUpdating" : "checkInstallUpdates")}</button>
+    {local.feedback && <p role="status" className={"action-feedback " + (local.error || local.action?.state === "failed" ? "is-error" : local.action?.state === "waiting" ? "is-waiting" : "")}>{local.feedback}</p>}
     <label className="checkbox-row"><input type="checkbox" checked={updates?.enabled ?? false} disabled={busy || !updates?.supported} onChange={event => void configure(event.target.checked)} /><span>{t("keepUpdated")}<small className="help-note">{t("runtimeUpdateHelp")}</small></span></label>
     <p className="help-note">{updates?.supported ? !updates.enabled ? t("updatesOff") : labels[updates.state ?? ""] ?? t("updateChecks") : updates?.reason ?? t("updateOnce")}</p>
     <p role="status" className="feedback">{message}</p>

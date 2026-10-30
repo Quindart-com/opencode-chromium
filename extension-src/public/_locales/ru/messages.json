@@ -6,7 +6,7 @@
     "message": "Подключайте OpenCode, Codex и агентов MCP к браузеру для поиска, заполнения форм, снимков экрана и локальной памяти действий."
   },
   "connected": {
-    "message": "Подключено"
+    "message": "Мост подключён"
   },
   "checking": {
     "message": "Проверка"
@@ -195,7 +195,7 @@
     "message": "Показать активность"
   },
   "thisProfile": {
-    "message": "Этот профиль"
+    "message": "Этот профиль браузера"
   },
   "allProfiles": {
     "message": "Все профили"
@@ -273,7 +273,7 @@
     "message": "Читать примечания к выпуску"
   },
   "connectAgent": {
-    "message": "Подключите агента для программирования"
+    "message": "Подключить"
   },
   "runTerminal": {
     "message": "Запустите команду в терминале. Настройка подключит найденные поддерживаемые инструменты и зарегистрирует локальный компонент браузера."
@@ -354,7 +354,7 @@
     "message": "Откройте расширение на панели браузера, чтобы проверить подключение."
   },
   "runtimeConnected": {
-    "message": "Локальная среда подключена"
+    "message": "Локальный мост подключён"
   },
   "checkingConnection": {
     "message": "Проверка подключения"
@@ -363,7 +363,7 @@
     "message": "Подключите браузер"
   },
   "runtimeExplanation": {
-    "message": "Расширение подключено к локальной среде. Выберите этот профиль в агенте. Состояние вкладок и ожидающие диалоги сообщаются инструментами браузера отдельно."
+    "message": "Нативный процесс отвечает. Проверьте ниже, какие подключения агентов активны."
   },
   "runtimeChecking": {
     "message": "Поиск локальной среды. Настройки остаются на этом устройстве."
@@ -1105,5 +1105,269 @@
   },
   "postUpdateMaster": {
     "message": "После завершения текущей работы выполните настройку и один раз переподключите MCP. Будущие совместимые обновления загружаются в фоне и применяются после завершения всех сессий браузера, сохраняя управляемые подключения MCP. Закреплённые команды и рабочие копии остаются под вашим контролем."
+  },
+  "harnessConnections": {
+    "message": "Подключения агентов"
+  },
+  "refreshConnections": {
+    "message": "Обновить"
+  },
+  "connectionLayers": {
+    "message": "Локальный мост и каждое подключение агента проверяются отдельно."
+  },
+  "localBridge": {
+    "message": "Расширение ↔ локальный мост"
+  },
+  "bridgeResponding": {
+    "message": "Отвечает"
+  },
+  "bridgeUnavailable": {
+    "message": "Не отвечает"
+  },
+  "connectionsUnsupported": {
+    "message": "Для подробностей обновите локальную среду. Запустите настройку и переподключите агент."
+  },
+  "connectionsUnavailable": {
+    "message": "Не удалось проверить подключения. Запустите команду диагностики ниже."
+  },
+  "noHarnessConnections": {
+    "message": "Подключений агентов не обнаружено. Подключённый мост не подтверждает загрузку инструментов в Codex, OpenCode или DeepSeek."
+  },
+  "harnessResponding": {
+    "message": "Сигнал получен"
+  },
+  "harnessStale": {
+    "message": "Сигнал просрочен"
+  },
+  "harnessUnidentified": {
+    "message": "Старый клиент · личность не определена"
+  },
+  "runtimeVersionLabel": {
+    "message": "Среда"
+  },
+  "harnessVersionLabel": {
+    "message": "Агент"
+  },
+  "harnessToolReceived": {
+    "message": "Получен вызов инструмента"
+  },
+  "harnessInitialized": {
+    "message": "Инициализировано · вызовов инструментов ещё нет"
+  },
+  "harnessPending": {
+    "message": "Ожидают: $1"
+  },
+  "harnessLastSeen": {
+    "message": "Последний сигнал: $1"
+  },
+  "disconnectHarnessConfirm": {
+    "message": "Отключить связь с браузером? Агент останется открыт и может переподключиться при следующем запросе или сигнале. Сначала завершите его работу в браузере."
+  },
+  "disconnectBridge": {
+    "message": "Отключить связь"
+  },
+  "cancelConnectionAction": {
+    "message": "Отмена"
+  },
+  "harnessDisconnected": {
+    "message": "Связь с браузером отключена. Переподключите агент или выполните новый вызов браузера."
+  },
+  "bridgeReconnecting": {
+    "message": "Переподключение локального моста…"
+  },
+  "reconnectBridge": {
+    "message": "Переподключить локальный мост"
+  },
+  "copyDoctor": {
+    "message": "Скопировать команду диагностики"
+  },
+  "doctorCopied": {
+    "message": "Команда диагностики скопирована."
+  },
+  "reconnectHarnessHelp": {
+    "message": "Переподключить агент"
+  },
+  "reconnectCodexHelp": {
+    "message": "Codex: выключите и включите этот плагин в настройках плагинов, чтобы перезагрузить инструменты MCP. Может потребоваться новый чат."
+  },
+  "reconnectOpenCodeHelp": {
+    "message": "OpenCode: выполните opencode reload. Текущие сессии применят настройки на следующем шаге."
+  },
+  "reconnectDshHelp": {
+    "message": "DeepSeek Harness: перезагрузите плагин MCP или заново откройте настроенный профиль."
+  },
+  "harnessToolsExplanation": {
+    "message": "Инициализация и свежий сигнал подтверждают связь с браузером. Регистрацией и доступностью инструментов управляет сам агент."
+  },
+  "usageProvider": {
+    "message": "Сервис"
+  },
+  "usagePeriod": {
+    "message": "Период"
+  },
+  "usageAllProviders": {
+    "message": "Все сервисы"
+  },
+  "usageCurrentProvider": {
+    "message": "Текущий сервис"
+  },
+  "usageLast7": {
+    "message": "Последние 7 дней"
+  },
+  "usageLast30": {
+    "message": "Последние 30 дней"
+  },
+  "usageLastWeek": {
+    "message": "Прошлая неделя"
+  },
+  "usageLastYear": {
+    "message": "Прошлый год"
+  },
+  "usageAllTime": {
+    "message": "За всё время"
+  },
+  "usageInput": {
+    "message": "Входные токены"
+  },
+  "usageOutput": {
+    "message": "Выходные токены"
+  },
+  "usageTrend": {
+    "message": "Расход токенов"
+  },
+  "usageNoData": {
+    "message": "Нет данных за этот период"
+  },
+  "usageServices": {
+    "message": "Сравнение сервисов"
+  },
+  "usageUnattributed": {
+    "message": "Ранее · не определено"
+  },
+  "usageLocalHistory": {
+    "message": "Тесты: $1 · расход известен: $2/$3 вызовов · UTC"
+  },
+  "usageSavingsGlobal": {
+    "message": "Локальная экономия · все сервисы за сеанс"
+  },
+  "usageAccountingIncomplete": {
+    "message": "Отсутствующие отчёты не входят в суммы токенов и стоимости."
+  },
+  "statusConnected": {
+    "message": "Подключено"
+  },
+  "statusDisconnected": {
+    "message": "Отключено"
+  },
+  "statusNotInstalled": {
+    "message": "Не установлено"
+  },
+  "statusUnknown": {
+    "message": "Нужно обновление"
+  },
+  "statusBusy": {
+    "message": "В работе"
+  },
+  "bridgeReady": {
+    "message": "CLI доступен"
+  },
+  "reconnectAgent": {
+    "message": "Переподключить"
+  },
+  "reconnectNamed": {
+    "message": "Переподключить $1"
+  },
+  "connectNamed": {
+    "message": "Подключить $1"
+  },
+  "connectionUpgrade": {
+    "message": "Обновите CLI для просмотра статуса агентов."
+  },
+  "updateCli": {
+    "message": "Обновить CLI"
+  },
+  "agentsKeepRunning": {
+    "message": "Сеансы остаются открытыми"
+  },
+  "runConnectionChecks": {
+    "message": "Диагностика"
+  },
+  "actionQueued": {
+    "message": "Запуск…"
+  },
+  "actionRunning": {
+    "message": "Выполняется…"
+  },
+  "actionReconnected": {
+    "message": "Инструменты браузера обновлены"
+  },
+  "actionBusy": {
+    "message": "Ожидание текущего действия браузера"
+  },
+  "actionWaiting": {
+    "message": "Готово к следующему ходу агента"
+  },
+  "actionUnreachable": {
+    "message": "Связь с агентом не отвечает"
+  },
+  "actionHealthy": {
+    "message": "Проверки соединения пройдены"
+  },
+  "actionNeedsAttention": {
+    "message": "Одна из связей требует проверки"
+  },
+  "actionUpdated": {
+    "message": "Установлен последний стабильный CLI"
+  },
+  "actionUpdateWaiting": {
+    "message": "Обновление готово; активация после работы браузера"
+  },
+  "actionUnmanaged": {
+    "message": "Для этой установки обновления недоступны"
+  },
+  "actionFailed": {
+    "message": "Не удалось выполнить действие. Повторите попытку."
+  },
+  "actionUnavailable": {
+    "message": "Помощник локальных действий недоступен."
+  },
+  "actionStatusUnavailable": {
+    "message": "Ожидание локального статуса…"
+  },
+  "actionUpdating": {
+    "message": "Обновление CLI…"
+  },
+  "checkInstallUpdates": {
+    "message": "Проверить и установить обновления"
+  },
+  "updateAutomaticHelp": {
+    "message": "CLI обновляется в фоне. Работающие агенты и ключи сохраняются."
+  },
+  "noHarnessesDetected": {
+    "message": "Поддерживаемые агенты не обнаружены."
+  },
+  "statusAmbiguous": {
+    "message": "Клиент Claude не определён"
+  },
+  "connectionTroubleshooting": {
+    "message": "Помощь с подключением"
+  },
+  "decisionAdvanced": {
+    "message": "Дополнительные настройки"
+  },
+  "decisionTextModel": {
+    "message": "Текстовая модель (необязательно)"
+  },
+  "decisionImageModel": {
+    "message": "Модель изображений (необязательно)"
+  },
+  "decisionModelHelp": {
+    "message": "Оставьте поле пустым, чтобы использовать предложенную модель. Пользовательские модели должны поддерживать API решений выбранного сервиса."
+  },
+  "actionPluginReload": {
+    "message": "В Codex откройте управление этим плагином, отключите его и включите снова."
+  },
+  "catalogInvalid": {
+    "message": "Не удалось загрузить пользовательский каталог. Встроенные модели доступны."
   }
 }

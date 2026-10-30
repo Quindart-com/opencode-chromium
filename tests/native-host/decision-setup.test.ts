@@ -7,6 +7,7 @@ import { saveAndTestProvider } from "../../native-host/src/decisions/connection.
 import { configureProvider, credentialPath, providerKey, providerStatus, storeProviderKey } from "../../native-host/src/decisions/settings.ts";
 import { decisionUsage, recordDecision } from "../../native-host/src/decisions/usage.ts";
 import { selectRecipe } from "../../native-host/src/decisions/recipes.ts";
+import { decide } from "../../native-host/src/decisions/index.ts";
 
 const settings = { provider: "jev" as const, route: "openrouter" as const, shareText: true, shareImages: false, keyEnv: "SYNTHETIC_DECISION_KEY" };
 let root: string;
@@ -65,6 +66,8 @@ test("direct OpenAI verifies and stores a separate key without replacing OpenRou
   expect(result.ok).toBe(true); expect(calls).toBe(1);
   expect(providerKey(direct)).toBe(directKey); expect(providerKey(settings)).toBe(secret);
   expect(providerStatus()).toMatchObject({ route: "openai", model: "gpt-6-luna", ready: true });
+  expect(providerStatus().credentialRoutes).toContain("openai");
+  expect(providerStatus().credentialRoutes).toContain("openrouter");
 }, 15000);
 
 test("usage keeps known costs separate from missing costs and includes abstentions", () => {
@@ -72,6 +75,22 @@ test("usage keeps known costs separate from missing costs and includes abstentio
   recordDecision({ status: "abstained", elapsedMs: 300 }, "select");
   expect(decisionUsage()).toMatchObject({ calls: 2, selected: 1, abstained: 1, inputTokens: 10, costReportedCalls: 1, usageReportedCalls: 1, averageMs: 200 });
 });
+
+test("image decisions can finish beyond the text deadline without widening subsequent text calls", async () => {
+  const previousFetch = globalThis.fetch;
+  configureProvider({ provider: "openai-decisions", route: "openai", shareText: true, shareImages: true, keyEnv: "SYNTHETIC_DECISION_KEY" });
+  process.env.SYNTHETIC_DECISION_KEY = secret;
+  globalThis.fetch = (async (_url, init) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(Response.json({ model: "gpt-6-luna", answers: [{ type: "choice", name: "decision", choice: "ready", confidence: 0.99,
+      probabilities: [{ value: "ready", probability: 0.99 }, { value: "__abstain", probability: 0.01 }] }], usage: { input_tokens: 10, output_tokens: 0 } })), 1800);
+    init?.signal?.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("aborted")); }, { once: true });
+  })) as typeof fetch;
+  const request = { purpose: "verify" as const, context: "Synthetic readiness test", instructions: "Select ready", candidates: [{ id: "ready", description: "Ready button" }] };
+  try {
+    expect(await decide({ ...request, image: "data:image/png;base64,AA==" })).toMatchObject({ status: "selected", candidateId: "ready" });
+    expect(await decide(request)).toMatchObject({ status: "abstained", reason: "timeout" });
+  } finally { globalThis.fetch = previousFetch; delete process.env.SYNTHETIC_DECISION_KEY; }
+}, 15000);
 
 test("recipe decisions resolve finite IDs and reject stale or uncertain recipes", async () => {
   configureProvider(settings); process.env.SYNTHETIC_DECISION_KEY = secret;

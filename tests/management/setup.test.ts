@@ -6,7 +6,9 @@ import { execFileSync } from "node:child_process";
 import { parse as parseToml } from "smol-toml";
 import { manageSetup, formatSetupResult } from "../../src/management/setup.ts";
 import type { Harness } from "../../src/management/harnesses.ts";
-import { inspectHarnessSkills } from "../../src/cli/skills.ts";
+import { directoryHash,inspectHarnessSkills } from "../../src/cli/skills.ts";
+import { planSkills } from "../../src/management/skills.ts";
+import { applyTransaction } from "../../src/management/transaction.ts";
 import { managedConfiguration } from "../../src/management/configuration.ts";
 
 function fixture() {
@@ -25,7 +27,7 @@ function fixture() {
   ];
   const rows: Harness[] = specs.map(([id, configPath, text]) => {
     fs.mkdirSync(path.dirname(configPath!), { recursive: true }); fs.writeFileSync(configPath!, text!);
-    return { id: id as Harness["id"], label: id!, configPath: configPath!, detected: true, supported: true, managed: false,
+    return { id: id as Harness["id"], label: id!, configPath: configPath!, detected: true, installed: true, supported: true, managed: false,
       executable: null, version: id === "opencode" ? "2.0.0" : "1.0.0", restart: "terminal" };
   });
   const hostPath = path.join(dir, "native-host-launcher"), registration = path.join(dir, "native-manifest.json");
@@ -72,7 +74,7 @@ test("targeted setup previews all changes, registers a host, preserves unrelated
 test("setup --all connects only detected supported apps and uninstall leaves browser registration in place", async () => {
   const f = fixture();
   try {
-    f.rows[3]!.supported = false; f.rows[4]!.detected = false;
+    f.rows[3]!.supported = false; f.rows[4]!.installed = false;
     const untouched = f.rows.slice(3).map(row => fs.readFileSync(row.configPath, "utf8"));
     const first = await manageSetup(["--all", "--json"], false, f.environment);
     expect(first.targets).toEqual(["codex", "opencode", "claude-code"]);
@@ -124,7 +126,7 @@ test("skill health catches an explicitly disabled or stale Codex browser skill",
 test("setup --all recognizes an existing custom configuration without requiring a default config", async () => {
   const f = fixture();
   try {
-    for (const row of f.rows) row.detected = false;
+    for (const row of f.rows) { row.detected = false; row.installed = false; }
     const custom = path.join(f.home, "custom-codex.toml");
     fs.writeFileSync(custom, '# custom preference\nmodel = "chosen"\n');
     const result = await manageSetup(["--all", "--config", "codex=" + custom, "--json"], false, f.environment);
@@ -163,3 +165,19 @@ test("setup help is noninteractive and never creates runtime or client files", (
     expect(fs.existsSync(f.dir)).toBe(false);
   } finally { fs.rmSync(f.home, { recursive: true, force: true }); }
 }, 20000);
+
+test("skill upgrades retain transaction backups without reporting them as stale instructions", () => {
+  const f = fixture();
+  try {
+    const source = path.join(f.root, "skills/opencode-browser-plugin");
+    applyTransaction(planSkills(f.root, ["opencode"], false, f.home));
+    fs.appendFileSync(path.join(source, "SKILL.md"), "\nUpdated recovery guidance.\n");
+    const applied = applyTransaction(planSkills(f.root, ["opencode"], false, f.home));
+    expect(applied.backups.length).toBeGreaterThan(0);
+    expect(applied.backups.every(file => fs.existsSync(file))).toBe(true);
+    const target = path.join(f.home, ".agents/skills/opencode-browser-plugin");
+    expect(directoryHash(target).sha256).toBe(directoryHash(source).sha256);
+    fs.appendFileSync(path.join(target, "SKILL.md"), "\nStale edit.\n");
+    expect(directoryHash(target).sha256).not.toBe(directoryHash(source).sha256);
+  } finally { fs.rmSync(f.home, { recursive: true, force: true }); }
+});

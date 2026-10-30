@@ -141,7 +141,7 @@ test("semantic host method returns model metadata", async () => {
   assert.equal(qwen.role, "deep");
   assert.ok(qwen.embedding.id.includes("Qwen3-Embedding"));
   assert.ok(qwen.reranker.id.includes("Qwen3-Reranker"));
-  assert.ok(result.models[0].benchmark.value);
+  assert.ok(result.models[0].embedding.id);
 });
 
 test("any adaptive model can be selected as the active retrieval model while deep stays fixed", async () => {

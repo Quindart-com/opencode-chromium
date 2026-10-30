@@ -57,13 +57,13 @@ console.log(JSON.stringify({
   action: dryRun ? "validating credentials and package (no store changes)" : "uploading and publishing",
 }, null, 2));
 
-if (!dryRun) {
-  const status = await fetchReleaseState({ accessToken, extensionId, publisherId });
-  const decision = releaseDecision(status, packageJson.version);
-  console.log(decision.reason);
-  if (decision.action === "blocked") process.exit(1);
-  if (decision.action === "published") process.exit(0);
-}
+// Read-only preflight also runs during validation, before a merge can trigger
+// publication. Dry runs must not hide a store state that prevents submission.
+const status = await fetchReleaseState({ accessToken, extensionId, publisherId });
+const decision = releaseDecision(status, packageJson.version);
+console.log(decision.reason);
+if (decision.action === "blocked") process.exit(1);
+if (!dryRun && decision.action === "published") process.exit(0);
 
 const results = await submit(config).catch((error) => {
   const detail = errorMessage(error);

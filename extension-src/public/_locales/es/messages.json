@@ -6,7 +6,7 @@
     "message": "Conecta OpenCode, Codex y agentes MCP al navegador para buscar, rellenar formularios, capturar pantalla y guardar acciones."
   },
   "connected": {
-    "message": "Conectado"
+    "message": "Puente conectado"
   },
   "checking": {
     "message": "Comprobando"
@@ -195,7 +195,7 @@
     "message": "Mostrar actividad de"
   },
   "thisProfile": {
-    "message": "Este perfil"
+    "message": "Este perfil del navegador"
   },
   "allProfiles": {
     "message": "Todos los perfiles"
@@ -273,7 +273,7 @@
     "message": "Leer las notas de la versión"
   },
   "connectAgent": {
-    "message": "Conecta tu agente de programación"
+    "message": "Conectar"
   },
   "runTerminal": {
     "message": "Ejecuta esto en una terminal. La configuración conecta las herramientas compatibles detectadas y registra el host nativo del navegador."
@@ -354,7 +354,7 @@
     "message": "Abre la extensión desde la barra del navegador para comprobar la conexión."
   },
   "runtimeConnected": {
-    "message": "Entorno conectado"
+    "message": "Puente local conectado"
   },
   "checkingConnection": {
     "message": "Comprobando conexión"
@@ -363,7 +363,7 @@
     "message": "Conecta tu navegador"
   },
   "runtimeExplanation": {
-    "message": "La extensión está conectada al entorno local. Elige este perfil en tu agente. Las herramientas del navegador informan por separado del estado de las pestañas y los diálogos pendientes."
+    "message": "El proceso nativo responde. Consulta las conexiones de agentes para comprobar los enlaces activos."
   },
   "runtimeChecking": {
     "message": "Buscando el entorno local. Tu configuración permanece en este dispositivo."
@@ -1105,5 +1105,269 @@
   },
   "postUpdateMaster": {
     "message": "Cuando termine el trabajo actual, ejecuta la configuración y reconecta MCP una vez. Las futuras actualizaciones compatibles se descargan en segundo plano y se aplican al terminar todas las sesiones, manteniendo abiertas las conexiones MCP administradas. Los comandos fijados y las copias de desarrollo siguen bajo tu control."
+  },
+  "harnessConnections": {
+    "message": "Conexiones de agentes"
+  },
+  "refreshConnections": {
+    "message": "Actualizar"
+  },
+  "connectionLayers": {
+    "message": "El puente local y cada conexión de agente se comprueban por separado."
+  },
+  "localBridge": {
+    "message": "Extensión ↔ puente local"
+  },
+  "bridgeResponding": {
+    "message": "Responde"
+  },
+  "bridgeUnavailable": {
+    "message": "No responde"
+  },
+  "connectionsUnsupported": {
+    "message": "Los detalles requieren un motor local actualizado. Ejecuta la configuración y vuelve a conectar el agente."
+  },
+  "connectionsUnavailable": {
+    "message": "No se pudieron comprobar las conexiones. Ejecuta el comando de diagnóstico siguiente."
+  },
+  "noHarnessConnections": {
+    "message": "No se ha observado ninguna conexión de agente. Un puente conectado no confirma que Codex, OpenCode o DeepSeek hayan cargado las herramientas."
+  },
+  "harnessResponding": {
+    "message": "Señal recibida"
+  },
+  "harnessStale": {
+    "message": "Señal atrasada"
+  },
+  "harnessUnidentified": {
+    "message": "Cliente antiguo · identidad no disponible"
+  },
+  "runtimeVersionLabel": {
+    "message": "Motor"
+  },
+  "harnessVersionLabel": {
+    "message": "Agente"
+  },
+  "harnessToolReceived": {
+    "message": "Llamada de herramienta recibida"
+  },
+  "harnessInitialized": {
+    "message": "Inicializado · sin llamadas de herramientas observadas"
+  },
+  "harnessPending": {
+    "message": "$1 pendientes"
+  },
+  "harnessLastSeen": {
+    "message": "Última señal: $1"
+  },
+  "disconnectHarnessConfirm": {
+    "message": "¿Desconectar este enlace al navegador? El agente seguirá abierto y podrá reconectarse en su próxima solicitud o señal. Termina primero su trabajo en el navegador."
+  },
+  "disconnectBridge": {
+    "message": "Desconectar enlace"
+  },
+  "cancelConnectionAction": {
+    "message": "Cancelar"
+  },
+  "harnessDisconnected": {
+    "message": "Enlace al navegador desconectado. Reconecta desde el agente o realiza otra llamada al navegador."
+  },
+  "bridgeReconnecting": {
+    "message": "Reconectando el puente local…"
+  },
+  "reconnectBridge": {
+    "message": "Reconectar puente local"
+  },
+  "copyDoctor": {
+    "message": "Copiar comando de diagnóstico"
+  },
+  "doctorCopied": {
+    "message": "Comando de diagnóstico copiado."
+  },
+  "reconnectHarnessHelp": {
+    "message": "Reconectar un agente"
+  },
+  "reconnectCodexHelp": {
+    "message": "Codex: desactiva y activa este plugin en los ajustes de plugins para recargar las herramientas MCP. Puede ser necesario un nuevo chat."
+  },
+  "reconnectOpenCodeHelp": {
+    "message": "OpenCode: ejecuta opencode reload. Las sesiones existentes adoptan la configuración en el siguiente paso."
+  },
+  "reconnectDshHelp": {
+    "message": "DeepSeek Harness: recarga su plugin MCP o vuelve a abrir el perfil configurado."
+  },
+  "harnessToolsExplanation": {
+    "message": "La inicialización y una señal reciente confirman el enlace al navegador. Cada agente controla el registro y la disponibilidad de sus herramientas."
+  },
+  "usageProvider": {
+    "message": "Servicio"
+  },
+  "usagePeriod": {
+    "message": "Período"
+  },
+  "usageAllProviders": {
+    "message": "Todos los servicios"
+  },
+  "usageCurrentProvider": {
+    "message": "Servicio actual"
+  },
+  "usageLast7": {
+    "message": "Últimos 7 días"
+  },
+  "usageLast30": {
+    "message": "Últimos 30 días"
+  },
+  "usageLastWeek": {
+    "message": "Semana pasada"
+  },
+  "usageLastYear": {
+    "message": "Año pasado"
+  },
+  "usageAllTime": {
+    "message": "Todo el historial"
+  },
+  "usageInput": {
+    "message": "Tokens de entrada"
+  },
+  "usageOutput": {
+    "message": "Tokens de salida"
+  },
+  "usageTrend": {
+    "message": "Consumo de tokens"
+  },
+  "usageNoData": {
+    "message": "Sin uso en este período"
+  },
+  "usageServices": {
+    "message": "Comparar servicios"
+  },
+  "usageUnattributed": {
+    "message": "Anterior · sin asignar"
+  },
+  "usageLocalHistory": {
+    "message": "Pruebas: $1 · uso informado: $2/$3 llamadas · UTC"
+  },
+  "usageSavingsGlobal": {
+    "message": "Ahorro local · todos los servicios de esta sesión"
+  },
+  "usageAccountingIncomplete": {
+    "message": "Los informes faltantes se excluyen de los totales de tokens y costo."
+  },
+  "statusConnected": {
+    "message": "Conectado"
+  },
+  "statusDisconnected": {
+    "message": "Desconectado"
+  },
+  "statusNotInstalled": {
+    "message": "No instalado"
+  },
+  "statusUnknown": {
+    "message": "Necesita actualización"
+  },
+  "statusBusy": {
+    "message": "En curso"
+  },
+  "bridgeReady": {
+    "message": "CLI listo"
+  },
+  "reconnectAgent": {
+    "message": "Reconectar"
+  },
+  "reconnectNamed": {
+    "message": "Reconectar $1"
+  },
+  "connectNamed": {
+    "message": "Conectar $1"
+  },
+  "connectionUpgrade": {
+    "message": "Actualiza el CLI para ver el estado de los agentes."
+  },
+  "updateCli": {
+    "message": "Actualizar CLI"
+  },
+  "agentsKeepRunning": {
+    "message": "Tus sesiones siguen abiertas"
+  },
+  "runConnectionChecks": {
+    "message": "Diagnosticar"
+  },
+  "actionQueued": {
+    "message": "Iniciando…"
+  },
+  "actionRunning": {
+    "message": "En curso…"
+  },
+  "actionReconnected": {
+    "message": "Herramientas del navegador actualizadas"
+  },
+  "actionBusy": {
+    "message": "Esperando la acción actual del navegador"
+  },
+  "actionWaiting": {
+    "message": "Listo para el siguiente turno del agente"
+  },
+  "actionUnreachable": {
+    "message": "La conexión del agente no responde"
+  },
+  "actionHealthy": {
+    "message": "Diagnóstico correcto"
+  },
+  "actionNeedsAttention": {
+    "message": "Una conexión necesita atención"
+  },
+  "actionUpdated": {
+    "message": "Último CLI de producción instalado"
+  },
+  "actionUpdateWaiting": {
+    "message": "Actualización lista; se activará al terminar el trabajo"
+  },
+  "actionUnmanaged": {
+    "message": "Actualizaciones no disponibles para esta instalación"
+  },
+  "actionFailed": {
+    "message": "No se pudo completar. Inténtalo de nuevo."
+  },
+  "actionUnavailable": {
+    "message": "El asistente de acciones locales no está disponible."
+  },
+  "actionStatusUnavailable": {
+    "message": "Esperando el progreso local…"
+  },
+  "actionUpdating": {
+    "message": "Actualizando CLI…"
+  },
+  "checkInstallUpdates": {
+    "message": "Buscar e instalar actualizaciones"
+  },
+  "updateAutomaticHelp": {
+    "message": "El CLI se actualiza en segundo plano. Los agentes y las claves se conservan."
+  },
+  "noHarnessesDetected": {
+    "message": "No se detectaron agentes compatibles."
+  },
+  "statusAmbiguous": {
+    "message": "Cliente Claude sin identificar"
+  },
+  "connectionTroubleshooting": {
+    "message": "Ayuda de conexión"
+  },
+  "decisionAdvanced": {
+    "message": "Ajustes avanzados"
+  },
+  "decisionTextModel": {
+    "message": "Modelo de texto (opcional)"
+  },
+  "decisionImageModel": {
+    "message": "Modelo de imagen (opcional)"
+  },
+  "decisionModelHelp": {
+    "message": "Déjalo vacío para usar el modelo sugerido. Los modelos personalizados deben admitir la API de decisiones del servicio elegido."
+  },
+  "actionPluginReload": {
+    "message": "En Codex, abre el menú Administrar del plugin, desactívalo y vuelve a activarlo."
+  },
+  "catalogInvalid": {
+    "message": "No se pudo cargar el catálogo personalizado. Los modelos integrados están disponibles."
   }
 }

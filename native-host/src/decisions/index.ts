@@ -3,7 +3,9 @@ import { saveAndTestProvider } from "./connection.js";
 import { reserveImageRequest } from "./image-budget.js";
 import { DEFAULT_DECISION_TIMEOUT_MS,JevProvider,type DecisionRequest,type DecisionResult } from "./provider.js";
 import { configureProvider,getProviderSettings,providerKey,providerModel,providerStatus,storeProviderKey } from "./settings.js";
-import { decisionUsage,recordDecision } from "./usage.js";
+import { decisionUsage,recordDecision,usageProviderId } from "./usage.js";
+import { record } from "../../../src/shared/values.ts";
+import type { UsageQuery } from "../../../src/shared/decision-usage.ts";
 
 let cached: { key: string; route: string; provider: JevProvider } | undefined;
 export async function decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionResult> {
@@ -14,19 +16,24 @@ export async function decide(request: DecisionRequest, signal?: AbortSignal): Pr
   if (signal?.aborted) return { status: "abstained", elapsedMs: 0, reason: "cancelled" };
   if (request.image && !reserveImageRequest()) return { status: "unavailable", elapsedMs: 0, reason: "image_budget_exhausted" };
   const model = providerModel(settings, !!request.image)!;
-  const identity = `${settings.provider}:${settings.route}:${settings.shareText}:${settings.shareImages}:${model}`;
+  // Screenshot decisions need a separate bounded allowance; text ranking stays fast.
+  const timeoutMs = request.image ? 5000 : DEFAULT_DECISION_TIMEOUT_MS;
+  const identity = `${settings.provider}:${settings.route}:${settings.shareText}:${settings.shareImages}:${model}:${timeoutMs}`;
   if (!cached || cached.key !== key || cached.route !== identity) cached = { key, route: identity,
-    provider: new JevProvider(key, fetch, model, DEFAULT_DECISION_TIMEOUT_MS, settings.route, () => {
+    provider: new JevProvider(key, fetch, model, timeoutMs, settings.route, () => {
       const current = getProviderSettings();
       return current.provider === settings.provider && current.route === settings.route && current.keyEnv === settings.keyEnv &&
-        current.shareText && current.shareImages === settings.shareImages && providerKey(current) === key;
-    }) };
+        current.shareText && current.shareImages === settings.shareImages && current.textModel === settings.textModel && current.imageModelOverride === settings.imageModelOverride && providerKey(current) === key;
+    }, settings.imageModelOverride === model) };
   const result = await cached.provider.decide(request, signal);
-  recordDecision(result, request.purpose, !!request.image);
+  recordDecision(result, request.purpose, !!request.image, settings);
   return result;
 }
 export async function handleDecisionHostMethod(method: string, params: unknown) {
-  if (method === "decision.status") return { ...providerStatus(), usage: decisionUsage(), efficiency: decisionBudget.stats() };
+  if (method === "decision.status") {
+    const settings = getProviderSettings(), query = record(record(params).usage) as UsageQuery;
+    return { ...providerStatus(), usage: decisionUsage({ provider: query.provider ?? usageProviderId(settings), period: query.period ?? "7d" }), efficiency: decisionBudget.stats() };
+  }
   if (method === "decision.saveAndTest") return saveAndTestProvider(params);
   if (method === "decision.removeKey") { storeProviderKey(getProviderSettings().route, null); cached = undefined; return providerStatus(); }
   if (method === "decision.configure") { cached = undefined; return configureProvider(params); }
