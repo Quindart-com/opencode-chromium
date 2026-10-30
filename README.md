@@ -120,9 +120,9 @@ Optional capability packs provide snapshot/pixel diffs, bounded frame inspection
 
 ## Measured target selection
 
-![Target accuracy and selection latency on 12 synthetic queries](assets/benchmarks/accuracy-1.9.3.svg)
+![Target accuracy and selection latency on 12 synthetic queries](assets/benchmarks/accuracy.svg)
 
-On this small fixture, Jev selected 11/12 targets, Luna text 9/12 and lexical search 7/12. Luna image calls reached the existing 1.5-second deadline and fell back locally. These are component measurements on one synthetic page, not complete browser-agent task success or a ranking against Browser Use. Exact matches skipped paid calls; missing cost reports remain unknown. [Results and methodology](assets/benchmarks/accuracy-1.9.3.json).
+The current recording measures local target selection on one synthetic page. These are component measurements, not complete browser-agent task success or a ranking against Browser Use. Cloud comparisons require an explicit opt-in; exact matches skip paid calls and missing cost reports remain unknown. The report records the measured package version and source fingerprints. [Results and methodology](assets/benchmarks/accuracy.json).
 
 <details><summary><strong>Reproduce the benchmark</strong></summary>
 
@@ -188,7 +188,7 @@ Keep remote debugging bound to loopback; do not expose its port to your network.
 
 **Overview** shows the local connection, selected decision model, and memory status, with setup guidance when disconnected. **Profiles** lets you name and copy the profile for your agent. **Settings** holds decision assistance, uploads, memory retention, and advanced controls. Detailed usage, timings, and storage controls expand when you need them, with consistent widths and automatic light and dark themes.
 
-Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenRouter. Separately opt in to bounded screenshots for visual decisions. Jev's experimental image fallback runs only after an unsure text answer, with persistent request caps. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance, costs and limits](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
+Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenAI Platform or OpenRouter. Separately opt in to bounded screenshots for visual decisions. Experimental image fallback runs only after an unsure text answer, with persistent request caps. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance, costs and limits](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
 
 ## Updates
 
@@ -218,7 +218,7 @@ npx -y opencode-chromium@latest uninstall --targets codex
 
 Use `--config harness-id=/absolute/path` for a custom configuration. Existing aliases, package names, profiles, and runtime data remain supported. [Troubleshooting](docs/troubleshooting.md).
 
-The extension distinguishes a responding local bridge from harness connections. Its connection panel shows observed agent links, versions and heartbeat health, with guarded disconnect/reconnect controls and a CLI doctor command. See [connection health](docs/connection-health.md).
+The extension distinguishes a responding local bridge from harness connections. Its panel shows installed harnesses, observed browser links, versions and heartbeat health, with scoped reconnect buttons and local diagnostics. If the skill is visible but Codex tools are missing, reload this plugin in Manage (disable, then enable) and invoke the skill again in the same chat. Keep Codex and other agents running. See [connection health](docs/connection-health.md).
 </details>
 
 <details><summary><strong>Develop and release</strong></summary>

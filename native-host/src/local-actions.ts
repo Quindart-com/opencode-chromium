@@ -8,7 +8,7 @@ import { runtimeDirectory,withRuntimeLock } from "./runtime-lifecycle.ts";
 import { record } from "../../src/shared/values.ts";
 import type { LocalAction,LocalActionKind } from "../../src/shared/local-actions.ts";
 import { detectHarnesses } from "../../src/management/harnesses.ts";
-import { safeClientVersion } from "../../src/shared/connections.ts";
+import { harnessTargets,safeClientVersion } from "../../src/shared/connections.ts";
 
 const validId = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9-]{36}$/.test(value);
 interface Job extends LocalAction { pid: number }
@@ -18,7 +18,7 @@ function readJob(dir: string, id: string): Job | null {
     const row = record(JSON.parse(fs.readFileSync(path.join(dir, "local-actions", id + ".json"), "utf8")) as unknown);
     return row.id === id && ["reconnect", "diagnose", "update"].includes(String(row.kind)) && ["queued", "running", "succeeded", "waiting", "failed"].includes(String(row.state)) &&
       Number.isSafeInteger(row.pid) && Number(row.pid) > 0 && typeof row.updatedAt === "number" && Number.isFinite(row.updatedAt) && typeof row.code === "string" &&
-      (row.kind !== "reconnect" || ["codex", "opencode", "dsh"].includes(String(row.target))) ? row as unknown as Job : null;
+      (row.kind !== "reconnect" || harnessTargets.some(target => target === row.target)) ? row as unknown as Job : null;
   } catch { return null; }
 }
 function publicJob(job: Job | null): LocalAction | null {
@@ -32,9 +32,9 @@ export function createLocalActions({ dir = runtimeDirectory(), launch = spawn, c
   let detectedAt = 0, detected: ReturnType<typeof detectHarnesses> = [];
   function harnesses() {
     if (Date.now() - detectedAt > 30000) { detected = detectHarnesses(undefined, { versions: false }); detectedAt = Date.now(); }
-    return (["codex", "opencode", "dsh"] as const).map(harness => {
+    return harnessTargets.map(harness => {
       const row = detected.find(value => value.id === harness);
-      return { harness, installed: row?.detected ?? false, configured: row?.managed ?? false, version: safeClientVersion(row?.version) };
+      return { harness, installed: row?.installed ?? false, configured: row?.managed ?? false, version: safeClientVersion(row?.version) };
     });
   }
   function status(id?: string) {
@@ -45,7 +45,7 @@ export function createLocalActions({ dir = runtimeDirectory(), launch = spawn, c
     } catch { return []; }
   }
   async function start(kind: LocalActionKind, target?: unknown) {
-    if (!["reconnect", "diagnose", "update"].includes(kind) || kind === "reconnect" && !["codex", "opencode", "dsh"].includes(String(target))) throw new Error("Unknown local action");
+    if (!["reconnect", "diagnose", "update"].includes(kind) || kind === "reconnect" && !harnessTargets.some(value => value === target)) throw new Error("Unknown local action");
     return withRuntimeLock(dir, () => {
       fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
       const existing = (status() as LocalAction[]).find(row => row.kind === kind && row.target === target && ["queued", "running"].includes(row.state));
@@ -83,7 +83,7 @@ export async function runLocalActionJob(id: string, dir = runtimeDirectory()) {
       const connection = await connectionDoctor({ repairRuntime: true });
       result = { ok: connection.ok, code: connection.ok ? "healthy" : "needs_attention" };
     }
-    await save(["busy", "waiting_for_harness", "update_waiting"].includes(result.code) ? "waiting" : result.ok ? "succeeded" : "failed", result.code);
+    await save(["busy", "waiting_for_harness", "plugin_reload_required", "update_waiting"].includes(result.code) ? "waiting" : result.ok ? "succeeded" : "failed", result.code);
   } catch { await save("failed", "action_failed"); }
   return publicJob(job);
 }

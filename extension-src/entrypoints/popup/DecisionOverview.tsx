@@ -4,9 +4,10 @@ import { sendMessage } from "./api";
 import type { DecisionSettings } from "./decision-types";
 import type { UsagePeriod,UsageProvider } from "../../../src/shared/decision-usage.ts";
 import UsageTrend from "./UsageTrend";
+import { decisionServiceLabel,decisionFamilyLabel } from "../../../src/shared/decision-catalog.ts";
 
-const service = (route: string) => route === "openai" ? "OpenAI Platform" : route === "openrouter" ? "OpenRouter" : route === "typesafe" ? "TypeSafe" : t("usageUnattributed");
-const model = (provider: string) => provider === "openai-decisions" ? "Luna" : provider === "jev" ? "Jev" : "";
+const service = (route: string) => decisionServiceLabel(route) ?? t("usageUnattributed");
+const model = decisionFamilyLabel;
 const label = (row: Pick<UsageProvider, "route" | "provider">) => service(row.route) + (model(row.provider) ? " · " + model(row.provider) : "");
 export default function DecisionOverview({ onConfigure }: { onConfigure: () => void }) {
   const [status, setStatus] = useState<DecisionSettings | null>(null);
@@ -30,7 +31,7 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
   const number = (value?: number) => value === undefined ? "—" : value.toLocaleString();
   return <section className="decision-overview" aria-labelledby="decision-usage-heading">
     <div className="decision-overview-heading"><h2 id="decision-usage-heading">{t("decisionAssistance")}</h2><button type="button" className="button-mini" onClick={onConfigure}>{t("configure")}</button></div>
-    <div className="decision-provider-line"><span className={"status-dot " + (status?.ready ? "is-online" : "is-offline")} /><strong>{status && status.provider !== "off" ? label(status) : t("localSearch")}</strong><span className="help-note">{!status ? t("loading") : status.ready ? t("statusConnected") : status.provider !== "off" && status.shareText ? t("assistanceNeedsConnection") : t("assistanceOff")}</span></div>
+    <div className="decision-provider-line"><span className={"status-dot " + (status?.ready ? "is-online" : "is-offline")} /><strong>{status && status.provider !== "off" ? status.textModel ? service(status.route) + " · " + status.textModel : label(status) : t("localSearch")}</strong><span className="help-note">{!status ? t("loading") : status.ready ? t("statusConnected") : status.provider !== "off" && status.shareText ? t("assistanceNeedsConnection") : t("assistanceOff")}</span></div>
     <div className="usage-filters">
       <label>{t("usageProvider")}<select aria-label={t("usageProvider")} value={provider} onChange={event => { setLoading(true); setProvider(event.target.value); }}>
         <option value="current">{t("usageCurrentProvider")}{status ? " · " + label(status) : ""}</option>

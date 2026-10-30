@@ -278,6 +278,15 @@ async function retireAtGate(requireJournal = true) {
 }
 const updateTimer = setInterval(() => { void checkRuntimeUpdate(); }, 1000);
 updateTimer.unref?.();
+// Catalog repair must work even when no Codex MCP process can start.
+const syncMarketplace = async () => {
+  if (shutdownStarted || fs.existsSync(new URL("../../src", import.meta.url)) || !updater.status({ includeParticipants: false }).enabled) return;
+  try { const { refreshBrowserMarketplace } = await import("../../src/management/marketplace.ts"); await refreshBrowserMarketplace({ version: nativeHostVersion, dir: runtimeDirectory() }); }
+  catch { /* Keep browser work serving; the next bounded check retries. */ }
+};
+void syncMarketplace();
+const marketplaceTimer = setInterval(() => { void syncMarketplace(); }, 5 * 60 * 1000);
+marketplaceTimer.unref();
 const retirementTimer = setInterval(() => { void retireAtGate(); }, 100);
 retirementTimer.unref();
 const activityWatcher = fs.watch(path.join(runtimeDirectory(), "participants"), (_event, file) => {
@@ -290,6 +299,7 @@ function shutdownHost(reason: string|undefined, exitCode = 0) {
   shutdownStarted = true;
   clearInterval(updateTimer);
   clearInterval(retirementTimer);
+  clearInterval(marketplaceTimer);
   activityWatcher.close();
   hostActivity.close();
   log(reason ?? "Native host shutting down");

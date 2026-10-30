@@ -6,6 +6,7 @@ import { sendMessage } from "./api";
 const labels: Record<string, string> = {
   queued: "actionQueued", running: "actionRunning", refreshed: "actionReconnected", busy: "actionBusy",
   waiting_for_harness: "actionWaiting", unreachable: "actionUnreachable", healthy: "actionHealthy",
+  plugin_reload_required: "actionPluginReload",
   needs_attention: "actionNeedsAttention", updated: "actionUpdated", update_waiting: "actionUpdateWaiting",
   not_installed: "statusNotInstalled", unmanaged_runtime: "actionUnmanaged",
 };

@@ -7,7 +7,8 @@ import { URL } from "node:url";
 import { isMainThread,parentPort,Worker,workerData } from "node:worker_threads";
 import { record } from "../../src/shared/values.ts";
 import { embeddingResultSchema,type EmbeddingResult } from "./memory/embedding-service.ts";
-import { DEEP_MODEL_ID,DEFAULT_MODEL_ID,SEMANTIC_MODELS } from "./semantic-models.ts";
+import { DEEP_MODEL_ID,DEFAULT_MODEL_ID,semanticModels } from "./semantic-models.ts";
+import { localModelCatalog } from "./model-catalog.ts";
 import { embeddingInputSchema,pageUnitSchema,rankInputSchema,settingsInputSchema,type BaseRanking,type EmbeddingInput,type Extractor,type LoadState,type NormalizedUnit,type PageUnit,type RankedItem,type RankingOptions,type RankInput,type Reranker,type SemanticModel,type SemanticSettings,type SettingsInput } from "./semantic-types.ts";
 export { SEMANTIC_MODELS } from "./semantic-models.ts";
 
@@ -167,10 +168,10 @@ function ensureSemanticDirs() {
 }
 
 function modelById(modelId: string) {
-  const fallback = SEMANTIC_MODELS[0];
+  const fallback = semanticModels()[0];
   if (!fallback) throw new Error("No semantic models are configured");
   if (LEGACY_MODEL_IDS.has(modelId)) return fallback;
-  return SEMANTIC_MODELS.find(model => model.id === modelId) ?? fallback;
+  return semanticModels().find(model => model.id === modelId) ?? fallback;
 }
 
 export function truncateAndRenormalize(vector: ArrayLike<number> | null | undefined, dimensions: number | undefined) {
@@ -215,7 +216,7 @@ function normalizeSettings(input: unknown = {}): SemanticSettings {
   const value = record(input);
   const enabled = value.enabled === undefined ? true : value.enabled === true;
   const requestedModelId = typeof value.modelId === "string" ? value.modelId : null;
-  const modelId = requestedModelId && SEMANTIC_MODELS.some((model) => model.id === requestedModelId && model.role === "adaptive")
+  const modelId = requestedModelId && semanticModels().some((model) => model.id === requestedModelId && model.role === "adaptive")
     ? requestedModelId
     : DEFAULT_MODEL_ID;
   // Strategy is always derived, never persisted: enabled semantic search is
@@ -232,7 +233,7 @@ function normalizeSettings(input: unknown = {}): SemanticSettings {
     strategyPreference: typeof value.strategyPreference === "string" && STRATEGY_PREFERENCES.includes(value.strategyPreference) ? value.strategyPreference : "auto",
     agentResultCount: typeof value.agentResultCount === "number" && AGENT_RESULT_COUNTS.includes(value.agentResultCount) ? value.agentResultCount : 5,
     agentResultDetail: typeof value.agentResultDetail === "string" && AGENT_RESULT_DETAILS.includes(value.agentResultDetail) ? value.agentResultDetail : "lean",
-    deepModelId: DEEP_MODEL_ID,
+    deepModelId: typeof value.deepModelId === "string" && semanticModels().some(model => model.id === value.deepModelId && model.role === "deep") ? value.deepModelId : DEEP_MODEL_ID,
   };
 }
 
@@ -265,7 +266,7 @@ export function getSemanticSettings(): SemanticSettings {
 export function setSemanticSettings(input: SettingsInput = {}) {
   const current = getSemanticSettings();
   const merge = { ...current, ...input };
-  if (typeof input?.modelId === "string" && !SEMANTIC_MODELS.some((model) => model.id === input.modelId && model.role === "adaptive")) {
+  if (typeof input?.modelId === "string" && !semanticModels().some((model) => model.id === input.modelId && model.role === "adaptive")) {
     merge.modelId = current.modelId;
   }
   if ("embeddingDims" in merge) {
@@ -280,9 +281,10 @@ export function setSemanticSettings(input: SettingsInput = {}) {
   settingsCachePath = settingsPath();
   writeJsonAtomic(settingsCachePath, next);
   if (next.enabled && input.preload === true) {
-    if (!IS_SEMANTIC_WORKER) updateLoadState({ state: "loading", modelId: next.modelId, component: "embedding", startedAt: nowIso(), completedAt: null, error: null });
-    const preload = IS_SEMANTIC_WORKER ? prepareSemanticModelLocal(next.modelId) : semanticWorkerRequest("semantic.prepareModel", { modelId: next.modelId });
-    void preload.catch((error) => updateLoadState({ state: "error", modelId: next.modelId, completedAt: nowIso(), error: error instanceof Error ? error.message : String(error) }));
+    const modelId = typeof input.deepModelId === "string" ? next.deepModelId : next.modelId;
+    if (!IS_SEMANTIC_WORKER) updateLoadState({ state: "loading", modelId, component: "embedding", startedAt: nowIso(), completedAt: null, error: null });
+    const preload = IS_SEMANTIC_WORKER ? prepareSemanticModelLocal(modelId) : semanticWorkerRequest("semantic.prepareModel", { modelId });
+    void preload.catch((error) => updateLoadState({ state: "error", modelId, completedAt: nowIso(), error: error instanceof Error ? error.message : String(error) }));
   }
   return semanticStatus();
 }
@@ -346,13 +348,13 @@ async function unloadModelsExcept(modelId: string) {
   }
 }
 
-function scheduleDeepUnload() {
+function scheduleDeepUnload(modelId: string) {
   if (deepIdleTimer) clearTimeout(deepIdleTimer);
   deepIdleTimer = setTimeout(() => {
-    const extractor = embeddingPipelines.get(DEEP_MODEL_ID);
-    const reranker = rerankers.get(DEEP_MODEL_ID);
-    embeddingPipelines.delete(DEEP_MODEL_ID);
-    rerankers.delete(DEEP_MODEL_ID);
+    const extractor = embeddingPipelines.get(modelId);
+    const reranker = rerankers.get(modelId);
+    embeddingPipelines.delete(modelId);
+    rerankers.delete(modelId);
     void Promise.all([disposeMaybe(extractor), disposeMaybe(reranker?.model)]).finally(() => {
       queryEmbeddingCache.clear();
       documentEmbeddingCache.clear();
@@ -512,7 +514,7 @@ function cacheInfoForModel(model: SemanticModel) {
 }
 
 function semanticModelsStatus() {
-  return SEMANTIC_MODELS.map((model) => {
+  return semanticModels().map((model) => {
     const effective = effectiveModel(model);
     return {
       ...effective,
@@ -534,6 +536,7 @@ export function semanticStatus() {
   return {
     settings,
     models: semanticModelsStatus(),
+    catalogStatus: localModelCatalog().status,
     cache: { kind: "local" },
     load: { ...loadState },
     runtime: { backend: "onnxruntime-node", intraOpThreads: 4, interOpThreads: 1, maxLoadedModels: 1, deepIdleMs: 120000 },
@@ -978,7 +981,7 @@ async function rankPageUnitsLocal(input: RankInput = {}) {
       rerankerError = error instanceof Error ? error.message : String(error);
     }
   }
-  if (requestedStrategy === "deep") scheduleDeepUnload();
+  if (requestedStrategy === "deep") scheduleDeepUnload(model.id);
 
   return formatRanking(base, {
     enabled: settings.enabled,
@@ -1047,7 +1050,7 @@ export async function handleSemanticHostMethod(method: string, input: unknown = 
         searchStrategy: strategy,
         degraded: true,
         degradationReason: /timed?\s*out/i.test(String(error)) ? "semantic-timeout" : "semantic-worker-failure",
-        model: modelById(strategy === "deep" ? DEEP_MODEL_ID : getSemanticSettings().modelId),
+        model: modelById(strategy === "deep" ? getSemanticSettings().deepModelId : getSemanticSettings().modelId),
         modelError: error instanceof Error ? error.message : String(error),
       });
     }

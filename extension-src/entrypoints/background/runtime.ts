@@ -1253,6 +1253,7 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
         rpc.request("semantic.setSettings", {
             enabled: message.enabled === true,
             modelId: typeof message.modelId === "string" ? message.modelId : undefined,
+            deepModelId: typeof message.deepModelId === "string" ? message.deepModelId : undefined,
             preload: message.preload === true,
             embeddingDims: Number.isInteger(message.embeddingDims) ? message.embeddingDims : undefined,
             strategyPreference: typeof message.strategyPreference === "string" ? message.strategyPreference : undefined,

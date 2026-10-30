@@ -85,7 +85,7 @@ function Header({ status }: { status: NativeStatus }): React.JSX.Element {
           <span id="app-version">v{browser.runtime.getManifest().version_name ?? browser.runtime.getManifest().version}</span> · {t("localAutomation")}
         </p>
       </div>
-      <div id="status-pill" className={`pill ${statusClass(state)}`} role="status">
+      <div id="status-pill" className={`pill ${statusClass(state)}`} role="status" hidden={state === "connected"}>
         <span id="status-dot" aria-hidden="true" />
         <span id="status">{statusText}</span>
       </div>
@@ -140,7 +140,7 @@ export default function App(): React.JSX.Element {
       <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
       <ViewTabs active={activeView} onChange={changeView} />
       <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={activeView !== "overview"}>
-        {activeView === "overview" && <><ConnectionSummary status={nativeStatus} onProfiles={() => changeView("profiles")} /><DecisionOverview onConfigure={() => changeView("settings")} /><MemoryView /></>}
+        {activeView === "overview" && <><ConnectionSummary status={nativeStatus} /><DecisionOverview onConfigure={() => changeView("settings")} /><MemoryView /></>}
       </div>
       <div className="view-panel" role="tabpanel" id="panel-profiles" aria-labelledby="tab-profiles" hidden={activeView !== "profiles"}>
         {activeView === "profiles" && <ConnectionView status={nativeStatus} view="profiles" />}

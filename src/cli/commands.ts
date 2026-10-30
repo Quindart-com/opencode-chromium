@@ -10,7 +10,7 @@ import { activateChannel,readActivation } from "../management/channels.ts";
 import { formatSetupResult,manageSetup } from "../management/setup.ts";
 import { packageRoot } from "./config.ts";
 import { configureClient } from "./configure.ts";
-import { installClient } from "./install.ts";
+import { installClient,SUPPORTED_CLIENTS } from "./install.ts";
 import { runtimeDir } from "./native-host.ts";
 import { linkClientSurfaces,linkRuntime,runtimeStatus,syncRuntime,writeLaunchers } from "./runtime-link.ts";
 import { uninstallClient } from "./uninstall.ts";
@@ -143,7 +143,7 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
   if (["install", "configure", "uninstall"].includes(command)) {
     const client = valueAfter(rest, "--client");
     if (!client) throw new Error(`${command} requires --client opencode|opencode-mcp|codex|skills`);
-    if (!["codex", "opencode", "opencode-mcp", "claude-code", "claude-desktop", "dsh", "skills"].includes(client)) throw new Error("Unsupported client");
+    if (!SUPPORTED_CLIENTS.includes(client)) throw new Error("Unsupported client");
     const options: ClientInstallOptions = { client: client as ClientInstallOptions["client"], config: valueAfter(rest, "--config"), dryRun: has(rest, "--dry-run"), serverPath: valueAfter(rest, "--server") };
     const result = command === "install" ? installClient(options) : command === "configure" ? configureClient(options) : uninstallClient(options);
     const { before: _before, after: _after, ...publicResult } = record(result);

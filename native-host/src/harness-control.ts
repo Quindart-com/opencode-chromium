@@ -6,7 +6,7 @@ import { randomUUID,timingSafeEqual } from "node:crypto";
 import { FrameDecoder,writeFrame } from "./framing.ts";
 import { atomicJson,processAlive } from "./runtime-participants.ts";
 import { runtimeDirectory } from "./runtime-lifecycle.ts";
-import { safeClientVersion,type HarnessKind } from "../../src/shared/connections.ts";
+import { harnessLabels,safeClientVersion,type HarnessKind } from "../../src/shared/connections.ts";
 import { record } from "../../src/shared/values.ts";
 
 export interface HarnessControlRecord { id: string; pid: number; harness: HarnessKind; version: string; harnessVersion: string | null; socket: string; token: string; updatedAt: number }
@@ -24,7 +24,7 @@ export function harnessControls(dir = runtimeDirectory()): HarnessControlRecord[
     try {
       const row = record(JSON.parse(fs.readFileSync(path.join(folder, name), "utf8")) as unknown);
       if (!validId(row.id) || name !== row.id + ".json" || !Number.isSafeInteger(row.pid) || Number(row.pid) <= 0 || !processAlive(Number(row.pid)) ||
-        !["codex", "opencode", "dsh", "claude", "mcp", "sdk"].includes(String(row.harness)) || row.socket !== ownSocket(row.id) || typeof row.token !== "string" || !/^[a-f0-9-]{36}$/.test(row.token) ||
+        !Object.hasOwn(harnessLabels, String(row.harness)) || row.socket !== ownSocket(row.id) || typeof row.token !== "string" || !/^[a-f0-9-]{36}$/.test(row.token) ||
         typeof row.updatedAt !== "number" || row.updatedAt < Date.now() - 90000 || row.updatedAt > Date.now() + 5000 || !safeClientVersion(row.version)) return [];
       return [row as unknown as HarnessControlRecord];
     } catch { return []; }

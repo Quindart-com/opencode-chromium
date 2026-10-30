@@ -3,6 +3,13 @@ import { EventEmitter } from "node:events";
 import { HarnessConnections } from "../../native-host/src/connections.ts";
 import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
 import { FrameDecoder } from "../../native-host/src/framing.ts";
+import { identifyHarness } from "../../src/shared/connections.ts";
+
+test("Claude Code and Desktop are identified separately; generic Claude remains ambiguous", () => {
+  expect(identifyHarness("claude-code")).toBe("claude-code");
+  expect(identifyHarness("Claude Desktop")).toBe("claude-desktop");
+  expect(identifyHarness("claude-ai")).toBe("claude");
+});
 
 test("connection inventory excludes arbitrary metadata and marks missing heartbeats stale", () => {
   let now = 1000;

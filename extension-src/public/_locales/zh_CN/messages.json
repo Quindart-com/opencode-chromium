@@ -1342,5 +1342,32 @@
   },
   "updateAutomaticHelp": {
     "message": "CLI 将在后台更新，运行中的代理和已保存的密钥会保留。"
+  },
+  "noHarnessesDetected": {
+    "message": "未检测到支持的智能体。"
+  },
+  "statusAmbiguous": {
+    "message": "Claude 客户端未识别"
+  },
+  "connectionTroubleshooting": {
+    "message": "连接帮助"
+  },
+  "decisionAdvanced": {
+    "message": "高级设置"
+  },
+  "decisionTextModel": {
+    "message": "文本模型（可选）"
+  },
+  "decisionImageModel": {
+    "message": "图像模型（可选）"
+  },
+  "decisionModelHelp": {
+    "message": "留空以使用建议的模型。自定义模型必须支持所选服务的决策 API。"
+  },
+  "actionPluginReload": {
+    "message": "在 Codex 中打开此插件的“管理”菜单，先停用，再重新启用。"
+  },
+  "catalogInvalid": {
+    "message": "无法加载自定义模型目录。内置模型仍然可用。"
   }
 }

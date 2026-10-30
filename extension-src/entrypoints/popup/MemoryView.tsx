@@ -226,19 +226,15 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
             <h2>{t("actionMemory")}</h2>
             <span className="memory-state-line">{t("memoryDescription")}</span>
           </div>
+          <button id="memory-enabled" type="button" role="switch" aria-checked={enabled} aria-label={t("actionMemory")} className={`switch${enabled ? " on" : ""}`} disabled={!status || memoryBusy} onClick={() => void runMemoryAction(enabled ? "memory.disable" : "memory.enable", t(enabled ? "memoryDisabled" : "memoryEnabled"))}><span /></button>
         </div>
         <span id="memory-state-line" className="visually-hidden" aria-live="polite">{stateLine}</span>
-        <div className="memory-actions memory-toggle-actions">
-          <button id="memory-enable" className="button button-primary" type="button" disabled={!status || memoryBusy || enabled} onClick={() => void runMemoryAction("memory.enable", t("memoryEnabled"))}>{t("enableMemory")}</button>
-          <button id="memory-disable" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.disable", t("memoryDisabled"))}>{t("disableMemory")}</button>
-        </div>
       </div>
 
       <details className="card memory-card memory-settings-details">
-        <summary>{t("storageLimit")}</summary>
+        <summary id="quota-heading">{t("storageLimit")}</summary>
         <div className="memory-head">
           <div>
-            <h2 id="quota-heading">{t("storageLimit")}</h2>
             <span id="quota-caption" className="memory-state-line">
               {powerUser ? t("expandedEnabled") : t("standardLimit")}
             </span>
@@ -272,7 +268,6 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         <summary>{t("cleanup")}</summary>
         <div className="memory-head">
           <div>
-            <h2>{t("cleanup")}</h2>
             <span className="memory-state-line">{t("cleanupHelp")}</span>
           </div>
         </div>

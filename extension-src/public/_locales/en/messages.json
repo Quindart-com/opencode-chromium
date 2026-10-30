@@ -1342,5 +1342,32 @@
   },
   "updateAutomaticHelp": {
     "message": "The CLI updates in the background. Running agents and saved keys are preserved."
+  },
+  "noHarnessesDetected": {
+    "message": "No supported harnesses detected."
+  },
+  "statusAmbiguous": {
+    "message": "Claude client not identified"
+  },
+  "connectionTroubleshooting": {
+    "message": "Connection help"
+  },
+  "decisionAdvanced": {
+    "message": "Advanced settings"
+  },
+  "decisionTextModel": {
+    "message": "Text model (optional)"
+  },
+  "decisionImageModel": {
+    "message": "Image model (optional)"
+  },
+  "decisionModelHelp": {
+    "message": "Leave blank to use the suggested model. Custom models must support the selected service’s decision API."
+  },
+  "actionPluginReload": {
+    "message": "In Codex, open this plugin’s Manage menu, disable it, then enable it again."
+  },
+  "catalogInvalid": {
+    "message": "The custom model catalog could not be loaded. Built-in models are available."
   }
 }

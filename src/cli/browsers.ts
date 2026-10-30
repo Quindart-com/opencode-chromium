@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { existingFile,findExecutable,windowsAppPath } from "../management/executable-discovery.ts";
 import os from "node:os";
 import path from "node:path";
 
@@ -86,18 +86,24 @@ function localAppData() {
   return process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local");
 }
 
+const browserEnv = (browser: string, suffix: string) => process.env["OPENCODE_BROWSER_" + browser.toUpperCase() + "_" + suffix];
+
 export function browserUserDataRoot(browser: string) {
+  const override = BROWSERS[browser] && browserEnv(browser, "USER_DATA_DIR");
+  if (override) return path.resolve(override);
   const parts = BROWSERS[browser]?.userDataDir[platformKey()];
   if (!parts) return null;
-  return process.platform === "win32" ? path.join(BROWSERS[browser]?.engine === "gecko" ? process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming") : localAppData(), ...parts) : path.join(os.homedir(), ...parts);
+  return process.platform === "win32" ? path.join(BROWSERS[browser]?.engine === "gecko" ? process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming") : localAppData(), ...parts) : process.platform === "linux" && parts[0] === ".config" ? path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), ...parts.slice(1)) : path.join(os.homedir(), ...parts);
 }
 
 export function nativeMessagingDir(browser: string) {
+  const override = BROWSERS[browser] && browserEnv(browser, "NATIVE_MESSAGING_DIR");
+  if (override && process.platform !== "win32") return path.resolve(override);
   const browser_ = BROWSERS[browser];
   if (!browser_) return null;
   if (process.platform === "win32") return null;
   const parts = browser_.nativeMessagingDir[platformKey()];
-  return parts ? path.join(os.homedir(), ...parts) : null;
+  return parts ? process.platform === "linux" && parts[0] === ".config" ? path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), ...parts.slice(1)) : path.join(os.homedir(), ...parts) : null;
 }
 
 export function windowsRegistryKey(browser: string, hostName: string) {
@@ -105,25 +111,15 @@ export function windowsRegistryKey(browser: string, hostName: string) {
   return root ? `HKCU\\Software\\${root}\\NativeMessagingHosts\\${hostName}` : null;
 }
 
-function commandPath(command: string) {
-  const executable = process.platform === "win32" ? "where" : "which";
-  try {
-    return execFileSync(executable, [command], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function executableCandidates(browser: string) {
   const entry = BROWSERS[browser];
   if (!entry) return [];
-  const onPath = entry.commands.map(commandPath).filter((value): value is string => value !== null);
+  const override = browserEnv(browser, "EXECUTABLE");
+  if (override) return existingFile(override) ? [path.resolve(override)] : [];
+  const onPath = entry.commands.map(findExecutable).filter((value): value is string => value !== null);
   if (process.platform === "win32") {
     const roots = [process.env.LOCALAPPDATA, process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"]].filter((value): value is string => typeof value === "string" && value.length > 0);
-    return [...roots.flatMap((root) => entry.windowsExecutables.map((relative: string) => path.join(root, relative))), ...onPath];
+    return [...entry.windowsExecutables.map(relative => windowsAppPath(path.win32.basename(relative))).filter((value): value is string => !!value), ...roots.flatMap((root) => entry.windowsExecutables.map((relative: string) => path.join(root, relative))), ...onPath];
   }
   if (process.platform === "darwin") {
     return [...["/Applications", "/System/Applications", path.join(os.homedir(), "Applications")].map((root) => path.join(root, entry.macApps[0])), ...onPath];

@@ -5,7 +5,7 @@ import HarnessConnections from "./HarnessConnections";
 
 const setupCommand = "npx -y opencode-chromium@latest setup --all";
 
-export default function ConnectionSummary({ status, onProfiles }: { status: NativeStatus; onProfiles: () => void }): React.JSX.Element {
+export default function ConnectionSummary({ status }: { status: NativeStatus }): React.JSX.Element {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [copyState, setCopyState] = useState("");
   const connected = status.state === "connected";
@@ -22,14 +22,12 @@ export default function ConnectionSummary({ status, onProfiles }: { status: Nati
     try { await navigator.clipboard.writeText(setupCommand); setCopyState(t("welcomeCopied")); }
     catch { setCopyState(t("copyUnavailable")); }
   }
-  return <><section className={`connection-summary${connected ? " is-connected" : ""}`} aria-labelledby="connection-summary-heading">
+  return <><section className="connection-summary" aria-labelledby="connection-summary-heading">
     <div className="connection-summary-heading">
-      <h2 id="connection-summary-heading">{connected ? t("runtimeConnected") : checking ? t("checkingConnection") : t("connectBrowser")}</h2>
-      {connected && <button type="button" className="button-mini" onClick={onProfiles}>{t("profiles")}</button>}
+      <h2 id="connection-summary-heading">{checking ? t("checkingConnection") : t("connectBrowser")}</h2>
     </div>
-    <p>{connected ? t("runtimeExplanation") : checking ? t("runtimeChecking") : t("runtimeInstall")}</p>
-    {connected && <p className="current-profile">{t("thisBrowser")}{" "}<strong>{profile?.profileLabel || t("unnamedProfile")}</strong></p>}
-    {!connected && !checking && <>
+    <p>{checking ? t("runtimeChecking") : t("runtimeInstall")}</p>
+    {!checking && <>
       <code className="setup-command">{setupCommand}</code>
       <div className="setup-actions"><button type="button" className="button button-primary" onClick={() => void copySetup()}>{t("copySetup")}</button><a href="https://github.com/Quindart-com/opencode-chromium#get-started" target="_blank" rel="noopener noreferrer">{t("setupGuide")}</a></div>
       <p className="setup-feedback" role="status">{copyState}</p>

@@ -57,7 +57,7 @@ test("a manual update stages while automatic updates are off, preserves the pref
   const f = fixture({ busy: async () => true }), globals = [];
   try {
     await f.updater.configure(false);
-    const result = await installPublishedUpdate(f.dir, { latest: async () => "1.9.3", updater: f.updater, globalInstall: async version => { globals.push(version); }, refreshSkills: () => 0 });
+    const result = await installPublishedUpdate(f.dir, { latest: async () => "1.9.3", updater: f.updater, globalInstall: async version => { globals.push(version); }, refreshSkills: () => 0, refreshMarketplace: async () => ({ status: "not_configured" }) });
     assert.equal(result.code, "update_waiting"); assert.deepEqual(globals, ["1.9.3"]);
     const activation = JSON.parse(fs.readFileSync(f.manifest));
     assert.equal(activation.autoUpdate, false); assert.equal(activation.root, f.root); assert.equal(activation.stagedRelease.version, "1.9.3");
@@ -66,9 +66,9 @@ test("a manual update stages while automatic updates are off, preserves the pref
 });
 
 test("manual installation accepts only a stable version of the official package", async () => {
-  await assert.rejects(publishedVersion(async url => { assert.equal(url, "https://registry.npmjs.org/opencode-chromium/latest"); return Response.json({ name: "another-package", version: "1.9.3" }); }));
-  await assert.rejects(publishedVersion(async () => Response.json({ name: "opencode-chromium", version: "1.9.4-dev.1" })));
-  assert.equal(await publishedVersion(async () => Response.json({ name: "opencode-chromium", version: "1.9.4" })), "1.9.4");
+  await assert.rejects(publishedVersion(async () => ({ name: "another-package", version: "1.9.3" })));
+  await assert.rejects(publishedVersion(async () => ({ name: "opencode-chromium", version: "1.9.4-dev.1" })));
+  assert.equal(await publishedVersion(async () => ({ name: "opencode-chromium", version: "1.9.4" })), "1.9.4");
 });
 test("a new agent starting during download defers activation, then reuses the validated download", async () => {
   const f = fixture(); let installs = 0;

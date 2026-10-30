@@ -143,7 +143,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
   const load = semantic?.load;
   const loading = load?.state === "loading";
   const adaptiveModels = useMemo(() => models.filter((model) => model.role !== "deep"), [models]);
-  const deepModel = useMemo(() => models.find((model) => model.role === "deep"), [models]);
+  const deepModels = useMemo(() => models.filter((model) => model.role === "deep"), [models]);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -219,7 +219,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
 
   function useModel(model: SemanticModel) {
     void updateSemantic(
-      { type: "SET_SEMANTIC_SETTINGS", enabled: true, modelId: model.id, preload: true },
+      { type: "SET_SEMANTIC_SETTINGS", enabled: true, ...(model.role === "deep" ? { deepModelId: model.id } : { modelId: model.id }), preload: true },
       t("switchModel", model.label),
     );
   }
@@ -236,7 +236,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
 
   function renderModelCard(model: SemanticModel) {
     const isAdaptive = model.role !== "deep";
-    const isActive = isAdaptive && model.id === activeModelId;
+    const isActive = model.id === (isAdaptive ? activeModelId : settings.deepModelId);
     const cached = model.cache?.cached === true;
     const busyForModel = semanticBusy || (loading && load?.modelId === model.id);
     const dims = model.supportedDimensions ?? [];
@@ -253,7 +253,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
         </div>
         <div className="model-desc">{model.description ? (knownModelDescriptions.has(model.description) ? t(knownModelDescriptions.get(model.description)!) : model.description) : t("localRetrievalModel")}</div>
         {model.benchmark?.value ? <div className="model-bench">{model.benchmark.label}: {model.benchmark.value}</div> : null}
-        {dims.length > 0 ? (
+        {isAdaptive && dims.length > 0 ? (
           <div className="dim-selector" role="radiogroup" aria-label={t("embeddingLabel", model.label)}>
             {dims.map((dim) => (
               <button
@@ -272,10 +272,10 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
           </div>
         ) : null}
         <div className="model-actions">
-          {isAdaptive && isActive ? (
+          {isActive ? (
             <span className="model-active-note" aria-label={t("activeModel")}>{t("active")}</span>
           ) : null}
-          {isAdaptive && !isActive ? (
+          {!isActive ? (
             <button
               type="button"
               className="button-use"
@@ -373,10 +373,9 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
             />
             <button type="submit" className="button button-primary" disabled={profileBusy}>{t("save")}</button>
           </div>
-          <p id="profile-help">{profileHelp}</p>
         </form>
         </details>
-        <p role="status">{profileHelp}</p>
+        <p id="profile-help" className="help-note" role="status">{profileHelp}</p>
       </div>
       </> : <>
 
@@ -457,8 +456,9 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
           </div>
         </div>
         <div id="semantic-model-list" className="model-list" aria-label={t("retrievalModels")}>
+          {semantic?.catalogStatus === "invalid_custom_catalog" && <p role="alert" className="help-note">{t("catalogInvalid")}</p>}
           {adaptiveModels.map(renderModelCard)}
-          {deepModel ? renderModelCard(deepModel) : null}
+          {deepModels.map(renderModelCard)}
         </div>
         </details>
         <p id="semantic-help">{semanticHelp}</p>

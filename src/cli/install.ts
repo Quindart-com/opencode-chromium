@@ -1,4 +1,5 @@
 import path from "node:path";
+import { harnessClients } from "../shared/harnesses.ts";
 import type { HarnessId } from "../management/configuration.ts";
 import { packageRoot,updateClientConfig } from "./config.ts";
 import { installSkills,uninstallSkills } from "./skills.ts";
@@ -12,7 +13,7 @@ export interface ClientInstallOptions {
   version?: string;
 }
 
-export const SUPPORTED_CLIENTS = ["opencode", "opencode-mcp", "codex", "claude-code", "claude-desktop", "dsh", "skills"];
+export const SUPPORTED_CLIENTS: string[] = [...harnessClients, "skills"];
 
 export function installClient({ client, config, dryRun = false, serverPath, pluginPath, version }: ClientInstallOptions) {
   if (!SUPPORTED_CLIENTS.includes(client)) throw new Error(`--client must be ${SUPPORTED_CLIENTS.join(", ")}`);

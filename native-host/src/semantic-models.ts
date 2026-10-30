@@ -1,3 +1,4 @@
+import { localModelCatalog,mergeModelCatalog } from "./model-catalog.ts";
 import type { SemanticModel } from "./semantic-types.ts";
 export const DEFAULT_MODEL_ID = "snowflake-arctic-embed-xs";
 export const DEEP_MODEL_ID = "qwen3-0.6b-retrieval";
@@ -20,11 +21,6 @@ export const SEMANTIC_MODELS: SemanticModel[] = [
       parameters: "22.6M",
       queryPrefix: "Represent this sentence for searching relevant passages: ",
     },
-    benchmark: {
-      label: "Model-card retrieval benchmark",
-      value: "Stronger than base MiniLM at the same size class",
-      note: "Browser-specific latency and recall are verified by local fixtures.",
-    },
   },
   {
     id: "snowflake-arctic-embed-m",
@@ -42,11 +38,6 @@ export const SEMANTIC_MODELS: SemanticModel[] = [
       dimensions: 768,
       parameters: "108.9M",
       queryPrefix: "Represent this sentence for searching relevant passages: ",
-    },
-    benchmark: {
-      label: "Model-card retrieval benchmark",
-      value: "Stronger than XS at the same 512-token context",
-      note: "Browser-specific latency and recall are verified by local fixtures.",
     },
   },
   {
@@ -72,11 +63,6 @@ export const SEMANTIC_MODELS: SemanticModel[] = [
       queryPrefix: "task: search result | query: ",
       documentPrefix: "title: none | text: ",
       promptVersion: "prompt-v1",
-    },
-    benchmark: {
-      label: "Model-card retrieval benchmark",
-      value: "Strong compact multilingual retrieval (q4)",
-      note: "Browser-specific latency and recall are verified by local fixtures before this becomes the default.",
     },
   },
   {
@@ -105,10 +91,7 @@ export const SEMANTIC_MODELS: SemanticModel[] = [
       maxLength: 2048,
       instruction: "Given a browser automation task, rank page elements, controls, content sections, and nearby context by relevance",
     },
-    benchmark: {
-      label: "MTEB Eng v2 embedding / MTEB-R reranker",
-      value: "70.70 / 65.80",
-      note: "Embedding and reranking benchmarks, not a browser-control benchmark.",
-    },
   },
 ];
+
+export const semanticModels = (): SemanticModel[] => mergeModelCatalog(SEMANTIC_MODELS, localModelCatalog().semantic);

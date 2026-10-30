@@ -1,16 +1,12 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ConfigOptions,HarnessId } from "../management/configuration.ts";
 import { planConfiguration } from "../management/configuration.ts";
+import { harnessConfigPath } from "../management/harness-paths.ts";
 import { applyTransaction } from "../management/transaction.ts";
 export const CANONICAL_SERVER = "opencode-browser-plugin";
 export const CORE_TOOLS = ["browser_run", "browser_observe", "browser_session", "browser_finalize"];
-
-function home() {
-  return os.homedir();
-}
 
 export function packageRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -18,14 +14,7 @@ export function packageRoot() {
 
 export function configPath(client: HarnessId, explicit?: string) {
   if (explicit) return path.resolve(explicit);
-  if (client === "dsh") return path.join(process.env.DSH_HOME ?? path.join(home(), ".dsh"), "profiles", "web", "cordis.patch.yml");
-  if (client === "claude-code") return path.join(process.env.CLAUDE_CONFIG_DIR ?? home(), ".claude.json");
-  if (client === "claude-desktop") return path.join(process.platform === "win32" ? process.env.APPDATA ?? path.join(home(), "AppData", "Roaming") : path.join(home(), "Library", "Application Support"), "Claude", "claude_desktop_config.json");
-  if (client === "codex") return path.join(process.env.CODEX_HOME ?? path.join(home(), ".codex"), "config.toml");
-  // OpenCode's Windows global config follows its XDG-style location, not the
-  // generic %APPDATA% application-data location.
-  if (process.platform === "win32") return path.join(home(), ".config", "opencode", "opencode.json");
-  return path.join(home(), ".config", "opencode", "opencode.json");
+  return harnessConfigPath(client);
 }
 
 export function backup(filePath: fs.PathLike, { now = new Date() } = {}) {

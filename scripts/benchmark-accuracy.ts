@@ -170,7 +170,6 @@ async function main() {
       if (measured.reduce((sum, item) => sum + item.decisions.paidCalls, 0) > 18) throw new Error("Cloud call cap exceeded");
       process.stderr.write(`Measured ${name}: ${result.accuracy.total.correct}/12 targets, ${result.decisions.paidCalls} requests\n`);
     }
-    const imageFile = output.replace(/\.json$/, "-fixture.jpg");
     const runtimeFiles = ["native-host/src/semantic-search.ts", "native-host/src/decisions/search.ts", "native-host/src/decisions/provider.ts", "native-host/src/decisions/budget.ts"];
     const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), packageVersion: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version,
       scope: "In-process component target accuracy and selection latency over fixed synthetic page units; not end-to-end browser-agent task success",
@@ -178,7 +177,7 @@ async function main() {
       scriptSha256: hash(fs.readFileSync(script)), captureScriptSha256: hash(fs.readFileSync(path.join(root, "scripts/fixtures/capture-accuracy-image.mjs"))),
       runtimeSha256: Object.fromEntries(runtimeFiles.map(file => [file, hash(fs.readFileSync(path.join(root, file)))])),
       configuration: { cloudOptIn: cloud, mode: "lexical", maxResults: 5, decisionCandidateCap: 16, decisionDeadlineMs: 1500, maxPaidCalls: 18, retries: 0, isolatedProcessPerArm: true },
-      screenshot: visual ? { file: path.basename(imageFile), sha256: hash(visual.bytes), format: "jpeg", bytes: visual.bytes.length,
+      screenshot: visual ? { generated: true, sha256: hash(visual.bytes), format: "jpeg", bytes: visual.bytes.length,
         viewport: { width: 1100, height: 1100 }, browser: { engine: "chromium", version: visual.version }, boxes: visual.boxes } : null,
       limitations: ["Twelve synthetic queries are not a general browser-agent benchmark; no planning or browser actions are measured.",
         "Accuracy is top-1 with local fallback on provider abstention/timeout, not raw model-only accuracy.",
@@ -186,7 +185,6 @@ async function main() {
         "Decisions can only rerank the lexical candidate pool; an absent accepted target cannot be recovered, even with an image.",
         "Provider-reported tokens/cost may be missing; aborted requests may incur unreported charges."], arms: measured };
     fs.mkdirSync(path.dirname(output), { recursive: true });
-    if (visual) fs.writeFileSync(imageFile, visual.bytes);
     fs.writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
     fs.writeFileSync(output.replace(/\.json$/, ".svg"), chart(report));
     process.stdout.write(JSON.stringify({ scope: report.scope, fixtureSha256: fixtureHash, arms: measured.map(({ samples, ...summary }) => summary) }, null, 2) + "\n");

@@ -1,0 +1,500 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-30T09:32:38.979Z",
+  "packageVersion": "1.10.2",
+  "scope": "In-process component target accuracy and selection latency over fixed synthetic page units; not end-to-end browser-agent task success",
+  "fixture": {
+    "sha256": "bf26595be3199297eeae4002bbbc6ef452cd66f16f352b1dead4098b41a957c9",
+    "queries": 12,
+    "units": 30,
+    "rounds": 1,
+    "multipleAcceptedTargets": {
+      "emails": [
+        "n12",
+        "n26",
+        "n28"
+      ]
+    }
+  },
+  "scriptSha256": "8b34caf5c7d10867fa3109e128beac481b9db4456b4047ad367a83a756583c51",
+  "captureScriptSha256": "c4976effe2c47374bc8393f7f24d18d04b14af5662e1f5d7a33985c9309c91ae",
+  "runtimeSha256": {
+    "native-host/src/semantic-search.ts": "46f3da1a615e510f6043a3d8b2a3e97fd65651ffd79247b21b4137e77fade1fa",
+    "native-host/src/decisions/search.ts": "b1d5211c9bbfd83693d9387c2eea683b54e8bfebdf29e2fa51b78f50bad87099",
+    "native-host/src/decisions/provider.ts": "0b38ef75169050971e2529e9717cc38fe96ab81d805b6f0ea2a7a5088f356bae",
+    "native-host/src/decisions/budget.ts": "4b8ff158ba07bf1949373b8f3278ca3afad64a49c541de3795e2c955aa16d173"
+  },
+  "configuration": {
+    "cloudOptIn": false,
+    "mode": "lexical",
+    "maxResults": 5,
+    "decisionCandidateCap": 16,
+    "decisionDeadlineMs": 1500,
+    "maxPaidCalls": 18,
+    "retries": 0,
+    "isolatedProcessPerArm": true
+  },
+  "screenshot": null,
+  "limitations": [
+    "Twelve synthetic queries are not a general browser-agent benchmark; no planning or browser actions are measured.",
+    "Accuracy is top-1 with local fallback on provider abstention/timeout, not raw model-only accuracy.",
+    "One round per arm, sequential fixed task order; latencies include first-call/network setup and are not stable service estimates.",
+    "Decisions can only rerank the lexical candidate pool; an absent accepted target cannot be recovered, even with an image.",
+    "Provider-reported tokens/cost may be missing; aborted requests may incur unreported charges."
+  ],
+  "arms": [
+    {
+      "arm": "lexical",
+      "requestedModel": null,
+      "accuracy": {
+        "total": {
+          "tasks": 12,
+          "correct": 7,
+          "recall5": 7,
+          "recall16": 11
+        },
+        "exact": {
+          "tasks": 6,
+          "correct": 6,
+          "recall5": 6,
+          "recall16": 6
+        },
+        "paraphrase": {
+          "tasks": 6,
+          "correct": 1,
+          "recall5": 1,
+          "recall16": 5
+        }
+      },
+      "latency": {
+        "p50Ms": 0.593,
+        "p95Ms": 5.872,
+        "paraphraseP50Ms": 0.593,
+        "paraphraseP95Ms": 0.868,
+        "totalMs": 12.935
+      },
+      "decisions": {
+        "paidCalls": 0,
+        "recordedCalls": 0,
+        "selected": 0,
+        "abstained": 0,
+        "unavailable": 0,
+        "skippedExact": 0,
+        "cacheHits": 0,
+        "budgetSkipped": 0,
+        "benchmarkCapSkipped": 0,
+        "fallback": 0
+      },
+      "usage": {
+        "usageReportedCalls": 0,
+        "costReportedCalls": 0,
+        "reportedInputTokens": 0,
+        "reportedOutputTokens": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "reportedCostUsd": 0,
+        "costUsd": 0
+      },
+      "samples": [
+        {
+          "taskId": "exact-save",
+          "bucket": "exact",
+          "query": "save changes",
+          "accepted": [
+            "n1"
+          ],
+          "top": "n1",
+          "correct": true,
+          "recall5": true,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n1",
+            "n23",
+            "n25",
+            "n2",
+            "n3",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14"
+          ],
+          "wallMs": 5.872,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "exact-delete",
+          "bucket": "exact",
+          "query": "delete workspace",
+          "accepted": [
+            "n3"
+          ],
+          "top": "n3",
+          "correct": true,
+          "recall5": true,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n3",
+            "n17",
+            "n24",
+            "n1",
+            "n2",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14"
+          ],
+          "wallMs": 1.007,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "exact-invite",
+          "bucket": "exact",
+          "query": "invite teammate",
+          "accepted": [
+            "n4"
+          ],
+          "top": "n4",
+          "correct": true,
+          "recall5": true,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n4",
+            "n1",
+            "n2",
+            "n3",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14",
+            "n15",
+            "n16"
+          ],
+          "wallMs": 0.751,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "exact-export",
+          "bucket": "exact",
+          "query": "export data",
+          "accepted": [
+            "n5"
+          ],
+          "top": "n5",
+          "correct": true,
+          "recall5": true,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n5",
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14",
+            "n15",
+            "n16"
+          ],
+          "wallMs": 0.478,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "exact-dark",
+          "bucket": "exact",
+          "query": "dark mode",
+          "accepted": [
+            "n11"
+          ],
+          "top": "n11",
+          "correct": true,
+          "recall5": true,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n11",
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n12",
+            "n13",
+            "n14",
+            "n15",
+            "n16"
+          ],
+          "wallMs": 0.475,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "exact-retention",
+          "bucket": "exact",
+          "query": "retention period",
+          "accepted": [
+            "n15"
+          ],
+          "top": "n15",
+          "correct": true,
+          "recall5": true,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n15",
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14",
+            "n16"
+          ],
+          "wallMs": 0.564,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "night",
+          "bucket": "paraphrase",
+          "query": "make the page easier on the eyes at night",
+          "accepted": [
+            "n11"
+          ],
+          "top": "n1",
+          "correct": false,
+          "recall5": false,
+          "poolExpectedIncluded": false,
+          "candidatePoolIds": [
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n5",
+            "n6",
+            "n13",
+            "n14",
+            "n15",
+            "n16",
+            "n21",
+            "n22",
+            "n23",
+            "n24",
+            "n25",
+            "n26"
+          ],
+          "wallMs": 0.544,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "emails",
+          "bucket": "paraphrase",
+          "query": "stop the emails piling up",
+          "accepted": [
+            "n12",
+            "n26",
+            "n28"
+          ],
+          "top": "n12",
+          "correct": true,
+          "recall5": true,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n12",
+            "n14",
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n13",
+            "n15",
+            "n16"
+          ],
+          "wallMs": 0.868,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "ownership",
+          "bucket": "paraphrase",
+          "query": "let someone else take over the project",
+          "accepted": [
+            "n7"
+          ],
+          "top": "n3",
+          "correct": false,
+          "recall5": false,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n3",
+            "n14",
+            "n24",
+            "n1",
+            "n2",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n15"
+          ],
+          "wallMs": 0.629,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "subscription",
+          "bucket": "paraphrase",
+          "query": "make my subscription cheaper",
+          "accepted": [
+            "n8"
+          ],
+          "top": "n1",
+          "correct": false,
+          "recall5": false,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14",
+            "n15",
+            "n16"
+          ],
+          "wallMs": 0.593,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "longer",
+          "bucket": "paraphrase",
+          "query": "keep my data for longer",
+          "accepted": [
+            "n15"
+          ],
+          "top": "n5",
+          "correct": false,
+          "recall5": false,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n5",
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14",
+            "n15",
+            "n16"
+          ],
+          "wallMs": 0.621,
+          "decision": null,
+          "fallback": false
+        },
+        {
+          "taskId": "private",
+          "bucket": "paraphrase",
+          "query": "hide what I do from my teammates",
+          "accepted": [
+            "n13"
+          ],
+          "top": "n22",
+          "correct": false,
+          "recall5": false,
+          "poolExpectedIncluded": true,
+          "candidatePoolIds": [
+            "n22",
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "n5",
+            "n6",
+            "n7",
+            "n8",
+            "n9",
+            "n10",
+            "n11",
+            "n12",
+            "n13",
+            "n14",
+            "n15"
+          ],
+          "wallMs": 0.533,
+          "decision": null,
+          "fallback": false
+        }
+      ]
+    }
+  ]
+}

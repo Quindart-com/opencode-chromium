@@ -1,5 +1,6 @@
 import type { LocalAction } from "./local-actions.ts";
-export const harnessLabels = { codex: "Codex", opencode: "OpenCode", dsh: "DeepSeek Harness", claude: "Claude", mcp: "MCP client", sdk: "JavaScript / CLI" } as const;
+import { harnessDefinitions,harnessLabels,harnessTargets,type HarnessTarget } from "./harnesses.ts";
+export { harnessLabels,harnessTargets,type HarnessTarget };
 export type HarnessKind = keyof typeof harnessLabels;
 export interface ClientIdentity {
   harness: HarnessKind;
@@ -21,15 +22,13 @@ export interface ConnectionSnapshot {
   observedAt: number;
   host: { version: string | null; pid: number };
   clients: HarnessConnection[];
-  harnesses?: Array<{ harness: "codex" | "opencode" | "dsh"; installed: boolean; configured: boolean; version: string | null }>;
+  harnesses?: Array<{ harness: HarnessTarget; installed: boolean; configured: boolean; version: string | null }>;
   actions?: LocalAction[];
 }
 
 /** Client names are hints, never authority. Do not forward arbitrary names or paths. */
 export function identifyHarness(name = ""): HarnessKind {
-  if (/codex/i.test(name)) return "codex";
-  if (/opencode/i.test(name)) return "opencode";
-  if (/deepseek|\bdsh\b/i.test(name)) return "dsh";
+  for (const id of harnessTargets) if (new RegExp(harnessDefinitions[id].clientPattern, "i").test(name)) return id;
   if (/claude/i.test(name)) return "claude";
   return "mcp";
 }

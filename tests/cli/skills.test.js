@@ -37,6 +37,7 @@ test("agents/openai.yaml is valid and declares the connector", () => {
   assert.equal(dep.type, "mcp");
   assert.equal(dep.value, "opencode-browser-plugin");
   assert.equal(dep.transport, "stdio");
+  assert.ok(dep.command === undefined || typeof dep.command === "string", "Codex requires a scalar dependency command, never argv");
 });
 
 test("codex skill config toml edits preserve unrelated entries and remove stale ones", () => {

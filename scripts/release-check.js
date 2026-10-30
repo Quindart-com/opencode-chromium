@@ -9,6 +9,7 @@ import { extensionDisplayName } from "./extension-identity.js";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const errors = [];
+if (!fs.existsSync(path.join(root, "docs/releases", `${packageJson.version}.md`))) errors.push("Current version is missing its release notes");
 
 if (packageJson.name !== "opencode-chromium") errors.push(`Unexpected package name: ${packageJson.name}`);
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) errors.push(`Invalid package version: ${packageJson.version}`);

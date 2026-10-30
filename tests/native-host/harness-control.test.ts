@@ -41,3 +41,29 @@ test("an active browser call or approval blocks plugin refresh; retained tabs do
     expect(runtime.sessions.has("retained-tabs")).toBe(true);
   } finally { release(); control.close(); runtime.close(); activity.close(); otherRuntime.close(); otherActivity.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("Claude Code and Desktop refresh only their own live plugin links", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "harness-controls-")), seen: string[] = [], controls = [];
+  try {
+    for (const harness of ["claude-code", "claude-desktop"] as const) controls.push(await startHarnessControl({ harness, version: "1.10.1", dir, idle: () => true, reload: async () => { seen.push(harness); } }));
+    expect(await reconnectHarness("claude-code", dir)).toMatchObject({ ok: true, code: "refreshed", refreshed: 1 });
+    expect(seen).toEqual(["claude-code"]);
+    expect(await reconnectHarness("claude-desktop", dir)).toMatchObject({ ok: true, code: "refreshed", refreshed: 1 });
+    expect(seen).toEqual(["claude-code", "claude-desktop"]);
+  } finally { for (const control of controls) control.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a Codex plugin that never connected requests the verified plugin reload instead of reinstalling or claiming success", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "harness-controls-"));
+  try {
+    const file = path.join(dir, "config.toml"), config = '[plugins."opencode-browser-plugin@quindart-browser"]\nenabled=true\n';
+    fs.writeFileSync(file, config);
+    const result = await reconnectHarness("codex", dir, { controls: () => [], detect: () => [{ id: "codex", label: "Codex", installed: true, detected: true, version: "0.164.0", configPath: file, supported: true, restart: "terminal", executable: null, managed: true }],
+      run: async () => { throw new Error("Must not start, reinstall or restart the harness"); } });
+    expect(result).toMatchObject({ code: "plugin_reload_required", refreshed: 0 });
+    expect(fs.readFileSync(file, "utf8")).toBe(config);
+  } finally {
+    expect(path.dirname(dir)).toBe(path.resolve(os.tmpdir())); expect(path.basename(dir)).toStartWith("harness-controls-");
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

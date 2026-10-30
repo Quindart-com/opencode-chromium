@@ -7,7 +7,7 @@ export interface SemanticModel {
     queryPrefix?: string; documentPrefix?: string; task?: string; adapter?: string; supportedDtypes?: ModelDtype[]; nativeDimensions?: number;
     supportedDimensions?: number[]; defaultDimensions?: number; promptVersion?: string };
   reranker?: { id: string; baseModel: string; dtype: ModelDtype; fallbackDtype?: ModelDtype; parameters: string; maxLength: number; instruction: string };
-  benchmark: { label: string; value: string; note: string };
+  benchmark?: { label: string; value: string; note: string };
 }
 export interface SemanticSettings { version: number; enabled: boolean; strategy: string; modelId: string; embeddingDims?: number;
   strategyPreference: string; agentResultCount: number; agentResultDetail: string; deepModelId: string }
@@ -37,6 +37,6 @@ export interface RankingOptions { enabled?: boolean; mode?: string; searchStrate
   rerankerUsed?: boolean; rerankerError?: string | null; rerankerCount?: number; rerankerDtype?: ModelDtype | null; cache?: { queryHit: boolean; documentHits: number } }
 export const embeddingInputSchema = z.object({ texts: z.array(z.string()).max(128).default([]), modelId: z.string().nullable().optional(), timeoutMs: z.number().optional() });
 export type EmbeddingInput = z.infer<typeof embeddingInputSchema>;
-export const settingsInputSchema = z.object({ enabled: z.boolean().optional(), modelId: z.string().optional(), embeddingDims: z.number().optional(),
+export const settingsInputSchema = z.object({ enabled: z.boolean().optional(), modelId: z.string().optional(), deepModelId: z.string().optional(), embeddingDims: z.number().optional(),
   strategyPreference: z.string().optional(), agentResultCount: z.number().optional(), agentResultDetail: z.string().optional(), preload: z.boolean().optional() });
 export type SettingsInput = z.infer<typeof settingsInputSchema>;

@@ -1,3 +1,4 @@
+import { npmCliFile,npmNode } from "../../src/management/npm-metadata.ts";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
@@ -61,33 +62,19 @@ export function validateRelease(root: string, version: string) {
   }
 }
 
-function npmCli() {
-  const candidates = [process.env.npm_execpath, path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js")];
-  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
-    candidates.push(path.join(directory, "node_modules/npm/bin/npm-cli.js"));
-    try { candidates.push(fs.realpathSync(path.join(directory, "npm"))); } catch { /* Try the next installation. */ }
-  }
-  const file = candidates.find(file => file && path.basename(file) === "npm-cli.js" && fs.existsSync(file));
-  if (!file) throw new Error("npm unavailable");
-  return file;
-}
 async function run(args: readonly string[], cwd: string, timeout = 180000): Promise<void> {
-  const executable = process.versions.bun ? (process.env.PATH ?? "").split(path.delimiter)
-    .map(directory => path.join(directory, process.platform === "win32" ? "node.exe" : "node"))
-    .find(file => fs.existsSync(file)) : process.execPath;
-  if (!executable) throw new Error("Node.js and npm are required for automatic updates");
-  await runProcess(executable, args, { cwd, timeoutMs: timeout });
+  await runProcess(npmNode(), args, { cwd, timeoutMs: timeout });
 }
 export async function installRelease(stage: string, version: string) {
   fs.writeFileSync(path.join(stage, "package.json"), '{"private":true}\n');
-  await run([npmCli(), "install", "--prefix", stage, "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=false", "--registry=https://registry.npmjs.org", `opencode-chromium@${version}`], stage);
+  await run([npmCliFile(), "install", "--prefix", stage, "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=false", `opencode-chromium@${version}`], stage);
   const root = path.join(stage, "node_modules/opencode-chromium");
   validateRelease(root, version);
   await run([path.join(root, "dist/cli/index.js"), "version"], root, 15000);
 }
 export async function installGlobalRelease(version: string) {
   if (!releaseVersion(version)) throw new Error("Invalid production release");
-  await run([npmCli(), "install", "--global", "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "opencode-chromium@" + version], process.cwd());
+  await run([npmCliFile(), "install", "--global", "--ignore-scripts", "--no-audit", "--no-fund", "opencode-chromium@" + version], process.cwd());
 }
 
 export function createRuntimeUpdater({ dir, install = installRelease, now = Date.now, busy = async () => false, verifiedProfiles = () => [], activate = activateRelease }: { dir: string; install?: typeof installRelease; now?: () => number; busy?: () => Promise<boolean>; verifiedProfiles?: () => readonly string[]; activate?: typeof activateRelease }) {

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { legacyDecisionIdentity } from "../../../src/shared/decision-catalog.ts";
 import { record } from "../../../src/shared/values.ts";
 import type { UsageDay,UsagePeriod,UsageProvider,UsageQuery,UsageReport,UsageTotals } from "../../../src/shared/decision-usage.ts";
 
@@ -9,8 +10,8 @@ function identity(row: Record<string, unknown>) {
   let provider = row.provider, route = row.route;
   // Never attribute unidentifiable historical records to the current service.
   if (!["jev", "openai-decisions"].includes(String(provider)) || !["openai", "openrouter", "typesafe"].includes(String(route))) {
-    route = model === "gpt-6-luna" ? "openai" : model?.startsWith("openai/") || model?.startsWith("typesafe/") ? "openrouter" : model?.startsWith("jev-") ? "typesafe" : "unattributed";
-    provider = model?.includes("luna") ? "openai-decisions" : model?.includes("jev") ? "jev" : "unknown";
+    const identity = legacyDecisionIdentity(model);
+    route = identity?.route ?? "unattributed"; provider = identity?.provider ?? "unknown";
   }
   return { id: String(route) + ":" + String(provider), provider: String(provider), route: String(route), model };
 }

@@ -1,6 +1,7 @@
 import { Data,Effect,Semaphore,Result } from "effect";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { decisionServices,decisionChoices,decisionImageCapable,decisionModelMatches } from "../../../src/shared/decision-catalog.ts";
 import { boundedJevImage } from "./jev-image.js";
 
 const candidateSchema = z.object({ id: z.string().min(1).max(100).refine(id => id !== "__abstain"), description: z.string().min(1).max(160) });
@@ -40,15 +41,15 @@ const responseSchema = z.object({
 const semaphore = Semaphore.makeUnsafe(2);
 export class JevProvider implements DecisionProvider {
   constructor(private readonly key: string, private readonly fetcher: typeof fetch = fetch,
-    private readonly model = "jev-1.13.0", private readonly timeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
-    private readonly route: "typesafe" | "openrouter" | "openai" = "typesafe", private readonly canSend: () => boolean = () => true) {}
+    private readonly model = decisionChoices.find(choice => choice.route === "typesafe")!.model, private readonly timeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
+    private readonly route: "typesafe" | "openrouter" | "openai" = "typesafe", private readonly canSend: () => boolean = () => true, private readonly explicitImageModel = false) {}
   async decide(input: DecisionRequest, signal?: AbortSignal): Promise<DecisionResult> {
     const started = performance.now();
     const operation = Effect.tryPromise({
       try: async (effectSignal) => {
         const request = decisionSchema.parse(input);
-        const jevImage = !!request.image && ["jev-1.14.0", "typesafe/jev-1.14"].includes(this.model);
-        if (request.image && this.model !== "openai/gpt-6-luna-decisions" && this.model !== "gpt-6-luna" && !jevImage) throw new DecisionFailure({ code: "images_not_supported" });
+        const jevImage = !!request.image && this.route === "typesafe";
+        if (request.image && !decisionImageCapable(this.route, this.model) && !this.explicitImageModel) throw new DecisionFailure({ code: "images_not_supported" });
         if (jevImage && !boundedJevImage(request.image!)) throw new DecisionFailure({ code: "invalid_image" });
         const criteria = Object.fromEntries(request.candidates.map(candidate => [candidate.id, candidate.description]));
         criteria.__abstain = "None of the candidates can be selected reliably from this context.";
@@ -69,7 +70,7 @@ export class JevProvider implements DecisionProvider {
         };
         if (!this.canSend()) throw new DecisionFailure({ code: "settings_changed" });
         if (effectSignal.aborted || signal?.aborted) throw new DecisionFailure({ code: "cancelled" });
-        const response = await this.fetcher(this.route === "openai" ? "https://api.openai.com/v1/decisions" : this.route === "openrouter" ? "https://openrouter.ai/api/alpha/decisions" : "https://api.typesafe.ai/v1/systemone", {
+        const response = await this.fetcher(decisionServices[this.route].endpoint, {
           method: "POST", signal: effectSignal, headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json", ...(nativeImage ? { "TypeSafe-Danger-Zone-Images": "true" } : {}) },
           body: JSON.stringify(body),
         });
@@ -98,11 +99,7 @@ export class JevProvider implements DecisionProvider {
         const result = direct ? responseSchema.parse({ model: direct.model, usage: direct.usage, answers: { decision: { ...direct.answers[0], probabilities: Object.fromEntries(direct.answers[0]!.probabilities.map(p => [p.value, p.probability])) } } }) : responseSchema.parse(raw);
         const answer = result.answers.decision;
         const ids = Object.keys(criteria);
-        const modelMatches = result.model === this.model || (this.route === "openrouter" && (
-          this.model === "typesafe/jev-1.13" && /^typesafe\/jev-1\.13-\d{8}$/.test(result.model) ||
-          this.model === "typesafe/jev-1.14" && /^typesafe\/jev-1\.14-\d{8}$/.test(result.model) ||
-          this.model === "openai/gpt-6-luna-decisions" && /^openai\/gpt-6-luna-decisions-\d{8}$/.test(result.model)
-        ));
+        const modelMatches = decisionModelMatches(this.model, result.model, this.route);
         if (!modelMatches || !ids.includes(answer.choice) || answer.probabilities[answer.choice] !== Math.max(...Object.values(answer.probabilities)) || Object.keys(answer.probabilities).length !== ids.length ||
           ids.some(id => answer.probabilities[id] === undefined) ||
           Math.abs(Object.values(answer.probabilities).reduce((sum, p) => sum + p, 0) - 1) > 0.01) {

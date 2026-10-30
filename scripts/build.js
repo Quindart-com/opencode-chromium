@@ -6,8 +6,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { sourceFingerprint } from "../src/cli/source-fingerprint.ts";
+import { syncReleaseMetadata } from "./sync-release-metadata.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+syncReleaseMetadata(root);
 const dist = path.join(root, "dist");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const hostDist = path.join(root, "native-host", "dist");

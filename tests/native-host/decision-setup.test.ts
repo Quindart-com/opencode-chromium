@@ -66,6 +66,8 @@ test("direct OpenAI verifies and stores a separate key without replacing OpenRou
   expect(result.ok).toBe(true); expect(calls).toBe(1);
   expect(providerKey(direct)).toBe(directKey); expect(providerKey(settings)).toBe(secret);
   expect(providerStatus()).toMatchObject({ route: "openai", model: "gpt-6-luna", ready: true });
+  expect(providerStatus().credentialRoutes).toContain("openai");
+  expect(providerStatus().credentialRoutes).toContain("openrouter");
 }, 15000);
 
 test("usage keeps known costs separate from missing costs and includes abstentions", () => {

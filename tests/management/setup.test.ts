@@ -27,7 +27,7 @@ function fixture() {
   ];
   const rows: Harness[] = specs.map(([id, configPath, text]) => {
     fs.mkdirSync(path.dirname(configPath!), { recursive: true }); fs.writeFileSync(configPath!, text!);
-    return { id: id as Harness["id"], label: id!, configPath: configPath!, detected: true, supported: true, managed: false,
+    return { id: id as Harness["id"], label: id!, configPath: configPath!, detected: true, installed: true, supported: true, managed: false,
       executable: null, version: id === "opencode" ? "2.0.0" : "1.0.0", restart: "terminal" };
   });
   const hostPath = path.join(dir, "native-host-launcher"), registration = path.join(dir, "native-manifest.json");
@@ -74,7 +74,7 @@ test("targeted setup previews all changes, registers a host, preserves unrelated
 test("setup --all connects only detected supported apps and uninstall leaves browser registration in place", async () => {
   const f = fixture();
   try {
-    f.rows[3]!.supported = false; f.rows[4]!.detected = false;
+    f.rows[3]!.supported = false; f.rows[4]!.installed = false;
     const untouched = f.rows.slice(3).map(row => fs.readFileSync(row.configPath, "utf8"));
     const first = await manageSetup(["--all", "--json"], false, f.environment);
     expect(first.targets).toEqual(["codex", "opencode", "claude-code"]);
@@ -126,7 +126,7 @@ test("skill health catches an explicitly disabled or stale Codex browser skill",
 test("setup --all recognizes an existing custom configuration without requiring a default config", async () => {
   const f = fixture();
   try {
-    for (const row of f.rows) row.detected = false;
+    for (const row of f.rows) { row.detected = false; row.installed = false; }
     const custom = path.join(f.home, "custom-codex.toml");
     fs.writeFileSync(custom, '# custom preference\nmodel = "chosen"\n');
     const result = await manageSetup(["--all", "--config", "codex=" + custom, "--json"], false, f.environment);

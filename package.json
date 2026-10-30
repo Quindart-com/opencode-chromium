@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "runtimeSupervisorProtocol": 1,
   "description": "Provider-neutral Chromium and Firefox browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
@@ -99,7 +99,7 @@
     "agent:server": "bun src/adapters/mcp/server.ts",
     "agent:http": "bun src/adapters/mcp/server.ts --transport=http",
     "codex:server": "bun src/adapters/mcp/server.ts",
-    "check": "bun run typecheck:backend && bun run lint && bun run check:unused && bun run check:architecture && bun run check:schemas && bun run check:package && bun run check:mcp && bun run adapter:report && bun test",
+    "check": "bun run check:metadata && bun run typecheck:backend && bun run lint && bun run check:unused && bun run check:architecture && bun run check:schemas && bun run check:package && bun run check:mcp && bun run adapter:report && bun test",
     "check:architecture": "bun scripts/check-architecture.js",
     "check:mcp": "bun scripts/check-mcp.js",
     "check:schemas": "bun scripts/check-schema-budget.js",
@@ -153,7 +153,9 @@
     "benchmark:production": "node scripts/benchmark-production-flow.js",
     "benchmark:decisions:capped": "bun scripts/benchmark-decision-capped.ts",
     "benchmark:lexical": "bun scripts/benchmark-lexical.ts",
-    "benchmark:accuracy": "bun scripts/benchmark-accuracy.ts"
+    "benchmark:accuracy": "bun scripts/benchmark-accuracy.ts",
+    "version": "node scripts/sync-release-metadata.mjs",
+    "check:metadata": "node scripts/sync-release-metadata.mjs --check"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

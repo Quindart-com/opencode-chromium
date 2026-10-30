@@ -10,6 +10,10 @@ Their use does not imply endorsement or partnership.
   Copyright (c) 2025 opencode. MIT License.
 - DeepSeek Harness icon: https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/web/public/favicon.svg
   Copyright (c) 2026 DeepSeek. MIT License.
+- Claude Code icon: https://github.com/devicons/devicon/tree/master/icons/claudecode
+  Copyright Devicon contributors. MIT License. Claude Code is an Anthropic trademark.
+- Claude Desktop icon: https://github.com/simple-icons/simple-icons/blob/develop/icons/claude.svg
+  CC0-1.0; the Claude mark is an Anthropic trademark.
 
 MIT License
 

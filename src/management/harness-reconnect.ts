@@ -4,13 +4,16 @@ import { harnessControls,refreshHarnessControl } from "../../native-host/src/har
 import { runProcess } from "../../native-host/src/process-effect.ts";
 import { detectHarnesses,planHarness,type Harness } from "./harnesses.ts";
 import { applyTransaction } from "./transaction.ts";
+import { nativeCodexPluginEnabled } from "./configuration.ts";
+import { harnessDefinitions } from "../shared/harnesses.ts";
+import { harnessTargets,type HarnessTarget } from "../shared/connections.ts";
 
-export const reconnectTargets = ["codex", "opencode", "dsh"] as const;
-export type ReconnectTarget = typeof reconnectTargets[number];
+export const reconnectTargets = harnessTargets;
+export type ReconnectTarget = HarnessTarget;
 function command(harness: Harness) {
   if (!harness.executable) return null;
   if (!/\.(cmd|ps1)$/i.test(harness.executable)) return { executable: harness.executable, args: [] as string[] };
-  const packages = harness.id === "opencode" ? ["@opencode/cli", "opencode-ai"] : harness.id === "codex" ? ["@openai/codex"] : [];
+  const packages = harnessDefinitions[harness.id === "opencode-mcp" ? "opencode" : harness.id].packages;
   for (const name of packages) {
     const root = path.join(path.dirname(harness.executable), "node_modules", name);
     try {
@@ -34,13 +37,15 @@ export async function reconnectHarness(target: unknown, dir: string, {
     return { ok: refreshed > 0, code: results.some(row => row.code === "busy") ? "busy" : refreshed ? "refreshed" : "unreachable", refreshed };
   }
   const harness = detect().find(row => row.id === target);
-  if (!harness?.detected) return { ok: false, code: "not_installed", refreshed: 0 };
+  if (!harness?.installed) return { ok: false, code: "not_installed", refreshed: 0 };
   if (!harness.managed) applyTransaction([planHarness(harness, dir)]);
   const cli = command(harness);
   if (cli && target === "opencode") {
     await run(cli.executable, [...cli.args, "reload"], { cwd: path.dirname(harness.configPath), timeoutMs: 15000 });
-  } else if (cli && target === "codex") {
-    await run(cli.executable, [...cli.args, "plugin", "add", "opencode-browser-plugin@quindart-browser"], { cwd: path.dirname(harness.configPath), timeoutMs: 30000 });
+  } else if (target === "codex" && fs.existsSync(harness.configPath) && nativeCodexPluginEnabled(fs.readFileSync(harness.configPath, "utf8"))) {
+    // A separate CLI cannot attach to the desktop app's failed per-chat MCP
+    // connection. Reinstalling metadata does not reload it and can undo a repair.
+    return { ok: true, code: "plugin_reload_required", refreshed: 0 };
   } else if (target === "dsh" && fs.existsSync(harness.configPath)) {
     // The profile loader watches this file. The user configuration and other
     // plugin entries are retained; no harness or process is restarted.

@@ -30,7 +30,7 @@ jobs:
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
-          DRY_RUN_FLAG: ${{ inputs.dry_run && '--dry-run' || '' }}
+          DRY_RUN_FLAG: ${{ inputs.dry_run && '--dry-run --verify-credentials' || '' }}
         run: bun run firefox:submit -- $DRY_RUN_FLAG
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()

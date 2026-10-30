@@ -9,7 +9,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
   if (["help", "--help"].includes(command)) {
-    console.log("Usage: opencode-chromium <setup|manage|update|updates|harness|dev-extension|link|status|sync|install|configure|uninstall|doctor|verify|mcp|version>\n\nGet started: opencode-chromium setup --all\nChoose an app: opencode-chromium setup --targets codex\nPreview changes: opencode-chromium setup --all --dry-run --json\nConnection checks: opencode-chromium doctor\nReconnect browser tools: opencode-chromium harness reconnect <codex|opencode|dsh>\nInstall production updates: opencode-chromium updates install\nRefresh an unpacked build: opencode-chromium dev-extension --help\nMore setup options: opencode-chromium setup --help");
+    console.log("Usage: opencode-chromium <setup|manage|update|updates|harness|dev-extension|link|status|sync|install|configure|uninstall|doctor|verify|mcp|version>\n\nGet started: opencode-chromium setup --all\nChoose an app: opencode-chromium setup --targets codex\nPreview changes: opencode-chromium setup --all --dry-run --json\nConnection checks: opencode-chromium doctor\nReconnect browser tools: opencode-chromium harness reconnect <codex|opencode|dsh|claude-code|claude-desktop>\nInstall production updates: opencode-chromium updates install\nRefresh an unpacked build: opencode-chromium dev-extension --help\nMore setup options: opencode-chromium setup --help");
     return;
   }
   await (await import("./commands.ts")).dispatchCommand(argv);

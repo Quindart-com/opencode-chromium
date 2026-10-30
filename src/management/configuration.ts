@@ -7,7 +7,8 @@ import { record } from "../shared/values.ts";
 import { deepSeekManaged,planDeepSeek } from "./deepseek.ts";
 
 export const SERVER_ID = "opencode-browser-plugin";
-export type HarnessId = "codex" | "opencode" | "opencode-mcp" | "claude-code" | "claude-desktop" | "dsh";
+import type { HarnessId } from "../shared/harnesses.ts";
+export type { HarnessId };
 export interface ConfigOptions {
   client: HarnessId;
   serverPath: string;

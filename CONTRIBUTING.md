@@ -44,7 +44,7 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 - Include tests for native-host protocol changes when practical.
 - Update README or component docs when setup behavior changes.
 - Reference related issues in the PR description. Use closing keywords only after verifying the reported workflow; otherwise state what still needs confirmation.
-- Do not commit generated files, browser profile data, `node_modules/`, local extension IDs, or internal reference material.
+- Do not commit generated build output, raw screenshots, browser profile data, `node_modules/`, local extension IDs, or internal reference material. The Codex manifest and small sanitized benchmark SVG/JSON snapshots are intentional versioned release inputs.
 - Keep new production modules below 500 lines. Existing migration exceptions are bounded in `architecture-exceptions.json`; increases require an explicit rationale in review.
 - Follow the [subsystem boundaries and migration status](docs/architecture.md). Validate contracts through behavior, including cancellation, failure, dry-run preservation, rollback, and mutation uncertainty.
 - Keep credentials and private benchmark/history inventories outside the checkout. Preserve runtime redaction, privacy behavior, synthetic fixtures, and ordinary secret scanning.
@@ -61,15 +61,18 @@ Changes to extension permissions, native messaging, file upload behavior, clipbo
 
 ## Releases
 
-`package.json` is the canonical release version. For a release PR, advance it to a higher SemVer version; the extension build derives its matching version. Run the complete release gate before merging:
+`package.json` is the only manually managed release version. Use `npm version <version> --no-git-tag-version`; the version lifecycle synchronizes Codex's required literal manifest version. The build also synchronizes it, and CI checks for drift before building. Extension manifests derive their version from the package. Add the complete release notes at `docs/releases/<version>.md`. Run the complete release gate before merging:
 
 ```bash
 bun run build
 bun run build:extension
+bun run build:extension:firefox
 bun run check
 bun run pack
 bun run test:tarball
 bun run check:release
 ```
 
-After the version bump reaches `master`, GitHub Actions automatically publishes npm with Trusted Publishing, submits the extension, and creates the matching `v<version>` GitHub release with generated notes. Do not create the root package tag manually. The compatibility shim under `packages/opencode-chromium-mcp` retains its separate `opencode-chromium-mcp-v<version>` release tag because it has an independent version lifecycle.
+After the version bump reaches `master`, GitHub Actions publishes npm with Trusted Publishing, submits both browser extensions, and creates the matching `v<version>` GitHub release from the versioned release notes. npm/GitHub release creation does not wait for store review. Store submission workflows report their own result, preserve verified artifacts and can be retried without republishing npm. Do not create the root package tag manually. The compatibility shim under `packages/opencode-chromium-mcp` retains its separate `opencode-chromium-mcp-v<version>` release tag because it has an independent version lifecycle.
+
+Before merging a release, run the Chrome and Firefox workflows on the PR branch with `dry_run: true`. Chrome validates credentials, package and current store readiness without uploading; Firefox validates the source archive and authenticates a read-only AMO query. Offline source-archive checks can still use `bun run firefox:submit -- --dry-run` without credentials.

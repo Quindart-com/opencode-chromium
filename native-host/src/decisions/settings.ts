@@ -2,19 +2,23 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { decisionChoice,decisionServices } from "../../../src/shared/decision-catalog.ts";
 import { protectKey,revealKey } from "./credentials.js";
 
 export const providerSettingsSchema = z.object({
   provider: z.enum(["off", "jev", "openai-decisions"]).default("off"),
   route: z.enum(["typesafe", "openrouter", "openai"]).default("typesafe"),
   shareText: z.boolean().default(false), shareImages: z.boolean().default(false),
-  keyEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/).default("TYPESAFE_API_KEY"),
+  textModel: z.string().regex(/^[\w/.+-]{1,100}$/).optional(),
+  imageModelOverride: z.string().regex(/^[\w/.+-]{1,100}$/).optional(),
+  keyEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/).default(decisionServices.typesafe.keyEnv),
 });
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
-export const LUNA_MODEL = "openai/gpt-6-luna-decisions";
+export const LUNA_MODEL = decisionChoice({ provider: "openai-decisions", route: "openrouter" })!.model;
 export function providerModel(settings: ProviderSettings, image = false): string | null {
-  if (settings.provider === "jev" && image) return settings.route === "openrouter" ? "typesafe/jev-1.14" : "jev-1.14.0";
-  return settings.provider === "openai-decisions" ? (settings.route === "openai" ? "gpt-6-luna" : LUNA_MODEL) : settings.provider === "jev" ? (settings.route === "openrouter" ? "typesafe/jev-1.13-20260917" : "jev-1.13.0") : null;
+  if (settings.provider === "off") return null;
+  const choice = decisionChoice(settings);
+  return (image ? settings.imageModelOverride ?? choice?.imageModel : settings.textModel ?? choice?.model) ?? null;
 }
 export function providerSettingsPath(): string {
   const base = process.env.AGENT_BROWSER_PROVIDER_DIR ?? (process.platform === "win32" ?
@@ -51,7 +55,7 @@ export function getProviderSettings(): ProviderSettings {
 }
 export function configureProvider(settings: unknown): ProviderSettings {
   const validated = providerSettingsSchema.parse(settings);
-  if ((validated.provider === "openai-decisions" && validated.route === "typesafe") || (validated.provider === "jev" && validated.route === "openai")) throw new Error("Invalid provider and route");
+  if (validated.provider !== "off" && !decisionChoice(validated)) throw new Error("Invalid provider and route");
   const file = providerSettingsPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.tmp`;
@@ -64,7 +68,10 @@ export function configureProvider(settings: unknown): ProviderSettings {
 export function providerStatus() {
   const settings = getProviderSettings();
   const credentialConfigured = Boolean(providerKey(settings));
+  let stored: Record<string, string> = {};
+  try { stored = z.record(z.string(), z.string()).parse(JSON.parse(fs.readFileSync(credentialPath(), "utf8"))); } catch { /* Environment-only setup. */ }
+  const credentialRoutes = Object.keys(decisionServices).filter(route => Boolean(stored[route] || process.env[route === settings.route ? settings.keyEnv : decisionServices[route as ProviderSettings["route"]].keyEnv]));
   const ready = settings.provider !== "off" && (settings.provider !== "openai-decisions" || settings.route !== "typesafe") && (settings.provider !== "jev" || settings.route !== "openai") && settings.shareText && credentialConfigured;
-  return { ...settings, ready, credentialConfigured, model: providerModel(settings), imageModel: providerModel(settings, true),
+  return { ...settings, ready, credentialConfigured, credentialRoutes, model: providerModel(settings), imageModel: providerModel(settings, true),
     reason: ready ? null : "Disabled, text sharing not enabled, or credential environment variable missing" };
 }

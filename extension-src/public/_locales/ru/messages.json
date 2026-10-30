@@ -1342,5 +1342,32 @@
   },
   "updateAutomaticHelp": {
     "message": "CLI обновляется в фоне. Работающие агенты и ключи сохраняются."
+  },
+  "noHarnessesDetected": {
+    "message": "Поддерживаемые агенты не обнаружены."
+  },
+  "statusAmbiguous": {
+    "message": "Клиент Claude не определён"
+  },
+  "connectionTroubleshooting": {
+    "message": "Помощь с подключением"
+  },
+  "decisionAdvanced": {
+    "message": "Дополнительные настройки"
+  },
+  "decisionTextModel": {
+    "message": "Текстовая модель (необязательно)"
+  },
+  "decisionImageModel": {
+    "message": "Модель изображений (необязательно)"
+  },
+  "decisionModelHelp": {
+    "message": "Оставьте поле пустым, чтобы использовать предложенную модель. Пользовательские модели должны поддерживать API решений выбранного сервиса."
+  },
+  "actionPluginReload": {
+    "message": "В Codex откройте управление этим плагином, отключите его и включите снова."
+  },
+  "catalogInvalid": {
+    "message": "Не удалось загрузить пользовательский каталог. Встроенные модели доступны."
   }
 }

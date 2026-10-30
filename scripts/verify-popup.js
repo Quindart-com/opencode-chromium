@@ -10,6 +10,7 @@ import { versionNotice } from "../extension-src/version-status.ts";
 import { MemoryStore } from "../native-host/dist/memory/store.js";
 import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js";
 import { decisionUsage } from "../native-host/dist/decisions/usage.js";
+import { SEMANTIC_MODELS } from "../native-host/dist/semantic-models.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureMessages = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(root, "extension-src/public/_locales/en/messages.json"), "utf8"))).map(([key, value]) => [key, value.message]));
@@ -33,6 +34,7 @@ const versionStatus = { state: "connected", versionChecked: true, nativeHostVers
 let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUTER_API_KEY", shareText: true, shareImages: false, ready: true };
 if (storeFixture) decisionSettings = { ...decisionSettings, provider: "off", shareText: false, ready: false };
 let uploadSettings = { allowWithoutConfirmation: false };
+let semanticSettings = { enabled: true, modelId: SEMANTIC_MODELS.find(model => model.role === "adaptive").id, deepModelId: SEMANTIC_MODELS.find(model => model.role === "deep").id, strategyPreference: "auto" };
 let runtimeUpdates = { supported: true, enabled: true, state: "waiting", targetVersion: "1.9.3", installedVersion: "1.9.2" };
 let harnessConnections = { observedAt: Date.now(), host: { version: fixtureVersion, pid: 42 }, clients: [
   { id: "fixture-codex", harness: "codex", harnessVersion: "1.2.3", runtimeVersion: "1.10.1", transport: "mcp", pid: 43, phase: "used", connectedAt: Date.now(), lastSeenAt: Date.now(), lastActionAt: Date.now(), pending: 0, state: "responding" },
@@ -82,6 +84,8 @@ const server = http.createServer(async (req, res) => {
         if (message.method === "memory.profiles") result = { currentProfileId: "primary", profiles: store.profiles.list().map((profile) => ({ ...profile, connected: true })) };
         else if (message.method === "memory.stats") result = store.status(message.params);
         else if (message.method === "memory.configure") result = store.configure(message.params);
+        else if (message.method === "memory.enable") result = store.enable();
+        else if (message.method === "memory.disable") result = store.disable();
         else throw new Error("Unexpected fixture method");
         result = { ok: true, result };
       } else if (message.type === "GET_PROFILE" || message.type === "GET_PROFILE_DETAILS") result = { profile: { profileId: "primary", profileLabel: storeFixture ? "Example browser" : "Primary" } };
@@ -102,7 +106,10 @@ const server = http.createServer(async (req, res) => {
         if (check.ok) decisionSettings = check.settings;
         result = { result: check };
       }
-      else if (message.type === "GET_SEMANTIC_SETTINGS") result = { semantic: { settings: { enabled: true, strategyPreference: "auto" }, models: [] } };
+      else if (["GET_SEMANTIC_SETTINGS", "SET_SEMANTIC_SETTINGS"].includes(message.type)) {
+        if (message.type === "SET_SEMANTIC_SETTINGS") semanticSettings = { ...semanticSettings, ...Object.fromEntries(Object.entries(message).filter(([key]) => !["type", "preload"].includes(key))) };
+        result = { semantic: { settings: semanticSettings, models: SEMANTIC_MODELS.map(model => ({ ...model, cache: { cached: false } })), catalogStatus: "builtin" } };
+      }
       else if (message.type === "SNOOZE_VERSION_NOTICE") {
         versionStatus.versionReminder = { key: versionNotice("1.9.1", versionStatus).key, until: Date.now() + 7 * 86400000 };
         result = { ok: true };
@@ -140,7 +147,7 @@ try {
     globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = messages[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
       id: "fixture",
         getURL: value => value,
-      getManifest: () => ({ version: "1.9.1" }),
+      getManifest: () => ({ version: globalThis.fixtureCurrentVersion ?? "1.9.1", ...(globalThis.fixtureCurrentVersion ? { version_name: globalThis.fixtureCurrentVersion + " dev preview" } : {}) }),
       connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }),
       sendMessage: (message) => fetch("/rpc", { method: "POST", body: JSON.stringify(message) }).then((response) => response.json()),
     } };
@@ -151,7 +158,9 @@ try {
   await connections.getByText("Codex", { exact: true }).waitFor();
   await connections.getByText("DeepSeek Harness", { exact: true }).waitFor();
   await connections.getByText("OpenCode", { exact: true }).waitFor();
-  assert.equal(await connections.locator(".agent-row").count(), 3, "all named harnesses are always visible");
+  assert.equal(await connections.locator(".agent-row").count(), 3, "only installed or responding harnesses are shown");
+  assert.equal(await connections.getByRole("button", { name: "Refresh connections", exact: true }).count(), 0, "automatic polling needs no duplicate refresh button");
+  assert.equal(await page.locator("#status-pill").isVisible(), false, "the healthy bridge is reported once in the connection card");
   await connections.locator(".badge-online").waitFor();
   assert.equal(await connections.locator(".badge-online").count(), 1);
   assert.equal(await connections.locator(".badge-offline").count(), 2);
@@ -167,9 +176,36 @@ try {
   await connections.getByText("Codex", { exact: true }).waitFor();
   assert.equal(harnessConnections.clients.length, 2, "reconnect preserves existing links");
   assert.equal(harnessConnections.clients.find(client => client.harness === "codex").state, "responding");
+  await connections.locator(".connection-troubleshooting > summary").click();
   await connections.getByRole("button", { name: "Run checks", exact: true }).click();
   await connections.getByText("Connection checks passed", { exact: true }).waitFor();
   assert.equal(await connections.getByText("Copy doctor command", { exact: true }).count(), 0);
+  harnessConnections.harnesses.push({ harness: "claude-code", installed: true, configured: true, version: "2.1.0" }, { harness: "claude-desktop", installed: false, configured: true, version: null });
+  await connections.getByText("Claude Code", { exact: true }).waitFor({ timeout: 10000 });
+  assert.equal(await connections.getByText("Claude Desktop", { exact: true }).count(), 0, "stale desktop configuration is not an installation");
+  const claudeCode = connections.locator("li", { hasText: "Claude Code" });
+  assert.equal(await claudeCode.locator("img").getAttribute("src"), "/images/harness/claude-code.svg");
+  await claudeCode.getByRole("button", { name: "Connect Claude Code" }).click();
+  await page.waitForTimeout(400);
+  harnessConnections.harnesses.find(row => row.harness === "claude-code").installed = false;
+  harnessConnections.harnesses.find(row => row.harness === "claude-desktop").installed = true;
+  harnessConnections.clients.push({ id: "fixture-claude", harness: "claude", harnessVersion: null, runtimeVersion: "1.10.1", transport: "mcp", pid: 46, phase: "initialized", connectedAt: Date.now(), lastSeenAt: Date.now(), lastActionAt: null, pending: 0, state: "responding" });
+  await connections.getByText("Claude Desktop", { exact: true }).waitFor({ timeout: 10000 });
+  const claudeDesktop = connections.locator("li", { hasText: "Claude Desktop" });
+  await claudeDesktop.getByText("Claude client not identified").waitFor();
+  assert.equal(await claudeDesktop.getByRole("button", { name: "Connect Claude Desktop" }).isDisabled(), true);
+  assert.equal(await connections.getByText("Claude Code", { exact: true }).count(), 0);
+  harnessConnections.harnesses = harnessConnections.harnesses.filter(row => !row.harness.startsWith("claude-"));
+  harnessConnections.clients = harnessConnections.clients.filter(row => row.id !== "fixture-claude");
+  const supportedConnections = harnessConnections;
+  harnessConnections = { observedAt: Date.now(), host: { version: fixtureVersion, pid: 42 } };
+  await page.reload();
+  await connections.getByText("Update the CLI to show agent status.", { exact: true }).waitFor();
+  assert.equal(await connections.locator(".agent-row").count(), 0, "an older host must not fabricate harness rows");
+  assert.equal(await page.getByRole("button", { name: "Update CLI", exact: true }).count(), 1, "the upgrade action appears once");
+  harnessConnections = supportedConnections;
+  await page.reload();
+  await connections.getByText("Codex", { exact: true }).waitFor();
   const dashboard = page.locator(".decision-overview");
   await page.waitForFunction(() => document.querySelector(".usage-metrics dd")?.textContent === "700");
   await dashboard.getByRole("combobox", { name: "Service", exact: true }).selectOption("openai:openai-decisions");
@@ -220,6 +256,13 @@ try {
   await page.selectOption("#connected-profile", "secondary");
   assert.equal(await page.locator("#connected-profile").inputValue(), "secondary");
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  const memoryToggle = page.getByRole("switch", { name: "Action memory", exact: true });
+  await page.waitForSelector("#memory-enabled:not(:disabled)");
+  assert.equal(await memoryToggle.getAttribute("aria-checked"), "true");
+  await memoryToggle.click();
+  await page.waitForFunction(() => document.querySelector("#memory-enabled")?.getAttribute("aria-checked") === "false");
+  await memoryToggle.click();
+  await page.waitForFunction(() => document.querySelector("#memory-enabled")?.getAttribute("aria-checked") === "true");
   const automaticUpdates = page.getByLabel("Keep local browser tools up to date", { exact: false });
   await page.waitForFunction(() => {
     const input = document.querySelector('[aria-labelledby="runtime-updates-title"] input');
@@ -246,6 +289,7 @@ try {
   await page.locator(".memory-settings-details > summary").filter({ hasText: "Cleanup" }).click();
   await page.waitForSelector("#purge-days:not(:disabled)");
   assert.equal(await page.locator(".version-notice").isVisible(), true, "instructions stay available in Settings");
+  assert.equal(await page.getByRole("button", { name: "Update CLI", exact: true }).count(), 0, "Settings uses its Updates section instead of a duplicate update action");
   await page.locator("#purge-days").fill("21");
   await page.waitForTimeout(2800);
   assert.equal(await page.locator("#purge-days").inputValue(), "21", "polling must preserve an unsaved edit");
@@ -292,12 +336,14 @@ try {
   assert.equal(await page.locator(".provider-consent").textContent().then(text => text.includes("OpenAI Platform")), true);
   await page.selectOption("#decision-provider", "jev-typesafe");
   assert.equal(await jevImages.isChecked(), false, "switching service resets screenshot consent");
-  await page.getByText("Advanced · Environment variable", { exact: true }).click();
+  await page.getByText("Advanced settings", { exact: true }).click();
   assert.equal(await page.locator("#decision-key-env").inputValue(), "TYPESAFE_API_KEY");
   await page.selectOption("#decision-provider", "off");
   assert.equal(await page.locator("#decision-api-key").count(), 0);
   await page.selectOption("#decision-provider", "jev-openrouter");
-  await page.getByText("Advanced · Environment variable", { exact: true }).click();
+  assert.equal(await page.locator("#decision-api-key").getAttribute("placeholder"), fixtureMessages.replaceKey, "switching service recognizes its saved key");
+  assert.equal(await page.locator(".provider-feedback").textContent().then(text => text.includes(fixtureMessages.decisionEnabled)), false, "unsaved service changes are not presented as active");
+  await page.getByText("Advanced settings", { exact: true }).click();
   assert.equal(await page.locator("#decision-key-env").inputValue(), "OPENROUTER_API_KEY");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "popup must fit the viewport");
   await page.setViewportSize({ width: 360, height: 800 });
@@ -318,6 +364,13 @@ try {
   assert.equal(await page.locator(".version-notice").count(), 0, "matching versions clear the notice");
   const reviewDirectory = path.join(root, "reports", "popup-review");
   fs.mkdirSync(reviewDirectory, { recursive: true });
+  const currentVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  versionStatus.nativeHostVersion = currentVersion; versionStatus.clientVersions = [currentVersion];
+  harnessConnections.host.version = currentVersion;
+  runtimeUpdates = { ...runtimeUpdates, installedVersion: currentVersion, targetVersion: currentVersion, state: "idle" };
+  await page.addInitScript(version => { globalThis.fixtureCurrentVersion = version; }, currentVersion);
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Bridge connected");
   for (const width of [320, 420]) {
     await page.setViewportSize({ width, height: 600 });
     for (const theme of ["light", "dark"]) {
@@ -327,6 +380,8 @@ try {
         await page.getByRole("tab", { name: view, exact: true }).click();
         await page.waitForFunction(() => !document.querySelector('.view-panel:not([hidden]) button[disabled]#decision-provider'));
         measuredWidths.push(await page.locator('main').evaluate(element => element.getBoundingClientRect().width));
+        await page.locator('.view-panel:not([hidden])').evaluate(panel => { for (const details of panel.querySelectorAll('details')) details.open = true; });
+        assert.equal(await page.locator('.view-panel:not([hidden]) details:not([open])').count(), 0, "full-page review includes every expandable feature");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} fits ${width}px ${theme}`);
         await page.screenshot({ path: path.join(reviewDirectory, `${view.toLowerCase()}-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
       }

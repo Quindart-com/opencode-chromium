@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "opencode-browser-plugin": {
-      "command": "npx",
-      "args": ["-y", "--package", "opencode-chromium@1.10.1", "opencode-chromium-mcp", "--managed"]
+      "command": "node",
+      "args": [
+        "--input-type=module",
+        "-e",
+        "import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {pathToFileURL} from 'node:url';const dir=process.env.OPENCODE_BROWSER_RUNTIME_DIR?path.resolve(process.env.OPENCODE_BROWSER_RUNTIME_DIR):process.platform==='win32'?path.join(process.env.LOCALAPPDATA??path.join(os.homedir(),'AppData','Local'),'OpenCode','browser'):path.join(os.homedir(),'.config','opencode','browser');try{const active=JSON.parse(fs.readFileSync(path.join(dir,'runtime.json'),'utf8'));if(typeof active.root!=='string'||!active.root)throw Object.assign(new Error(),{code:'INVALID_RUNTIME'});await import(pathToFileURL(path.join(dir,'mcp.mjs')).href)}catch(error){const denied=['EACCES','EPERM'].includes(error.code);process.stderr.write(JSON.stringify({ok:false,code:denied?'MCP_ACCESS_DENIED':'MCP_RUNTIME_SETUP_REQUIRED',message:denied?'The harness cannot access the installed local runtime. Use its permitted local-server approval; do not change ACLs.':'Run opencode-chromium setup --all to install or repair the local runtime, then reload this plugin (disable and enable it in Manage). Keep Codex and other agents running.'})+'\\n');process.exit(1)}"
+      ]
     }
   }
 }

@@ -37,12 +37,14 @@ export type SemanticState = {
   settings?: {
     enabled?: boolean;
     modelId?: string;
+    deepModelId?: string;
     embeddingDims?: number;
     strategyPreference?: string;
     agentResultCount?: number;
     agentResultDetail?: string;
   };
   models?: SemanticModel[];
+  catalogStatus?: "builtin" | "custom" | "invalid_custom_catalog";
   load?: {
     state?: string;
     modelId?: string;

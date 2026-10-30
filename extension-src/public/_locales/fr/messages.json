@@ -1342,5 +1342,32 @@
   },
   "updateAutomaticHelp": {
     "message": "Le CLI se met à jour en arrière-plan. Les agents et clés sont conservés."
+  },
+  "noHarnessesDetected": {
+    "message": "Aucun agent compatible détecté."
+  },
+  "statusAmbiguous": {
+    "message": "Client Claude non identifié"
+  },
+  "connectionTroubleshooting": {
+    "message": "Aide à la connexion"
+  },
+  "decisionAdvanced": {
+    "message": "Paramètres avancés"
+  },
+  "decisionTextModel": {
+    "message": "Modèle texte (facultatif)"
+  },
+  "decisionImageModel": {
+    "message": "Modèle image (facultatif)"
+  },
+  "decisionModelHelp": {
+    "message": "Laissez vide pour utiliser le modèle suggéré. Les modèles personnalisés doivent prendre en charge l’API de décision du service choisi."
+  },
+  "actionPluginReload": {
+    "message": "Dans Codex, ouvrez Gérer pour ce plugin, désactivez-le, puis réactivez-le."
+  },
+  "catalogInvalid": {
+    "message": "Le catalogue personnalisé n’a pas pu être chargé. Les modèles intégrés restent disponibles."
   }
 }

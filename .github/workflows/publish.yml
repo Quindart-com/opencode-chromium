@@ -80,6 +80,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Validate generated release metadata
+        run: bun run check:metadata
+
       - name: Validate release tag
         env:
           RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
@@ -176,11 +179,14 @@ jobs:
   github-release:
     name: Create GitHub release
     if: needs.release-metadata.outputs.should_release == 'true'
-    needs: [release-metadata, publish, webstore-release, firefox-release]
+    needs: [release-metadata, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Check out release notes
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
       - name: Create tag and release notes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -190,7 +196,7 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists."
           else
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "opencode-chromium $RELEASE_VERSION" --generate-notes
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "opencode-chromium $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md"
           fi
 
   webstore-release:

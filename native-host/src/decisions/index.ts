@@ -23,8 +23,8 @@ export async function decide(request: DecisionRequest, signal?: AbortSignal): Pr
     provider: new JevProvider(key, fetch, model, timeoutMs, settings.route, () => {
       const current = getProviderSettings();
       return current.provider === settings.provider && current.route === settings.route && current.keyEnv === settings.keyEnv &&
-        current.shareText && current.shareImages === settings.shareImages && providerKey(current) === key;
-    }) };
+        current.shareText && current.shareImages === settings.shareImages && current.textModel === settings.textModel && current.imageModelOverride === settings.imageModelOverride && providerKey(current) === key;
+    }, settings.imageModelOverride === model) };
   const result = await cached.provider.decide(request, signal);
   recordDecision(result, request.purpose, !!request.image, settings);
   return result;
