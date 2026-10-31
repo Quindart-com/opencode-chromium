@@ -117,6 +117,9 @@ jobs:
       - run: node --test tests/native-host/memory-reliability.test.js tests/native-host/memory-search.test.js tests/native-host/embedding-service.test.js tests/native-host/framing.test.js tests/core/reliability.test.js tests/native-host/runtime-updates.test.js
       - run: bun run check:package
       - run: bun run check:schemas
+      - run: bun run check:release
+      - run: bun run pack
+      - run: bun run test:tarball
       - name: Cache Chromium headless shell
         if: runner.os != 'Windows'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
