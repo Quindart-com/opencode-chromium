@@ -6,6 +6,9 @@ export type VersionStatus = {
   nativeHostVersion?: string | null;
   clientVersions?: string[];
   unknownClientVersion?: boolean;
+  browserCompatible?: boolean;
+  browserContractVersion?: number;
+  runtimeBrowserContractVersions?: number[];
   versionReminder?: { key: string; until: number } | null;
 };
 
@@ -14,6 +17,7 @@ export function validVersion(value: unknown): string | null {
 }
 export function versionNotice(extension: string, status: VersionStatus) {
   if (status.state !== "connected" || !status.versionChecked) return null;
+  if (status.browserCompatible === true && !status.unknownClientVersion) return null;
   const host = validVersion(status.nativeHostVersion);
   const clients = [...new Set((status.clientVersions ?? []).map(validVersion).filter((item): item is string => item !== null))].sort();
   if (!status.unknownClientVersion && host === extension && clients.every((version) => version === extension)) return null;

@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { PassThrough } from "node:stream";
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { createRuntimeUpdater, createIdleUpdateCheck, releaseVersion } from "../../src/control/update.ts";
+import { createRuntimeUpdater, createIdleUpdateCheck, releaseVersion,validateRelease } from "../../src/control/update.ts";
 import { rollbackRelease } from "../../src/control/activation.ts";
 import { createParticipant } from "../../src/control/leases.ts";
 import { desiredRuntime } from "../../src/shared/runtime-config.ts";
@@ -18,14 +18,15 @@ import { installPublishedUpdate,publishedVersion } from "../../src/management/ma
 
 function release(root, version) {
   fs.mkdirSync(root, { recursive: true });
-  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "opencode-chromium", version, runtimeControllerProtocol: 2, toolContractVersion: Number(version.split(".")[0]) >= 2 ? 2 : 1 }));
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "opencode-chromium", version, runtimeControllerProtocol: 2,
+    toolContractVersion: Number(version.split(".")[0]) >= 2 ? 2 : 1,browserContractVersion: 1,supportedBrowserContractVersions: [1] }));
   const build = path.join(root, "dist/build-manifest.json"); fs.mkdirSync(path.dirname(build), { recursive: true });
   fs.writeFileSync(build, JSON.stringify({ name: "opencode-chromium", version, sha256: "a".repeat(64) }));
   for (const file of ["dist/cli/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "native-host/dist/runtime.js", "extension/manifest.json", "extension-firefox/manifest.json"]) {
     const target = path.join(root, file); fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, file.endsWith(".json") ? JSON.stringify({ version }) : "// fixture\n");
   }
-  for (const file of ["controller.js", "jobs.js", "mcp-supervisor.js", "mcp-worker.js", "state.js", "leases.js", "update.js"]) {
+  for (const file of ["browser-broker.js", "browser-compatibility.js", "controller.js", "jobs.js", "mcp-supervisor.js", "mcp-worker.js", "state.js", "leases.js", "update.js"]) {
     const target = path.join(root, "dist/control", file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, "// fixture\n");
   }
 }
@@ -75,6 +76,21 @@ test("major releases require one explicit approval before blue-green activation"
     assert.equal(desiredRuntime(activation).version, "2.0.0");
     assert.equal(activation.approvedMajor, 2);
   } finally { f.cleanup(); }
+});
+
+test("release validation preserves one Web Store compatibility generation", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-browser-contract-"));
+  try {
+    release(dir, "2.0.0");
+    validateRelease(dir, "2.0.0");
+    const packageFile = path.join(dir, "package.json"), pkg = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+    fs.writeFileSync(packageFile, JSON.stringify({ ...pkg,browserContractVersion: 2,supportedBrowserContractVersions: [2] }));
+    assert.throws(() => validateRelease(dir, "2.0.0"), /browser compatibility contract/);
+    fs.writeFileSync(packageFile, JSON.stringify({ ...pkg,browserContractVersion: 2,supportedBrowserContractVersions: [1,2] }));
+    validateRelease(dir, "2.0.0");
+    fs.rmSync(path.join(dir, "dist/control/browser-compatibility.js"));
+    assert.throws(() => validateRelease(dir, "2.0.0"), /Incomplete runtime controller/);
+  } finally { fs.rmSync(dir, { recursive: true,force: true }); }
 });
 
 test("rollback assigns fallback as desired and drains through the same path", async () => {

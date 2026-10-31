@@ -13,6 +13,11 @@ export function readJsonIfPresent<T = Record<string, unknown>>(filePath: fs.Path
   catch { return null; }
 }
 
+export function isFile(filePath: fs.PathLike): boolean {
+  try { return fs.statSync(filePath).isFile(); }
+  catch { return false; }
+}
+
 export function samePath(first: string | null | undefined, second: string | null | undefined): boolean {
   if (typeof first !== "string" || typeof second !== "string") return false;
   return first.replaceAll("\\", "/").toLowerCase() === second.replaceAll("\\", "/").toLowerCase();

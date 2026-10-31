@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { isFile } from "../shared/node-files.ts";
 import { FrameDecoder,writeFrame } from "../shared/node-framing.ts";
 import { PRODUCT } from "../shared/product.ts";
 import { desiredRuntime,type RuntimeActivation } from "../shared/runtime-config.ts";
@@ -53,17 +54,23 @@ export const packagedRuntime = (root: string): boolean => !fs.existsSync(path.jo
 export function validateRelease(root: string, version: string) {
   const pkg = read(path.join(root, "package.json"));
   if (pkg?.name !== PRODUCT.packageName || pkg.version !== version || !packagedRuntime(root)) throw new Error("Invalid release");
+  if (pkg.runtimeControllerProtocol === 2) {
+    const current = pkg.browserContractVersion, supported = pkg.supportedBrowserContractVersions;
+    if (!Number.isSafeInteger(current) || Number(current) < 1 || !Array.isArray(supported) ||
+      supported.some(value => !Number.isSafeInteger(value) || Number(value) < 1) || new Set(supported).size !== supported.length ||
+      !supported.includes(current) || Number(current) > 1 && !supported.includes(Number(current) - 1)) throw new Error("Invalid browser compatibility contract");
+  }
   const build = read(path.join(root, "dist/build-manifest.json"));
   if (build?.name !== PRODUCT.packageName || build.version !== version || typeof build.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(build.sha256)) throw new Error("Invalid release manifest");
   for (const file of ["dist/cli/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "native-host/dist/runtime.js", "extension/manifest.json", "extension-firefox/manifest.json"]) {
-    if (!fs.statSync(path.join(root, file)).isFile()) throw new Error("Incomplete release");
+    if (!isFile(path.join(root, file))) throw new Error("Incomplete release");
   }
   for (const folder of ["extension", "extension-firefox"]) if (read(path.join(root, folder, "manifest.json"))?.version !== version) throw new Error("Release version mismatch");
   if (pkg.runtimeSupervisorProtocol === 1) for (const file of ["runtime-coordinator.js", "runtime-supervisor.js", "runtime-worker.js", "runtime-participants.js", "runtime-activation.js", "runtime-lifecycle.js"]) {
-    if (!fs.statSync(path.join(root, "native-host/dist", file)).isFile()) throw new Error("Incomplete managed runtime");
+    if (!isFile(path.join(root, "native-host/dist", file))) throw new Error("Incomplete managed runtime");
   }
-  if (pkg.runtimeControllerProtocol === 2) for (const file of ["controller.js", "jobs.js", "mcp-supervisor.js", "mcp-worker.js", "state.js", "leases.js", "update.js"]) {
-    if (!fs.statSync(path.join(root, "dist/control", file)).isFile()) throw new Error("Incomplete runtime controller");
+  if (pkg.runtimeControllerProtocol === 2) for (const file of ["browser-broker.js", "browser-compatibility.js", "controller.js", "jobs.js", "mcp-supervisor.js", "mcp-worker.js", "state.js", "leases.js", "update.js"]) {
+    if (!isFile(path.join(root, "dist/control", file))) throw new Error("Incomplete runtime controller");
   }
 }
 

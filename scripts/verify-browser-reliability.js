@@ -187,6 +187,9 @@ try {
   const panel = await fixture.context.newPage();
   await panel.goto(`chrome-extension://${fixture.extensionId}/popup.html`);
   const connectionControl = message => panel.evaluate(value => chrome.runtime.sendMessage(value), message);
+  const nativeStatus = await connectionControl({ type: "GET_NATIVE_HOST_STATUS" });
+  assert.equal(nativeStatus.status?.browserCompatible, true, JSON.stringify(nativeStatus));
+  assert.equal(nativeStatus.status?.browserContractVersion, 1, JSON.stringify(nativeStatus));
   const inventory = await connectionControl({ type: "GET_HARNESS_CONNECTIONS" });
   assert.ok(inventory.result.clients.some(client => client.harness === "sdk" && client.phase === "used" && client.state === "responding"));
   const connectionId = inventory.result.clients.find(client => client.harness === "sdk").id;

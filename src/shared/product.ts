@@ -10,3 +10,5 @@ export const PRODUCT = Object.freeze({
 
 export const CONTROL_PROTOCOL_VERSION = 2;
 export const TOOL_CONTRACT_VERSION = 2;
+export const LEGACY_BROWSER_CONTRACT_VERSION = 1;
+export const BROWSER_CONTRACT_VERSION = 1;

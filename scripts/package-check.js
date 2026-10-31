@@ -23,6 +23,12 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version ?? "")) meta
 if (packageJson.repository?.url !== "git+https://github.com/Quindart-com/opencode-chromium.git") metadataErrors.push("Repository metadata must point to the canonical GitHub repository");
 if (packageJson.publishConfig?.access !== "public") metadataErrors.push("Package must be configured for public npm access");
 if (packageJson.publishConfig?.registry !== "https://registry.npmjs.org") metadataErrors.push("Package must publish to the public npm registry");
+const browserContract = packageJson.browserContractVersion, supportedBrowserContracts = packageJson.supportedBrowserContractVersions;
+if (!Number.isSafeInteger(browserContract) || browserContract < 1 || !Array.isArray(supportedBrowserContracts) ||
+  supportedBrowserContracts.some(value => !Number.isSafeInteger(value) || value < 1) || new Set(supportedBrowserContracts).size !== supportedBrowserContracts.length ||
+  !supportedBrowserContracts.includes(browserContract) || browserContract > 1 && !supportedBrowserContracts.includes(browserContract - 1)) {
+  metadataErrors.push("Browser runtime must support the current and immediately previous extension contracts");
+}
 if (packageJson.bin?.["opencode-chromium"] !== "./dist/cli/index.js") metadataErrors.push("Canonical CLI binary is missing");
 if (packageJson.bin?.["opencode-chromium-mcp"] !== "./dist/adapters/mcp/server.js") metadataErrors.push("Canonical MCP binary is missing");
 if ((packageJson.exports?.["./server"]?.import ?? packageJson.exports?.["./server"]) !== "./dist/adapters/opencode/index.js") metadataErrors.push("opencode ./server export is missing");

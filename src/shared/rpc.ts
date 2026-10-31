@@ -24,6 +24,7 @@ export const profileHelloSchema = z.object({
   browserVersion: z.string().nullable().optional(),
   extensionId: z.string().nullable().optional(),
   extensionVersion: z.string().nullable().optional(),
+  browserContractVersion: z.number().int().positive().optional(),
   uploadConsentVersion: z.number().int().optional(),
 });
 export type ProfileHello = z.output<typeof profileHelloSchema>;

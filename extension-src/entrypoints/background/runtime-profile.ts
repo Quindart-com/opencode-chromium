@@ -1,4 +1,5 @@
 import { z } from "zod/mini";
+import { BROWSER_CONTRACT_VERSION } from "../../../src/shared/product.ts";
 import { maskIdentifier,record } from "../../../src/shared/values.ts";
 import { validVersion,versionNotice } from "../../version-status.ts";
 import { NativeRpc } from "./native-rpc.ts";
@@ -82,6 +83,7 @@ async function profileMetadata() {
         browserName: browserNameFromUserAgent(),
         extensionId: chrome.runtime.id,
         extensionVersion: manifest.version,
+        browserContractVersion: BROWSER_CONTRACT_VERSION,
     };
 }
 async function announceProfile() {
@@ -100,6 +102,10 @@ function applyHostVersions(value: unknown) {
     hostStatus.unknownClientVersion = result?.unknownClientVersion === true;
     hostStatus.nativeHostVersion = validVersion(result?.nativeHostVersion);
     hostStatus.clientVersions = Array.isArray(result?.clientVersions) ? result.clientVersions.map(validVersion).filter((version): version is string => version !== null) : [];
+    const compatibility = record(result?.browserCompatibility);
+    if (typeof compatibility.compatible === "boolean") hostStatus.browserCompatible = compatibility.compatible;
+    if (Number.isSafeInteger(compatibility.extensionContractVersion)) hostStatus.browserContractVersion = Number(compatibility.extensionContractVersion);
+    if (Array.isArray(compatibility.runtimeContractVersions)) hostStatus.runtimeBrowserContractVersions = compatibility.runtimeContractVersions.filter((value): value is number => Number.isSafeInteger(value) && Number(value) > 0);
     broadcastNativeStatus();
 }
 rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });

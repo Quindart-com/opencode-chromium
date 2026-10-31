@@ -3,6 +3,10 @@
   "version": "2.0.0",
   "runtimeControllerProtocol": 2,
   "toolContractVersion": 2,
+  "browserContractVersion": 1,
+  "supportedBrowserContractVersions": [
+    1
+  ],
   "description": "Provider-neutral Chromium and Firefox browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {

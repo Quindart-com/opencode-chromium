@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { test } from "bun:test";
 import { createController } from "../../src/control/controller.ts";
 import { activateRelease,rollbackRelease } from "../../src/control/activation.ts";
+import { browserCompatibilityStatus,browserContractFromHello,selectBrowserRelease } from "../../src/control/browser-compatibility.ts";
 import { createParticipant } from "../../src/control/leases.ts";
 import { parseRuntimeActivation } from "../../src/control/state.ts";
 import { launcherPlan } from "../../src/cli/runtime-link.ts";
@@ -81,6 +82,27 @@ test("all configured launchers target the fixed controller or desired runtime", 
   assert.deepEqual(launcherPlan("host"), { selection: "controller",entry: "controller/2/control/browser-broker.js" });
   assert.deepEqual(launcherPlan("mcp"), { selection: "controller",entry: "controller/2/control/mcp-supervisor.js" });
   assert.deepEqual(launcherPlan("plugin"), { selection: "desired",entry: "dist/adapters/opencode/index.js" });
+});
+
+test("old Web Store extensions keep a compatible worker while newer extensions adopt desired", () => {
+  const f = fixture();
+  try {
+    const desired = { root: f.nextRoot,version: "2.0.0",contractVersion: 2 };
+    const fallback = { root: f.oldRoot,version: "1.11.0",contractVersion: 1 };
+    fs.writeFileSync(path.join(desired.root, "package.json"), JSON.stringify({ name: "opencode-chromium",version: desired.version,
+      browserContractVersion: 2,supportedBrowserContractVersions: [2] }));
+    fs.writeFileSync(path.join(fallback.root, "package.json"), JSON.stringify({ name: "opencode-chromium",version: fallback.version,
+      browserContractVersion: 1,supportedBrowserContractVersions: [1] }));
+    const activation = { root: desired.root,version: desired.version,desired,fallback };
+    assert.equal(browserContractFromHello({}), 1, "pre-contract extensions negotiate as browser contract 1");
+    assert.equal(selectBrowserRelease(activation, 1)?.root, fallback.root);
+    assert.equal(selectBrowserRelease(activation, 2)?.root, desired.root);
+    assert.deepEqual(browserCompatibilityStatus(activation, fallback, 1), { compatible: true,extensionContractVersion: 1,
+      runtimeContractVersions: [1],runtimeVersion: "1.11.0",selection: "fallback" });
+    fs.writeFileSync(path.join(desired.root, "package.json"), JSON.stringify({ name: "opencode-chromium",version: desired.version,
+      browserContractVersion: 2,supportedBrowserContractVersions: [1,2] }));
+    assert.equal(selectBrowserRelease(activation, 1)?.root, desired.root, "bridge releases adopt immediately even before store review completes");
+  } finally { f.cleanup(); }
 });
 
 test("the installed controller is a complete importable module graph", async () => {
