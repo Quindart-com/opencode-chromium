@@ -1,7 +1,7 @@
-import { t, setDocumentLanguage } from "../../i18n";
-import { useEffect, useState } from "react";
+import { useEffect,useState } from "react";
 import { createRoot } from "react-dom/client";
 import { browser } from "wxt/browser";
+import { setDocumentLanguage,t } from "../../i18n";
 import "./welcome.css";
 
 const setupCommand = "npx -y opencode-chromium@latest setup --all";
@@ -69,7 +69,7 @@ function Welcome() {
     <p className="feedback" role="status">{feedback}</p>
     <footer>
       <label><input type="checkbox" checked={showUpdates} disabled={saving || !loaded} onChange={event => void toggleUpdates(event.target.checked)} />{t("showNotes")}</label>
-      <nav aria-label={t("help")}><a href={`${repository}/blob/master/docs/troubleshooting.md`} target="_blank" rel="noreferrer">{t("help")}</a><a href={`${repository}/blob/master/docs/PRIVACY.md`} target="_blank" rel="noreferrer">{t("privacy")}</a><button className="text-button" onClick={() => window.close()}>{t("closeGuide")}</button></nav>
+      <nav aria-label={t("help")}><a href={`${repository}/blob/master/docs/runtime-updates.md#connection-recovery`} target="_blank" rel="noreferrer">{t("help")}</a><a href={`${repository}/blob/master/docs/PRIVACY.md`} target="_blank" rel="noreferrer">{t("privacy")}</a><button className="text-button" onClick={() => window.close()}>{t("closeGuide")}</button></nav>
     </footer>
   </main>;
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { FrameRouting } from "../../extension-src/entrypoints/background/frame-routing.ts";
 import { FirefoxFrameRouting } from "../../extension-src/entrypoints/background/firefox-frame-routing.ts";
 

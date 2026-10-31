@@ -1,9 +1,9 @@
-import fs from "node:fs";
-import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
+import fs from "node:fs";
+import path from "node:path";
 import { sourceFingerprint } from "../cli/source-fingerprint.ts";
+import { withRuntimeLock } from "../control/state.ts";
 import { atomicWrite } from "./transaction.ts";
 
 export function developmentExtensionSource(dir: string): string | null {

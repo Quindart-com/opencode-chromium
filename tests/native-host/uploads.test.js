@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createUploadFiles } from "../../native-host/src/uploads.ts";
 import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
-import { FrameDecoder } from "../../native-host/src/framing.ts";
+import { FrameDecoder } from "../../src/shared/node-framing.ts";
 
 test("approved snapshots preserve the exact bytes and file names; changed files fail closed", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "upload-files-test-"));

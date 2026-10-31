@@ -1,7 +1,7 @@
 import { z } from "zod";
+import { authorizationForError } from "../shared/authorization.ts";
 import { record } from "../shared/values.ts";
 import { errorMessage } from "./errors.ts";
-import { authorizationForError } from "../shared/authorization.ts";
 
 // A failure has to say what went wrong and what to try next, and little else:
 // the code, a bounded message, and one actionable hint. Provider messages can be

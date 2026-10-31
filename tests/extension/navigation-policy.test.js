@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { updateSessionPolicy, assertSessionUrl, installNavigationPolicy } from "../../extension-src/entrypoints/background/navigation-policy.ts";
 test("session policy survives configuration updates and permits a safe blank tab", () => {
   const session = {};

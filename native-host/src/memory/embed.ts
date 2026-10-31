@@ -1,10 +1,10 @@
 import { record } from "../../../src/shared/values.ts";
 import { EMBED_BATCH_SIZE,MEMORY_EMBED_MAX_ATTEMPTS,WRITER_FLUSH_MS,WRITER_QUEUE_CAPACITY } from "./config.ts";
+import type { MemoryStorePort } from "./contracts.ts";
 import type { Embedder,EmbeddingResult } from "./embedding-service.ts";
 import { EmbeddingService } from "./embedding-service.ts";
 import { dot,scoreFor } from "./rank.ts";
 import { parseRecipeJson } from "./recipe.ts";
-import type { MemoryStore } from "./store.ts";
 export interface EmbeddingRow { fingerprint: string; values: ArrayLike<number> | undefined }
 type QueueItem = { fingerprint: string; text: string; attempts?: number; kind?: string };
 type QueryEmbedding = { vector: number[] | Float32Array | null; model?: string | null; dims?: number | null; embeddingProfile?: string | null };
@@ -23,7 +23,7 @@ export class EmbedQueue {
   readonly embed: ((texts: string[]) => Promise<EmbeddingResult>) | null;
   private flushing: Promise<void> | null;
   onResults: ((rows: EmbeddingRow[], model: string | null | undefined, dims: number, profile: string | null) => void) | null;
-  store: MemoryStore | null;
+  store: MemoryStorePort | null;
   private queue: QueueItem[];
   private pendingDrop: number;
   private closed: boolean;
@@ -32,7 +32,7 @@ export class EmbedQueue {
   private reindexPromise: Promise<unknown> | null;
   readonly capacity: number;
   private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>();
-  constructor({ embed = null, onResults = null, capacity = WRITER_QUEUE_CAPACITY, store = null }: { embed?: Embedder | null; onResults?: EmbedQueue["onResults"]; capacity?: number; store?: MemoryStore | null } = {}) {
+  constructor({ embed = null, onResults = null, capacity = WRITER_QUEUE_CAPACITY, store = null }: { embed?: Embedder | null; onResults?: EmbedQueue["onResults"]; capacity?: number; store?: MemoryStorePort | null } = {}) {
     this.service = embed ? new EmbeddingService(embed) : null;
     const service = this.service;
     this.embed = service ? texts => service.run(texts) : null;
@@ -114,7 +114,7 @@ export class EmbedQueue {
     }
   }
 
-  async embedQuery(store: MemoryStore, { query, bound, candidates, vectors, modelId, kind: _kind, embeddingProfile = null, threshold = 0.42, profileId = null }: QueryOptions) {
+  async embedQuery(store: MemoryStorePort, { query, bound, candidates, vectors, modelId, embeddingProfile = null, threshold = 0.42, profileId = null }: QueryOptions) {
     if (!this.queryEmbed || typeof query !== "string") {
       return { results: [], model: modelId, dims: null, embedding_profile: embeddingProfile, degraded: true, error: "memory_model_unavailable" };
     }
@@ -202,7 +202,7 @@ export class EmbedQueue {
     };
   }
 
-  #scheduleReindex(store: MemoryStore) {
+  #scheduleReindex(store: MemoryStorePort) {
     if (this.reindexPromise || !store?.open || !this.embed) return;
     this.reindexPromise = Promise.resolve(store.reindex({ embed: this.embed }))
       .catch((error) => store?.noteEmbeddingFailure?.(error))

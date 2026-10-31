@@ -1,6 +1,6 @@
+import { useEffect,useState } from "react";
 import { t } from "../../i18n";
-import { useEffect, useState } from "react";
-import { sendMessage, type NativeStatus, type Profile } from "./api";
+import { sendMessage,type NativeStatus,type Profile } from "./api";
 import HarnessConnections from "./HarnessConnections";
 
 const setupCommand = "npx -y opencode-chromium@latest setup --all";

@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { pageException } from "../shared/page-error.ts";
 import type { BrowserContext } from "../core/tool-definition.ts";
 import type { PageCdpRequest } from "../shared/cdp.ts";
+import { pageException } from "../shared/page-error.ts";
 import type { FilePolicy } from "./file-policy.ts";
 import { defineBrowserOperation } from "./operation-definition.ts";
 
@@ -63,7 +63,7 @@ export function fileInputExpression(nodeId: string | undefined, selector = "inpu
   })()`;
 }
 
-export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }: { tool: typeof defineBrowserOperation & { schema: typeof z }; cdp: PageCdpRequest; enableCdpDomains(context: BrowserContext, tabId: number, domains: "DOM"[], options: { optional: boolean }): Promise<void>; stringify(value: unknown): string }) {
+export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }: { tool: typeof defineBrowserOperation & { schema: typeof z }; cdp: PageCdpRequest<BrowserContext>; enableCdpDomains(context: BrowserContext, tabId: number, domains: "DOM"[], options: { optional: boolean }): Promise<void>; stringify(value: unknown): string }) {
   return tool({
     description: "Set files on a specific file input by page node ID or CSS selector using CDP.",
     args: {

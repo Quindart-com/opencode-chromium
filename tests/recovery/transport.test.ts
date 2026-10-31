@@ -5,8 +5,8 @@ import path from "node:path";
 import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { browserRequest, closeBrowserClients } from "../../src/browser/client.ts";
-import { FrameDecoder, writeFrame } from "../../native-host/src/framing.ts";
-import { writeProfileRegistration } from "../../native-host/src/profile-registry.ts";
+import { FrameDecoder, writeFrame } from "../../src/shared/node-framing.ts";
+import { writeProfileRegistration } from "../../src/shared/profile-registry.ts";
 import { errorDetails } from "../../src/core/failure-context.ts";
 
 async function fixture(run: (profileId: string, calls: string[], legacy: { value: boolean }) => Promise<void>) {

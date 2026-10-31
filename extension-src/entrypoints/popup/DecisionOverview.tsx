@@ -1,10 +1,10 @@
+import { useEffect,useState } from "react";
+import { decisionFamilyLabel,decisionServiceLabel } from "../../../src/shared/decision-catalog.ts";
+import type { UsagePeriod,UsageProvider } from "../../../src/shared/decision-usage.ts";
 import { t } from "../../i18n";
-import { useEffect, useState } from "react";
 import { sendMessage } from "./api";
 import type { DecisionSettings } from "./decision-types";
-import type { UsagePeriod,UsageProvider } from "../../../src/shared/decision-usage.ts";
 import UsageTrend from "./UsageTrend";
-import { decisionServiceLabel,decisionFamilyLabel } from "../../../src/shared/decision-catalog.ts";
 
 const service = (route: string) => decisionServiceLabel(route) ?? t("usageUnattributed");
 const model = decisionFamilyLabel;

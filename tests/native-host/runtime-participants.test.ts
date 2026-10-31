@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { atomicJson, createParticipant, participants } from "../../native-host/src/runtime-participants.ts";
+import { atomicJson, createParticipant, participants } from "../../src/control/leases.ts";
 
 test("starting a participant reaps dead idle records but preserves sessions, approvals, in-flight work and live owners", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "participant-recovery-"));

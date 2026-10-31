@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
-import { npmMetadata } from "../../src/management/npm-metadata.ts";
+import { npmMetadata } from "../../src/control/npm-client.ts";
 import { publishedVersion } from "../../src/management/manual-update.ts";
 
 test("release lookup uses npm's configured registry and auth without exposing credentials", async () => {

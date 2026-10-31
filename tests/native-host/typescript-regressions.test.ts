@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { float32FromBuffer, embedBufferFromRows } from "../../native-host/src/memory/rank.ts";
 import { parseTrace } from "../../native-host/src/diagnostics/trace-parser.ts";
 import { normalizeError } from "../../src/core/errors.ts";

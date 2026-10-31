@@ -1,6 +1,6 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 export function existingFile(file: string | undefined): string | null {
   if (!file) return null;
   try { return fs.statSync(file).isFile() ? path.resolve(file) : null; } catch { return null; }

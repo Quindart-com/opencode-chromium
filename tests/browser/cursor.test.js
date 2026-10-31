@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { cursorActionForStep, cursorActionForTool, cursorPoint, isCursorAction } from "../../src/browser/cursor.ts";
 
 test("every interactive tool maps to a cursor animation", () => {

@@ -1,13 +1,9 @@
 {
   "entry": [
-    "src/cli/index.ts",
     "src/adapters/{sdk,opencode,mcp}/index.ts",
-    "src/adapters/mcp/server.ts",
     "src/core/index.ts",
     "src/browser/operations/index.ts",
-    "native-host/src/host.js",
-    "native-host/src/runtime.ts",
-    "native-host/src/runtime-supervisor.ts",
+    "src/control/{browser-broker,controller,mcp-supervisor}.ts",
     "extension-src/entrypoints/background/index.ts",
     "extension-src/entrypoints/popup/main.tsx",
     "extension-src/entrypoints/upload-confirm/main.tsx",
@@ -19,8 +15,5 @@
     "src/**/*.{js,ts}",
     "native-host/src/**/*.{js,ts}",
     "extension-src/**/*.{js,ts,tsx}"
-  ],
-  "ignore": [
-    "src/search/**"
   ]
 }

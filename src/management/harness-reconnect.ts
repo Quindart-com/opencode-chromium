@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { harnessControls,refreshHarnessControl } from "../../native-host/src/harness-control.ts";
-import { runProcess } from "../../native-host/src/process-effect.ts";
+import { harnessControls,refreshHarnessControl } from "../control/harness-control.ts";
+import { runProcess } from "../control/process.ts";
+import { harnessTargets,type HarnessTarget } from "../shared/connections.ts";
+import { harnessDefinitions } from "../shared/harnesses.ts";
+import { nativeCodexPluginEnabled } from "./configuration.ts";
 import { detectHarnesses,planHarness,type Harness } from "./harnesses.ts";
 import { applyTransaction } from "./transaction.ts";
-import { nativeCodexPluginEnabled } from "./configuration.ts";
-import { harnessDefinitions } from "../shared/harnesses.ts";
-import { harnessTargets,type HarnessTarget } from "../shared/connections.ts";
 
 export const reconnectTargets = harnessTargets;
 export type ReconnectTarget = HarnessTarget;

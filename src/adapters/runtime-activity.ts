@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createParticipant } from "../../native-host/src/runtime-participants.ts";
+import { createParticipant } from "../control/leases.ts";
 import type { AgentBrowserRuntime } from "../core/runtime.ts";
 import { PLUGIN_VERSION } from "../core/versions.ts";
 

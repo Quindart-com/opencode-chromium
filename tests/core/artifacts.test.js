@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "bun:test";
 import { ArtifactStore, artifactUriTemplate } from "../../src/core/artifacts.ts";
 
 test("artifact store returns URI metadata and reads content", () => {

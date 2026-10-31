@@ -1,7 +1,7 @@
 import type { Browser,WxtBrowser } from "wxt/browser";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 import { record } from "../../../src/shared/values.ts";
 import { commandParamsSchema,type CommandParams } from "./command-schema.ts";
-import { beforeDeadline } from "../../../src/shared/deadline.ts";
 
 interface Pending {
   resolve(result: unknown): void;

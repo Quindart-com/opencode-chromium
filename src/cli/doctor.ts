@@ -1,17 +1,17 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readProfileRegistrations } from "../../native-host/src/profile-registry.ts";
-import { participants,participantBusy,processAlive,reapParticipants } from "../../native-host/src/runtime-participants.ts";
 import { createBrowserAgent } from "../adapters/sdk/index.ts";
+import { participantBusy,participants,processAlive,reapParticipants } from "../control/leases.ts";
 import { errorMessage } from "../core/errors.ts";
+import { inspectBrowserMarketplace } from "../management/marketplace.ts";
+import { readProfileRegistrations } from "../shared/profile-registry.ts";
+import { inspectProjectBrowserPlugin } from "./codex-marketplace.ts";
+import { connectionDoctor } from "./connection-doctor.ts";
 import { firefoxHealth } from "./firefox.ts";
+import { runtimeDir } from "./native-host.ts";
 import { codexConfigPath,inspectHarnessSkills,STALE_SKILL_MARKER } from "./skills.ts";
 import { packageInfo } from "./version.ts";
-import { runtimeDir } from "./native-host.ts";
-import { inspectProjectBrowserPlugin } from "./codex-marketplace.ts";
-import { inspectBrowserMarketplace } from "../management/marketplace.ts";
-import { connectionDoctor } from "./connection-doctor.ts";
 
 const MAX_SCHEMA_BYTES = 13000;
 

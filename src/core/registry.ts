@@ -80,7 +80,7 @@ const observationSchema = z.object({
   format: z.enum(["png", "jpeg", "webp"]).optional(),
   quality: z.number().int().min(0).max(100).optional(),
   diagnostic: diagnosticSchema.optional(),
-  searchStrategy: z.enum(["auto", "semantic", "lexical", "deep", "snowflake"]).optional(),
+  searchStrategy: z.enum(["auto", "semantic", "lexical", "deep"]).optional(),
 }).optional();
 
 const stepSchema = z.object({
@@ -160,7 +160,7 @@ export const observeInputSchema = z.object({
         format: z.enum(["png", "jpeg", "webp"]).optional(),
         quality: z.number().int().min(0).max(100).optional(),
         delivery: z.enum(["artifact", "inline"]).optional(),
-        searchStrategy: z.enum(["auto", "semantic", "lexical", "deep", "snowflake"]).optional(),
+        searchStrategy: z.enum(["auto", "semantic", "lexical", "deep"]).optional(),
         pack: z.string().max(64).optional(),
         uri: z.string().max(300).optional(),
         diagnostic: diagnosticSchema.optional(),
@@ -221,7 +221,7 @@ export interface RuntimePort {
   memorySearch(input: MemorySearchInput, context: BrowserContext): unknown | Promise<unknown>;
 }
 
-export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" | "session" | "finalize">, { memory: _memory = false } = {}) {
+export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" | "session" | "finalize">) {
   return {
     browser_run: defineRuntimeTool({
       description: "Run an action chain with settle and post-observation. If authorization is blocked, ask Approve / Disapprove with the harness question tool.",

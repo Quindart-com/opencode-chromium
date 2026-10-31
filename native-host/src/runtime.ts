@@ -2,10 +2,15 @@
 
 import fs from "node:fs";
 import net from "node:net";
-import path from "node:path";
 import process from "node:process";
 import { z } from "zod";
+import { createParticipant,participantBusy,participants,processAlive } from "../../src/control/leases.ts";
+import { runtimeDirectory } from "../../src/control/state.ts";
 import { errorMessage } from "../../src/core/errors.ts";
+import { instanceIpcPath,isUnixSocketPath } from "../../src/shared/node-files.ts";
+import { FrameDecoder,writeFrame } from "../../src/shared/node-framing.ts";
+import { PRODUCT } from "../../src/shared/product.ts";
+import { normalizeProfileRegistration,readProfileRegistrations,removeProfileRegistration,writeProfileRegistration } from "../../src/shared/profile-registry.ts";
 import type { ProfileHello } from "../../src/shared/rpc.ts";
 import { record } from "../../src/shared/values.ts";
 import { handleDecisionHostMethod } from "./decisions/index.ts";
@@ -13,26 +18,18 @@ import { selectRecipe } from "./decisions/recipes.ts";
 import { decisionSearch } from "./decisions/search.ts";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.ts";
 import { createFirefoxHost } from "./firefox/backend.ts";
-import { FrameDecoder,writeFrame } from "./framing.ts";
-import { configureNetworkFamilyFallback } from "./network-policy.ts";
-import { instanceIpcPath,isUnixSocketPath } from "./ipc-path.ts";
 import { memoryCommandSchema } from "./memory/commands.ts";
 import { EmbedQueue,MemoryStore,embeddingEnabled } from "./memory/index.ts";
 import { candidateRecipes } from "./memory/recipe-candidates.ts";
-import { normalizeProfileRegistration,readProfileRegistrations,removeProfileRegistration,writeProfileRegistration } from "./profile-registry.ts";
+import { configureNetworkFamilyFallback } from "./network-policy.ts";
 import type { RelayState } from "./rpc-relay.ts";
 import { RpcRelay } from "./rpc-relay.ts";
-import { runtimeDirectory,withRuntimeLock } from "./runtime-lifecycle.ts";
-import { createParticipant,participantBusy,participants,processAlive,readJournal } from "./runtime-participants.ts";
-import { runActivationCoordinator } from "./runtime-coordinator.ts";
-import { createIdleUpdateCheck,createRuntimeUpdater,probeRuntimeActivity } from "./runtime-updates.ts";
-import { createLocalActions } from "./local-actions.ts";
 import { embedMemoryTexts,handleSemanticHostMethod,rankPageUnits } from "./semantic-search.ts";
 import { rankInputSchema } from "./semantic-types.ts";
 import { createUploadFiles } from "./uploads.ts";
 import { handleVisualHostMethod } from "./visual-map.ts";
 
-const PLUGIN_NAME = "opencode-browser-plugin";
+const PLUGIN_NAME = PRODUCT.pluginId;
 const PROTOCOL_VERSION = "1";
 configureNetworkFamilyFallback();
 
@@ -63,7 +60,6 @@ function registerProfile(profile: ProfileHello) {
   writeProfileRegistration(registration);
   state.profile = { ...registration, uploadConsentVersion: profile.uploadConsentVersion };
   activeProfileId = profile.profileId;
-  try { updater.schedule(profile.extensionVersion); } catch { /* Update scheduling is best effort. */ }
   memoryStore?.profiles.register(profile);
 }
 
@@ -92,7 +88,6 @@ try {
   log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
 const uploadFiles = createUploadFiles();
-const localActions = createLocalActions();
 const firefoxHost = createFirefoxHost({ getProfile: () => state.profile, onEvent: (tabId, method, params) => {
   void relay.requestExtension("firefox.event", { tabId, method, params }).catch(() => {});
 } });
@@ -102,12 +97,8 @@ const relay: RpcRelay = new RpcRelay({
   onProfile: registerProfile,
   admit: async () => { await hostActivity.enter(); return () => hostActivity.leave(); },
   canDisconnect: () => !participants(runtimeDirectory()).some(row => processAlive(row.pid) && participantBusy(row)),
-  connectionDetails: () => ({ harnesses: localActions.harnesses(), actions: localActions.status() }),
+  connectionDetails: () => ({}),
   localHandler: async (method, params): Promise<unknown> => {
-    if (method === "connections.reconnect") return localActions.start("reconnect", params.target);
-    if (method === "connections.diagnose") return localActions.start("diagnose");
-    if (method === "runtime.updateNow") return localActions.start("update");
-    if (method === "runtime.actionStatus") return localActions.status(typeof params.id === "string" ? params.id : undefined);
     const firefox = await firefoxHost(method, params);
     if (firefox !== undefined) return firefox;
     if (method.startsWith("uploads.")) return uploadFiles(method, params);
@@ -115,8 +106,6 @@ const relay: RpcRelay = new RpcRelay({
       const idle = await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null);
       return { ...relay.activity(), extensionIdle: record(idle).idle === true, nativeHostVersion };
     }
-    if (method === "runtime.updateStatus") return updater.status();
-    if (method === "runtime.updateConfigure") return updater.configure(z.boolean().parse(params.enabled));
     if (method === "memory.selectRecipe" && memoryStore) return await selectRecipe(params?.intent,
       () => memoryStore ? candidateRecipes(memoryStore, { hostname: typeof params.hostname === "string" ? params.hostname : undefined, stepCount: typeof params.stepCount === "number" ? params.stepCount : undefined, profileId: activeProfileId ?? undefined }) : []) ?? { match: null };
     const decision = await handleDecisionHostMethod(method, params);
@@ -231,76 +220,10 @@ function createIpcServer() {
 
 const server = createIpcServer();
 let shutdownStarted = false;
-const verifiedProfiles = new Set<string>();
-const updater = createRuntimeUpdater({ dir: runtimeDirectory(), activate: runActivationCoordinator, verifiedProfiles: () => [...verifiedProfiles], busy: async () => {
-  verifiedProfiles.clear();
-  if (relay.activity(false).unmanaged || relay.activity(false).pending) return true;
-  const idle = await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null);
-  if (record(idle).idle !== true) return true;
-  if (activeProfileId) verifiedProfiles.add(activeProfileId);
-  for (const profile of readProfileRegistrations()) {
-    if (profile.hostPid !== process.pid && profile.ipcPath) {
-      if (await probeRuntimeActivity(profile)) return true;
-      verifiedProfiles.add(profile.profileId);
-    }
-  }
-  return false;
-} });
-const checkRuntimeUpdate = createIdleUpdateCheck({ updater, nativeVersion: nativeHostVersion,
-  quietMs: 0,
-  target: () => state.profile?.extensionVersion,
-  active: () => shutdownStarted || relay.activity(false).unmanaged > 0 || relay.activity(false).pending > 0,
-  canReconnect: async () => {
-    if (participants(runtimeDirectory()).some(row => processAlive(row.pid) && participantBusy(row))) return false;
-    for (const profile of readProfileRegistrations()) if (profile.hostPid !== process.pid && await probeRuntimeActivity(profile)) return false;
-    return record(await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null)).idle === true;
-  },
-  retire: () => { void retireAtGate(false); },
-});
-let checkingRetirement = false;
-async function retireAtGate(requireJournal = true) {
-  if (checkingRetirement || shutdownStarted) return;
-  checkingRetirement = true;
-  try {
-    const dir = runtimeDirectory(), journal = readJournal(dir);
-    if (requireJournal && (!journal || journal.phase === "preparing")) return;
-    const selected = JSON.parse(fs.readFileSync(path.join(dir, "runtime.json"), "utf8")) as { version?: string };
-    if (selected.version === nativeHostVersion) return;
-    await withRuntimeLock(dir, async () => {
-      if (participants(dir).some(participantBusy) || relay.activity(false).unmanaged || relay.activity(false).pending) return;
-      if (record(await relay.requestExtension("runtime.canReconnect", {}, 1500).catch(() => null)).idle !== true) return;
-      // New agent admission remains blocked by the journal until the helper
-      // observes replacement hosts. The helper does not die with this host.
-      shutdownHost("Matching runtime ready; reconnecting idle browser host");
-    });
-  } catch { /* A failed idle check must leave this host serving work. */ }
-  finally { checkingRetirement = false; }
-}
-const updateTimer = setInterval(() => { void checkRuntimeUpdate(); }, 1000);
-updateTimer.unref?.();
-// Catalog repair must work even when no Codex MCP process can start.
-const syncMarketplace = async () => {
-  if (shutdownStarted || fs.existsSync(new URL("../../src", import.meta.url)) || !updater.status({ includeParticipants: false }).enabled) return;
-  try { const { refreshBrowserMarketplace } = await import("../../src/management/marketplace.ts"); await refreshBrowserMarketplace({ version: nativeHostVersion, dir: runtimeDirectory() }); }
-  catch { /* Keep browser work serving; the next bounded check retries. */ }
-};
-void syncMarketplace();
-const marketplaceTimer = setInterval(() => { void syncMarketplace(); }, 5 * 60 * 1000);
-marketplaceTimer.unref();
-const retirementTimer = setInterval(() => { void retireAtGate(); }, 100);
-retirementTimer.unref();
-const activityWatcher = fs.watch(path.join(runtimeDirectory(), "participants"), (_event, file) => {
-  if (file?.toString().endsWith(".json")) void checkRuntimeUpdate();
-});
-activityWatcher.unref();
 
 function shutdownHost(reason: string|undefined, exitCode = 0) {
   if (shutdownStarted) return;
   shutdownStarted = true;
-  clearInterval(updateTimer);
-  clearInterval(retirementTimer);
-  clearInterval(marketplaceTimer);
-  activityWatcher.close();
   hostActivity.close();
   log(reason ?? "Native host shutting down");
   relay.flushMemory();

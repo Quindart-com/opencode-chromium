@@ -1,7 +1,7 @@
-import { Data,Effect,Semaphore,Result } from "effect";
+import { Data,Effect,Result,Semaphore } from "effect";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { decisionServices,decisionChoices,decisionImageCapable,decisionModelMatches } from "../../../src/shared/decision-catalog.ts";
+import { decisionChoices,decisionImageCapable,decisionModelMatches,decisionServices } from "../../../src/shared/decision-catalog.ts";
 import { boundedJevImage } from "./jev-image.js";
 
 const candidateSchema = z.object({ id: z.string().min(1).max(100).refine(id => id !== "__abstain"), description: z.string().min(1).max(160) });

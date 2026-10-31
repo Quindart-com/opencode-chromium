@@ -1369,5 +1369,9 @@
   },
   "catalogInvalid": {
     "message": "无法加载自定义模型目录。内置模型仍然可用。"
-  }
+  },
+  "bridgeRequired": { "message": "请运行一次 opencode-chromium setup --all，以安装稳定更新控制器。" },
+  "runtimeDraining": { "message": "新连接使用更新后的运行时。现有会话会继续使用当前版本直至结束。" },
+  "runtimeApprovalRequired": { "message": "有新的主要版本可用，需要你的确认。" },
+  "majorUpgradeConfirm": { "message": "升级到新的主要版本吗？现有会话不会中断，但新连接将无法使用已移除的旧命令。" }
 }

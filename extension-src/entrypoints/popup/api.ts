@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type { VersionStatus } from "../../version-status";
+export { formatBytes } from "../../../src/shared/values";
 
 export type NativeStatus = VersionStatus & {
   state?: string;
@@ -117,7 +118,6 @@ export type MemoryResponse<T> =
 export async function sendMessage<T>(message: object): Promise<T> {
   return (await browser.runtime.sendMessage(message)) as T;
 }
-
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -135,14 +135,3 @@ export async function memoryCall<T>(method: string, params: object = {}): Promis
 }
 
 export const MB = 1024 * 1024;
-
-export function formatBytes(bytes: number): string {
-  const units = ["B", "KiB", "MiB", "GiB"];
-  let value = Number(bytes) || 0;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-}

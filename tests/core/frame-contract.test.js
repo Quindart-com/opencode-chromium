@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test as bunTest } from "bun:test";
 import { AgentBrowserRuntime } from "../../src/core/runtime.ts";
 import { targetSchema } from "../../src/core/registry.ts";
+
+const test = (name, run) => bunTest(name, async () => {
+  const cleanup = [];
+  try { return await run({ after: callback => cleanup.push(callback) }); }
+  finally { for (const callback of cleanup.reverse()) await callback(); }
+});
 
 function fixture(t) {
   const runtime = new AgentBrowserRuntime({ artifactStore: { close() {} }, operationFactory: async () => ({ tool: {} }) });

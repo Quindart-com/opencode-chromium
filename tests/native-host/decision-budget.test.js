@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 
 // The provider directory is redirected before the decision modules read it, so
 // these tests never touch a real credential and never make a network call.

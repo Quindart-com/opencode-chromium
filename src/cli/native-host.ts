@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import type { FileChange } from "../management/transaction.ts";
+import { readJsonIfPresent,samePath } from "../shared/node-files.ts";
+import { PRODUCT } from "../shared/product.ts";
 import { record } from "../shared/values.ts";
 export interface NativeHostOptions {
   browsers: string[]; extensionIds: string[]; auto?: boolean; hostPath?: string; targetDir?: string; noDetection?: boolean;
@@ -14,8 +16,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { browserIds,BROWSERS,browserUserDataRoot,installedBrowsers,nativeMessagingDir,windowsRegistryKey } from "./browsers.ts";
 
-const HOST_NAME = "com.opencode.browser.plugin";
-export const FIREFOX_EXTENSION_ID = "opencode-browser-plugin@quindart.com";
+const HOST_NAME = PRODUCT.nativeHost;
+export const FIREFOX_EXTENSION_ID = PRODUCT.firefoxExtensionId;
 export { HOST_NAME };
 function usage() {
   console.error("Usage: node scripts/install-native-host.js [--auto] [--extension-id <id> ...] [--browsers chrome,edge,brave,chromium|all] [--host-path <executable>]");
@@ -91,7 +93,7 @@ function repoRoot() {
 // One per-user location holds the launchers, the manifests and the pointer, so
 // the browser registration and every client config can be written once and
 // never change again.
-const RUNTIME_DIR_ENV = "OPENCODE_BROWSER_RUNTIME_DIR";
+const RUNTIME_DIR_ENV = PRODUCT.runtimeEnvironment;
 
 export function runtimeDir() {
   const configured = process.env[RUNTIME_DIR_ENV];
@@ -100,15 +102,6 @@ export function runtimeDir() {
     return path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), "OpenCode", "browser");
   }
   return path.join(os.homedir(), ".config", "opencode", "browser");
-}
-
-function readJsonIfPresent(filePath: string): Record<string, unknown> | null {
-  if (!fs.existsSync(filePath)) return null;
-  try {
-    return record((JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown));
-  } catch {
-    return null;
-  }
 }
 
 function detectExtensionIds(browser: string): string[] {
@@ -318,12 +311,6 @@ export function installManifest(args: NativeHostOptions) {
 
   const extensionIdConfigPath = writeExtensionIdConfig(targetDir, allExtensionIds);
   return { hostName: HOST_NAME, hostPath, extensionIdConfigPath, installed, skipped };
-}
-
-// A registration path comparison must ignore case and separator style.
-function samePath(first: string|null, second: string) {
-  if (typeof first !== "string" || typeof second !== "string") return false;
-  return first.replaceAll("\\", "/").toLowerCase() === second.replaceAll("\\", "/").toLowerCase();
 }
 
 export { detectExtensionIds,installedBrowsers,parseArgs };

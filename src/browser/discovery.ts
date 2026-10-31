@@ -4,8 +4,8 @@ import type { PageCdpRequest } from "../shared/cdp.ts";
 import { record } from "../shared/values.ts";
 import { safeNetworkUrl } from "./network.ts";
 import { defineObjectOperation } from "./operation-definition.ts";
-import { assertNavigationAllowed } from "./url-policy.ts";
 import { pageStateSource } from "./operations/page-state.ts";
+import { assertNavigationAllowed } from "./url-policy.ts";
 
 export function boundedFrameTree(tree: unknown, { maxDepth = 3, maxFrames = 20 } = {}) {
   const frames: { frameId: string; parentId: string | null; depth: number; url: string }[] = [];
@@ -62,7 +62,7 @@ export function webMcpDiscoveryExpression({ limit = 20, maxSchemaChars = 2000 } 
 
 type FrameInput = { tabId: number; maxDepth: number; maxFrames: number };
 export function createDiscoveryOperations({ command, evaluate, getTab }: {
-  command: PageCdpRequest;
+  command: PageCdpRequest<BrowserContext>;
   evaluate(context: BrowserContext, tabId: number, expression: string, options?: { timeoutMs?: number }): Promise<unknown>;
   getTab(context: BrowserContext, tabId: number): Promise<{ url?: string }>;
 }) {

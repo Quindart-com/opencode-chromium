@@ -1369,5 +1369,9 @@
   },
   "catalogInvalid": {
     "message": "No se pudo cargar el catálogo personalizado. Los modelos integrados están disponibles."
-  }
+  },
+  "bridgeRequired": { "message": "Ejecuta opencode-chromium setup --all una vez para instalar el controlador de actualizaciones estable." },
+  "runtimeDraining": { "message": "Las conexiones nuevas usan el runtime actualizado. Las sesiones existentes terminarán con su versión actual." },
+  "runtimeApprovalRequired": { "message": "Hay una actualización principal disponible y necesita tu aprobación." },
+  "majorUpgradeConfirm": { "message": "¿Actualizar a la nueva versión principal? Las sesiones existentes no se interrumpirán, pero los comandos heredados eliminados ya no estarán disponibles para conexiones nuevas." }
 }

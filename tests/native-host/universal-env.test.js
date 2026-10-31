@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { defaultIpcPath, instanceIpcPath } from "../../native-host/src/ipc-path.ts";
-import { profileRegistryDir } from "../../native-host/src/profile-registry.ts";
+import { test } from "bun:test";
+import { defaultIpcPath, instanceIpcPath } from "../../src/shared/node-files.ts";
+import { profileRegistryDir } from "../../src/shared/profile-registry.ts";
 
 test("provider-neutral environment names take precedence over legacy aliases", () => {
   const keys = [

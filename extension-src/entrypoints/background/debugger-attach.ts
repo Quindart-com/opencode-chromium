@@ -1,8 +1,8 @@
 import type { Browser,WxtBrowser } from "wxt/browser";
-import type { DebuggerDependencies,TraceBuffer } from "./types.ts";
 import { beforeDeadline } from "../../../src/shared/deadline.ts";
+import type { DebuggerDependencies,TraceBuffer } from "./types.ts";
 
-export function createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall: _chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS, onAttached, generation, trackPending, keepAttached }: DebuggerDependencies) {
+export function createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS, onAttached, generation, trackPending, keepAttached }: DebuggerDependencies) {
   return async function attachTab(tabId: number, sessionId: string, deadlineAt = Date.now() + DEFAULT_CDP_TIMEOUT_MS) {
   return withTabLock(tabId, async () => {
     const innerDeadline = deadlineAt - 25;

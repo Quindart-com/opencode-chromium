@@ -1,5 +1,5 @@
+import { useEffect,useState } from "react";
 import { t } from "../../i18n";
-import { useEffect, useState } from "react";
 import { sendMessage } from "./api";
 
 export default function UploadSettings() {

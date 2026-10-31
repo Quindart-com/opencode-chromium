@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { UsageQuery } from "../../../src/shared/decision-usage.ts";
 import type { DecisionResult } from "./provider.js";
 import { providerSettingsPath,type ProviderSettings } from "./settings.js";
 import { usageReport } from "./usage-ledger.js";
-import type { UsageQuery } from "../../../src/shared/decision-usage.ts";
 
 const file = () => path.join(path.dirname(providerSettingsPath()), "usage.jsonl");
 export const usageProviderId = (settings: Pick<ProviderSettings, "provider" | "route">) => settings.route + ":" + settings.provider;

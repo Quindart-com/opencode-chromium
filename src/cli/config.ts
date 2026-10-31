@@ -5,7 +5,8 @@ import type { ConfigOptions,HarnessId } from "../management/configuration.ts";
 import { planConfiguration } from "../management/configuration.ts";
 import { harnessConfigPath } from "../management/harness-paths.ts";
 import { applyTransaction } from "../management/transaction.ts";
-export const CANONICAL_SERVER = "opencode-browser-plugin";
+import { PRODUCT } from "../shared/product.ts";
+export const CANONICAL_SERVER = PRODUCT.pluginId;
 export const CORE_TOOLS = ["browser_run", "browser_observe", "browser_session", "browser_finalize"];
 
 export function packageRoot() {

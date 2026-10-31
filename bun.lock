@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode-browser-plugin",
+      "name": "opencode-chromium",
       "dependencies": {
         "@huggingface/transformers": "^4.2.0",
         "@jridgewell/trace-mapping": "^0.3.31",

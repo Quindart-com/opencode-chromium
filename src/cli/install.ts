@@ -1,6 +1,6 @@
 import path from "node:path";
-import { harnessClients } from "../shared/harnesses.ts";
 import type { HarnessId } from "../management/configuration.ts";
+import { harnessClients } from "../shared/harnesses.ts";
 import { packageRoot,updateClientConfig } from "./config.ts";
 import { installSkills,uninstallSkills } from "./skills.ts";
 

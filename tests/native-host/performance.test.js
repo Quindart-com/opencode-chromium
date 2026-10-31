@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { analyzePerformanceTrace, performanceInsightById, traceEventsFromChunks } from "../../native-host/src/diagnostics/index.ts";
 
 const TS = 1000000;

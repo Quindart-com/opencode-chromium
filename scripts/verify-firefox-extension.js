@@ -29,7 +29,7 @@ fs.writeFileSync(background, fs.readFileSync(background, 'utf8').replaceAll('com
 const registry = path.join(fixture, 'registry'); fs.mkdirSync(registry);
 const runtimeDir = path.join(fixture, 'runtime');
 const env = { ...process.env, OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: registry, OPENCODE_BROWSER_RUNTIME_DIR: runtimeDir, OPENCODE_BROWSER_MEMORY_DIR: path.join(fixture, 'memory'), AGENT_BROWSER_PROVIDER_DIR: path.join(fixture, 'providers'), OPENCODE_BROWSER_SEMANTIC_DIR: path.join(fixture, 'models') };
-const { MemoryStore } = await import('../native-host/dist/memory/store.js');
+const { MemoryStore } = await import('../native-host/dist/memory/index.js');
 const fixtureMemory = new MemoryStore({ root: env.OPENCODE_BROWSER_MEMORY_DIR }); fixtureMemory.enable(); fixtureMemory.close();
 if (browser === 'librewolf') {
   env.USERPROFILE = fixture; env.HOME = fixture;

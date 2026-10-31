@@ -1,8 +1,8 @@
-import { t } from "../../i18n";
 import { useState } from "react";
 import { browser } from "wxt/browser";
+import { t } from "../../i18n";
 import { versionNotice } from "../../version-status";
-import { sendMessage, type NativeStatus } from "./api";
+import { sendMessage,type NativeStatus } from "./api";
 import useLocalAction from "./useLocalAction";
 
 export default function VersionNotice({ status, showSnoozed }: { status: NativeStatus; showSnoozed: boolean }) {

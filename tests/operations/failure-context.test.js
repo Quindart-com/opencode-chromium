@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { z } from "zod";
 import { FAILURE_MESSAGE_LIMIT, errorDetails, failureHint, shouldReobservePage } from "../../src/core/failure-context.ts";
 import { createAgentBrowserRuntime, createCoreRegistry } from "../../src/core/index.ts";

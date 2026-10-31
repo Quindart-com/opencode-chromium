@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { CURSOR_SCRIPTS, cursorIdFromParams, cursorLabel, cursorState, gestureAction } from "../../extension-src/entrypoints/background/cursor-state.ts";
 
 test("the injected cursor scripts load the artwork before the renderer", () => {

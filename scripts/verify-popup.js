@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { versionNotice } from "../extension-src/version-status.ts";
-import { MemoryStore } from "../native-host/dist/memory/store.js";
+import { MemoryStore } from "../native-host/dist/memory/index.js";
 import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js";
 import { decisionUsage } from "../native-host/dist/decisions/usage.js";
 import { SEMANTIC_MODELS } from "../native-host/dist/semantic-models.js";

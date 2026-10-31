@@ -3,7 +3,7 @@ import { PNG } from "pngjs";
 import { z } from "zod";
 import { defineObjectOperation } from "../browser/operation-definition.ts";
 import { record } from "../shared/values.ts";
-import type { AgentBrowserRuntime } from "./runtime.ts";
+import type { RuntimePort } from "./runtime-port.ts";
 
 const MAX_PIXELS = 2_000_000;
 const MAX_PNG_BYTES = 4_000_000;
@@ -71,7 +71,7 @@ export function snapshotDiff(before: SemanticNode[], after: SemanticNode[], limi
   for (const [selector, node] of old) if (!next.has(selector)) removed.push(node);
   return { counts: { added: added.length, removed: removed.length, changed: changed.length }, added: added.slice(0, limit), removed: removed.slice(0, limit), changed: changed.slice(0, limit), truncated: Math.max(added.length, removed.length, changed.length) > limit };
 }
-export function createObservationOperations(runtime: AgentBrowserRuntime) {
+export function createObservationOperations(runtime: RuntimePort) {
   const compareSchema = z.object({ tabId, baseline: z.string().max(300), threshold: z.number().min(0).max(1).default(0.1), limit: z.number().int().min(1).max(100).default(40) });
   async function capture(input: z.output<typeof captureSchema>, sessionId: string): Promise<Baseline> {
     const session = runtime.getSession(sessionId);

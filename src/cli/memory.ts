@@ -1,6 +1,6 @@
 import { embedMemoryTexts } from "../../native-host/src/semantic-search.ts";
 import { EmbedQueue,MemoryStore,embeddingEnabled,memoryRootDir } from "../memory/index.ts";
-import { record } from "../shared/values.ts";
+import { formatBytes,record } from "../shared/values.ts";
 
 function openCliStore() {
   const root = memoryRootDir();
@@ -219,17 +219,6 @@ function prettyStatus(input: unknown, subcommand: string) {
     ].join("\n");
   }
   return JSON.stringify(result, null, 2);
-}
-
-function formatBytes(bytes: number) {
-  const units = ["B", "KiB", "MiB", "GiB"];
-  let value = Number(bytes) || 0;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 export { commandUsage as memoryHelp };

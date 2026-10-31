@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
-import { test } from "node:test";
+import { test } from "bun:test";
 
 // The cursor theme ships as a plain content script, so it is evaluated in a
 // bare context exactly the way chrome.scripting.executeScript would.

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { runProcess, ProcessFailure } from "../../native-host/src/process-effect.ts";
+import { test } from "bun:test";
+import { runProcess, ProcessFailure } from "../../src/control/process.ts";
 
 test("process effects preserve success and typed failures", async () => {
   await runProcess(process.execPath, ["-e", "process.exit(0)"], { cwd: process.cwd(), timeoutMs: 5000 });
@@ -31,7 +31,7 @@ test("cancelling a process scope terminates its child", async () => {
       try { process.kill(pid, 0); await new Promise(resolve => setTimeout(resolve, 20)); } catch { running = false; }
     }
     assert.equal(running, false, "cancellation released the child process");
-  } finally { controller.abort(); await rejected; fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { controller.abort(); await rejected; fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 });
 
 test("process deadlines produce a typed timeout", async () => {

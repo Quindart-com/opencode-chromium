@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { MAX_CHAIN_STEPS } from "./config.ts";
+import type { CompositionStore } from "./contracts.ts";
 import { prepareRows,sqlProjection } from "./database.ts";
 import { embedBufferFromRows,float32FromBuffer } from "./rank.ts";
-import type { MemoryStore } from "./store.ts";
 const legacyStepSchema = z.looseObject({ position: z.number().optional(), fingerprint: z.string().optional(), capability: z.string().nullable().optional(), hostname: z.string().nullable().optional(), verb: z.string().nullable().optional(), label: z.string().nullable().optional(), success: z.boolean().optional() });
 export type LegacyStep = z.infer<typeof legacyStepSchema>;
-type CompositionStore = Pick<MemoryStore, "db" | "meta">;
-
 export function stepsOf(chain: { steps_json: string | null }) {
   try {
     const steps = (JSON.parse(chain.steps_json ?? "[]") as unknown);

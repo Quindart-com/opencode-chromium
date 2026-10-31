@@ -1,8 +1,8 @@
+import type { MemoryStorePort } from "./contracts.ts";
 import { prepareRows,sqlProjection } from "./database.ts";
 import { canonicalRecipeSteps,parseRecipeJson } from "./recipe.ts";
-import type { MemoryStore } from "./store.ts";
 
-export function candidateRecipes(store: Pick<MemoryStore, "db">,
+export function candidateRecipes(store: Pick<MemoryStorePort, "db">,
   { hostname, profileId, stepCount }: { hostname?: string; profileId?: string; stepCount?: number } = {}) {
   if (!hostname || !profileId || stepCount === undefined || !Number.isInteger(stepCount) || stepCount < 1) return [];
   const rows = prepareRows(store.db, "SELECT c.id, c.safe_summary, c.recipe_json, c.confirmed_count, c.failed_count FROM memory_chains_v2 c " +

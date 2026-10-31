@@ -35,7 +35,10 @@ export function toolDefinitionsForDialect(registry: Record<string, RuntimeTool>,
   return Object.entries(registry).map(([name, definition]) => {
     const base = baseDefinition(name, definition);
     if (dialect === "mcp") {
-      return { name, description: base.description, inputSchema: base.input, outputSchema: base.output, annotations: definition.annotations };
+      // MCP output schemas are optional. Result validation remains enforced at
+      // execution time; omitting the repeated envelope saves substantial tool
+      // context without weakening runtime validation.
+      return { name, description: base.description, inputSchema: base.input, annotations: definition.annotations };
     }
     if (dialect === "openai") {
       return { type: "function", name, description: base.description, parameters: base.input, strict: false };

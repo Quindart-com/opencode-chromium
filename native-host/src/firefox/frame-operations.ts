@@ -1,7 +1,7 @@
 import type { BrowsingContext,Script } from "webdriver-bidi-protocol";
-import type { BidiSend } from "./protocol.ts";
-import { bridgedFrameTree } from "./frames.ts";
 import { frameGeometryFunction } from "../../../src/shared/frame-geometry.ts";
+import { bridgedFrameTree } from "./frames.ts";
+import type { BidiSend } from "./protocol.ts";
 
 export async function resolveFirefoxFrame(send: BidiSend, root: string, frameId: string) {
   const bridge = await bridgedFrameTree({ send, root, maxDepth: 8, maxFrames: 50 });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { openInstallGuide } from "../../extension-src/entrypoints/background/onboarding.ts";
 test("install guide opens once; updates respect opt-out and do not steal focus", async () => {
   const stored = {}, opened = [];

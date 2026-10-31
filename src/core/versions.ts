@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PRODUCT } from "../shared/product.ts";
 import { record } from "../shared/values.ts";
 import { BrowserRuntimeError } from "./errors.ts";
 
-export const PLUGIN_NAME = "opencode-browser-plugin";
+export const PLUGIN_NAME = PRODUCT.pluginId;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function packageVersion() {

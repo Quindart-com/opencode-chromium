@@ -1,5 +1,5 @@
-import { record } from "../../../src/shared/values.ts";
 import { beforeDeadline } from "../../../src/shared/deadline.ts";
+import { record } from "../../../src/shared/values.ts";
 
 type Send = (tabId: number, method: string, params: object, timeoutMs?: number) => Promise<unknown>;
 export class FirefoxFrameRouting {

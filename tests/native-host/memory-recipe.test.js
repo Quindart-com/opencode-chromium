@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { MemoryStore } from "../../native-host/src/memory/store.ts";
+import { test } from "bun:test";
+import { MemoryStore } from "../../native-host/src/memory/index.ts";
 import { chainV2Fingerprint, shortFingerprint } from "../../native-host/src/memory/recipe.ts";
 import { candidateRecipes } from "../../native-host/src/memory/recipe-candidates.ts";
 

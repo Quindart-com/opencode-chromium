@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { chromiumExtensionFixture } from "./fixtures/chromium-extension.js";
-import { McpWorker } from "../native-host/src/runtime-worker.ts";
-import { harnessControls } from "../native-host/src/harness-control.ts";
+import { McpWorker } from "../src/control/mcp-worker.ts";
+import { harnessControls } from "../src/control/harness-control.ts";
 
 const server = http.createServer((req, res) => {
   res.setHeader("Content-Type", "text/html");

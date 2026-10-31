@@ -1,14 +1,14 @@
-import net from "node:net";
 import { randomUUID } from "node:crypto";
-import { FrameDecoder,writeFrame } from "../../native-host/src/framing.ts";
-import { defaultIpcPath } from "../../native-host/src/ipc-path.ts";
-import { normalizeProfileRegistration,profileRegistryDir,readProfileRegistrations,type ProfileRegistration } from "../../native-host/src/profile-registry.ts";
+import net from "node:net";
+import { BrowserRuntimeError } from "../core/errors.ts";
 import { ProfileSelectionError,type BrowserProfile } from "../core/profiles.ts";
 import { PLUGIN_VERSION } from "../core/versions.ts";
-import { BrowserRuntimeError } from "../core/errors.ts";
+import { defaultIpcPath } from "../shared/node-files.ts";
+import { FrameDecoder,writeFrame } from "../shared/node-framing.ts";
+import { normalizeProfileRegistration,profileRegistryDir,readProfileRegistrations,type ProfileRegistration } from "../shared/profile-registry.ts";
 import { isRecord,record } from "../shared/values.ts";
-import { reconciledTab,runRecoveryDoctor,sessionTabs,transportFailure } from "./recovery.ts";
 import { browserClientIdentity,stopBrowserClientPresence } from "./client-identity.ts";
+import { reconciledTab,runRecoveryDoctor,sessionTabs,transportFailure } from "./recovery.ts";
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const PROFILE_STATUS_TIMEOUT_MS = 1000;

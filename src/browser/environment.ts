@@ -21,7 +21,7 @@ function networkConditions(value: NonNullable<Environment["network"]>): NetworkC
 
 // Bookkeeping is keyed by the caller's session, profile, and tab. A reset never
 // removes another session's preload scripts or changes untracked overrides.
-export function createEnvironmentController({ command, backend, keyFor, enableNetwork = (context: BrowserContext, tabId: number) => command(context, tabId, "Network.enable", {}) }: { command: PageCdpRequest; backend: { configure(context: BrowserContext, tabId: number, env: Environment): Promise<boolean>; reset(context: BrowserContext, tabId: number): Promise<boolean> }; keyFor(context: BrowserContext, tabId: number): Promise<string>; enableNetwork?(context: BrowserContext, tabId: number): Promise<unknown> }) {
+export function createEnvironmentController({ command, backend, keyFor, enableNetwork = (context: BrowserContext, tabId: number) => command(context, tabId, "Network.enable", {}) }: { command: PageCdpRequest<BrowserContext>; backend: { configure(context: BrowserContext, tabId: number, env: Environment): Promise<boolean>; reset(context: BrowserContext, tabId: number): Promise<boolean> }; keyFor(context: BrowserContext, tabId: number): Promise<string>; enableNetwork?(context: BrowserContext, tabId: number): Promise<unknown> }) {
   const records = new Map<string, AppliedEnvironment>();
   return {
     async apply(context: BrowserContext, tabId: number, env: Environment) {

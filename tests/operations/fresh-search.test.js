@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { freshSearch } from "../../src/browser/operations/fresh-search.ts";
 
 test("search recaptures a page that changes during ranking and returns only the new targets", async () => {

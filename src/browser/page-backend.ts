@@ -8,7 +8,7 @@ const pointSchema = z.looseObject({ x: z.number().finite(), y: z.number().finite
 interface BackendDependencies {
   request(context: BrowserContext, method: string, params?: Record<string, unknown>): Promise<unknown>;
   evaluate(context: BrowserContext, tabId: number, expression: string, options?: { userGesture?: boolean }): Promise<unknown>;
-  command: PageCdpRequest;
+  command: PageCdpRequest<BrowserContext>;
   ready(context: BrowserContext, tabId: number, condition: string, timeoutMs: number): Promise<unknown>;
 }
 

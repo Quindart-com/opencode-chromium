@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
-import { BrowserRuntimeError } from "./errors.ts";
-import type { Step } from "./registry.ts";
-import type { AgentBrowserRuntime } from "./runtime.ts";
-import type { RuntimeSession } from "./runtime-types.ts";
 import { nodeFrameId } from "../browser/operations/page-state.ts";
 import { record } from "../shared/values.ts";
+import { BrowserRuntimeError } from "./errors.ts";
+import type { Step } from "./registry.ts";
+import type { RuntimePort } from "./runtime-port.ts";
+import type { RuntimeSession } from "./runtime-types.ts";
 
 const automatic = new Set(["navigate", "reload", "back", "forward", "click", "doubleClick"]);
-export async function settleBrowserStep(runtime: AgentBrowserRuntime, step: Step, tabId: number, prior: Map<string, unknown>, session: RuntimeSession) {
+export async function settleBrowserStep(runtime: RuntimePort, step: Step, tabId: number, prior: Map<string, unknown>, session: RuntimeSession) {
   const spec = step.settle ?? (automatic.has(step.action) ? { condition: "dom-quiet" as const } : null);
   if (!spec) return null;
   const timeoutMs = Math.max(100, Math.min(spec.timeoutMs ?? 2500, 15000));

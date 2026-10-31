@@ -1,5 +1,5 @@
 import { useCallback,useEffect,useRef,useState } from "react";
-import type { LocalAction } from "../../../src/shared/local-actions.ts";
+import type { LocalAction } from "../../../src/shared/control-protocol.ts";
 import { t } from "../../i18n";
 import { sendMessage } from "./api";
 
@@ -9,6 +9,8 @@ const labels: Record<string, string> = {
   plugin_reload_required: "actionPluginReload",
   needs_attention: "actionNeedsAttention", updated: "actionUpdated", update_waiting: "actionUpdateWaiting",
   not_installed: "statusNotInstalled", unmanaged_runtime: "actionUnmanaged",
+  bridge_required: "connectionsUnsupported", major_approval_required: "runtimeReconnectRequired",
+  rollback_started: "runtimeScheduled", reconciled: "runtimeInstalled", already_current: "runtimeInstalled",
 };
 export const localActionLabel = (action: LocalAction) => t(labels[action.code] ?? (action.state === "failed" ? "actionFailed" : action.state === "waiting" ? "actionWaiting" : "actionRunning"));
 export default function useLocalAction() {
