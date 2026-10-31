@@ -158,17 +158,17 @@
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@jridgewell/trace-mapping": "^0.3.31",
-    "@modelcontextprotocol/node": "2.1.1",
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
     "@opencode-ai/plugin": "1.19.4",
-    "effect": "4.0.6",
+    "effect": "4.0.7",
     "jsonc-parser": "^3.3.1",
     "pngjs": "7.0.0",
     "smol-toml": "^1.9.0",
     "ws": "^8.22.0",
     "yaml": "^2.9.0",
     "zod": "4.6.7",
-    "devtools-protocol": "0.0.1724436",
+    "devtools-protocol": "0.0.1727723",
     "webdriver-bidi-protocol": "1.0.2"
   },
   "devDependencies": {
@@ -188,7 +188,7 @@
     "typescript": "5.9.3",
     "typescript-eslint": "^8.71.0",
     "web-ext": "^10.7.0",
-    "wxt": "0.21.4",
+    "wxt": "0.21.5",
     "yazl": "3.3.1"
   },
   "overrides": {
