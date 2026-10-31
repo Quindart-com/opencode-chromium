@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { test } from "bun:test";
 import { createController } from "../../src/control/controller.ts";
 import { activateRelease,rollbackRelease } from "../../src/control/activation.ts";
 import { createParticipant } from "../../src/control/leases.ts";
 import { parseRuntimeActivation } from "../../src/control/state.ts";
 import { launcherPlan } from "../../src/cli/runtime-link.ts";
+import { supervisorFiles } from "../../src/management/supervisor.ts";
 import { CONTROL_METHODS } from "../../src/shared/control-protocol.ts";
 import { desiredRuntime } from "../../src/shared/runtime-config.ts";
 
@@ -79,4 +81,16 @@ test("all configured launchers target the fixed controller or desired runtime", 
   assert.deepEqual(launcherPlan("host"), { selection: "controller",entry: "controller/2/control/browser-broker.js" });
   assert.deepEqual(launcherPlan("mcp"), { selection: "controller",entry: "controller/2/control/mcp-supervisor.js" });
   assert.deepEqual(launcherPlan("plugin"), { selection: "desired",entry: "dist/adapters/opencode/index.js" });
+});
+
+test("the installed controller is a complete importable module graph", async () => {
+  const f = fixture();
+  try {
+    for (const file of supervisorFiles(f.dir)) {
+      fs.mkdirSync(path.dirname(file.filePath), { recursive: true });
+      fs.writeFileSync(file.filePath, file.after!);
+    }
+    const installed = await import(`${pathToFileURL(path.join(f.dir, "controller", "2", "control", "controller.js")).href}?fixture=${Date.now()}`);
+    assert.equal(typeof installed.createController, "function");
+  } finally { f.cleanup(); }
 });

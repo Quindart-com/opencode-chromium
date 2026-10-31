@@ -13,6 +13,14 @@ export { pageSearchUnitsExpression } from './snapshot-expressions.ts';
 
 type EditableOptions = { selectAll?: boolean; cursorAtEnd?: boolean; includeSelect?: boolean };
 type InputGestureStep = { method: string; commandParams: object; cursor?: unknown; delayMs?: number };
+
+export function selectorClickTargetExpression(selector: string) {
+  return `(() => {
+    ${interactionHelpersSource()}
+    return clickTarget(querySelectorStrict(${JSON.stringify(selector)}));
+  })()`;
+}
+
 export function createInteractionRuntime(dependencies: Dependencies) {
   const { cdp, runtimeEvaluate, pointCursor, inputGesture, activate, finiteNumber, pageBackend } = dependencies;
 function domNodeClickTargetExpression(nodeId: string) {
@@ -51,13 +59,6 @@ function domNodeEditableExpression(nodeId: string, options: EditableOptions = {}
   return `(() => {
     ${interactionHelpersSource()}
     return prepareEditable(nodeByIdStrict(${JSON.stringify(nodeId)}), ${JSON.stringify(options)});
-  })()`;
-}
-
-function selectorClickTargetExpression(selector: string) {
-  return `(() => {
-    ${interactionHelpersSource()}
-    return clickTarget(querySelectorStrict(${JSON.stringify(selector)}));
   })()`;
 }
 

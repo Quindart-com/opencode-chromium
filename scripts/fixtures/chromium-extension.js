@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash,generateKeyPairSync,randomBytes } from "node:crypto";
 import { chromium } from "playwright";
+import { writeLaunchers,writeRuntimeManifest } from "../../src/cli/runtime-link.ts";
 
 /** Unique host name and disposable profile: never replaces an installed host. */
 export async function chromiumExtensionFixture({ headless = true } = {}) {
@@ -18,12 +19,15 @@ export async function chromiumExtensionFixture({ headless = true } = {}) {
   const extensionId = [...createHash("sha256").update(key).digest().subarray(0, 16)].flatMap(byte => [byte >> 4, byte & 15]).map(n => String.fromCharCode(97 + n)).join("");
   const manifestPath = path.join(source, "manifest.json"), manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, key: key.toString("base64") }));
-  const env = { ...process.env, OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: registry, OPENCODE_BROWSER_RUNTIME_DIR: path.join(fixture, "runtime"),
+  const runtimeDir = path.join(fixture, "runtime");
+  const env = { ...process.env, OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: registry, OPENCODE_BROWSER_RUNTIME_DIR: runtimeDir,
     OPENCODE_BROWSER_MEMORY_DIR: path.join(fixture, "memory"), AGENT_BROWSER_PROVIDER_DIR: path.join(fixture, "providers"), OPENCODE_BROWSER_SEMANTIC_DIR: path.join(fixture, "models"),
     CODEX_HOME: path.join(fixture, "codex"), DSH_HOME: path.join(fixture, "dsh"), CLAUDE_CONFIG_DIR: path.join(fixture, "claude"), XDG_CONFIG_HOME: path.join(fixture, ".config") };
+  writeRuntimeManifest(root, runtimeDir);
+  const controller = writeLaunchers(root, runtimeDir);
   const launcher = path.join(fixture, process.platform === "win32" ? "native.cmd" : "native.sh");
   const variables = ["OPENCODE_BROWSER_PROFILE_REGISTRY_DIR", "OPENCODE_BROWSER_RUNTIME_DIR", "OPENCODE_BROWSER_MEMORY_DIR", "AGENT_BROWSER_PROVIDER_DIR", "OPENCODE_BROWSER_SEMANTIC_DIR", "CODEX_HOME", "DSH_HOME", "CLAUDE_CONFIG_DIR", "XDG_CONFIG_HOME"];
-  fs.writeFileSync(launcher, process.platform === "win32" ? '@echo off\r\n' + variables.map(k => 'set "' + k + '=' + env[k] + '"').join('\r\n') + '\r\n"' + process.execPath + '" "' + path.join(root, "native-host/dist/runtime.js") + '"\r\n' : '#!/bin/sh\n' + variables.map(k => 'export ' + k + '=' + JSON.stringify(env[k])).join('\n') + '\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(path.join(root, "native-host/dist/runtime.js")) + '\n', { mode: 0o700 });
+  fs.writeFileSync(launcher, process.platform === "win32" ? '@echo off\r\n' + variables.map(k => 'set "' + k + '=' + env[k] + '"').join('\r\n') + '\r\n"' + process.execPath + '" "' + controller.host + '"\r\n' : '#!/bin/sh\n' + variables.map(k => 'export ' + k + '=' + JSON.stringify(env[k])).join('\n') + '\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(controller.host) + '\n', { mode: 0o700 });
   const nativeManifest = path.join(fixture, "native.json");
   fs.writeFileSync(nativeManifest, JSON.stringify({ name: host, description: "Disposable reliability verification", path: launcher, type: "stdio", allowed_origins: [`chrome-extension://${extensionId}/`] }));
   let nativeKey, context;

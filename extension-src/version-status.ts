@@ -1,4 +1,4 @@
-import { compareVersions,validVersion as isValidVersion } from "../src/shared/semver";
+import { compareVersions,validVersion as isValidVersion } from "../src/shared/semver.ts";
 
 export type VersionStatus = {
   state?: string;

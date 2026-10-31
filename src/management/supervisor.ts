@@ -8,8 +8,8 @@ import type { FileChange } from "./transaction.js";
 
 export function supervisorFiles(dir: string): FileChange[] {
   const source = fileURLToPath(new URL("../../dist/", import.meta.url));
-  const control = ["activation.js", "browser-broker.js", "controller.js", "harness-control.js", "jobs.js", "leases.js", "mcp-supervisor.js", "mcp-worker.js", "npm-client.js", "process.js", "state.js", "update.js"];
-  const shared = ["connections.js", "control-protocol.js", "harnesses.js", "node-files.js", "node-framing.js", "product.js", "runtime-config.js", "semver.js", "values.js"];
+  const control = ["activation.js", "auth.js", "browser-broker.js", "controller.js", "harness-control.js", "jobs.js", "leases.js", "mcp-supervisor.js", "mcp-worker.js", "npm-client.js", "process.js", "reconcile.js", "state.js", "update.js"];
+  const shared = ["connections.js", "control-protocol.js", "harnesses.js", "node-files.js", "node-framing.js", "product.js", "profile-registry.js", "runtime-config.js", "semver.js", "values.js"];
   const files = [
     ...control.map(name => ({ name: path.join("control", name), content: fs.readFileSync(path.join(source, "control", name), "utf8") })),
     ...shared.map(name => ({ name: path.join("shared", name), content: fs.readFileSync(path.join(source, "shared", name), "utf8") })),
