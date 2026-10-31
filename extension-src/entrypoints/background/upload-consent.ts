@@ -34,6 +34,7 @@ export function createUploadConsent({ chrome, describe, snapshot, release, timeo
     for (const [token, request] of pending) if (request.windowId === windowId) settle(token, "closed");
   });
   return {
+    idle() { return pending.size === 0; },
     async withFiles<T>(files: string[], destination: string, upload: (files: string[]) => Promise<T>, tabId?: number): Promise<T> {
       const info = await describe(files);
       let retained = false;

@@ -6,8 +6,10 @@ import { FrameDecoder,writeFrame } from "../shared/node-framing.ts";
 import { PRODUCT } from "../shared/product.ts";
 import { desiredRuntime,type RuntimeRelease } from "../shared/runtime-config.ts";
 import { record } from "../shared/values.ts";
+import { controlToken } from "./auth.ts";
 import { createController } from "./controller.ts";
 import { createParticipant } from "./leases.ts";
+import { reconcileRuntimeState } from "./reconcile.ts";
 import { parseRuntimeActivation } from "./state.ts";
 
 type RpcId = string | number;
@@ -15,9 +17,10 @@ type RpcMessage = { jsonrpc?: string; id?: RpcId; method?: string; params?: Reco
 
 export async function runBrowserBroker(dir: string) {
   const controller = createController({ dir });
+  const reconciliationToken = controlToken(dir);
   const selected = (): RuntimeRelease => desiredRuntime(parseRuntimeActivation(JSON.parse(fs.readFileSync(path.join(dir, "runtime.json"), "utf8")) as unknown));
-  let release = selected(), child: ChildProcessWithoutNullStreams | null = null, closing = false, swapping = false, extensionVersion: string | null = null;
-  const extensionRequests = new Set<RpcId>(), childRequests = new Set<RpcId>();
+  let release = selected(), child: ChildProcessWithoutNullStreams | null = null, closing = false, swapping = false, maintenanceRunning = false, extensionVersion: string | null = null, lastMaintenanceAt = 0;
+  const extensionRequests = new Set<RpcId>(), childRequests = new Set<RpcId>(), profileHelloRequests = new Set<RpcId>();
   const probes = new Map<string, { resolve(value: Record<string, unknown> | null): void; timer: ReturnType<typeof setTimeout> }>();
   const lease = createParticipant(dir, "host", release.version, release.root, { contractVersion: release.contractVersion, harness: "browser" });
 
@@ -39,7 +42,7 @@ export async function runBrowserBroker(dir: string) {
         },
       });
     }
-    extensionRequests.clear(); childRequests.clear();
+    extensionRequests.clear(); childRequests.clear(); profileHelloRequests.clear();
   }
 
   function startWorker(next = selected()) {
@@ -53,6 +56,10 @@ export async function runBrowserBroker(dir: string) {
       const message = record(value) as RpcMessage;
       if (typeof message.id === "string" && probes.has(message.id) && !message.method) {
         const probe = probes.get(message.id)!; probes.delete(message.id); clearTimeout(probe.timer); probe.resolve(record(message.result)); return;
+      }
+      const profileHello = message.id !== undefined && !message.method && profileHelloRequests.delete(message.id);
+      if (profileHello && !message.error) {
+        value = { ...message,result: { ...record(message.result),reconciliationToken } };
       }
       if (message.id !== undefined && !message.method) extensionRequests.delete(message.id);
       if (message.id !== undefined && message.method) childRequests.add(message.id);
@@ -88,7 +95,10 @@ export async function runBrowserBroker(dir: string) {
   const legacyControl = new Set(["runtime.updateNow", "runtime.actionStatus", "runtime.updateStatus", "runtime.updateConfigure", "connections.reconnect", "connections.diagnose"]);
   async function route(value: unknown) {
     const message = record(value) as RpcMessage;
-    if (message.method === "profile.hello" && typeof record(message.params).extensionVersion === "string") extensionVersion = String(record(message.params).extensionVersion);
+    if (message.method === "profile.hello") {
+      if (message.id !== undefined) profileHelloRequests.add(message.id);
+      if (typeof record(message.params).extensionVersion === "string") extensionVersion = String(record(message.params).extensionVersion);
+    }
     if (message.id !== undefined && !message.method) childRequests.delete(message.id);
     if (message.method && (message.method.startsWith("control.") || legacyControl.has(message.method))) {
       if (message.id === undefined) return;
@@ -118,6 +128,10 @@ export async function runBrowserBroker(dir: string) {
 
   async function reconcile() {
     if (swapping || closing) return;
+    if (!maintenanceRunning && Date.now() - lastMaintenanceAt >= 60000) {
+      lastMaintenanceAt = Date.now(); maintenanceRunning = true;
+      void reconcileRuntimeState(dir).catch(() => {}).finally(() => { maintenanceRunning = false; });
+    }
     const desired = selected();
     lease.publish({ desiredVersion: desired.version,draining: desired.root !== release.root });
     if (desired.root === release.root) return;

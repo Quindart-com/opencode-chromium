@@ -8,7 +8,7 @@ import { desiredRuntime,type RuntimeActivation } from "../shared/runtime-config.
 import { isMajorUpgrade,isNewerVersion,validVersion } from "../shared/semver.ts";
 import { record } from "../shared/values.ts";
 import { activateRelease } from "./activation.ts";
-import { atomicJson,participantBusy,participants,processAlive } from "./leases.ts";
+import { atomicJson,participantActive,participantBusy,participants } from "./leases.ts";
 import { npmCliFile,npmNode } from "./npm-client.ts";
 import { runProcess } from "./process.ts";
 import { activeRuntimeLeases,parseRuntimeActivation,withRuntimeLock } from "./state.ts";
@@ -87,7 +87,7 @@ export function garbageCollectReleases(dir: string, now = Date.now(), graceMs = 
   if (!manifest || !fs.existsSync(releases)) return [];
   const roots = new Set([desiredRuntime(manifest).root, manifest.fallback?.root].filter((value): value is string => typeof value === "string").map(value => path.resolve(value)));
   let live: string[];
-  try { live = participants(dir).filter(row => processAlive(row.pid) && typeof row.root === "string").map(row => path.resolve(row.root!)); }
+  try { live = participants(dir).filter(row => participantActive(row) && typeof row.root === "string").map(row => path.resolve(row.root!)); }
   catch { return []; }
   const removed: string[] = [];
   for (const entry of fs.readdirSync(releases, { withFileTypes: true })) {
@@ -120,7 +120,7 @@ export function createRuntimeUpdater({ dir, install = installRelease, now = Date
       ...(!supported ? { state: "manual", reason: "Development or unmanaged installation; run setup from a published package." } : {}) };
   }
   function participantStatus(desiredVersion?: string) {
-    try { const rows = participants(dir).filter(row => processAlive(row.pid)); return { blockerCount: rows.filter(row => participantBusy(row) && row.version !== desiredVersion).length + activeRuntimeLeases(dir), loadedVersions: [...new Set(rows.map(row => row.version))].sort(), workers: rows.map(row => ({ kind: row.kind, version: row.version, desiredVersion: row.desiredVersion ?? desiredVersion ?? null, draining: row.version !== desiredVersion })) }; }
+    try { const rows = participants(dir).filter(participantActive); return { blockerCount: rows.filter(row => participantBusy(row) && row.version !== desiredVersion).length + activeRuntimeLeases(dir), loadedVersions: [...new Set(rows.map(row => row.version))].sort(), workers: rows.map(row => ({ kind: row.kind, version: row.version, desiredVersion: row.desiredVersion ?? desiredVersion ?? null, draining: row.version !== desiredVersion })) }; }
     catch { return { blockerCount: 1, loadedVersions: [], registryError: true }; }
   }
   async function configure(enabled: boolean) {

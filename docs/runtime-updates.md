@@ -12,6 +12,8 @@ New MCP connections and browser profiles select the desired release immediately.
 
 The last successfully active, unleased release becomes the fallback. Desired and fallback releases are retained. Older releases are eligible for collection only after seven days and only when no live lease references them. Rollback assigns fallback as desired and uses the same drain process; it does not terminate user sessions.
 
+Lease cleanup is proof-based rather than age-based. A clean disconnect with unfinished sessions leaves a non-blocking tombstone; a crash leaves its last heartbeat. After a five-minute grace period, authenticated controller reconciliation requires the owner to be closed or dead, any recorded approval to be absent or expired, no live replacement lease to claim the same session ID, and the extension to report no pending command, upload approval, or native dialog. Reconciliation detaches automation and releases ownership without closing tabs. A recent or unverifiable session remains untouched. An unreachable profile registration is ignored and removed only when its host process is dead and its last registration is at least fifteen minutes old; if the profile reconnects before cleanup, it keeps its sessions and adopts the desired worker normally.
+
 Compatible patch and minor releases may apply automatically. A major release requires one explicit approval showing its breaking changes. The controller updates itself by atomically preparing the next-run bootstrap while keeping capability negotiation backward compatible.
 
 ## Status and controls
@@ -34,6 +36,8 @@ The stable controller exposes `control.capabilities`, `control.status`, `control
 The live registry distinguishes a stable profile fingerprint, optional human label, transient connection ID, browser family and version, extension version, and connection generation. One connected profile is selected automatically. Multiple profiles require an exact label or ID; duplicate labels return `PROFILE_LABEL_AMBIGUOUS`, and a disconnected selected profile returns `PROFILE_DISCONNECTED` without silently choosing another profile.
 
 Use `browser_session` to open, create, claim, release, and name tabs. Claiming an existing page requires the user's explicit request or permission. Reconnects invalidate stale tab handles, and one session cannot claim another profile's tabs. Call `browser_finalize` when finished. Deliverable tabs remain open in a blue review group; only an explicit handoff retains ownership in the active group.
+
+Agents should still call `browser_finalize`; automatic reconciliation is a crash/disconnect safety net, not a substitute for choosing deliverable versus handoff state. `control.reconcile` and the broker's periodic maintenance use the same idempotent checks, so repeated or concurrent recovery attempts do not take ownership from a live connection.
 
 ## Connection recovery
 

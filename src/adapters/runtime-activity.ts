@@ -30,9 +30,11 @@ function createTracker(runtime: AgentBrowserRuntime) {
   if (participant) process.env.OPENCODE_BROWSER_COORDINATED = "1";
   const snapshot = () => {
     const now = Date.now();
-    for (const [token, approval] of runtime.approvals) if (approval.expiresAt <= now) runtime.approvals.delete(token);
-    return { sessions: [...runtime.sessions.keys()], approvals: runtime.approvals.size,
-      profiles: [...new Set([...runtime.sessions.values()].map(session => session.profileId).filter((id): id is string => id !== null))] };
+    const approvals = runtime.approvals ?? new Map(), sessions = runtime.sessions ?? new Map();
+    for (const [token, approval] of approvals) if (approval.expiresAt <= now) approvals.delete(token);
+    return { sessions: [...sessions.keys()], approvals: approvals.size,
+      approvalExpiresAt: Math.max(0, ...[...approvals.values()].map(approval => approval.expiresAt)),
+      profiles: [...new Set([...sessions.values()].map(session => session.profileId).filter((id): id is string => id !== null))] };
   };
   const timer = setInterval(() => {
     if (!participant) return;
@@ -49,6 +51,10 @@ function createTracker(runtime: AgentBrowserRuntime) {
       inFlight++; processInFlight++;
       try { return await action(); } finally { inFlight--; processInFlight--; participant?.leave(snapshot()); }
     },
-    close() { clearInterval(timer); activeRuntimes.delete(reference); participant?.close(); },
+    close() {
+      clearInterval(timer); activeRuntimes.delete(reference);
+      const state = snapshot();
+      if (state.sessions.length || state.approvals) participant?.abandon(state); else participant?.close();
+    },
   };
 }

@@ -13,6 +13,7 @@ import { harnessControls,refreshHarnessControl } from "./harness-control.ts";
 import { atomicJson,processAlive } from "./leases.ts";
 import { npmMetadata } from "./npm-client.ts";
 import { runProcess } from "./process.ts";
+import { reconcileRuntimeState } from "./reconcile.ts";
 import { parseRuntimeActivation,withRuntimeLock } from "./state.ts";
 import { createRuntimeUpdater,garbageCollectReleases,installGlobalRelease,releaseVersion } from "./update.ts";
 
@@ -67,7 +68,11 @@ export function createControlJobs({ dir, launch = spawn }: { dir: string; launch
 
 async function execute(job: Job, dir: string): Promise<{ state: Job["state"]; code: string; details?: LocalAction["details"] }> {
   if (job.kind === "rollback") { const result = await rollbackRelease(dir); return { state: result.ok ? "succeeded" : "failed",code: result.code }; }
-  if (job.kind === "reconcile") { const removed = garbageCollectReleases(dir); return { state: "succeeded",code: removed.length ? "reconciled" : "already_current" }; }
+  if (job.kind === "reconcile") {
+    const reconciled = await reconcileRuntimeState(dir), removed = garbageCollectReleases(dir);
+    const changed = reconciled.removedParticipants + reconciled.releasedSessions + reconciled.removedProfiles + removed.length;
+    return { state: "succeeded",code: changed ? "reconciled" : "already_current",details: { blockerCount: reconciled.deferredParticipants } };
+  }
   if (job.kind === "diagnose") {
     const status = createRuntimeUpdater({ dir }).status();
     return { state: status.supported ? "succeeded" : "failed",code: status.supported ? "healthy" : "needs_attention" };

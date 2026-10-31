@@ -8,6 +8,7 @@ export interface ParticipantState {
   id: string; pid: number; kind: "supervisor" | "runtime" | "host";
   version: string; root?: string; inFlight: number; sessions: string[]; approvals: number;
   contractVersion?: number; desiredVersion?: string; harness?: string; profileId?: string; heartbeatAt?: number; draining?: boolean;
+  abandonedAt?: number; approvalExpiresAt?: number;
   prepared?: string; committed?: string; error?: string;
   profiles?: string[];
 }
@@ -20,6 +21,7 @@ export const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(res
 export function processAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
 }
+export function participantActive(row: ParticipantState) { return !row.abandonedAt && processAlive(row.pid); }
 export function atomicJson(file: string, value: unknown) {
   const temp = `${file}.${randomUUID()}.tmp`;
   try {
@@ -63,8 +65,8 @@ export function participantBusy(row: ParticipantState) { return row.inFlight > 0
 // Reap only after every extension has independently confirmed that no session remains.
 export function reapParticipants(dir: string, verifiedProfiles: readonly string[] = []) {
   for (const row of participants(dir)) {
-    const independentlyIdle = row.approvals === 0 && !!row.profiles?.length && row.profiles.every(id => verifiedProfiles.includes(id));
-    if (!processAlive(row.pid) && (!participantBusy(row) || independentlyIdle)) fs.rmSync(path.join(dir, "participants", `${row.id}.json`), { force: true });
+    const independentlyIdle = row.inFlight === 0 && row.approvals === 0 && !!row.profiles?.length && row.profiles.every(id => verifiedProfiles.includes(id));
+    if (!participantActive(row) && (!participantBusy(row) || independentlyIdle)) fs.rmSync(path.join(dir, "participants", `${row.id}.json`), { force: true });
   }
 }
 export function createParticipant(dir: string, kind: ParticipantState["kind"], version: string, root?: string, metadata: Partial<ParticipantState> = {}) {
@@ -82,6 +84,11 @@ export function createParticipant(dir: string, kind: ParticipantState["kind"], v
   const close = () => { closed = true; clearInterval(heartbeat); fs.rmSync(file, { force: true }); };
   process.once("exit", close);
   return { state, publish, close() { process.removeListener("exit", close); close(); },
+    abandon(patch: Partial<ParticipantState> = {}) {
+      if (closed) return;
+      publish({ ...patch,abandonedAt: Date.now() });
+      closed = true; clearInterval(heartbeat); process.removeListener("exit", close);
+    },
     async enter() {
       const deadline = Date.now() + 45000;
       for (;;) {

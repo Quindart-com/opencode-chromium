@@ -31,6 +31,7 @@ export const commandParamsSchema = z.looseObject({
     active: z.optional(z.boolean()), foreground: z.optional(z.boolean()), clear: z.optional(z.boolean()),
     label: z.optional(z.nullable(z.string())), name: z.optional(z.string()), query: z.optional(z.string()), from: z.optional(z.string()), to: z.optional(z.string()),
     bypassCache: z.optional(z.boolean()), keep: z.optional(z.array(keepSchema)), command: z.optional(z.unknown()),
+    sessionIds: z.optional(z.array(z.string())), inactiveBefore: z.optional(z.number()), reconciliationToken: z.optional(z.string()),
     blockedTabs: z.optional(z.array(z.object({ tabId: z.int(), reason: z.string(), profileId: z.optional(z.nullable(z.string())) }))),
     pageUrl: z.optional(z.string()), decisionState: z.optional(z.string()),
 });

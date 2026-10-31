@@ -7,7 +7,7 @@ import { validVersion } from "../shared/semver.ts";
 import { record } from "../shared/values.ts";
 import { harnessControls } from "./harness-control.ts";
 import { createControlJobs } from "./jobs.ts";
-import { participants,processAlive } from "./leases.ts";
+import { participantActive,participants } from "./leases.ts";
 import { parseRuntimeActivation } from "./state.ts";
 import { createRuntimeUpdater } from "./update.ts";
 
@@ -37,7 +37,7 @@ export function createController({ dir }: { dir: string }) {
       { component: "desired-runtime",version: desired.version,state: update.state === "approval_required" ? "approval_required" : update.state === "retry" ? "failed" : "current" },
     ];
     try {
-      for (const worker of participants(dir).filter(row => processAlive(row.pid))) components.push({ component: "active-worker",version: worker.version,
+      for (const worker of participants(dir).filter(participantActive)) components.push({ component: "active-worker",version: worker.version,
         state: worker.version === desired.version ? "current" : "draining",label: worker.kind });
       for (const harness of harnessControls(dir)) components.push({ component: "harness-adapter",version: harness.version,
         state: harness.version === desired.version ? "current" : "draining",label: harness.harness });

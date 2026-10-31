@@ -10,6 +10,7 @@ export type BackgroundRuntimeDependencies = Record<string, any>;
 export interface ExtensionSession {
   tabIds: Set<number>;
   tabOrigins: Map<number, string>;
+  lastActivityAt: number;
   name: string | null;
   groupId: number | null;
   activeTabId: number | null;

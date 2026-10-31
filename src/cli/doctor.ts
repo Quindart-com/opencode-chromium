@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createBrowserAgent } from "../adapters/sdk/index.ts";
-import { participantBusy,participants,processAlive,reapParticipants } from "../control/leases.ts";
+import { participantActive,participantBusy,participants,reapParticipants } from "../control/leases.ts";
 import { errorMessage } from "../core/errors.ts";
 import { inspectBrowserMarketplace } from "../management/marketplace.ts";
 import { readProfileRegistrations } from "../shared/profile-registry.ts";
@@ -59,7 +59,7 @@ export async function runDoctor({ json = false, repairRuntime = false } = {}) {
     const before = participants(runtimeDir());
     if (repairRuntime) reapParticipants(runtimeDir());
     const rows = repairRuntime ? participants(runtimeDir()) : before;
-    const staleIdle = rows.filter(row => !processAlive(row.pid) && !participantBusy(row)).length;
+    const staleIdle = rows.filter(row => !participantActive(row) && !participantBusy(row)).length;
     checks.push(check("runtime-participants", staleIdle === 0, { count: rows.length, staleIdle,
       removed: before.length - rows.length, repairCommand: "opencode-chromium doctor --repair-runtime --json",
       message: "Repair removes only dead, idle process records. Sessions and approvals are retained." }));

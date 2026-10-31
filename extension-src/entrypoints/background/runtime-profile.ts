@@ -21,7 +21,7 @@ export function sanitizeSemanticForPopup(semantic: unknown) {
 }
 
 export function createProfileRuntime(dependencies: Dependencies) {
-  const { chrome, IS_FIREFOX, PROFILE_STORAGE_KEY, VERSION_REMINDER_KEY, hostStatus, storageGet, storageSet, broadcastNativeStatus, versionCheck } = dependencies;
+  const { chrome, IS_FIREFOX, PROFILE_STORAGE_KEY, VERSION_REMINDER_KEY, hostStatus, storageGet, storageSet, broadcastNativeStatus, versionCheck, acceptReconciliationToken } = dependencies;
   const rpc = dependencies.rpc as NativeRpc;
   let profileStatePromise: Promise<ProfileState> | null = null;
 function randomProfileId() {
@@ -91,6 +91,7 @@ async function announceProfile() {
     if (generation !== versionCheck.generation || hostStatus.state !== "connected")
         return;
     hostStatus.versionReminder = z.object({ key: z.string(), until: z.number() }).safeParse(reminder).data ?? null;
+    acceptReconciliationToken(result);
     applyHostVersions(result);
 }
 function applyHostVersions(value: unknown) {

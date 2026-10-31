@@ -7,13 +7,14 @@ import { registerDownloadHandlers } from "./download-events.ts";
 import { finalizeOwnedTabs } from "./finalize-session.ts";
 import { registerDecisionImageCapture } from "./firefox-bridge.ts";
 import { NativeRpc } from "./native-rpc.ts";
+import { reconcileAbandonedSessions } from "./reconcile-sessions.ts";
 import { groupReviewTabs } from "./review-group.ts";
 import { isBrowserInternalUrl } from "./tab-ownership.ts";
 import type { BackgroundRuntimeDependencies as Dependencies } from "./types.ts";
 
 export function registerRuntimeMethods(dependencies: Dependencies) {
   const rpc = dependencies.rpc as NativeRpc;
-  const { profileMetadata, setProfileLabel, attachTab, detachTab, executeCdp, executeInputGesture, resolveTabActivation, moveMouse, framePoint, tabIdFromParams, cursorIdFromParams, cursorArrivalWaiters, cursorWaiterKey, cdpEventsByTabId, traceBuffers, requiredSessionId, sessionState, updateTurn, focusedNormalWindowId, creationRequestIds, trackTab, getTab, assertClaimableTab, normalizeTab, queryTabs, isClaimableTab, findTabOwner, assertSessionUrl, untrackTab, ensureControlledTab, hideCursor, ungroupTab, persistSessions, normalizeKeepItem, commandHealth, sessions, SESSION_GROUP_COLOR, downloadEvents, IS_FIREFOX, attachedTabs, recordCdpEvent, sendCdpCommand, HOST_NAME, focusTab, nowIso } = dependencies;
+  const { profileMetadata, setProfileLabel, attachTab, detachTab, executeCdp, executeInputGesture, resolveTabActivation, moveMouse, framePoint, tabIdFromParams, cursorIdFromParams, cursorArrivalWaiters, cursorWaiterKey, cdpEventsByTabId, traceBuffers, requiredSessionId, sessionState, updateTurn, focusedNormalWindowId, creationRequestIds, trackTab, getTab, assertClaimableTab, normalizeTab, queryTabs, isClaimableTab, findTabOwner, assertSessionUrl, untrackTab, ensureControlledTab, hideCursor, ungroupTab, persistSessions, normalizeKeepItem, commandHealth, sessions, SESSION_GROUP_COLOR, downloadEvents, IS_FIREFOX, attachedTabs, recordCdpEvent, sendCdpCommand, HOST_NAME, focusTab, nowIso, uploadConsent, reconciliationToken } = dependencies;
 rpc.register("ping", async () => "pong");
 rpc.register("getInfo", async () => {
     const profile = await profileMetadata();
@@ -274,6 +275,19 @@ rpc.register("finalizeTabs", async (params) => {
     const result = await finalizeOwnedTabs(session, keep, { blocked: tabId => params.blockedTabs?.find(tab => tab.tabId === tabId)?.reason, dialog: tabId => commandHealth.dialog(tabId), detach: detachTab, hide: hideCursor,
       deliver: tabIds => groupReviewTabs(session, tabIds, chrome), untrack: tabId => untrackTab(id, tabId) });
     if (!session.tabIds.size) sessions.delete(id);
+    await persistSessions().catch(() => {});
+    return result;
+});
+rpc.register("runtime.reconcileSessions", async (params) => {
+    const sessionIds = params.sessionIds ?? [];
+    const inactiveBefore = params.inactiveBefore;
+    const expectedToken = reconciliationToken();
+    if (!expectedToken || params.reconciliationToken !== expectedToken) throw Object.assign(new Error("Abandoned-session reconciliation requires the stable controller"), { code: "CONTROLLER_AUTH_REQUIRED" });
+    if (!Number.isFinite(inactiveBefore) || sessionIds.some(id => !id || id.length > 240)) throw new Error("Invalid abandoned-session reconciliation request");
+    const result = await reconcileAbandonedSessions(sessions, sessionIds, Number(inactiveBefore), {
+      idle: () => commandHealth.idle() && uploadConsent.idle(), dialog: tabId => commandHealth.dialog(tabId),
+      detach: detachTab, hide: hideCursor, ungroup: ungroupTab, untrack: untrackTab,
+    });
     await persistSessions().catch(() => {});
     return result;
 });

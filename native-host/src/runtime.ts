@@ -4,7 +4,7 @@ import fs from "node:fs";
 import net from "node:net";
 import process from "node:process";
 import { z } from "zod";
-import { createParticipant,participantBusy,participants,processAlive } from "../../src/control/leases.ts";
+import { createParticipant,participantActive,participantBusy,participants } from "../../src/control/leases.ts";
 import { runtimeDirectory } from "../../src/control/state.ts";
 import { errorMessage } from "../../src/core/errors.ts";
 import { instanceIpcPath,isUnixSocketPath } from "../../src/shared/node-files.ts";
@@ -96,7 +96,7 @@ const relay: RpcRelay = new RpcRelay({
   extensionWriter: (message: unknown) => writeFrame(process.stdout, message),
   onProfile: registerProfile,
   admit: async () => { await hostActivity.enter(); return () => hostActivity.leave(); },
-  canDisconnect: () => !participants(runtimeDirectory()).some(row => processAlive(row.pid) && participantBusy(row)),
+  canDisconnect: () => !participants(runtimeDirectory()).some(row => participantActive(row) && participantBusy(row)),
   connectionDetails: () => ({}),
   localHandler: async (method, params): Promise<unknown> => {
     const firefox = await firefoxHost(method, params);

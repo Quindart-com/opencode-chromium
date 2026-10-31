@@ -60,6 +60,7 @@ const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
 const PROFILE_STORAGE_KEY = "OPENCODE_BROWSER_PROFILE";
 const VERSION_REMINDER_KEY = "OPENCODE_VERSION_REMINDER";
 const versionCheck = { generation: 0 };
+let reconciliationToken: string | null = null;
 let restoringSessions = 0;
 const sessions = new Map<string, ExtensionSession>();
 const attachedTabs = new Map<number, string>();
@@ -95,7 +96,7 @@ const rpc = new NativeRpc({ chrome, hostName: HOST_NAME, timeoutMs: DEFAULT_NATI
         broadcastNativeStatus();
     },
     connected() { ++versionCheck.generation; void announceProfile().catch(() => { }); },
-    disconnected() { ++versionCheck.generation; },
+    disconnected() { ++versionCheck.generation; reconciliationToken = null; },
 });
 const uploadConsent = createUploadConsent({ chrome,
     describe: async (files) => uploadInfoSchema.parse(await rpc.request("uploads.describe", { files }, { timeoutMs: 60000 })),
@@ -110,7 +111,8 @@ function errorMessage(error: unknown): string {
 }
 let popupRuntime: ReturnType<typeof createPopupRuntime> | null = null;
 function broadcastNativeStatus() { popupRuntime?.broadcastNativeStatus(); }
-const profileRuntime = createProfileRuntime({ rpc, chrome, IS_FIREFOX, PROFILE_STORAGE_KEY, VERSION_REMINDER_KEY, hostStatus, storageGet, storageSet, broadcastNativeStatus, versionCheck });
+const profileRuntime = createProfileRuntime({ rpc, chrome, IS_FIREFOX, PROFILE_STORAGE_KEY, VERSION_REMINDER_KEY, hostStatus, storageGet, storageSet, broadcastNativeStatus, versionCheck,
+    acceptReconciliationToken(value: unknown) { const token = record(value).reconciliationToken; reconciliationToken = typeof token === "string" && /^[a-f0-9]{64}$/.test(token) ? token : null; } });
 const { setProfileLabel, profileMetadata, publicProfile, sanitizeSemanticForPopup, announceProfile, updateVersionBadge } = profileRuntime;
 const connectionIdle = () => restoringSessions === 0 && ![...sessions.values()].some(session => session.tabIds.size > 0) && attachedTabs.size === 0 && commandHealth.idle() && traceBuffers.size === 0;
 rpc.register("runtime.canReconnect", async () => ({ idle: rpc.idle() && connectionIdle() }));
@@ -136,6 +138,7 @@ function sessionState(id: string): ExtensionSession {
         session = {
             tabIds: new Set(),
             tabOrigins: new Map(),
+            lastActivityAt: Date.now(),
             name: null,
             groupId: null,
             activeTabId: null,
@@ -146,6 +149,7 @@ function sessionState(id: string): ExtensionSession {
     return session;
 }
 function updateTurn(session: ExtensionSession, params: CommandParams) {
+    session.lastActivityAt = Date.now();
     updateSessionPolicy(session, params);
     const id = turnId(params);
     if (id)
@@ -266,6 +270,7 @@ async function persistSessions() {
         serialized[id] = {
             tabIds: [...session.tabIds],
             tabOrigins: Object.fromEntries(session.tabOrigins.entries()),
+            lastActivityAt: session.lastActivityAt,
             name: session.name,
             urlPolicy: session.urlPolicy ?? null,
             groupId: session.groupId,
@@ -282,11 +287,12 @@ async function restoreSessions() {
     if (!stored || typeof stored !== "object")
         return;
     for (const [id, value] of Object.entries(stored)) {
-        const parsed = z.object({ name: z.optional(z.nullable(z.string())), urlPolicy: z.optional(z.nullable(z.object({ allowedOrigins: z.optional(z.array(z.string())), blockedOrigins: z.optional(z.array(z.string())) }))), groupId: z.optional(z.nullable(z.int())), activeTabId: z.optional(z.nullable(z.int())), currentTurnId: z.optional(z.nullable(z.string())), tabOrigins: z.optional(z.record(z.string(), z.string())), tabIds: z.optional(z.array(z.int())) }).safeParse(value);
+        const parsed = z.object({ name: z.optional(z.nullable(z.string())), urlPolicy: z.optional(z.nullable(z.object({ allowedOrigins: z.optional(z.array(z.string())), blockedOrigins: z.optional(z.array(z.string())) }))), groupId: z.optional(z.nullable(z.int())), activeTabId: z.optional(z.nullable(z.int())), currentTurnId: z.optional(z.nullable(z.string())), lastActivityAt: z.optional(z.number()), tabOrigins: z.optional(z.record(z.string(), z.string())), tabIds: z.optional(z.array(z.int())) }).safeParse(value);
         if (!parsed.success)
             continue;
         const serialized = parsed.data;
         const session = sessionState(id);
+        session.lastActivityAt = typeof serialized.lastActivityAt === "number" && Number.isFinite(serialized.lastActivityAt) ? serialized.lastActivityAt : 0;
         session.name = typeof serialized.name === "string" ? serialized.name : null;
         if (serialized.urlPolicy)
             updateSessionPolicy(session, { url_policy: serialized.urlPolicy });
@@ -437,7 +443,7 @@ async function sendCdpCommand(tabId: number, method: string, commandParams: obje
     });
 }
 const recordInlineBrowserResponse = createInlineResponseRecorder({ downloadEvents, inlineResponseEventKeys, maxInlineResponseKeys: MAX_INLINE_RESPONSE_KEYS });
-registerRuntimeMethods({ rpc, profileMetadata, setProfileLabel, attachTab, detachTab, executeCdp, executeInputGesture, resolveTabActivation, moveMouse, framePoint, tabIdFromParams, cursorIdFromParams, cursorArrivalWaiters, cursorWaiterKey, cdpEventsByTabId, traceBuffers, MAX_TRACE_CHUNKS, requiredSessionId, sessionState, updateTurn, focusedNormalWindowId, creationRequestIds, trackTab, getTab, assertClaimableTab, normalizeTab, queryTabs, isClaimableTab, findTabOwner, assertSessionUrl, untrackTab, ensureControlledTab, hideCursor, ungroupTab, persistSessions, normalizeKeepItem, commandHealth, sessions, SESSION_GROUP_COLOR, downloadEvents, IS_FIREFOX, attachedTabs, recordCdpEvent, sendCdpCommand, HOST_NAME, focusTab, nowIso });
+registerRuntimeMethods({ rpc, profileMetadata, setProfileLabel, attachTab, detachTab, executeCdp, executeInputGesture, resolveTabActivation, moveMouse, framePoint, tabIdFromParams, cursorIdFromParams, cursorArrivalWaiters, cursorWaiterKey, cdpEventsByTabId, traceBuffers, MAX_TRACE_CHUNKS, requiredSessionId, sessionState, updateTurn, focusedNormalWindowId, creationRequestIds, trackTab, getTab, assertClaimableTab, normalizeTab, queryTabs, isClaimableTab, findTabOwner, assertSessionUrl, untrackTab, ensureControlledTab, hideCursor, ungroupTab, persistSessions, normalizeKeepItem, commandHealth, sessions, SESSION_GROUP_COLOR, downloadEvents, IS_FIREFOX, attachedTabs, recordCdpEvent, sendCdpCommand, HOST_NAME, focusTab, nowIso, uploadConsent, reconciliationToken: () => reconciliationToken });
 if (!IS_FIREFOX) chrome.debugger.onDetach.addListener(source => { if (source.tabId !== undefined) { commandHealth.invalidate(source.tabId); frameRouting.forget(source.tabId); } });
 if (!IS_FIREFOX) chrome.debugger.onEvent.addListener((source, method, params) => { if (source.tabId !== undefined && attachedTabs.has(source.tabId)) frameRouting.event(source, method, params); });
 if (!IS_FIREFOX)
