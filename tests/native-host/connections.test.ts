@@ -2,7 +2,7 @@ import { expect,test } from "bun:test";
 import { EventEmitter } from "node:events";
 import { HarnessConnections } from "../../native-host/src/connections.ts";
 import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
-import { FrameDecoder } from "../../native-host/src/framing.ts";
+import { FrameDecoder } from "../../src/shared/node-framing.ts";
 import { identifyHarness } from "../../src/shared/connections.ts";
 
 test("Claude Code and Desktop are identified separately; generic Claude remains ambiguous", () => {

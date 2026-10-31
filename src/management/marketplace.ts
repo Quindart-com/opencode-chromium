@@ -1,10 +1,10 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFile } from "node:child_process";
 import { parse } from "smol-toml";
+import { atomicJson,processAlive } from "../control/leases.ts";
 import { record } from "../shared/values.ts";
-import { atomicJson,processAlive } from "../../native-host/src/runtime-participants.ts";
 
 export const BROWSER_MARKETPLACE = "quindart-browser";
 export const BROWSER_PLUGIN = "opencode-browser-plugin@" + BROWSER_MARKETPLACE;

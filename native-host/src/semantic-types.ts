@@ -32,7 +32,7 @@ export const rankInputSchema = z.object({ query: z.string().nullable().optional(
   pageFingerprint: z.string().optional(), timeoutMs: z.number().optional() });
 export type RankInput = z.infer<typeof rankInputSchema>;
 export interface BaseRanking { query: string; maxResults: number; units: NormalizedUnit[]; documents: string[]; lexical: number[]; ranked: RankedItem[] }
-export interface RankingOptions { enabled?: boolean; mode?: string; searchStrategy?: string; deprecatedAlias?: boolean; degraded?: boolean;
+export interface RankingOptions { enabled?: boolean; mode?: string; searchStrategy?: string; degraded?: boolean;
   degradationReason?: string | null; model?: SemanticModel; modelError?: string | null; ranked?: RankedItem[]; modelUsed?: boolean;
   rerankerUsed?: boolean; rerankerError?: string | null; rerankerCount?: number; rerankerDtype?: ModelDtype | null; cache?: { queryHit: boolean; documentHits: number } }
 export const embeddingInputSchema = z.object({ texts: z.array(z.string()).max(128).default([]), modelId: z.string().nullable().optional(), timeoutMs: z.number().optional() });

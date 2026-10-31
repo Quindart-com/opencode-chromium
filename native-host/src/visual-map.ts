@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { localModelCatalog,mergeModelCatalog,type VisualModel } from "./model-catalog.ts";
 import { z } from "zod";
+import { readJsonIfPresent } from "../../src/shared/node-files.ts";
 import { record } from "../../src/shared/values.ts";
+import { localModelCatalog,mergeModelCatalog,type VisualModel } from "./model-catalog.ts";
 
 const visualInputSchema = z.object({ force: z.boolean().optional(), modelId: z.string().optional(), labels: z.array(z.string()).max(80).optional(), threshold: z.number().optional(), maxResults: z.number().optional(), mimeType: z.string().optional(), imageBase64: z.string().max(4_000_000).optional() });
 type VisualInput = z.infer<typeof visualInputSchema>;
@@ -89,15 +90,6 @@ function normalizeSettings(input: unknown = {}) {
     modelId: model.id,
     threshold: typeof value.threshold === "number" && Number.isFinite(value.threshold) ? Math.max(0.05, Math.min(0.95, value.threshold)) : 0.25,
   };
-}
-
-function readJsonIfPresent(filePath: fs.PathLike) {
-  if (!fs.existsSync(filePath)) return null;
-  try {
-    return (JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown);
-  } catch {
-    return null;
-  }
 }
 
 function writeJsonAtomic(filePath: fs.PathLike, value: { version: number; enabled: boolean; modelId: string; threshold: number; }) {

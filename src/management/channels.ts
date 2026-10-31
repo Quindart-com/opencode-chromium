@@ -1,9 +1,9 @@
-import { parseRuntimeActivation } from "../../native-host/src/runtime-lifecycle.ts";
 import { execFileSync } from "node:child_process";
 import { createHash,randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { sourceFingerprint } from "../cli/source-fingerprint.ts";
+import { parseRuntimeActivation } from "../control/state.ts";
 import { record } from "../shared/values.ts";
 import { atomicWrite } from "./transaction.js";
 

@@ -1,20 +1,18 @@
-import { formatRuntimeStatus } from "./status-format.ts";
 import { record } from "../shared/values.ts";
 import type { ClientInstallOptions } from "./install.ts";
+import { formatRuntimeStatus } from "./status-format.ts";
 
 import path from "node:path";
 import process from "node:process";
-import { readProfileRegistrations } from "../../native-host/src/profile-registry.ts";
 import { BrowserHostClient } from "../browser/client.ts";
 import { activateChannel,readActivation } from "../management/channels.ts";
+import { developmentExtensionSource,publishDevelopmentExtension } from "../management/development-extension.ts";
 import { formatSetupResult,manageSetup } from "../management/setup.ts";
+import { readProfileRegistrations } from "../shared/profile-registry.ts";
 import { packageRoot } from "./config.ts";
-import { configureClient } from "./configure.ts";
-import { installClient,SUPPORTED_CLIENTS } from "./install.ts";
+import { installClient,SUPPORTED_CLIENTS,uninstallClient } from "./install.ts";
 import { runtimeDir } from "./native-host.ts";
 import { linkClientSurfaces,linkRuntime,runtimeStatus,syncRuntime,writeLaunchers } from "./runtime-link.ts";
-import { uninstallClient } from "./uninstall.ts";
-import { developmentExtensionSource,publishDevelopmentExtension } from "../management/development-extension.ts";
 
 
 async function runtimeBusy() {
@@ -44,10 +42,6 @@ function has(argv: string[], flag: string) {
 
 export async function dispatchCommand(argv = process.argv.slice(2)) {
   const [command = "doctor", ...rest] = argv;
-  if (command === "local-action") {
-    const { runLocalActionJob } = await import("../../native-host/src/local-actions.ts");
-    console.log(JSON.stringify(await runLocalActionJob(valueAfter(rest, "--job") ?? "", runtimeDir()), null, 2)); return;
-  }
   if (command === "harness" && rest[0] === "reconnect") {
     const { reconnectHarness } = await import("../management/harness-reconnect.ts");
     console.log(JSON.stringify(await reconnectHarness(rest[1], runtimeDir()), null, 2)); return;
@@ -70,7 +64,7 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
     }
   }
   if (command === "updates") {
-    const { createRuntimeUpdater } = await import("../../native-host/src/runtime-updates.ts");
+    const { createRuntimeUpdater } = await import("../control/update.ts");
     const updater = createRuntimeUpdater({ dir: runtimeDir() });
     if (![undefined, "status", "on", "off"].includes(rest[0])) throw new Error("Use updates status, updates on, or updates off");
     console.log(JSON.stringify(rest[0] !== undefined && ["on", "off"].includes(rest[0]) ? await updater.configure(rest[0] === "on") : updater.status(), null, 2));
@@ -145,7 +139,7 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
     if (!client) throw new Error(`${command} requires --client opencode|opencode-mcp|codex|skills`);
     if (!SUPPORTED_CLIENTS.includes(client)) throw new Error("Unsupported client");
     const options: ClientInstallOptions = { client: client as ClientInstallOptions["client"], config: valueAfter(rest, "--config"), dryRun: has(rest, "--dry-run"), serverPath: valueAfter(rest, "--server") };
-    const result = command === "install" ? installClient(options) : command === "configure" ? configureClient(options) : uninstallClient(options);
+    const result = command === "install" || command === "configure" ? installClient(options) : uninstallClient(options);
     const { before: _before, after: _after, ...publicResult } = record(result);
     const changedFiles = "changedFiles" in result ? result.changedFiles : result.changed ? [result.filePath] : [];
     console.log(JSON.stringify({ ok: true, ...publicResult, changedFiles }, null, 2));

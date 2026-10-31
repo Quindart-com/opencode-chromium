@@ -3,11 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runtimeDir } from "../cli/native-host.ts";
-import { record } from "../shared/values.ts";
 import { harnessDefinitions,harnessEnv,harnessTargets } from "../shared/harnesses.ts";
-import { harnessConfigPath } from "./harness-paths.ts";
-import { existingFile,findExecutable,windowsAppPath } from "./executable-discovery.ts";
+import { record } from "../shared/values.ts";
 import { type HarnessId,managedConfiguration,planConfiguration } from "./configuration.ts";
+import { existingFile,findExecutable,windowsAppPath } from "./executable-discovery.ts";
+import { harnessConfigPath } from "./harness-paths.ts";
 import type { FileChange } from "./transaction.js";
 
 export interface Harness {

@@ -60,7 +60,7 @@ export function createUploadFiles({ snapshotLifetimeMs = 24 * 60 * 60 * 1000 } =
       const token = randomUUID();
       const timer = setTimeout(() => release(token), 120000); timer.unref?.();
       requests.set(token, { files, timer });
-      return { token, files: files.map(({ digest: _digest, ...file }) => file) };
+      return { token, files: files.map(({ ...file }) => file) };
     }
     if (method === "uploads.snapshot") {
       const request = requests.get(params.token ?? "");

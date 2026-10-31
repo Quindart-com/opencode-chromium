@@ -1,6 +1,6 @@
 {
   "name": "opencode-browser-plugin",
-  "version": "1.10.2",
+  "version": "2.0.0",
   "description": "Automate Chromium and Firefox browsers through named profiles with four compact browser tools.",
   "author": {
     "name": "Quindart",

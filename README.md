@@ -108,7 +108,7 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 
 Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later; LibreWolf must expose the matching Remote Agent. Compatible derivatives need individual validation; this does not claim support for every fork. See [Firefox capabilities](docs/firefox.md) and [compatibility](docs/compatibility.md) for transport differences and verification limits.
 
-Named profiles choose the browser. Agents keep the same four tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Sessions own their tabs, targets are checked against the live page, and uploads require confirmation by default. [Profiles](docs/profiles.md) · [Security](docs/security.md).
+Named profiles choose the browser. Agents keep the same four tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Sessions own their tabs, targets are checked against the live page, and uploads require confirmation by default. [Runtime operations](docs/runtime-updates.md#profiles-and-sessions) · [Security](docs/security.md).
 
 Finalization leaves every tab open in a blue group for human review. Existing pages can be claimed with the user's permission, provided they are ungrouped and unclaimed; tabs in another agent's group are excluded.
 
@@ -194,7 +194,7 @@ Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, o
 
 Extension updates open [what’s new](https://quindart-com.github.io/opencode-chromium/updates/) once per version in a background tab. Turn this off in the extension’s setup guide.
 
-Published CLI installations set up with `setup --all` can keep their managed runtime aligned automatically. The extension triggers a background download of its matching npm release. Activation waits until **every agent's browser session across all connected profiles has finished**, then replaces MCP workers while keeping harness connections open. New work stays available while an update waits; incoming calls briefly queue during the final switch. Handoff tabs, approvals and incomplete cleanup continue to block activation. **Settings → Updates** shows selected, downloaded and loaded versions. Existing installations need one setup and MCP reconnection to adopt this flow. OpenCode's native adapter still requires reloading to pick up new adapter code. Development checkouts and explicit pins stay manual; global npm installations are not overwritten. CLI controls: `opencode-chromium updates status`, `updates on`, or `updates off`. Unavailable npm releases are retried after six hours. See [automatic updates](docs/runtime-updates.md) for compatibility and recovery details.
+Published CLI installations set up with `setup --all` use fixed launchers and a stable local controller. Validated releases become desired immediately for new connections; initialized connections and browser profiles stay pinned until they are idle, then drain independently. A forgotten `browser_finalize` cannot block desired-state activation forever: after a grace period, the controller releases ownership only when the owner lease is closed or its process is dead, no approval is live, no replacement lease owns the session, and the extension confirms no command or dialog is pending. Tabs stay open. **Settings → Updates** reports the extension, global CLI, controller, desired runtime, active workers, and harness adapters separately. Development checkouts and explicit pins stay manual. See [runtime operations](docs/runtime-updates.md) for compatibility and recovery details.
 
 ## npm downloads
 
@@ -216,9 +216,9 @@ npx -y opencode-chromium@latest status --json
 npx -y opencode-chromium@latest uninstall --targets codex
 ```
 
-Use `--config harness-id=/absolute/path` for a custom configuration. Existing aliases, package names, profiles, and runtime data remain supported. [Troubleshooting](docs/troubleshooting.md).
+Use `--config harness-id=/absolute/path` for a custom configuration. Existing package names, profiles, and runtime data remain supported. [Connection recovery](docs/runtime-updates.md#connection-recovery).
 
-The extension distinguishes a responding local bridge from harness connections. Its panel shows installed harnesses, observed browser links, versions and heartbeat health, with scoped reconnect buttons and local diagnostics. If the skill is visible but Codex tools are missing, reload this plugin in Manage (disable, then enable) and invoke the skill again in the same chat. Keep Codex and other agents running. See [connection health](docs/connection-health.md).
+The extension distinguishes a responding local bridge from harness connections. Its panel shows installed harnesses, observed browser links, versions and heartbeat health, with scoped reconnect buttons and local diagnostics. If the skill is visible but Codex tools are missing, reload this plugin in Manage (disable, then enable) and invoke the skill again in the same chat. Keep Codex and other agents running. See [runtime operations](docs/runtime-updates.md).
 </details>
 
 <details><summary><strong>Develop and release</strong></summary>
@@ -234,7 +234,7 @@ bun run check:firefox
 
 Both extensions share WXT/React source. Separate output directories prevent one build replacing the other. Forward version bumps on `master` trigger npm and store release workflows. Mozilla submissions can remain pending review before publication. [Architecture](docs/architecture.md) · [Firefox publishing](docs/firefox.md).
 
-For a stale unpacked extension, run `bun src/cli/index.ts dev-extension --source /absolute/checkout --output /absolute/loaded/extension`, then reload it in the browser. This refreshes the existing extension path and labels the build with its source fingerprint while retaining production runtime selection. See [local development builds](docs/connection-health.md#refresh-a-stale-unpacked-extension).
+For a stale unpacked extension, run `bun src/cli/index.ts dev-extension --source /absolute/checkout --output /absolute/loaded/extension`, then reload it in the browser. This refreshes the existing extension path and labels the build with its source fingerprint while retaining production runtime selection. See [local development extension](docs/runtime-updates.md#local-development-extension).
 </details>
 
 Questions and ideas: [Discussions](https://github.com/Quindart-com/opencode-chromium/discussions). Bugs: [Issues](https://github.com/Quindart-com/opencode-chromium/issues). [MIT license](LICENSE).

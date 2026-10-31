@@ -1,30 +1,30 @@
 import type { Browser } from "wxt/browser";
 import { browser as chrome } from "wxt/browser";
 import { z } from "zod/mini";
-import type { CdpMethod,CdpParams,CdpRequest,CdpResult } from "../../../src/shared/cdp.ts";
-import { pageException } from "../../../src/shared/page-error.ts";
-import { record } from "../../../src/shared/values.ts";
+import type { CdpMethod,CdpParams,CdpResult } from "../../../src/shared/cdp.ts";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 import { partialDispatchError } from "../../../src/shared/execution-state.ts";
+import { record } from "../../../src/shared/values.ts";
 import type { VersionStatus } from "../../version-status.ts";
-import { validVersion,versionNotice } from "../../version-status.ts";
+import { CommandHealth } from "./command-health.ts";
 import type { CommandParams,KeepItem } from "./command-schema.ts";
 import type { CursorState } from "./cursor-state.ts";
-import { CURSOR_SCRIPTS,cursorIdFromParams,cursorState,gestureAction } from "./cursor-state.ts";
+import { cursorIdFromParams,gestureAction } from "./cursor-state.ts";
 import { createDebuggerAttacher,installChromiumEvents } from "./debugger-attach.ts";
-import { createDownloadEvents,registerDownloadHandlers } from "./download-events.ts";
-import { createFirefoxAttacher,registerDecisionImageCapture } from "./firefox-bridge.ts";
-import { resolveTabActivation } from "./focus-policy.ts";
-import { CommandHealth } from "./command-health.ts";
-import { finalizeOwnedTabs } from "./finalize-session.ts";
-import { groupReviewTabs } from "./review-group.ts";
+import { createDownloadEvents } from "./download-events.ts";
+import { createFirefoxAttacher } from "./firefox-bridge.ts";
 import { FirefoxFrameRouting } from "./firefox-frame-routing.ts";
+import { resolveTabActivation } from "./focus-policy.ts";
 import { FrameRouting } from "./frame-routing.ts";
-import { beforeDeadline } from "../../../src/shared/deadline.ts";
+import { createInlineResponseRecorder } from "./inline-response-recorder.ts";
 import { NativeRpc } from "./native-rpc.ts";
-import { connectionPanelMessage } from "./connection-panel.ts";
 import { assertSessionUrl,installNavigationPolicy,updateSessionPolicy } from "./navigation-policy.ts";
 import { openInstallGuide } from "./onboarding.ts";
-import { popupMessageSchema,uploadMessageSchema } from "./popup-schema.ts";
+import { createCdpRuntime } from "./runtime-cdp.ts";
+import { createCursorRuntime } from "./runtime-cursor.ts";
+import { registerRuntimeMethods } from "./runtime-methods.ts";
+import { createPopupRuntime } from "./runtime-popup.ts";
+import { createProfileRuntime } from "./runtime-profile.ts";
 import { assertClaimableTab,assertTabAccess,isBrowserInternalUrl,isClaimableTab } from "./tab-ownership.ts";
 import type { ExtensionSession,TabOwner,TraceBuffer } from "./types.ts";
 import { createUploadConsent } from "./upload-consent.ts";
@@ -34,10 +34,6 @@ type CdpEvent = {
     tabId: number;
     method: string;
     params: Record<string, unknown>;
-};
-type ProfileState = {
-    profileId: string;
-    profileLabel: string | null;
 };
 type HostStatus = VersionStatus & {
     hostName: string;
@@ -63,7 +59,8 @@ const HOST_STATUS_STORAGE_KEY = "OPENCODE_NATIVE_HOST_STATUS";
 const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
 const PROFILE_STORAGE_KEY = "OPENCODE_BROWSER_PROFILE";
 const VERSION_REMINDER_KEY = "OPENCODE_VERSION_REMINDER";
-let versionCheckGeneration = 0;
+const versionCheck = { generation: 0 };
+let reconciliationToken: string | null = null;
 let restoringSessions = 0;
 const sessions = new Map<string, ExtensionSession>();
 const attachedTabs = new Map<number, string>();
@@ -78,7 +75,6 @@ const cursorArrivalWaiters = new Map<string, () => void>();
 const cursorInjectedTabs = new Set<number>();
 const downloadEvents = createDownloadEvents({ ownerForTab: tabId => findTabOwner(tabId)?.sessionId ?? null, maxEvents: MAX_DOWNLOAD_EVENTS });
 const inlineResponseEventKeys = new Set<string>();
-let profileStatePromise: Promise<ProfileState> | null = null;
 const hostStatus: HostStatus = {
     state: "disconnected",
     hostName: HOST_NAME,
@@ -99,8 +95,8 @@ const rpc = new NativeRpc({ chrome, hostName: HOST_NAME, timeoutMs: DEFAULT_NATI
         void storageSet({ [HOST_STATUS_STORAGE_KEY]: hostStatus }).catch(() => { });
         broadcastNativeStatus();
     },
-    connected() { ++versionCheckGeneration; void announceProfile().catch(() => { }); },
-    disconnected() { ++versionCheckGeneration; },
+    connected() { ++versionCheck.generation; void announceProfile().catch(() => { }); },
+    disconnected() { ++versionCheck.generation; reconciliationToken = null; },
 });
 const uploadConsent = createUploadConsent({ chrome,
     describe: async (files) => uploadInfoSchema.parse(await rpc.request("uploads.describe", { files }, { timeoutMs: 60000 })),
@@ -113,113 +109,13 @@ function nowIso() {
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
-function randomProfileId() {
-    if (globalThis.crypto?.randomUUID)
-        return globalThis.crypto.randomUUID();
-    const bytes = new Uint8Array(16);
-    globalThis.crypto?.getRandomValues?.(bytes);
-    return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("") || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-function normalizeProfileLabel(label: unknown): string | null {
-    if (label === null || label === undefined)
-        return null;
-    const normalized = String(label).replace(/[\r\n\t]+/g, " ").trim().slice(0, 80);
-    return normalized.length > 0 ? normalized : null;
-}
-function browserNameFromUserAgent() {
-    if (IS_FIREFOX)
-        return "Firefox";
-    const userAgent = navigator.userAgent ?? "";
-    if (/Edg\//.test(userAgent))
-        return "Microsoft Edge";
-    if (/OPR\//.test(userAgent))
-        return "Opera";
-    if (/Chrome\//.test(userAgent))
-        return "Chromium";
-    return "Chromium-based browser";
-}
-async function getProfileState(): Promise<ProfileState> {
-    if (profileStatePromise)
-        return profileStatePromise;
-    profileStatePromise = (async () => {
-        const stored = (await storageGet(PROFILE_STORAGE_KEY).catch((): Record<string, unknown> => ({})))?.[PROFILE_STORAGE_KEY];
-        const profile = record(stored);
-        const state = {
-            profileId: typeof profile.profileId === "string" && profile.profileId.length > 0 ? profile.profileId : randomProfileId(),
-            profileLabel: normalizeProfileLabel(profile.profileLabel),
-        };
-        await storageSet({ [PROFILE_STORAGE_KEY]: state }).catch(() => { });
-        return state;
-    })();
-    return profileStatePromise;
-}
-async function setProfileLabel(label: unknown) {
-    const current = await getProfileState();
-    const next = { ...current, profileLabel: normalizeProfileLabel(label) };
-    profileStatePromise = Promise.resolve(next);
-    await storageSet({ [PROFILE_STORAGE_KEY]: next });
-    await announceProfile().catch(() => { });
-    return profileMetadata();
-}
-async function profileMetadata() {
-    const profile = await getProfileState();
-    const manifest = chrome.runtime.getManifest();
-    return {
-        profileId: profile.profileId,
-        profileIdMasked: maskIdentifier(profile.profileId),
-        profileLabel: profile.profileLabel,
-        browserName: browserNameFromUserAgent(),
-        extensionId: chrome.runtime.id,
-        extensionVersion: manifest.version,
-    };
-}
-function maskIdentifier(value: unknown): string {
-    if (typeof value !== "string" || value.length === 0)
-        return "";
-    if (value.length <= 8)
-        return `${value[0]}…`;
-    return `${value.slice(0, 4)}…${value.slice(-4)}`;
-}
-function publicProfile(profile: Awaited<ReturnType<typeof profileMetadata>>) {
-    if (!profile || typeof profile !== "object")
-        return profile;
-    const { profileId, profileIdMasked, ...rest } = profile;
-    const masked = profileId ? maskIdentifier(profileId) : (typeof profileIdMasked === "string" ? profileIdMasked : "");
-    return { ...rest, profileIdMasked: masked };
-}
-function sanitizeSemanticForPopup(semantic: unknown) {
-    if (!semantic || typeof semantic !== "object")
-        return semantic;
-    const { cacheDir: _cacheDir, ...rest } = record(semantic);
-    return rest;
-}
-async function announceProfile() {
-    const generation = ++versionCheckGeneration;
-    const result = await rpc.request("profile.hello", { ...await profileMetadata(), uploadConsentVersion: 1 }).catch(() => null);
-    const reminder = (await storageGet(VERSION_REMINDER_KEY).catch((): Record<string, unknown> => ({})))[VERSION_REMINDER_KEY] ?? null;
-    if (generation !== versionCheckGeneration || hostStatus.state !== "connected")
-        return;
-    hostStatus.versionReminder = z.object({ key: z.string(), until: z.number() }).safeParse(reminder).data ?? null;
-    applyHostVersions(result);
-}
-function applyHostVersions(value: unknown) {
-    const result = record(value);
-    hostStatus.versionChecked = true;
-    hostStatus.unknownClientVersion = result?.unknownClientVersion === true;
-    hostStatus.nativeHostVersion = validVersion(result?.nativeHostVersion);
-    hostStatus.clientVersions = Array.isArray(result?.clientVersions) ? result.clientVersions.map(validVersion).filter((version): version is string => version !== null) : [];
-    broadcastNativeStatus();
-}
-rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });
+let popupRuntime: ReturnType<typeof createPopupRuntime> | null = null;
+function broadcastNativeStatus() { popupRuntime?.broadcastNativeStatus(); }
+const profileRuntime = createProfileRuntime({ rpc, chrome, IS_FIREFOX, PROFILE_STORAGE_KEY, VERSION_REMINDER_KEY, hostStatus, storageGet, storageSet, broadcastNativeStatus, versionCheck,
+    acceptReconciliationToken(value: unknown) { const token = record(value).reconciliationToken; reconciliationToken = typeof token === "string" && /^[a-f0-9]{64}$/.test(token) ? token : null; } });
+const { setProfileLabel, profileMetadata, publicProfile, sanitizeSemanticForPopup, announceProfile, updateVersionBadge } = profileRuntime;
 const connectionIdle = () => restoringSessions === 0 && ![...sessions.values()].some(session => session.tabIds.size > 0) && attachedTabs.size === 0 && commandHealth.idle() && traceBuffers.size === 0;
 rpc.register("runtime.canReconnect", async () => ({ idle: rpc.idle() && connectionIdle() }));
-async function updateVersionBadge() {
-    const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
-    if (!chrome.action?.setBadgeText)
-        return;
-    await chrome.action.setBadgeText({ text: notice && !notice.snoozed ? (notice.kind === "unknown" ? "?" : "!") : "" }).catch(() => { });
-    await chrome.action.setBadgeBackgroundColor({ color: "#a86b00" }).catch(() => { });
-}
 function finiteNumber(value: unknown, label: string): number {
     const number = Number(value);
     if (!Number.isFinite(number))
@@ -242,6 +138,7 @@ function sessionState(id: string): ExtensionSession {
         session = {
             tabIds: new Set(),
             tabOrigins: new Map(),
+            lastActivityAt: Date.now(),
             name: null,
             groupId: null,
             activeTabId: null,
@@ -252,6 +149,7 @@ function sessionState(id: string): ExtensionSession {
     return session;
 }
 function updateTurn(session: ExtensionSession, params: CommandParams) {
+    session.lastActivityAt = Date.now();
     updateSessionPolicy(session, params);
     const id = turnId(params);
     if (id)
@@ -372,6 +270,7 @@ async function persistSessions() {
         serialized[id] = {
             tabIds: [...session.tabIds],
             tabOrigins: Object.fromEntries(session.tabOrigins.entries()),
+            lastActivityAt: session.lastActivityAt,
             name: session.name,
             urlPolicy: session.urlPolicy ?? null,
             groupId: session.groupId,
@@ -388,11 +287,12 @@ async function restoreSessions() {
     if (!stored || typeof stored !== "object")
         return;
     for (const [id, value] of Object.entries(stored)) {
-        const parsed = z.object({ name: z.optional(z.nullable(z.string())), urlPolicy: z.optional(z.nullable(z.object({ allowedOrigins: z.optional(z.array(z.string())), blockedOrigins: z.optional(z.array(z.string())) }))), groupId: z.optional(z.nullable(z.int())), activeTabId: z.optional(z.nullable(z.int())), currentTurnId: z.optional(z.nullable(z.string())), tabOrigins: z.optional(z.record(z.string(), z.string())), tabIds: z.optional(z.array(z.int())) }).safeParse(value);
+        const parsed = z.object({ name: z.optional(z.nullable(z.string())), urlPolicy: z.optional(z.nullable(z.object({ allowedOrigins: z.optional(z.array(z.string())), blockedOrigins: z.optional(z.array(z.string())) }))), groupId: z.optional(z.nullable(z.int())), activeTabId: z.optional(z.nullable(z.int())), currentTurnId: z.optional(z.nullable(z.string())), lastActivityAt: z.optional(z.number()), tabOrigins: z.optional(z.record(z.string(), z.string())), tabIds: z.optional(z.array(z.int())) }).safeParse(value);
         if (!parsed.success)
             continue;
         const serialized = parsed.data;
         const session = sessionState(id);
+        session.lastActivityAt = typeof serialized.lastActivityAt === "number" && Number.isFinite(serialized.lastActivityAt) ? serialized.lastActivityAt : 0;
         session.name = typeof serialized.name === "string" ? serialized.name : null;
         if (serialized.urlPolicy)
             updateSessionPolicy(session, { url_policy: serialized.urlPolicy });
@@ -491,108 +391,7 @@ async function untrackTab(sessionId: string, tabId: number) {
     cursorInjectedTabs.delete(tabId);
     await persistSessions().catch(() => { });
 }
-async function injectCursor(tabId: number, options: {
-    force?: boolean;
-} = {}) {
-    if (!chrome.scripting?.executeScript)
-        return false;
-    if (!options.force && cursorInjectedTabs.has(tabId))
-        return true;
-    try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: CURSOR_SCRIPTS, injectImmediately: true });
-        cursorInjectedTabs.add(tabId);
-        return true;
-    }
-    catch {
-        cursorInjectedTabs.delete(tabId);
-        return false;
-    }
-}
-function cursorWaiterKey(tabId: number, cursorId: string, moveSequence: number) {
-    return `${tabId}:${cursorId}:${moveSequence}`;
-}
-async function waitForCursorArrival(tabId: number, cursorId: string, moveSequence: number, timeoutMs: number) {
-    const key = cursorWaiterKey(tabId, cursorId, moveSequence);
-    return new Promise<{
-        arrived: boolean;
-        timedOut: boolean;
-    }>((resolve) => {
-        const timer = setTimeout(() => {
-            cursorArrivalWaiters.delete(key);
-            resolve({ arrived: false, timedOut: true });
-        }, timeoutMs);
-        cursorArrivalWaiters.set(key, () => {
-            clearTimeout(timer);
-            cursorArrivalWaiters.delete(key);
-            resolve({ arrived: true, timedOut: false });
-        });
-    });
-}
-async function publishCursorState(tabId: number, state: CursorState) {
-    const cursorId = state.cursorId ?? "default";
-    cursorStatesForTab(tabId).set(cursorId, { ...state, cursorId });
-    if (!(await injectCursor(tabId)))
-        throw new Error(`Could not inject cursor overlay into tab ${tabId}`);
-    try {
-        const response = await chrome.tabs.sendMessage(tabId, { type: "OPENCODE_CURSOR_STATE", ...state, cursorId });
-        return { delivered: true, retried: false, response };
-    }
-    catch {
-        cursorInjectedTabs.delete(tabId);
-    }
-    if (await injectCursor(tabId, { force: true })) {
-        const response = await chrome.tabs.sendMessage(tabId, { type: "OPENCODE_CURSOR_STATE", ...state, cursorId });
-        return { delivered: true, retried: true, response };
-    }
-    throw new Error(`Could not deliver cursor state to tab ${tabId}`);
-}
-async function framePoint(params: CommandParams) {
-    const tabId = tabIdFromParams(params);
-    const { session } = ensureControlledTab(params, tabId);
-    const point = { x: params.x ?? 0, y: params.y ?? 0 };
-    if (!params.frameId || params.frameId === "main") return point;
-    if (IS_FIREFOX) return z.object({ x: z.number(), y: z.number() }).parse(await firefoxFrameRouting.command(tabId, "OpenCode.framePoint", point, params.frameId, url => assertSessionUrl(session, url), 5000));
-    return frameRouting.viewportPoint(tabId, params.frameId, point, url => assertSessionUrl(session, url));
-}
-async function moveMouse(params: CommandParams) {
-    if (params.frameId) params = { ...params, ...await framePoint(params) };
-    const tabId = tabIdFromParams(params);
-    const { session } = ensureControlledTab(params, tabId);
-    const cursorId = cursorIdFromParams(params);
-    const previous = cursorStateByTabId.get(tabId)?.get(cursorId);
-    const moveSequence = params.moveSequence !== undefined && Number.isInteger(params.moveSequence)
-        ? params.moveSequence
-        : (previous?.moveSequence ?? 0) + 1;
-    const state = cursorState({
-        cursorId,
-        session,
-        x: finiteNumber(params.x, "x"),
-        y: finiteNumber(params.y, "y"),
-        visible: params.visible !== false,
-        moveSequence,
-        action: typeof params.action === "string" ? params.action : null,
-    });
-    const arrival = params.waitForArrival
-        ? waitForCursorArrival(tabId, cursorId, moveSequence, params.timeoutMs ?? 2000)
-        : null;
-    const delivery = await publishCursorState(tabId, state);
-    if (arrival) {
-        const result = await arrival;
-        if (result.timedOut)
-            throw new Error(`Cursor did not report arrival within ${params.timeoutMs ?? 2000}ms`);
-        return { ...result, ...delivery };
-    }
-    return { moveSequence, cursorId, ...delivery };
-}
-async function hideCursor(tabId: number, cursorId?: string) {
-    const states = cursorStateByTabId.get(tabId);
-    if (!states?.size && !cursorInjectedTabs.has(tabId)) return;
-    const ids = cursorId ? [cursorId] : [...(states?.keys() ?? ["default"])];
-    for (const id of ids) {
-        const previous = states?.get(id) ?? { x: -100, y: -100, moveSequence: 0, cursorId: id, label: id, visible: false };
-        await publishCursorState(tabId, { ...previous, cursorId: id, visible: false, moveSequence: previous.moveSequence + 1 });
-    }
-}
+const { cursorWaiterKey, publishCursorState, framePoint, moveMouse, hideCursor } = createCursorRuntime({ chrome, cursorInjectedTabs, cursorArrivalWaiters, cursorStatesForTab, tabIdFromParams, ensureControlledTab, IS_FIREFOX, firefoxFrameRouting, frameRouting, assertSessionUrl, cursorStateByTabId, finiteNumber });
 const withTabLock = <T>(tabId: number, operation: () => Promise<T>, deadlineAt?: number, method?: string) => commandHealth.run(tabId, operation, deadlineAt, method);
 const attachChromiumTab = createDebuggerAttacher({ withTabLock, attachedTabs, isBrowserInternalUrl, getTab, chromeCall, chrome, DEBUGGER_VERSION, errorMessage, sendCdpCommand, DEFAULT_CDP_TIMEOUT_MS, onAttached: (tabId, deadlineAt) => frameRouting.enable(tabId, undefined, deadlineAt).catch(() => {}), generation: tabId => commandHealth.generation(tabId), trackPending: (tabId, task) => commandHealth.track(tabId, task), keepAttached: tabId => Boolean(commandHealth.dialog(tabId)) });
 const attachTab = IS_FIREFOX ? createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chromeCall, chrome, rpc, generation: tabId => commandHealth.generation(tabId), trackPending: (tabId, task) => commandHealth.track(tabId, task) }) : attachChromiumTab;
@@ -619,13 +418,7 @@ async function detachTab(tabId: number) {
     commandHealth.track(tabId, task);
     return beforeDeadline(() => task, Date.now() + 2500, { tabId, phase: "detach", method: "detach" });
 }
-function commandTimeoutMs(params: CommandParams): number {
-    const timeoutMs = params.timeoutMs ?? params.timeout_ms ?? DEFAULT_CDP_TIMEOUT_MS;
-    return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CDP_TIMEOUT_MS;
-}
-function sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const { executeCdp, executeInputGesture } = createCdpRuntime({ DEFAULT_CDP_TIMEOUT_MS, IS_FIREFOX, rpc, errorMessage, attachedTabs, chrome, record, beforeDeadline, commandHealth, queryTabs, tabIdFromParams, ensureControlledTab, assertSessionUrl, getTab, firefoxFrameRouting, frameRouting, withTabLock, guardedCdp, uploadConsent, uploadTargetUrl, sendCdpCommand, cursorIdFromParams, finiteNumber, gestureAction, moveMouse, publishCursorState, partialDispatchError, attachTab, cursorStateByTabId, framePoint, cursorStatesForTab });
 function sendCdpCommand<K extends CdpMethod>(tabId: number, method: K, commandParams: CdpParams<K>, timeoutMs?: number, sessionId?: string): Promise<CdpResult<K>>;
 function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs?: number, sessionId?: string): Promise<unknown>;
 async function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs = DEFAULT_CDP_TIMEOUT_MS, sessionId?: string): Promise<unknown> {
@@ -649,464 +442,8 @@ async function sendCdpCommand(tabId: number, method: string, commandParams: obje
         throw error;
     });
 }
-async function executeCdp(params: CommandParams) {
-    const method = params.method;
-    if (typeof method !== "string" || method.length === 0)
-        throw new Error("Expected CDP method");
-    if (method === "Target.getTargets") {
-        if (IS_FIREFOX)
-            return { targetInfos: (await queryTabs({})).map(tab => ({ targetId: String(tab.id), type: "page", url: tab.url, title: tab.title })) };
-        const targets = await chrome.debugger.getTargets();
-        return { targetInfos: targets };
-    }
-    const tabId = tabIdFromParams(params);
-    const { session } = ensureControlledTab(params, tabId);
-    if (method === "Page.navigate")
-        assertSessionUrl(session, params.commandParams?.url ?? params.command_params?.url ?? "");
-    else if ((session.urlPolicy?.allowedOrigins?.length || session.urlPolicy?.blockedOrigins?.length) && !/^(Page.stopLoading|Emulation.clear|Network.setExtraHTTPHeaders|Page.removeScriptToEvaluateOnNewDocument)/.test(method))
-        assertSessionUrl(session, (await getTab(tabId)).url ?? "about:blank");
-    if (!attachedTabs.has(tabId))
-        throw Object.assign(new Error("Debugger unattached"), { code: "DEBUGGER_DETACHED", executionState: "not_started", uncertain: false });
-    const deadlineAt = params.deadlineAt ?? Date.now() + commandTimeoutMs(params);
-    const send = (command: object) => IS_FIREFOX
-      ? firefoxFrameRouting.command(tabId, method, command, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now())
-      : frameRouting.command(tabId, method, command, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now());
-    const inspect: CdpRequest = async <K extends CdpMethod>(inspectMethod: K, inspectParams: CdpParams<K>) =>
-      await (IS_FIREFOX ? firefoxFrameRouting : frameRouting).command(tabId, inspectMethod, inspectParams, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now()) as CdpResult<K>;
-    if (method === "Page.handleJavaScriptDialog") {
-      const result = await beforeDeadline(() => sendCdpCommand(tabId, method, params.commandParams ?? params.command_params ?? {}, Math.max(1, deadlineAt - Date.now()), commandHealth.dialog(tabId)?.sessionId), deadlineAt, { tabId, method, phase: "dialog recovery" });
-      commandHealth.event(tabId, "Page.javascriptDialogClosed", {});
-      return result;
-    }
-    if (commandHealth.dialog(tabId)) throw Object.assign(new Error("A native browser dialog is open. Read events and use handleDialog before continuing."), { code: "DIALOG_OPEN", executionState: "not_started", uncertain: false, details: { tabId, method, phase: "preflight", dialogType: commandHealth.dialog(tabId)?.type } });
-    return withTabLock(tabId, () => guardedCdp({ method, tabId, consent: uploadConsent, getTab,
-        inspectTarget: (uploadMethod, command) => uploadTargetUrl(uploadMethod, command, inspect),
-        commandParams: params.commandParams ?? params.command_params ?? {}, send,
-    }), deadlineAt, method);
-}
-async function executeInputGesture(params: CommandParams) {
-    const tabId = tabIdFromParams(params);
-    const methodTimeoutMs = commandTimeoutMs(params);
-    const { sessionId, session } = ensureControlledTab(params, tabId);
-    const cursorId = cursorIdFromParams(params);
-    const steps = Array.isArray(params.steps) ? params.steps : [];
-    if (!steps.length)
-        throw new Error("inputGesture requires at least one step");
-    if (steps.length > 5000)
-        throw new Error(`inputGesture step limit exceeded: ${steps.length}`);
-    for (const [index, step] of steps.entries()) {
-        if (step.cursor) {
-            finiteNumber(step.cursor.x, `steps[${index}].cursor.x`);
-            finiteNumber(step.cursor.y, `steps[${index}].cursor.y`);
-        }
-        const params = step.commandParams ?? step.command_params;
-        if (params && (step.method === "Input.dispatchMouseEvent" || step.method === "Input.dispatchTouchEvent")) {
-            if (params.x !== undefined)
-                finiteNumber(params.x, `steps[${index}].commandParams.x`);
-            if (params.y !== undefined)
-                finiteNumber(params.y, `steps[${index}].commandParams.y`);
-        }
-    }
-    const deadlineAt = params.deadlineAt ?? Date.now() + methodTimeoutMs;
-    await attachTab(tabId, sessionId, deadlineAt);
-    let moveSequence = cursorStateByTabId.get(tabId)?.get(cursorId)?.moveSequence ?? 0;
-    return withTabLock(tabId, async () => {
-        const results = [];
-        const hasCursorSteps = steps.some((s) => s.cursor && Number.isFinite(s.cursor.x) && Number.isFinite(s.cursor.y));
-        const cursorPublishInterval = hasCursorSteps && steps.length > 20 ? Math.max(1, Math.floor(steps.length / 20)) : 1;
-        let stepIndex = 0;
-        let pointerDown = false;
-        try {
-        for (const step of steps) {
-            await beforeDeadline(() => {}, deadlineAt, { tabId, method: step.method, phase: "gesture", executionState: results.length ? "unknown" : "not_started" });
-            stepIndex += 1;
-            const isLast = stepIndex === steps.length;
-            const commandParams = step.commandParams ?? step.command_params ?? {};
-            const action = gestureAction(step, pointerDown);
-            if (step.cursor && Number.isFinite(step.cursor.x) && Number.isFinite(step.cursor.y)) {
-                moveSequence += 1;
-                const point = params.frameId ? await framePoint({ ...params, ...step.cursor }) : step.cursor;
-                const patch = cursorState({
-                    cursorId,
-                    session,
-                    x: point.x,
-                    y: point.y,
-                    visible: step.cursor.visible !== false,
-                    moveSequence,
-                    action,
-                });
-                if (isLast || stepIndex % cursorPublishInterval === 1)
-                    await publishCursorState(tabId, patch);
-                else
-                    cursorStatesForTab(tabId).set(cursorId, patch);
-            }
-            if (step.method === "Input.dispatchMouseEvent")
-                pointerDown = commandParams.type !== "mouseReleased" && Number(commandParams.buttons) > 0;
-            if (typeof step.method === "string" && step.method.length > 0) {
-                results.push(await guardedCdp({ method: step.method, tabId, consent: uploadConsent, getTab,
-                    inspectTarget: (method, command) => uploadTargetUrl(method, command, (method, command) => sendCdpCommand(tabId, method, command, DEFAULT_CDP_TIMEOUT_MS)),
-                    commandParams,
-                    send: async command => {
-                      const result = await (IS_FIREFOX ? firefoxFrameRouting : frameRouting).command(tabId, step.method, command, params.frameId, url => assertSessionUrl(session, url), deadlineAt - Date.now());
-                      const exception = record(result).exceptionDetails;
-                      if (exception) throw pageException(exception);
-                      return result;
-                    },
-                }));
-            }
-            const delayMs = Number(step.delayMs ?? step.delay_ms ?? 0);
-            if (delayMs > 0)
-                await sleep(Math.min(delayMs, 1000));
-        }
-        } catch (error) { throw partialDispatchError(error, results.length); }
-        return { results, cursorId, moveSequence };
-    }, deadlineAt, "inputGesture");
-}
-function headerValue(headers: unknown, name: string): unknown {
-    if (!headers || typeof headers !== "object")
-        return null;
-    const expected = name.toLowerCase();
-    for (const [key, value] of Object.entries(record(headers))) {
-        if (key.toLowerCase() === expected)
-            return Array.isArray(value) ? value[0] : value;
-    }
-    return null;
-}
-function filenameFromDisposition(disposition: unknown): string | null {
-    if (typeof disposition !== "string")
-        return null;
-    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
-    if (encoded) {
-        try {
-            return decodeURIComponent(encoded);
-        }
-        catch {
-            return encoded;
-        }
-    }
-    return /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? null;
-}
-function recordInlineBrowserResponse(tabId: number, method: string, params: unknown) {
-    if (method !== "Network.responseReceived")
-        return;
-    const event = record(params);
-    const response = record(event.response);
-    const mime = String(response?.mimeType ?? headerValue(response?.headers, "content-type") ?? "").toLowerCase();
-    if (!mime.includes("application/pdf"))
-        return;
-    const url = response?.url ?? event.documentURL ?? null;
-    const key = `${tabId}:${event.requestId ?? inlineResponseEventKeys.size}`;
-    if (inlineResponseEventKeys.has(key))
-        return;
-    inlineResponseEventKeys.add(key);
-    if (inlineResponseEventKeys.size > MAX_INLINE_RESPONSE_KEYS)
-        inlineResponseEventKeys.delete(inlineResponseEventKeys.values().next().value ?? "");
-    const totalBytes = Number(headerValue(response?.headers, "content-length"));
-    downloadEvents.recordInline(tabId, `inline:${key}`, {
-        url,
-        finalUrl: url,
-        filename: filenameFromDisposition(headerValue(response?.headers, "content-disposition")),
-        mime: response?.mimeType ?? "application/pdf",
-        totalBytes: Number.isFinite(totalBytes) ? totalBytes : null,
-        bytesReceived: null,
-        danger: null,
-        error: null,
-    });
-}
-rpc.register("ping", async () => "pong");
-rpc.register("getInfo", async () => {
-    const profile = await profileMetadata();
-    return {
-        id: chrome.runtime.id,
-        name: "opencode-browser-plugin",
-        version: chrome.runtime.getManifest().version,
-        type: "extension",
-        engine: IS_FIREFOX ? "gecko" : "chromium",
-        profile,
-        capabilities: {
-            browser: [
-                { id: "profiles", description: "Select among currently open browser profiles without launching closed profiles." },
-                { id: "tabs", description: "Create, claim, list, finalize, and navigate Chromium tabs." },
-                { id: "history", description: "Read browser history through the extension history permission." },
-                { id: "downloads", description: "Observe attributed download events from this session's controlled tabs." },
-                { id: "semantic", description: "Configure local semantic page retrieval models in the native host." },
-                { id: "visual-map", description: "Return lean visible UI boxes and optionally use local screenshot detection in the native host." },
-            ],
-            tab: [
-                { id: "cdp", description: "Run Chrome DevTools Protocol commands against controlled tabs." },
-                { id: "cua", description: "Coordinate-based mouse, keyboard, scroll, drag, and screenshot automation." },
-                { id: "dom", description: "DOM snapshot and selector-based interaction helpers." },
-                { id: "clipboard", description: "Read and write plain text through the page clipboard API." },
-            ],
-        },
-        metadata: {
-            extensionId: chrome.runtime.id,
-            hostName: HOST_NAME,
-            profileId: profile.profileId,
-            profileLabel: profile.profileLabel,
-        },
-    };
-});
-rpc.register("getProfile", async () => profileMetadata());
-rpc.register("setProfileLabel", async (params) => setProfileLabel(params.label));
-rpc.register("attach", async (params) => {
-    const tabId = tabIdFromParams(params);
-    const { sessionId } = ensureControlledTab(params, tabId);
-    return attachTab(tabId, sessionId, params.deadlineAt);
-});
-rpc.register("detach", async (params) => detachTab(tabIdFromParams(params)));
-rpc.register("executeCdp", executeCdp);
-rpc.register("uploadPolicy", async () => ({ version: 1 }));
-rpc.register("inputGesture", executeInputGesture);
-rpc.register("activateTab", async (params) => {
-    const tabId = tabIdFromParams(params);
-    const { session } = ensureControlledTab(params, tabId);
-    session.activeTabId = tabId;
-    await persistSessions().catch(() => { });
-    const activation = resolveTabActivation(params);
-    return normalizeTab(await focusTab(tabId, activation));
-});
-rpc.register("moveMouse", moveMouse);
-rpc.register("framePoint", framePoint);
-rpc.register("notifyCursorArrived", async (params) => {
-    const tabId = tabIdFromParams(params);
-    const cursorId = cursorIdFromParams(params);
-    const moveSequence = params.moveSequence ?? params.move_sequence;
-    if (moveSequence === undefined)
-        throw new Error("Expected move sequence");
-    const waiter = cursorArrivalWaiters.get(cursorWaiterKey(tabId, cursorId, moveSequence));
-    if (waiter)
-        waiter();
-    return {};
-});
-rpc.register("getCdpEvents", async (params) => {
-    const tabId = tabIdFromParams(params);
-    ensureControlledTab(params, tabId);
-    const methods = Array.isArray(params.methods) ? new Set(params.methods) : null;
-    const prefix = typeof params.methodPrefix === "string" ? params.methodPrefix : null;
-    const limit = params.limit !== undefined && Number.isInteger(params.limit) ? params.limit : 100;
-    let events = cdpEventsByTabId.get(tabId) ?? [];
-    if (methods)
-        events = events.filter((event) => methods.has(event.method));
-    if (prefix)
-        events = events.filter((event) => event.method.startsWith(prefix));
-    return { events: events.slice(-limit), dialogs: { open: commandHealth.dialog(tabId) ? [{ tabId, ...commandHealth.dialog(tabId) }] : [] }, health: commandHealth.snapshot([tabId])[0] };
-});
-rpc.register("clearCdpEvents", async (params) => {
-    const tabId = tabIdFromParams(params);
-    ensureControlledTab(params, tabId);
-    cdpEventsByTabId.delete(tabId);
-    return {};
-});
-rpc.register("trace.begin", async (params) => {
-    const tabId = tabIdFromParams(params);
-    ensureControlledTab(params, tabId);
-    traceBuffers.set(tabId, { chunks: [], complete: false, overflowed: false, eventCount: 0, startedAt: nowIso(), endTime: null });
-    return { started: true, tabId };
-});
-rpc.register("trace.collect", async (params) => {
-    const tabId = tabIdFromParams(params);
-    ensureControlledTab(params, tabId);
-    const buffer = traceBuffers.get(tabId);
-    if (!buffer)
-        return { collecting: false, chunkCount: 0, eventCount: 0, chunks: [] };
-    const clear = params.clear === true;
-    const result = {
-        collecting: true,
-        complete: buffer.complete === true,
-        overflowed: buffer.overflowed === true,
-        chunkCount: buffer.chunks.length,
-        eventCount: buffer.eventCount,
-        startedAt: buffer.startedAt,
-        ...(buffer.complete ? { endTime: buffer.endTime } : {}),
-        chunks: clear ? buffer.chunks.splice(0, buffer.chunks.length) : buffer.chunks,
-    };
-    if (clear)
-        traceBuffers.delete(tabId);
-    return result;
-});
-rpc.register("trace.clear", async (params) => {
-    const tabId = tabIdFromParams(params);
-    traceBuffers.delete(tabId);
-    return {};
-});
-rpc.register("createTab", async (params) => {
-    const id = requiredSessionId(params);
-    const session = sessionState(id);
-    updateTurn(session, params);
-    const windowId = await focusedNormalWindowId();
-    let tab;
-    if (windowId !== null && Number.isInteger(windowId)) {
-        tab = await chrome.tabs.create({ active: false, url: "about:blank", windowId });
-    }
-    else {
-        const window = await chrome.windows.create({ focused: false, type: "normal", url: "about:blank" });
-        tab = window?.tabs?.[0];
-        if (!tab?.id)
-            throw new Error("Could not create browser tab");
-    }
-    if (tab.id === undefined)
-        throw new Error("Could not identify browser tab");
-    if (params.creationRequestId) creationRequestIds.set(tab.id, params.creationRequestId);
-    await trackTab(id, tab.id, "agent");
-    return normalizeTab(tab);
-});
-rpc.register("claimUserTab", async (params) => {
-    const id = requiredSessionId(params);
-    const session = sessionState(id);
-    updateTurn(session, params);
-    const tabId = tabIdFromParams(params);
-    const tab = await getTab(tabId);
-    assertClaimableTab(tab, findTabOwner(tabId));
-    assertSessionUrl(session, tab.url ?? "about:blank");
-    await trackTab(id, tabId, "user");
-    return normalizeTab(tab);
-});
-rpc.register("getTabs", async (params) => {
-    const id = requiredSessionId(params);
-    const session = sessionState(id);
-    updateTurn(session, params);
-    const tabs = [];
-    for (const tabId of [...session.tabIds]) {
-        try {
-            const tab = await getTab(tabId);
-            if (isBrowserInternalUrl(tab.url))
-                continue;
-            try {
-                assertSessionUrl(session, tab.url ?? "about:blank");
-            }
-            catch {
-                continue;
-            }
-            tabs.push(normalizeTab(tab, {
-                selected: session.activeTabId === tabId,
-                origin: session.tabOrigins.get(tabId) ?? "agent",
-            }));
-        }
-        catch {
-            await untrackTab(id, tabId);
-        }
-    }
-    return { tabs, health: commandHealth.snapshot(session.tabIds) };
-});
-rpc.register("getSelectedTab", async (params) => {
-    const id = requiredSessionId(params);
-    const session = sessionState(id);
-    updateTurn(session, params);
-    if (session.activeTabId === null || !Number.isInteger(session.activeTabId) || !session.tabIds.has(session.activeTabId))
-        return null;
-    try {
-        return normalizeTab(await getTab(session.activeTabId), { selected: true });
-    }
-    catch {
-        await untrackTab(id, session.activeTabId);
-        return null;
-    }
-});
-rpc.register("getTab", async (params) => {
-    const tabId = tabIdFromParams(params);
-    ensureControlledTab(params, tabId);
-    const tab = await getTab(tabId);
-    assertSessionUrl(sessionState(requiredSessionId(params)), tab.url ?? "about:blank");
-    return normalizeTab(tab);
-});
-rpc.register("getUserTabs", async () => {
-    const tabs = await queryTabs({});
-    const normalized = tabs.filter(tab => isClaimableTab(tab, tab.id === undefined ? null : findTabOwner(tab.id)))
-        .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0)).slice(0, 1000)
-        .map(tab => normalizeTab(tab, { tabGroup: null, claimable: true }));
-    return { tabs: normalized };
-});
-rpc.register("getUserHistory", async (params) => {
-    const items = await chrome.history.search({
-        text: params.query ?? "",
-        maxResults: params.limit ?? 25,
-        startTime: params.from ? Date.parse(params.from) : 0,
-        endTime: params.to ? Date.parse(params.to) : Date.now(),
-    });
-    return {
-        items: items.map((item) => ({
-            id: item.id,
-            url: item.url,
-            title: item.title ?? null,
-            dateVisited: typeof item.lastVisitTime === "number" && Number.isFinite(item.lastVisitTime) ? new Date(item.lastVisitTime).toISOString() : null,
-            visitCount: item.visitCount ?? null,
-            typedCount: item.typedCount ?? null,
-        })),
-    };
-});
-rpc.register("closeTab", async (params) => {
-    const tabId = tabIdFromParams(params);
-    const { sessionId } = ensureControlledTab(params, tabId);
-    await detachTab(tabId);
-    await chrome.tabs.remove(tabId);
-    await untrackTab(sessionId, tabId);
-    return {};
-});
-rpc.register("releaseTab", async (params) => {
-    const tabId = tabIdFromParams(params);
-    const { sessionId, session } = ensureControlledTab(params, tabId);
-    const origin = session.tabOrigins.get(tabId) ?? "agent";
-    await detachTab(tabId);
-    await hideCursor(tabId).catch(() => { });
-    await ungroupTab(tabId).catch(() => { });
-    await untrackTab(sessionId, tabId);
-    await persistSessions().catch(() => { });
-    return { released: true, tabId, origin };
-});
-rpc.register("reloadTab", async (params) => {
-    const tabId = tabIdFromParams(params);
-    ensureControlledTab(params, tabId);
-    await chrome.tabs.reload(tabId, { bypassCache: Boolean(params.bypassCache) });
-    return {};
-});
-rpc.register("finalizeTabs", async (params) => {
-    const id = requiredSessionId(params);
-    const session = sessionState(id);
-    updateTurn(session, params);
-    const keep = new Map((params.keep ?? []).map((item) => {
-        const normalized = normalizeKeepItem(item);
-        if (!session.tabIds.has(normalized.tabId))
-            throw new Error(`Cannot keep unmanaged tab ${normalized.tabId}`);
-        return [normalized.tabId, normalized.status];
-    }));
-    const result = await finalizeOwnedTabs(session, keep, { blocked: tabId => params.blockedTabs?.find(tab => tab.tabId === tabId)?.reason, dialog: tabId => commandHealth.dialog(tabId), detach: detachTab, hide: hideCursor,
-      deliver: tabIds => groupReviewTabs(session, tabIds, chrome), untrack: tabId => untrackTab(id, tabId) });
-    if (!session.tabIds.size) sessions.delete(id);
-    await persistSessions().catch(() => {});
-    return result;
-});
-rpc.register("turnEnded", async (params) => {
-    const id = requiredSessionId(params);
-    const session = sessionState(id);
-    for (const tabId of [...session.tabIds]) {
-        if (!commandHealth.dialog(tabId)) await detachTab(tabId).catch(() => {});
-        await beforeDeadline(() => hideCursor(tabId), Date.now() + 500, { tabId, phase: "cursor cleanup" }).catch(() => {});
-    }
-    session.currentTurnId = null;
-    await persistSessions().catch(() => { });
-    return {};
-});
-rpc.register("nameSession", async (params) => {
-    const session = sessionState(requiredSessionId(params));
-    updateTurn(session, params);
-    if (typeof params.name !== "string" || !params.name.trim() || params.name.length > 120)
-        throw new Error("Session name must contain 1 to 120 characters.");
-    session.name = params.name.trim();
-    if (session.groupId !== null && Number.isInteger(session.groupId) && chrome.tabGroups) {
-        await chrome.tabGroups.update(session.groupId, { title: session.name ?? "OpenCode", color: SESSION_GROUP_COLOR });
-    }
-    await persistSessions().catch(() => { });
-    return {};
-});
-registerDownloadHandlers({ rpc, downloads: downloadEvents, requiredSessionId, capabilities: IS_FIREFOX ? async () => z.object({ started: z.boolean(), completed: z.boolean() }).parse(await rpc.request("firefox.downloadCapabilities", {})) : null });
-rpc.register("executeUnhandledCommand", async (params) => ({ handled: false, command: params.command ?? null }));
-rpc.register("firefox.event", async ({ tabId, method, params }) => {
-    if (IS_FIREFOX && tabId !== undefined && typeof method === "string" && attachedTabs.has(tabId))
-        recordCdpEvent({ tabId }, method, record(params));
-    return {};
-});
-registerDecisionImageCapture({ rpc, tabIdFromParams, ensureControlledTab, getTab, isBrowserInternalUrl, attachTab, requiredSessionId, sendCdpCommand });
+const recordInlineBrowserResponse = createInlineResponseRecorder({ downloadEvents, inlineResponseEventKeys, maxInlineResponseKeys: MAX_INLINE_RESPONSE_KEYS });
+registerRuntimeMethods({ rpc, profileMetadata, setProfileLabel, attachTab, detachTab, executeCdp, executeInputGesture, resolveTabActivation, moveMouse, framePoint, tabIdFromParams, cursorIdFromParams, cursorArrivalWaiters, cursorWaiterKey, cdpEventsByTabId, traceBuffers, MAX_TRACE_CHUNKS, requiredSessionId, sessionState, updateTurn, focusedNormalWindowId, creationRequestIds, trackTab, getTab, assertClaimableTab, normalizeTab, queryTabs, isClaimableTab, findTabOwner, assertSessionUrl, untrackTab, ensureControlledTab, hideCursor, ungroupTab, persistSessions, normalizeKeepItem, commandHealth, sessions, SESSION_GROUP_COLOR, downloadEvents, IS_FIREFOX, attachedTabs, recordCdpEvent, sendCdpCommand, HOST_NAME, focusTab, nowIso, uploadConsent, reconciliationToken: () => reconciliationToken });
 if (!IS_FIREFOX) chrome.debugger.onDetach.addListener(source => { if (source.tabId !== undefined) { commandHealth.invalidate(source.tabId); frameRouting.forget(source.tabId); } });
 if (!IS_FIREFOX) chrome.debugger.onEvent.addListener((source, method, params) => { if (source.tabId !== undefined && attachedTabs.has(source.tabId)) frameRouting.event(source, method, params); });
 if (!IS_FIREFOX)
@@ -1129,173 +466,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status === "loading" || typeof changeInfo.url === "string")
         cursorInjectedTabs.delete(tabId);
 });
-const statusPorts = new Set<Browser.runtime.Port>();
-const POPUP_MEMORY_METHODS = new Set([
-    "memory.profiles",
-    "memory.stats",
-    "memory.configure",
-    "memory.enable",
-    "memory.disable",
-    "memory.prune",
-    "memory.reindex",
-]);
-function broadcastNativeStatus() {
-    void updateVersionBadge();
-    const payload = { type: "NATIVE_STATUS", status: { ...hostStatus } };
-    for (const port of statusPorts) {
-        try {
-            port.postMessage(payload);
-        }
-        catch {
-            statusPorts.delete(port);
-        }
-    }
-}
-chrome.runtime.onConnect.addListener((port) => {
-    if (port.name !== "popup-status")
-        return;
-    statusPorts.add(port);
-    try {
-        port.postMessage({ type: "STATUS_SNAPSHOT", status: { ...hostStatus } });
-    }
-    catch {
-        statusPorts.delete(port);
-        return;
-    }
-    port.onDisconnect.addListener(() => statusPorts.delete(port));
-});
-chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
-    const parsed = popupMessageSchema.safeParse(value);
-    if (!parsed.success) return false;
-    const message = parsed.data;
-    if (["GET_HARNESS_CONNECTIONS", "DISCONNECT_HARNESS", "RECONNECT_NATIVE_HOST", "START_HARNESS_RECONNECT", "RUN_CONNECTION_DOCTOR", "INSTALL_RUNTIME_UPDATE", "GET_LOCAL_ACTION", "GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message.type)) {
-        connectionPanelMessage(message, sender, { extensionId: chrome.runtime.id, panelUrl: chrome.runtime.getURL("/popup.html"), rpc, idle: connectionIdle })
-            .then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (["GET_UPLOAD_SETTINGS", "SET_UPLOAD_SETTINGS", "GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST"].includes(message?.type)) {
-        const upload = uploadMessageSchema.safeParse(message);
-        if (!upload.success) { sendResponse({ error: "Invalid upload request" }); return false; }
-        uploadConsent.message(upload.data, sender).then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "SNOOZE_VERSION_NOTICE") {
-        const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
-        if (!notice) {
-            sendResponse({ ok: true });
-            return false;
-        }
-        const reminder = { key: notice.key, until: Date.now() + 7 * 86400000 };
-        storageSet({ [VERSION_REMINDER_KEY]: reminder }).then(() => {
-            hostStatus.versionReminder = reminder;
-            broadcastNativeStatus();
-            sendResponse({ ok: true });
-        }).catch(() => sendResponse({ ok: false }));
-        return true;
-    }
-    if (message?.type === "MEMORY_CALL") {
-        if (!message.method || !POPUP_MEMORY_METHODS.has(message.method)) {
-            sendResponse({ ok: false, error: "Unsupported memory operation" });
-            return false;
-        }
-        rpc.connect();
-        rpc.request(message.method, message.params ?? {}, { timeoutMs: 60000 })
-            .then((result) => sendResponse({ ok: true, result }))
-            .catch((error) => sendResponse({ ok: false, error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "GET_HOST_STATUS" || message?.type === "GET_NATIVE_HOST_STATUS") {
-        sendResponse({ status: hostStatus });
-        return true;
-    }
-    if (message?.type === "GET_PROFILE") {
-        profileMetadata()
-            .then((profile) => sendResponse({ profile: publicProfile(profile) }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "GET_PROFILE_DETAILS") {
-        profileMetadata()
-            .then((profile) => sendResponse({ profile }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "SET_PROFILE_LABEL") {
-        setProfileLabel(message.label)
-            .then((profile) => sendResponse({ profile: publicProfile(profile) }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (["GET_DECISION_SETTINGS", "SET_DECISION_SETTINGS", "TEST_DECISION_CONNECTION", "REMOVE_DECISION_KEY"].includes(message?.type)) {
-        const decisionMethods: Record<string, string> = { GET_DECISION_SETTINGS: "decision.status", SET_DECISION_SETTINGS: "decision.configure",
-            TEST_DECISION_CONNECTION: "decision.saveAndTest", REMOVE_DECISION_KEY: "decision.removeKey" };
-        const method = decisionMethods[message.type];
-        if (!method)
-            return false;
-        rpc.request(method, message.type === "TEST_DECISION_CONNECTION" ? { settings: message.settings, ...(message.apiKey ? { apiKey: message.apiKey } : {}) } : message.type === "SET_DECISION_SETTINGS" ? message.settings ?? {} : { usage: message.usage })
-            .then((result) => sendResponse({ result }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "GET_SEMANTIC_SETTINGS") {
-        rpc.request("semantic.status", {})
-            .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "GET_SEMANTIC_DIAGNOSTICS") {
-        rpc.request("semantic.cacheDiagnostics", {})
-            .then((diagnostics) => sendResponse({ diagnostics }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "SET_SEMANTIC_SETTINGS") {
-        rpc.request("semantic.setSettings", {
-            enabled: message.enabled === true,
-            modelId: typeof message.modelId === "string" ? message.modelId : undefined,
-            deepModelId: typeof message.deepModelId === "string" ? message.deepModelId : undefined,
-            preload: message.preload === true,
-            embeddingDims: Number.isInteger(message.embeddingDims) ? message.embeddingDims : undefined,
-            strategyPreference: typeof message.strategyPreference === "string" ? message.strategyPreference : undefined,
-            agentResultCount: Number.isInteger(message.agentResultCount) ? message.agentResultCount : undefined,
-            agentResultDetail: typeof message.agentResultDetail === "string" ? message.agentResultDetail : undefined,
-        })
-            .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "PREPARE_SEMANTIC_MODEL") {
-        rpc.request("semantic.prepareModel", { modelId: typeof message.modelId === "string" ? message.modelId : undefined })
-            .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "DELETE_SEMANTIC_MODEL") {
-        rpc.request("semantic.deleteModel", { modelId: typeof message.modelId === "string" ? message.modelId : undefined })
-            .then((semantic) => sendResponse({ semantic: sanitizeSemanticForPopup(semantic) }))
-            .catch((error) => sendResponse({ error: errorMessage(error) }));
-        return true;
-    }
-    if (message?.type === "OPENCODE_CURSOR_ARRIVED") {
-        const tabId = sender.tab?.id;
-        const cursorId = typeof message.cursorId === "string" && message.cursorId.length > 0 ? message.cursorId : "default";
-        const moveSequence = message.moveSequence;
-        if (tabId !== undefined && Number.isInteger(tabId) && moveSequence !== undefined) {
-            const waiter = cursorArrivalWaiters.get(cursorWaiterKey(tabId, cursorId, moveSequence));
-            if (waiter)
-                waiter();
-        }
-        sendResponse({ ok: true });
-        return true;
-    }
-    if (message?.type === "OPENCODE_GET_CURSOR_STATE") {
-        const tabId = sender.tab?.id;
-        const states = tabId !== undefined && Number.isInteger(tabId) ? currentCursorStates(tabId) : [];
-        sendResponse({ state: states[0] ?? null, states });
-        return true;
-    }
-    return false;
-});
+popupRuntime = createPopupRuntime({ rpc, hostStatus, updateVersionBadge, connectionIdle, errorMessage, storageSet, VERSION_REMINDER_KEY, profileMetadata, publicProfile, setProfileLabel, sanitizeSemanticForPopup, uploadConsent, cursorArrivalWaiters, cursorWaiterKey, currentCursorStates });
 function createAlarms() {
     chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 });
     chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });

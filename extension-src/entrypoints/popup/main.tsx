@@ -1,6 +1,6 @@
-import { setDocumentLanguage } from "../../i18n";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { setDocumentLanguage } from "../../i18n";
 import App from "./App";
 import "./popup.css";
 

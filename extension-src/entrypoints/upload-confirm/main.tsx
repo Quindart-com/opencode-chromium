@@ -1,8 +1,8 @@
-import { setDocumentLanguage } from "../../i18n";
-import { useEffect, useState } from "react";
-import { browser } from "wxt/browser";
+import { useEffect,useState } from "react";
 import { createRoot } from "react-dom/client";
-import { sendMessage, formatBytes } from "../popup/api";
+import { browser } from "wxt/browser";
+import { setDocumentLanguage } from "../../i18n";
+import { formatBytes,sendMessage } from "../popup/api";
 import "../popup/popup.css";
 
 type UploadRequest = { destination: string; files: Array<{ name: string; path: string; size: number; preview?: string }> };

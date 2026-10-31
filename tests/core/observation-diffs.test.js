@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "bun:test";
 import { PNG } from "pngjs";
 import { pixelDiff, snapshotDiff } from "../../src/core/observation-diffs.ts";
 import { AgentBrowserRuntime } from "../../src/core/runtime.ts";

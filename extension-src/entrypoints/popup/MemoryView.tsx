@@ -1,6 +1,6 @@
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 import { t } from "../../i18n";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorMessage, formatBytes, memoryCall, MB, type MemoryStatus, type MemoryProfiles } from "./api";
+import { errorMessage,formatBytes,MB,memoryCall,type MemoryProfiles,type MemoryStatus } from "./api";
 
 const EMPTY_COUNTS: MemoryStatus["counts"] = {
   signatures: 0,

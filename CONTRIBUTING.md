@@ -45,7 +45,7 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 - Update README or component docs when setup behavior changes.
 - Reference related issues in the PR description. Use closing keywords only after verifying the reported workflow; otherwise state what still needs confirmation.
 - Do not commit generated build output, raw screenshots, browser profile data, `node_modules/`, local extension IDs, or internal reference material. The Codex manifest and small sanitized benchmark SVG/JSON snapshots are intentional versioned release inputs.
-- Keep new production modules below 500 lines. Existing migration exceptions are bounded in `architecture-exceptions.json`; increases require an explicit rationale in review.
+- Keep every production module below 500 lines. The architecture gate has no exception list; extract a focused responsibility before a module crosses the limit.
 - Follow the [subsystem boundaries and migration status](docs/architecture.md). Validate contracts through behavior, including cancellation, failure, dry-run preservation, rollback, and mutation uncertainty.
 - Keep credentials and private benchmark/history inventories outside the checkout. Preserve runtime redaction, privacy behavior, synthetic fixtures, and ordinary secret scanning.
 
@@ -54,6 +54,8 @@ bun run install:native-host -- --extension-id <extension-id> --browsers chrome
 Add tests for distinct failures in production behavior. Extend an existing fixture when it already exercises the affected flow. Avoid tests that only search source code for helper names, repeat package/schema checks, copy SVG coordinates or CSS constants, or assert facts about a mock without calling production code.
 
 Keep coverage for ownership isolation, consent, redaction, startup and update recovery, cancellation, mutation uncertainty, and supported Node/platform behavior. Real browser checks cover DOM interaction and rendering; small unit tests should cover additional boundaries or failure paths instead of repeating that flow.
+
+Repository commands use Bun. Build the runtime and the relevant extension before running a real-browser verifier. The maintained release gate is `bun run check`; focused browser checks are `bun run verify:popup`, `bun run verify:uploads`, and `node scripts/verify-firefox-extension.js`. Use `node scripts/verify-firefox-uploads.js --frames` for cross-origin upload consent and `--librewolf` when targeting LibreWolf.
 
 ## Security-Sensitive Changes
 
@@ -73,6 +75,6 @@ bun run test:tarball
 bun run check:release
 ```
 
-After the version bump reaches `master`, GitHub Actions publishes npm with Trusted Publishing, submits both browser extensions, and creates the matching `v<version>` GitHub release from the versioned release notes. npm/GitHub release creation does not wait for store review. Store submission workflows report their own result, preserve verified artifacts and can be retried without republishing npm. Do not create the root package tag manually. The compatibility shim under `packages/opencode-chromium-mcp` retains its separate `opencode-chromium-mcp-v<version>` release tag because it has an independent version lifecycle.
+After the version bump reaches `master`, GitHub Actions publishes npm with Trusted Publishing, submits both browser extensions, and creates the matching `v<version>` GitHub release from the versioned release notes. npm/GitHub release creation does not wait for store review. Store submission workflows report their own result, preserve verified artifacts and can be retried without republishing npm. Do not create the root package tag manually.
 
 Before merging a release, run the Chrome and Firefox workflows on the PR branch with `dry_run: true`. Chrome validates credentials, package and current store readiness without uploading; Firefox validates the source archive and authenticates a read-only AMO query. Offline source-archive checks can still use `bun run firefox:submit -- --dry-run` without credentials.

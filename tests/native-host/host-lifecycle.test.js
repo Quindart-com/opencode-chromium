@@ -2,14 +2,23 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import { test as bunTest } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
-import { FrameDecoder, encodeFrame } from "../../native-host/src/framing.ts";
+import { FrameDecoder, encodeFrame } from "../../src/shared/node-framing.ts";
+
+const test = (name, options, run) => {
+  if (typeof options === "function") { run = options; options = undefined; }
+  return bunTest(name, options ?? {}, async () => {
+  const cleanup = [];
+  try { return await run({ after: callback => cleanup.push(callback) }); }
+  finally { for (const callback of cleanup.reverse()) await callback(); }
+  });
+};
 
 function startHost(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "host-version-test-"));
-  const host = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "native-host", "src", "host.js");
+  const host = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "native-host", "src", "runtime.ts");
   const child = spawn(process.execPath, [host], {
     stdio: ["pipe", "pipe", "ignore"],
     env: { ...process.env, OPENCODE_BROWSER_MEMORY_DIR: root, OPENCODE_BROWSER_MEMORY_EMBED: "0", AGENT_BROWSER_PROFILE_REGISTRY_DIR: path.join(root, "profiles"), AGENT_BROWSER_INSTANCE_IPC_PATH: process.platform === "win32" ? `\\\\.\\pipe\\opencode-browser-lifecycle-${process.pid}-${Date.now()}` : path.join(root, "host.sock") },

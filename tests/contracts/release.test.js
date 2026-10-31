@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { checkTagVersion } from "../../scripts/check-tag-version.js";
 import { checkVersionBump, compareVersions, isManifestVersionSyncRetry } from "../../scripts/check-version-bump.js";
 import { maskIdentifier } from "../../extension-src/entrypoints/popup/privacy.ts";
+import { publicProfile, sanitizeSemanticForPopup } from "../../extension-src/entrypoints/background/runtime-profile.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -42,33 +43,18 @@ describe("release metadata", () => {
 });
 
 describe("popup privacy surface", () => {
-  const popupDir = path.join(root, "extension-src", "entrypoints", "popup");
-  const backgroundRuntime = path.join(root, "extension-src", "entrypoints", "background", "runtime.ts");
-
-  test("popup api never declares the raw model cache path", () => {
-    const api = fs.readFileSync(path.join(popupDir, "api.ts"), "utf8");
-    expect(api).not.toMatch(/cacheDir/);
-    expect(api).toMatch(/cache\?:\s*\{\s*kind\?:\s*string\s*\}/);
-  });
-
-  test("connection view masks the profile id and hides cache paths by default", () => {
-    const view = fs.readFileSync(path.join(popupDir, "ConnectionView.tsx"), "utf8");
-    expect(view).toMatch(/maskIdentifier/);
-    expect(view).toContain('<details id="semantic-dev-details" className="dev-details">');
-    expect(view).toContain('<summary>{t("developerDetails")}</summary>');
+  test("popup responses mask profile ids and omit semantic cache paths", () => {
+    expect(publicProfile({ profileId: "274b81aa-1234-5678-9abc-def012345678", profileLabel: "Work" })).toEqual({
+      profileIdMasked: "274b…5678",
+      profileLabel: "Work",
+    });
+    expect(sanitizeSemanticForPopup({ state: "ready", cacheDir: "C:/private/models", cache: { kind: "local" } })).toEqual({
+      state: "ready",
+      cache: { kind: "local" },
+    });
+    expect(sanitizeSemanticForPopup(null)).toBeNull();
     const messages = JSON.parse(fs.readFileSync(path.join(root, "extension-src", "public", "_locales", "en", "messages.json"), "utf8"));
     expect(messages.developerDetails.message).toBe("Developer details");
-    expect(view).not.toMatch(/\{profile\?\.profileId\s*\?\?/);
-    expect(view).not.toMatch(/semantic-cache-path/);
-    expect(view).toMatch(/GET_SEMANTIC_DIAGNOSTICS/);
-  });
-
-  test("background relay strips profile ids and cache paths from popup responses", () => {
-    const runtime = fs.readFileSync(backgroundRuntime, "utf8");
-    expect(runtime).toMatch(/GET_PROFILE[\s\S]{0,240}publicProfile\(profile\)/);
-    expect(runtime).toMatch(/GET_PROFILE_DETAILS/);
-    expect(runtime).toMatch(/GET_PROFILE[\s\S]{0,240}publicProfile\(profile\)[\s\S]{0,240}GET_PROFILE_DETAILS[\s\S]{0,240}sendResponse\(\{ profile \}\)/);
-    expect(runtime).toMatch(/sanitizeSemanticForPopup/);
   });
 
   test("maskIdentifier reveals only the edges of an identifier", () => {

@@ -1,4 +1,4 @@
-import type { LocalAction } from "./local-actions.ts";
+import type { LocalAction } from "./control-protocol.ts";
 import { harnessDefinitions,harnessLabels,harnessTargets,type HarnessTarget } from "./harnesses.ts";
 export { harnessLabels,harnessTargets,type HarnessTarget };
 export type HarnessKind = keyof typeof harnessLabels;

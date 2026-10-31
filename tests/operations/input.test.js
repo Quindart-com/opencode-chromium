@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { keyDispatchEvents, parseKeyPress } from "../../src/browser/operations/index.ts";
 
 test("parses Control+A as a select-all chord", () => {

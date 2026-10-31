@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { EmbeddingService } from "../../native-host/src/memory/embedding-service.ts";
 import { EmbedQueue } from "../../native-host/src/memory/embed.ts";
 

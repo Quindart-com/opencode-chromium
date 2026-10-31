@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { handleVisualHostMethod, setVisualSettings, visualDataDir } from "../../native-host/src/visual-map.ts";
 
 test("persists visual settings in configured local directory", () => {

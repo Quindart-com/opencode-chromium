@@ -1,6 +1,9 @@
 import { tool as openCodeTool } from "@opencode-ai/plugin";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
+import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
+import { announceBrowserClient,resetBrowserClientConnections } from "../../browser/client.ts";
+import { startHarnessControl } from "../../control/harness-control.ts";
 import { createLogger } from "../../core/logging.ts";
 import { createCoreRegistry,createMemoryRegistry } from "../../core/registry.ts";
 import type { RuntimeOptions } from "../../core/runtime-types.ts";
@@ -13,9 +16,6 @@ import { memoryEnabledForServer } from "../../memory/index.ts";
 import { record } from "../../shared/values.ts";
 import { imageCandidates,sanitizeImages } from "../image-content.ts";
 import { trackRuntime } from "../runtime-activity.ts";
-import { announceBrowserClient,resetBrowserClientConnections } from "../../browser/client.ts";
-import { startHarnessControl } from "../../../native-host/src/harness-control.ts";
-import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
 
 
 

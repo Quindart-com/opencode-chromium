@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 
 test("memory tools are registered only when the memory flag is on", async () => {
   const { createMemoryRegistry, createCoreRegistry } = await import("../../src/core/registry.ts");

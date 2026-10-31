@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { fetchReleaseState, releaseDecision } from "../../scripts/webstore-state.js";
 import { chromeReleaseConfig } from "../../scripts/webstore-config.js";

@@ -2,6 +2,11 @@ import { z } from "zod";
 import type { BrowserContext } from "../core/tool-definition.ts";
 import { nodeFrameId } from "./operations/page-state.ts";
 
+// Operation groups receive the shared composition bag and destructure only
+// the capabilities they own.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type BrowserOperationDependencies = Record<string, any>;
+
 export interface BrowserOperation {
   description: string;
   args: z.ZodRawShape;

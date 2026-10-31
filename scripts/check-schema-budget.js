@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { createBrowserAgent } from "../src/core/index.ts";
+import { createBrowserAgent } from "../src/adapters/sdk/index.ts";
 
-const MAX_SCHEMA_BYTES = 13000;
+const MAX_SCHEMA_BYTES = 11700;
 const agent = createBrowserAgent();
 try {
   const sizes = {};

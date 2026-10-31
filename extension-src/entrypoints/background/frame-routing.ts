@@ -1,7 +1,7 @@
-import { record } from "../../../src/shared/values.ts";
-import { frameGeometryFunction } from "../../../src/shared/frame-geometry.ts";
-import { beforeDeadline } from "../../../src/shared/deadline.ts";
 import type { Browser } from "wxt/browser";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
+import { frameGeometryFunction } from "../../../src/shared/frame-geometry.ts";
+import { record } from "../../../src/shared/values.ts";
 
 type Route = { frameId: string; parentId: string | null; url: string; sessionId?: string; contextId?: number };
 type Send = (tabId: number, method: string, params: object, timeoutMs?: number, sessionId?: string) => Promise<unknown>;

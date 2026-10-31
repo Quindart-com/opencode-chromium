@@ -5,9 +5,9 @@ import { record } from "../../shared/values.ts";
 import { imageCandidates,sanitizeImages } from "../image-content.ts";
 
 import {
-localhostHostValidation,
-localhostOriginValidation,
-NodeStreamableHTTPServerTransport,
+  localhostHostValidation,
+  localhostOriginValidation,
+  NodeStreamableHTTPServerTransport,
 } from "@modelcontextprotocol/node";
 import { McpServer,ResourceTemplate } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
@@ -18,17 +18,16 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { announceBrowserClient,closeBrowserClients,resetBrowserClientConnections } from "../../browser/client.ts";
-import { startHarnessControl } from "../../../native-host/src/harness-control.ts";
 import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
-import { identifyHarness } from "../../shared/connections.ts";
-import { createBrowserOperations } from "../../browser/operations/index.ts";
+import { announceBrowserClient,closeBrowserClients,resetBrowserClientConnections } from "../../browser/client.ts";
+import { startHarnessControl } from "../../control/harness-control.ts";
 import { artifactUriTemplate } from "../../core/artifacts.ts";
 import { createCoreRegistry,createMemoryRegistry } from "../../core/registry.ts";
 import { createAgentBrowserRuntime } from "../../core/runtime.ts";
 import { jsonSchemaFor } from "../../core/schema-adapters.ts";
 import { responseMetadata as contractMetadata,PLUGIN_NAME,PLUGIN_VERSION } from "../../core/versions.ts";
 import { memoryEnabledForServer } from "../../memory/index.ts";
+import { identifyHarness } from "../../shared/connections.ts";
 import { trackRuntime } from "../runtime-activity.ts";
 
 export const SERVER_NAME = PLUGIN_NAME;
@@ -60,7 +59,6 @@ export function packageVersion() {
 export function parseArgs(argv: string[] = []) {
   const options: ServerOptions = {
     transport: "stdio",
-    toolset: "core",
     host: "127.0.0.1",
     port: 3210,
     authTokenEnv: "AGENT_BROWSER_AUTH_TOKEN",
@@ -73,7 +71,6 @@ export function parseArgs(argv: string[] = []) {
     const [rawFlag, inlineValue] = argument.split("=", 2);
     const nextValue = () => { const value = inlineValue ?? argv[++index]; if (!value) throw new Error(`${rawFlag} requires a value`); return value; };
     if (rawFlag === "--transport") options.transport = nextValue();
-    else if (rawFlag === "--toolset") options.toolset = nextValue();
     else if (rawFlag === "--host") options.host = nextValue();
     else if (rawFlag === "--port") options.port = Number(nextValue());
     else if (rawFlag === "--auth-token-env") options.authTokenEnv = nextValue();
@@ -83,7 +80,6 @@ export function parseArgs(argv: string[] = []) {
     else throw new Error(`Unknown option: ${argument}`);
   }
   if (!options.help && !["stdio", "http"].includes(options.transport)) throw new Error("--transport must be stdio or http");
-  if (!options.help && !["core", "legacy", "debug"].includes(options.toolset)) throw new Error("--toolset must be core, legacy, or debug");
   if (!options.help && (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535)) throw new Error("--port must be between 1 and 65535");
   return options;
 }
@@ -111,7 +107,7 @@ function conciseText(result: unknown) {
   });
 }
 
-interface ServerOptions { transport: string; toolset: string; host: string; port: number; authTokenEnv: string; allowedOrigins: string[]; blockedOrigins: string[]; help?: boolean }
+interface ServerOptions { transport: string; host: string; port: number; authTokenEnv: string; allowedOrigins: string[]; blockedOrigins: string[]; help?: boolean }
 const IMAGE_ATTACHMENT_LIMIT = 4;
 
 
@@ -169,7 +165,6 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
       server.registerTool(name, {
         description: definition.description,
       inputSchema: mcpSchema(definition.inputSchema),
-      outputSchema: mcpSchema(definition.outputSchema),
       annotations: definition.annotations,
     }, async (args: unknown) => activity.call(async () => {
       markBrowserClientUsed();
@@ -209,27 +204,7 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
   );
 }
 
-export async function registerLegacyTools(server: McpServer, fallbackSessionId: string, runtime = createAgentBrowserRuntime()) {
-  const activity = trackRuntime(runtime);
-  const hooks = await createBrowserOperations();
-  for (const [name, definition] of Object.entries(hooks.tool ?? {})) {
-    if (definition.capabilityOnly === true) continue;
-    server.registerTool(name, {
-      description: `[Compatibility] ${definition.description}`,
-      inputSchema: z.object(definition.args),
-    }, async (args: unknown) => activity.call(async () => {
-      markBrowserClientUsed();
-      try {
-        const text = await definition.execute(args, { sessionID: fallbackSessionId, sessionId: fallbackSessionId, agent: "mcp-compatibility" });
-        return { content: [{ type: "text", text: text ?? "" }], isError: false };
-      } catch (error) {
-        return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], isError: true };
-      }
-    }));
-  }
-}
-
-export async function createServer({ runtime, toolset = "core", fallbackSessionId = `mcp-${randomUUID()}`, memory = memoryEnabledForServer() }: { runtime?: AgentBrowserRuntime; toolset?: string; fallbackSessionId?: string; memory?: boolean } = {}) {
+export async function createServer({ runtime, fallbackSessionId = `mcp-${randomUUID()}`, memory = memoryEnabledForServer() }: { runtime?: AgentBrowserRuntime; fallbackSessionId?: string; memory?: boolean } = {}) {
   const server = new McpServer({ name: SERVER_NAME, version: packageVersion() }, { instructions: SERVER_INSTRUCTIONS });
   const activeRuntime = runtime ?? createAgentBrowserRuntime();
   let stopPresence: (() => void) | undefined;
@@ -245,14 +220,13 @@ export async function createServer({ runtime, toolset = "core", fallbackSessionI
         resetBrowserClientConnections(); await announceBrowserClient(); await server.server.sendToolListChanged();
       } }).then(control => { if (closed) control.close(); else stopControl = control.close; }).catch(() => {});
   };
-  if (toolset === "core" || toolset === "debug") await registerCoreTools(server, activeRuntime, fallbackSessionId, { memory });
-  if (toolset === "legacy" || toolset === "debug") await registerLegacyTools(server, fallbackSessionId, activeRuntime);
+  await registerCoreTools(server, activeRuntime, fallbackSessionId, { memory });
   return server;
 }
 
 export async function serveStdio(options: ServerOptions, runtime: AgentBrowserRuntime) {
   const fallbackSessionId = process.env.AGENT_BROWSER_SESSION_ID ?? process.env.CODEX_SESSION_ID ?? `mcp-${randomUUID()}`;
-  const server = await createServer({ runtime, toolset: options.toolset, fallbackSessionId });
+  const server = await createServer({ runtime, fallbackSessionId });
   await server.connect(new StdioServerTransport());
   return server;
 }
@@ -276,7 +250,7 @@ export async function serveHttp(options: ServerOptions, runtime: AgentBrowserRun
       }
       if (request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ ...contractMetadata(), ok: true, transport: "http", toolset: options.toolset }));
+        response.end(JSON.stringify({ ...contractMetadata(), ok: true, transport: "http", tools: "browser-core" }));
         return;
       }
       if (request.url !== "/mcp") {
@@ -284,7 +258,7 @@ export async function serveHttp(options: ServerOptions, runtime: AgentBrowserRun
         return;
       }
       const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      const mcp = await createServer({ runtime, toolset: options.toolset, fallbackSessionId: `http-${randomUUID()}` });
+      const mcp = await createServer({ runtime, fallbackSessionId: `http-${randomUUID()}` });
       await mcp.connect(transport);
       await transport.handleRequest(request, response);
       if (!response.writableEnded) response.once("finish", () => mcp.close().catch(() => {}));
@@ -309,10 +283,9 @@ export async function startMcpServer(options = parseArgs(process.argv.slice(2)),
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  if (argv.includes("--managed")) return (await import("../../cli/managed-mcp.ts")).managedMcp(argv.filter(arg => arg !== "--managed"));
   const options = parseArgs(argv);
   if (options.help) {
-    process.stdout.write("Usage: opencode-chromium-mcp [--transport=stdio|http] [--toolset=core|legacy|debug] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN] [--allowed-origin=PATTERN] [--blocked-origin=PATTERN]\n");
+    process.stdout.write("Usage: opencode-chromium-mcp [--transport=stdio|http] [--host=127.0.0.1] [--port=3210] [--auth-token-env=AGENT_BROWSER_AUTH_TOKEN] [--allowed-origin=PATTERN] [--blocked-origin=PATTERN]\n");
     return;
   }
   if (process.env.OPENCODE_BROWSER_COORDINATED === "1") {

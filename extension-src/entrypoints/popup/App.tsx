@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect,useRef,useState } from "react";
 import { browser } from "wxt/browser";
-import { sendMessage, type NativeStatus } from "./api";
-import ConnectionView from "./ConnectionView";
-import MemoryView from "./MemoryView";
-import VersionNotice from "./VersionNotice";
-import ProviderSettings from "./ProviderSettings";
-import DecisionOverview from "./DecisionOverview";
-import UploadSettings from "./UploadSettings";
+import { sendMessage,type NativeStatus } from "./api";
 import ConnectionSummary from "./ConnectionSummary";
+import ConnectionView from "./ConnectionView";
+import DecisionOverview from "./DecisionOverview";
+import MemoryView from "./MemoryView";
+import ProviderSettings from "./ProviderSettings";
 import RuntimeUpdates from "./RuntimeUpdates";
+import UploadSettings from "./UploadSettings";
+import VersionNotice from "./VersionNotice";
 
 const t = (key: "connected" | "checking" | "reconnecting" | "notConnected" | "localAutomation" | "extensionViews" | "overview" | "profiles" | "settings" | "setupGuide" | "sourceGithub") => browser.i18n.getMessage(key);
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { harnessControls,refreshHarnessControl,startHarnessControl } from "../../native-host/src/harness-control.ts";
+import { harnessControls,refreshHarnessControl,startHarnessControl } from "../../src/control/harness-control.ts";
 import { reconnectHarness } from "../../src/management/harness-reconnect.ts";
 import { createAgentBrowserRuntime } from "../../src/core/runtime.ts";
 import { trackRuntime } from "../../src/adapters/runtime-activity.ts";

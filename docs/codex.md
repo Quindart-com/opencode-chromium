@@ -11,7 +11,7 @@ codex plugin add opencode-browser-plugin@quindart-browser
 
 The native manifest at `.codex-plugin/plugin.json` bundles the browser skill
 and `.mcp.json`. The MCP configuration runs the published `opencode-chromium`
-runtime through `npx`; Node.js 20 or later is required. Sparse checkout includes
+runtime through `npx`; Node.js 24 or later is required. Sparse checkout includes
 the plugin resources and documentation without fetching the development source
 directories. Install the browser
 extension and register its native host with `npx -y opencode-chromium@latest setup --targets codex`

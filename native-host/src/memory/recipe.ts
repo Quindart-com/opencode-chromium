@@ -1,13 +1,8 @@
 import { createHash } from "node:crypto";
-import { z } from "zod";
+import { recipeSchema,type RecipeStep } from "../../../src/shared/memory-recipe.ts";
 import { MAX_CHAIN_STEPS } from "./config.ts";
 import { sanitizeTarget } from "./privacy.ts";
-export const recipeSchema = z.object({
-  position: z.number().int().nullable().default(null), action: z.string().max(64).nullable().default(null), hostname: z.string().nullable().default(null),
-  target_label: z.string().nullable().default(null), target_role: z.string().nullable().default(null), selector: z.string().nullable().default(null),
-  requiresRuntimeValue: z.boolean().default(false), requiresRuntimeUrl: z.boolean().default(false), success: z.boolean().default(false),
-});
-export type RecipeStep = z.infer<typeof recipeSchema>;
+export { recipeSchema,type RecipeStep } from "../../../src/shared/memory-recipe.ts";
 type RecipeInput = { position?: number | null; action?: unknown; hostname?: unknown; target?: unknown; success?: boolean };
 
 // Recipe identity lives in exactly one place. Stored chain fingerprints and

@@ -1,25 +1,72 @@
-# Automatic runtime activation
+# Runtime operations
 
-Run `npx -y opencode-chromium@latest setup --all` and reconnect MCP once to adopt the managed supervisor. Setup installs a complete immutable release and copies the supervisor and its built-in-only dependencies into the user's runtime directory. The packaged Codex plugin uses `opencode-chromium-mcp --managed` to share this installation. Initial setup may need npm access; dry runs do not install anything.
+opencode-chromium separates the globally installed CLI, stable controller, desired managed release, active workers, harness adapters, and browser extension. They can legitimately have different versions. Compatibility is negotiated from control-protocol and tool-contract capabilities, not version equality.
 
-When the extension announces a newer version, the native host installs that exact npm release in a unique staging directory, validates it and renames it into `releases/<version>`. Downloads do not block browsing or replace global npm files. Unavailable or invalid releases retain the current runtime and retry after six hours.
+Run `opencode-chromium setup --all` once to install the fixed controller and stable `host.mjs`, `mcp.mjs`, and `plugin.mjs` launchers. Harness and native-messaging configuration always targets those launchers, never a release directory or source checkout. Credentials, memory, artifacts, profiles, and settings remain in stable data directories outside immutable releases.
 
-## Global session boundary
+## Blue-green activation
 
-Activity is shared across processes and profiles, rather than inferred from the lifetime of a harness or socket. Open sessions, paused agents, pending approvals, handoff tabs, unfinished cleanup, traces and in-flight work prevent activation. New sessions remain allowed while a downloaded update waits. Finish work with `browser_finalize`; use `deliverable` for output tabs that should remain open without retaining a session.
+An update is downloaded into a unique staging directory and checked for package identity, version, release metadata, required entrypoints, and hashes. Validation must finish before the release becomes `desired`; a merely staged release is never a fallback.
 
-Adapters register activity before dispatch, and native hosts gate uncoordinated ingress too. Every registered extension independently confirms that it has no retained sessions or unfinished commands. Older clients without activity reporting remain conservative blockers until reconnected. Unknown or corrupt activity records prevent activation. A crashed process's retained session is not cleared solely because its PID exited: associated profiles must independently confirm idle, and unresolved approvals remain blockers.
+New MCP connections and browser profiles select the desired release immediately. Each connection keeps a persistent lease containing its runtime and contract version, process and harness identity, heartbeat, in-flight work, approvals, and retained sessions. An initialized connection never changes to a contract-incompatible worker underneath the client. Busy connections drain on their existing worker, while idle processes and newly opened connections adopt independently.
 
-At the first verified global boundary, a journal closes the shared request-admission gate. Each supervisor warms a replacement worker, internally initializes MCP and compares its tool schemas, negotiated capabilities and resource templates against the existing connection. New calls queue temporarily. After every supervisor acknowledges readiness, the runtime pointer and generation are committed atomically. Supervisors switch workers without closing harness stdio connections or sending another initialization response to the harness.
+Browser compatibility is negotiated separately from package versions. Every published runtime declares the extension wire contracts it supports and must retain the immediately previous contract. A legacy extension that does not advertise a contract is treated as contract 1. The stable broker routes that browser profile to the desired release when compatible or to the retained fallback otherwise, so npm/CLI publication can safely precede Chrome Web Store approval. Raw version skew is informational and never disables browsing.
 
-A separate coordinator process keeps the gate closed while idle native hosts exit and their extensions reconnect them to the selected release. It verifies every previously connected profile before reopening admission. Keeping coordination outside native hosts allows replacement of the host that downloaded the update. No browser or harness application is forcibly restarted.
+The last successfully active, unleased release becomes the fallback. Desired and fallback releases are retained. Older releases are eligible for collection only after seven days and only when no live lease references them. Rollback assigns fallback as desired and uses the same drain process; it does not terminate user sessions.
 
-## Compatibility and recovery
+Lease cleanup is proof-based rather than age-based. A clean disconnect with unfinished sessions leaves a non-blocking tombstone; a crash leaves its last heartbeat. After a five-minute grace period, authenticated controller reconciliation requires the owner to be closed or dead, any recorded approval to be absent or expired, no live replacement lease to claim the same session ID, and the extension to report no pending command, upload approval, or native dialog. Reconciliation detaches automation and releases ownership without closing tabs. A recent or unverifiable session remains untouched. An unreachable profile registration is ignored and removed only when its host process is dead and its last registration is at least fifteen minutes old; if the profile reconnects before cleanup, it keeps its sessions and adopts the desired worker normally.
 
-The supervisor protocol is versioned separately from releases. Compatible workers preserve public tool contracts and result formatting, images, resources, IDs, notifications and cancellation forwarding. Instructions and descriptions already advertised to a harness remain that connection's snapshot. Contract or supervisor incompatibility reports `reconnect_required`; run setup and reconnect once to adopt that change.
+Compatible patch and minor releases may apply automatically. A major release requires one explicit approval showing its breaking changes. The controller updates itself by atomically preparing the next-run bootstrap while keeping capability negotiation backward compatible.
 
-Preparation, commit acknowledgement and host reconnection have bounded deadlines. Failure before admission resumes restores the previous runtime pointer; previous workers and immutable releases remain available during rollback. The atomic pointer is authoritative after a coordinator crash, and each supervisor reconciles it before its next dispatched call. Interrupted mutations return an uncertain error and are never automatically replayed. A replacement worker can handle subsequent calls; agents must re-observe after an uncertain result.
+## Status and controls
 
-Use `opencode-chromium updates status` or **Settings → Updates** to inspect selected, downloaded and loaded versions, update state and participant blockers. `updates off` prevents automatic activation even if a release is already downloaded. Disabling updates during preparation aborts that switch.
+The extension reports separate rows for:
 
-Automatic worker replacement covers managed core stdio MCP clients. OpenCode's native adapter reports activity and blocks unsafe switches, but its adapter code remains loaded until OpenCode reloads. Explicit version pins, development/follow-branch installations, standalone HTTP and legacy/debug commands keep their existing manual policy. The managed launcher retains development build checks.
+- extension;
+- globally installed CLI;
+- stable controller;
+- desired managed runtime;
+- active worker versions; and
+- harness or marketplace adapters.
+
+States include available, staging, draining, blocked, major approval required, rollback available, and failed. A global CLI at 1.10.2 with a selected 1.10.1 runtime and staged 1.10.2 release is a reconcilable component mismatch, not an “old CLI.” A new extension connected to a legacy host reports that the compatibility bridge is required and never calls an unsupported update method.
+
+The stable controller exposes `control.capabilities`, `control.status`, `control.update`, `control.job`, `control.rollback`, and `control.reconcile`. Jobs persist across host reconnection and return structured state and error codes. Recovery details sanitize connection identities and do not expose credentials or private paths.
+
+## Profiles and sessions
+
+The live registry distinguishes a stable profile fingerprint, optional human label, transient connection ID, browser family and version, extension version, and connection generation. One connected profile is selected automatically. Multiple profiles require an exact label or ID; duplicate labels return `PROFILE_LABEL_AMBIGUOUS`, and a disconnected selected profile returns `PROFILE_DISCONNECTED` without silently choosing another profile.
+
+Use `browser_session` to open, create, claim, release, and name tabs. Claiming an existing page requires the user's explicit request or permission. Reconnects invalidate stale tab handles, and one session cannot claim another profile's tabs. Call `browser_finalize` when finished. Deliverable tabs remain open in a blue review group; only an explicit handoff retains ownership in the active group.
+
+Agents should still call `browser_finalize`; automatic reconciliation is a crash/disconnect safety net, not a substitute for choosing deliverable versus handoff state. `control.reconcile` and the broker's periodic maintenance use the same idempotent checks, so repeated or concurrent recovery attempts do not take ownership from a live connection.
+
+## Connection recovery
+
+The harness panel distinguishes a responding local bridge from an initialized harness link and a received tool call. Links heartbeat every 15 seconds and become stale after 45 seconds. A successful install or reload command alone never marks a harness connected.
+
+Use the guarded Connect or Reconnect action for the affected harness. It refreshes this plugin's configuration and supported tool catalog without restarting the application or unrelated MCP servers. Existing browser sessions remain pinned. If Codex loaded the skill but the current chat has no tools, use **Plugins → OpenCode Browser Plugin → Manage → disable → enable**, then invoke the skill again in the same chat.
+
+For profile discovery failures, open a session again without a profile label, confirm the browser is running and unlocked, and discard only stale tab handles. A missing tab does not invalidate the whole session. For native-host failures, run setup and `doctor`, confirm the extension is enabled, then reload the extension or browser. Inspect the sanitized doctor result before reinstalling.
+
+Harness-specific recovery is also available from the CLI:
+
+```sh
+opencode-chromium harness reconnect codex
+opencode-chromium harness reconnect opencode
+opencode-chromium harness reconnect dsh
+opencode-chromium harness reconnect claude-code
+opencode-chromium harness reconnect claude-desktop
+```
+
+Controls are restricted to trusted extension pages. Websites and browser-agent IPC callers cannot start local controller jobs.
+
+## Local development extension
+
+Browser reload reads the exact directory selected by **Load unpacked**; it does not rebuild source code. Publish a current development build with:
+
+```sh
+bun src/cli/index.ts dev-extension --source /absolute/current/checkout --output /absolute/loaded/extension
+```
+
+The output retains the extension ID, records a source fingerprint, and does not change the desired production runtime or provider settings. Reload the extension after publication. A development extension can use an older compatible runtime; unavailable capabilities are reported explicitly.

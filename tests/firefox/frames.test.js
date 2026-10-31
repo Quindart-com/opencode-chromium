@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import vm from "node:vm";
 import { bridgedFrameTree } from "../../native-host/src/firefox/frames.ts";
 import { FirefoxBackend } from "../../native-host/src/firefox/backend.ts";

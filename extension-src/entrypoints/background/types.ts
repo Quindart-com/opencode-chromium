@@ -2,9 +2,15 @@ import type { Browser,WxtBrowser } from "wxt/browser";
 import type { UrlPolicyConfig } from "../../../src/browser/url-policy.ts";
 import type { TabCdpRequest } from "../../../src/shared/cdp.ts";
 
+// Composition modules receive a shared wiring bag; each module immediately
+// destructures its owned dependencies and exposes a narrow public API.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type BackgroundRuntimeDependencies = Record<string, any>;
+
 export interface ExtensionSession {
   tabIds: Set<number>;
   tabOrigins: Map<number, string>;
+  lastActivityAt: number;
   name: string | null;
   groupId: number | null;
   activeTabId: number | null;

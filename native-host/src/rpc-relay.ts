@@ -1,8 +1,8 @@
 import type { Writable } from "node:stream";
+import { writeFrame } from "../../src/shared/node-framing.ts";
+import type { ProfileRegistration } from "../../src/shared/profile-registry.ts";
 import { profileHelloSchema,rpcMessageSchema,type ProfileHello,type RpcId,type RpcMessage } from "../../src/shared/rpc.ts";
 import { record } from "../../src/shared/values.ts";
-import { writeFrame } from "./framing.ts";
-import type { ProfileRegistration } from "./profile-registry.ts";
 import { HarnessConnections } from "./connections.ts";
 type RpcSocket = Pick<Writable, "write" | "on" | "destroy">;
 export interface RelayState { startedAt: string; ipcPath?: string; profile: (ProfileRegistration & { uploadConsentVersion?: number }) | null; nativeHostVersion?: string; lastExtensionMessageAt?: string }

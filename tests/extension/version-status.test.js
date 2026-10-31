@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { EventEmitter } from "node:events";
 import { versionNotice, validVersion } from "../../extension-src/version-status.ts";
 import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
@@ -12,6 +12,7 @@ test("version notices distinguish matching, older local, older extension, and un
   assert.equal(versionNotice("1.7.1", { ...connected, nativeHostVersion: "1.6.5" }).kind, "local");
   assert.equal(versionNotice("1.7.1", { ...connected, clientVersions: ["1.6.5"] }).kind, "local");
   assert.equal(versionNotice("1.7.1", { ...connected, nativeHostVersion: "1.10.0" }).kind, "extension");
+  assert.equal(versionNotice("1.7.1", { ...connected, nativeHostVersion: "2.0.0", browserCompatible: true }), null);
   assert.equal(versionNotice("1.7.1", { ...connected, nativeHostVersion: null }).kind, "unknown");
   assert.equal(versionNotice("1.7.1", { ...connected, unknownClientVersion: true }).kind, "unknown");
   assert.equal(validVersion("unexpected version text"), null);

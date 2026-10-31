@@ -1,7 +1,7 @@
 import type { Browser,WxtBrowser } from "wxt/browser";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 import { record } from "../../../src/shared/values.ts";
 import { commandParamsSchema,type CommandParams } from "./command-schema.ts";
-import { beforeDeadline } from "../../../src/shared/deadline.ts";
 
 interface Pending {
   resolve(result: unknown): void;
@@ -17,6 +17,9 @@ export interface RpcStatusPatch {
   nativeHostVersion?: string | null;
   clientVersions?: string[];
   unknownClientVersion?: boolean;
+  browserCompatible?: boolean;
+  browserContractVersion?: number;
+  runtimeBrowserContractVersions?: number[];
 }
 
 export class NativeRpc {
@@ -41,7 +44,8 @@ export class NativeRpc {
     if (this.#port) return;
     try {
       this.#port = this.options.chrome.runtime.connectNative(this.options.hostName);
-      this.options.status({ state: "connecting", error: null, nextRetryMs: null, versionChecked: false, nativeHostVersion: null, clientVersions: [], unknownClientVersion: false });
+      this.options.status({ state: "connecting", error: null, nextRetryMs: null, versionChecked: false, nativeHostVersion: null, clientVersions: [], unknownClientVersion: false,
+        browserCompatible: undefined,browserContractVersion: undefined,runtimeBrowserContractVersions: undefined });
       const port = this.#port;
       port.onMessage.addListener((message: unknown) => { if (this.#port === port) void this.#handleMessage(message); });
       port.onDisconnect.addListener(() => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { encodeFrame, FrameDecoder } from "../../native-host/src/framing.ts";
+import { test } from "bun:test";
+import { encodeFrame, FrameDecoder } from "../../src/shared/node-framing.ts";
 
 test("decodes a large message in single-byte fragments", () => {
   const expected = { text: "x".repeat(20000) };

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { versionNotice } from "../extension-src/version-status.ts";
-import { MemoryStore } from "../native-host/dist/memory/store.js";
+import { MemoryStore } from "../native-host/dist/memory/index.js";
 import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js";
 import { decisionUsage } from "../native-host/dist/decisions/usage.js";
 import { SEMANTIC_MODELS } from "../native-host/dist/semantic-models.js";
@@ -380,8 +380,18 @@ try {
         await page.getByRole("tab", { name: view, exact: true }).click();
         await page.waitForFunction(() => !document.querySelector('.view-panel:not([hidden]) button[disabled]#decision-provider'));
         measuredWidths.push(await page.locator('main').evaluate(element => element.getBoundingClientRect().width));
-        await page.locator('.view-panel:not([hidden])').evaluate(panel => { for (const details of panel.querySelectorAll('details')) details.open = true; });
-        assert.equal(await page.locator('.view-panel:not([hidden]) details:not([open])').count(), 0, "full-page review includes every expandable feature");
+        let detailCount = -1, stableDetails = 0;
+        for (let attempt = 0; attempt < 20 && stableDetails < 3; attempt++) {
+          const details = await page.locator('.view-panel:not([hidden])').evaluate(panel => {
+            const rows = [...panel.querySelectorAll('details')];
+            for (const row of rows) row.open = true;
+            return { count: rows.length,closed: rows.filter(row => !row.open).length };
+          });
+          stableDetails = details.count === detailCount && details.closed === 0 ? stableDetails + 1 : 0;
+          detailCount = details.count;
+          if (stableDetails < 3) await page.waitForTimeout(50);
+        }
+        assert.equal(stableDetails, 3, "full-page review includes every asynchronously loaded expandable feature");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} fits ${width}px ${theme}`);
         await page.screenshot({ path: path.join(reviewDirectory, `${view.toLowerCase()}-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
       }

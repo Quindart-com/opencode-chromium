@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { createUploadConsent } from "../../extension-src/entrypoints/background/upload-consent.ts";
 import { guardedCdp } from "../../extension-src/entrypoints/background/upload-gate.ts";
 import { createDebuggerAttacher } from "../../extension-src/entrypoints/background/debugger-attach.ts";

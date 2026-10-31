@@ -1369,5 +1369,9 @@
   },
   "catalogInvalid": {
     "message": "The custom model catalog could not be loaded. Built-in models are available."
-  }
+  },
+  "bridgeRequired": { "message": "Run opencode-chromium setup --all once to install the stable update controller." },
+  "runtimeDraining": { "message": "New connections use the updated runtime. Existing sessions will finish on their current version." },
+  "runtimeApprovalRequired": { "message": "A major upgrade is available and needs your approval." },
+  "majorUpgradeConfirm": { "message": "Upgrade to the new major version? Existing sessions will not be interrupted, but removed legacy commands will no longer be available to new connections." }
 }

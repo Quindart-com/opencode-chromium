@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { resolveTabActivation } from "../../extension-src/entrypoints/background/focus-policy.ts";
 
 test("background operations never activate the tab or focus the window", () => {

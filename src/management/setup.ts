@@ -1,22 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
-import { parseRuntimeActivation,runtimeLifecycleSource,withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
-import { packagedRuntime } from "../../native-host/src/runtime-updates.ts";
 import { CODEX_MARKETPLACE_UPDATE } from "../cli/codex-marketplace.ts";
-import { runActivationCoordinator } from "../../native-host/src/runtime-coordinator.ts";
 import { packageRoot } from "../cli/config.ts";
 import { applyRegistryChanges,planNativeHosts,runtimeDir } from "../cli/native-host.ts";
 import { launcherSource } from "../cli/runtime-link.ts";
+import { parseRuntimeActivation,withRuntimeLock } from "../control/state.ts";
+import { packagedRuntime } from "../control/update.ts";
+import { PRODUCT } from "../shared/product.ts";
+import { samePath } from "../shared/node-files.ts";
+import { desiredRuntime,selectDesiredRuntime,type RuntimeRelease } from "../shared/runtime-config.ts";
 import { record } from "../shared/values.ts";
 import { managedConfiguration,nativeCodexPluginEnabled,type HarnessId } from "./configuration.js";
 import { detectHarnesses,planHarness,type Harness } from "./harnesses.js";
-import { selectHarnesses } from "./menu.js";
-import { offerRestart } from "./restart.js";
-import { opencodeV2Launcher } from "./opencode-v2.ts";
-import { planSkills } from "./skills.js";
-import { applyTransaction,type FileChange } from "./transaction.js";
-import { ensureManagedRelease,supervisorFiles } from "./supervisor.ts";
 import { refreshBrowserMarketplace } from "./marketplace.ts";
+import { selectHarnesses } from "./menu.js";
+import { opencodeV2Launcher } from "./opencode-v2.ts";
+import { offerRestart } from "./restart.js";
+import { planSkills } from "./skills.js";
+import { ensureManagedRelease,supervisorFiles } from "./supervisor.ts";
+import { applyTransaction,type FileChange } from "./transaction.js";
 
 interface SetupEnvironment {
   home?: string;
@@ -70,11 +72,16 @@ export async function manageSetup(argv: string[], remove = false, environment: S
     fs.existsSync(row.configPath) && nativeCodexPluginEnabled(fs.readFileSync(row.configPath, "utf8"))).map(row => row.id);
   changes.push(...planSkills(root, selected.filter(id => !nativePlugins.includes(id as HarnessId)) as HarnessId[], remove, environment.home));
   const dryRun = argv.includes("--dry-run");
-  let pendingRelease: { root: string; version: string } | null = null;
   if (!remove) {
     changes.push(...supervisorFiles(dir));
-    const lifecycle = path.join(dir, "runtime-lifecycle.mjs");
-    changes.push({ filePath: lifecycle, before: fs.existsSync(lifecycle) ? fs.readFileSync(lifecycle, "utf8") : null, after: runtimeLifecycleSource() });
+    const controller = path.join(dir, "controller.json");
+    const controllerBefore = fs.existsSync(controller) ? fs.readFileSync(controller, "utf8") : null;
+    const previousController = controllerBefore ? record(JSON.parse(controllerBefore) as unknown) : {};
+    const controllerUnchanged = previousController.protocolVersion === 2 && previousController.controllerVersion === pkg.version &&
+      previousController.globalCliVersion === pkg.version && typeof previousController.installedAt === "string";
+    changes.push({ filePath: controller, before: controllerBefore,
+      after: JSON.stringify({ protocolVersion: 2,controllerVersion: pkg.version,globalCliVersion: pkg.version,
+        installedAt: controllerUnchanged ? previousController.installedAt : new Date().toISOString() }, null, 2) + "\n" });
     for (const kind of ["host", "mcp", "plugin"] as const) {
       const filePath = path.join(dir, `${kind}.mjs`);
       changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: launcherSource(kind) });
@@ -86,25 +93,24 @@ export async function manageSetup(argv: string[], remove = false, environment: S
     const filePath = path.join(dir, "runtime.json");
     const existing = fs.existsSync(filePath) ? parseRuntimeActivation(JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown) : null;
     const production = argv.includes("--production");
-    const managed = packagedRuntime(root) && pkg.name === "opencode-chromium" && typeof pkg.version === "string" && !(existing?.followBranch && !production);
-    const selectedRoot = managed ? dryRun ? path.join(dir, "releases", String(pkg.version), "node_modules/opencode-chromium") : await ensureManagedRelease(dir, String(pkg.version)) : root;
-    const manifest = existing?.followBranch && !production ? existing : { ...existing, root: selectedRoot, version: pkg.version,
-      generation: existing?.generation ?? 0,
+    const managed = packagedRuntime(root) && pkg.name === PRODUCT.packageName && typeof pkg.version === "string" && !(existing?.followBranch && !production);
+    const selectedRoot = managed ? dryRun ? path.join(dir, "releases", String(pkg.version), `node_modules/${PRODUCT.packageName}`) : await ensureManagedRelease(dir, String(pkg.version)) : root;
+    const version = String(pkg.version ?? "0.0.0"), contractVersion = Number.isSafeInteger(pkg.toolContractVersion) ? Number(pkg.toolContractVersion) : 1;
+    const currentDesired = existing ? desiredRuntime(existing) : null;
+    const release: RuntimeRelease = currentDesired && samePath(currentDesired.root, selectedRoot) && currentDesired.version === version && currentDesired.contractVersion === contractVersion ?
+      currentDesired : { root: selectedRoot,version,contractVersion,installedAt: new Date().toISOString() };
+    const base = existing ?? { root: selectedRoot,version: String(pkg.version ?? "0.0.0"),schemaVersion: 2,desired: release };
+    const desiredUnchanged = currentDesired === release;
+    const activation = existing?.followBranch && !production || desiredUnchanged ? base : selectDesiredRuntime(base, release, desiredRuntime(base));
+    const manifest = { ...activation,
       autoUpdate: argv.includes("--no-auto-update") ? false : argv.includes("--auto-update") ? true : existing?.autoUpdate ?? packagedRuntime(root),
-      ...(production ? { channel: "production", followBranch: false, pendingReload: true } : {}) };
-    // After the one-time legacy migration, setup uses the same global switch
-    // transaction as automatic updates instead of replacing a live pointer.
-    if (managed && existing && existing.root !== selectedRoot && existing.autoUpdate !== false && fs.existsSync(path.join(dir, "supervisor/1/runtime-supervisor.js"))) {
-      pendingRelease = { root: selectedRoot, version: String(pkg.version) };
-      Object.assign(manifest, { root: existing.root, version: existing.version, stagedRelease: pendingRelease });
-    }
+      ...(production ? { channel: "production" as const,followBranch: false,pendingReload: true } : {}) };
     changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after: JSON.stringify(manifest, null, 2) + "\n" });
   }
   const hosts = !remove ? (environment.planHosts ?? planNativeHosts)(dir) : null;
   if (hosts) changes.push(...hosts.changes);
   const apply = () => applyTransaction(changes, dryRun, hosts ? () => { if (process.platform !== "win32") fs.chmodSync(hosts.hostPath, 0o755); (environment.registerHosts ?? applyRegistryChanges)(hosts.registry); } : undefined);
   const result = dryRun ? apply() : await withRuntimeLock(dir, apply);
-  if (!dryRun && pendingRelease) await runActivationCoordinator(dir, pendingRelease, async () => false);
   const restarts = dryRun ? [] : await (environment.restart ?? offerRestart)(selected, argv.includes("--restart"), !argv.includes("--json"));
   const marketplace = !dryRun && !remove && nativePlugins.includes("codex") && pkg.name === "opencode-chromium" && packagedRuntime(root) ?
     await refreshBrowserMarketplace({ version: String(pkg.version), dir, ...(environment.home ? { home: path.join(environment.home, ".codex") } : {}) }) : null;

@@ -1,7 +1,7 @@
 import { browserRequest,closeBrowserClients,listBrowserProfiles } from "../browser/client.ts";
-import { participants,reapParticipants } from "../../native-host/src/runtime-participants.ts";
-import { runtimeDir } from "./native-host.ts";
+import { participants,reapParticipants } from "../control/leases.ts";
 import { record } from "../shared/values.ts";
+import { runtimeDir } from "./native-host.ts";
 
 /** Probe the actual extension, not just the host's cached connected indicator. */
 export async function connectionDoctor({ profileId, repairRuntime = false }: { profileId?: string; repairRuntime?: boolean } = {}) {

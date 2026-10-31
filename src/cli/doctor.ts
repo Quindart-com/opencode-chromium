@@ -1,17 +1,17 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readProfileRegistrations } from "../../native-host/src/profile-registry.ts";
-import { participants,participantBusy,processAlive,reapParticipants } from "../../native-host/src/runtime-participants.ts";
 import { createBrowserAgent } from "../adapters/sdk/index.ts";
+import { participantActive,participantBusy,participants,reapParticipants } from "../control/leases.ts";
 import { errorMessage } from "../core/errors.ts";
+import { inspectBrowserMarketplace } from "../management/marketplace.ts";
+import { readProfileRegistrations } from "../shared/profile-registry.ts";
+import { inspectProjectBrowserPlugin } from "./codex-marketplace.ts";
+import { connectionDoctor } from "./connection-doctor.ts";
 import { firefoxHealth } from "./firefox.ts";
+import { runtimeDir } from "./native-host.ts";
 import { codexConfigPath,inspectHarnessSkills,STALE_SKILL_MARKER } from "./skills.ts";
 import { packageInfo } from "./version.ts";
-import { runtimeDir } from "./native-host.ts";
-import { inspectProjectBrowserPlugin } from "./codex-marketplace.ts";
-import { inspectBrowserMarketplace } from "../management/marketplace.ts";
-import { connectionDoctor } from "./connection-doctor.ts";
 
 const MAX_SCHEMA_BYTES = 13000;
 
@@ -59,7 +59,7 @@ export async function runDoctor({ json = false, repairRuntime = false } = {}) {
     const before = participants(runtimeDir());
     if (repairRuntime) reapParticipants(runtimeDir());
     const rows = repairRuntime ? participants(runtimeDir()) : before;
-    const staleIdle = rows.filter(row => !processAlive(row.pid) && !participantBusy(row)).length;
+    const staleIdle = rows.filter(row => !participantActive(row) && !participantBusy(row)).length;
     checks.push(check("runtime-participants", staleIdle === 0, { count: rows.length, staleIdle,
       removed: before.length - rows.length, repairCommand: "opencode-chromium doctor --repair-runtime --json",
       message: "Repair removes only dead, idle process records. Sessions and approvals are retained." }));

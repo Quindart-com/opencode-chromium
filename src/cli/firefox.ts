@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import net from "node:net";
 import { firefoxConfigPath,validateEndpoint } from "../../native-host/src/firefox/backend.ts";
-import { readProfileRegistrations } from "../../native-host/src/profile-registry.ts";
 import { atomicWrite } from "../management/transaction.js";
+import { readProfileRegistrations } from "../shared/profile-registry.ts";
 import { record } from "../shared/values.ts";
 
 export async function firefoxHealth(profileId: string) {

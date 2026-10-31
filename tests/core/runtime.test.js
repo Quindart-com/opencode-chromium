@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AgentBrowserRuntime } from "../../src/core/runtime.ts";
 import { ArtifactStore } from "../../src/core/artifacts.ts";
 import { resultSchema, createCoreRegistry } from "../../src/core/registry.ts";
-import { MemoryStore } from "../../native-host/src/memory/store.ts";
+import { MemoryStore } from "../../native-host/src/memory/index.ts";
 
 function fakeRuntime() {
   const store = new ArtifactStore({ root: fs.mkdtempSync(path.join(os.tmpdir(), "agent-browser-runtime-test-")) });

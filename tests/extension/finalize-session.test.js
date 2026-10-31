@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { finalizeOwnedTabs } from "../../extension-src/entrypoints/background/finalize-session.ts";
 
 test("handoff keeps ownership and deliverables are grouped before release", async () => {

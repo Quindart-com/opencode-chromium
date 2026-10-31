@@ -1,7 +1,7 @@
-import type { RuntimeSession } from "./runtime-types.ts";
-import type { AgentBrowserRuntime } from "./runtime.ts";
 import { beforeDeadline } from "../shared/deadline.ts";
-export async function cleanupSessionEnvironment(runtime: AgentBrowserRuntime, session: RuntimeSession) {
+import type { RuntimePort } from "./runtime-port.ts";
+import type { RuntimeSession } from "./runtime-types.ts";
+export async function cleanupSessionEnvironment(runtime: RuntimePort, session: RuntimeSession) {
   const selectedProfileId = session.profileId;
   const activeTabId = session.activeTabId;
   const configuredTabs = [...session.configuredTabs.values()];

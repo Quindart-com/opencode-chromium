@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { CALIBRATION_PAIRS, sweepThreshold } from "../../tests/fixtures/memory-threshold-calibration.js";
 import { DEFAULT_MEMORY_SIMILARITY_THRESHOLD } from "../../native-host/src/memory/index.ts";
 

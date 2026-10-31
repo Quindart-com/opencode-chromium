@@ -1,7 +1,12 @@
 {
   "name": "opencode-chromium",
-  "version": "1.10.2",
-  "runtimeSupervisorProtocol": 1,
+  "version": "2.0.0",
+  "runtimeControllerProtocol": 2,
+  "toolContractVersion": 2,
+  "browserContractVersion": 1,
+  "supportedBrowserContractVersions": [
+    1
+  ],
   "description": "Provider-neutral Chromium and Firefox browser automation for MCP, OpenCode V2, Codex, and direct JavaScript agents.",
   "license": "MIT",
   "repository": {
@@ -16,7 +21,7 @@
   "type": "module",
   "packageManager": "bun@1.3.6",
   "engines": {
-    "node": ">=20",
+    "node": ">=24",
     "bun": ">=1.1"
   },
   "keywords": [
@@ -85,20 +90,15 @@
   },
   "bin": {
     "opencode-chromium": "./dist/cli/index.js",
-    "opencode-chromium-mcp": "./dist/adapters/mcp/server.js",
-    "opencode-browser-plugin": "./dist/cli/index.js",
-    "opencode-browser-plugin-mcp": "./dist/adapters/mcp/server.js"
+    "opencode-chromium-mcp": "./dist/adapters/mcp/server.js"
   },
   "scripts": {
     "prepare": "node -e \"try{require('node:fs').accessSync('.git');require('node:child_process').execSync('git config core.hooksPath .githooks')}catch{}\"",
     "build": "bun scripts/build.js",
     "clean": "bun scripts/build.js --clean",
-    "host": "bun native-host/src/host.js",
-    "mcp": "bun src/adapters/mcp/server.ts",
+    "host": "bun native-host/src/runtime.ts",
     "mcp:http": "bun src/adapters/mcp/server.ts --transport=http",
-    "agent:server": "bun src/adapters/mcp/server.ts",
     "agent:http": "bun src/adapters/mcp/server.ts --transport=http",
-    "codex:server": "bun src/adapters/mcp/server.ts",
     "check": "bun run check:metadata && bun run typecheck:backend && bun run lint && bun run check:unused && bun run check:architecture && bun run check:schemas && bun run check:package && bun run check:mcp && bun run adapter:report && bun test",
     "check:architecture": "bun scripts/check-architecture.js",
     "check:mcp": "bun scripts/check-mcp.js",
@@ -109,9 +109,7 @@
     "check:version-bump": "bun scripts/check-version-bump.js",
     "test": "bun test",
     "test:contracts": "bun test tests/contracts tests/adapters",
-    "test:mcp": "bun scripts/check-mcp.js",
     "test:opencode": "bun scripts/check-opencode.js",
-    "test:codex": "bun scripts/check-mcp.js",
     "test:tarball": "bun scripts/test-tarball.js",
     "pack": "bun scripts/pack.js",
     "schema:report": "bun scripts/schema-report.js",

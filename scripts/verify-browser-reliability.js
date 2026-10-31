@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { chromiumExtensionFixture } from "./fixtures/chromium-extension.js";
-import { McpWorker } from "../native-host/src/runtime-worker.ts";
-import { harnessControls } from "../native-host/src/harness-control.ts";
+import { McpWorker } from "../src/control/mcp-worker.ts";
+import { harnessControls } from "../src/control/harness-control.ts";
 
 const server = http.createServer((req, res) => {
   res.setHeader("Content-Type", "text/html");
@@ -187,6 +187,9 @@ try {
   const panel = await fixture.context.newPage();
   await panel.goto(`chrome-extension://${fixture.extensionId}/popup.html`);
   const connectionControl = message => panel.evaluate(value => chrome.runtime.sendMessage(value), message);
+  const nativeStatus = await connectionControl({ type: "GET_NATIVE_HOST_STATUS" });
+  assert.equal(nativeStatus.status?.browserCompatible, true, JSON.stringify(nativeStatus));
+  assert.equal(nativeStatus.status?.browserContractVersion, 1, JSON.stringify(nativeStatus));
   const inventory = await connectionControl({ type: "GET_HARNESS_CONNECTIONS" });
   assert.ok(inventory.result.clients.some(client => client.harness === "sdk" && client.phase === "used" && client.state === "responding"));
   const connectionId = inventory.result.clients.find(client => client.harness === "sdk").id;

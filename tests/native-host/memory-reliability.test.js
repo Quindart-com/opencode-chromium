@@ -2,11 +2,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test as bunTest } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { MemoryStore } from "../../native-host/src/memory/store.ts";
+import { MemoryStore } from "../../native-host/src/memory/index.ts";
 import { safeSelector } from "../../native-host/src/memory/privacy.ts";
 import { sqliteImplementation } from "../../native-host/src/memory/config.ts";
+
+const test = (name, run) => bunTest(name, async () => {
+  const cleanup = [];
+  try { return await run({ after: callback => cleanup.push(callback) }); }
+  finally { for (const callback of cleanup.reverse()) await callback(); }
+});
 
 function stores(t, count = 1) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "memory-reliability-"));

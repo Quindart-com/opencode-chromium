@@ -1,5 +1,5 @@
-import { decisionServices,type DecisionRoute } from "../shared/decision-catalog.ts";
 import { configureProvider,providerStatus } from "../../native-host/src/decisions/settings.js";
+import { decisionServices,type DecisionRoute } from "../shared/decision-catalog.ts";
 
 export function runProviderCommand(argv: string[]) {
   if (argv.includes("--help") || argv.includes("-h")) return { usage: "providers status | configure --provider off|jev|openai-decisions [--route typesafe|openrouter|openai] [--model MODEL] [--image-model MODEL] [--share-text] [--share-images] [--key-env NAME]" };

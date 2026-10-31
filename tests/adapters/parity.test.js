@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { createBrowserAgent } from "../../src/adapters/sdk/index.ts";
-import { openAITools } from "../../src/adapters/sdk/openai.ts";
-import { anthropicTools } from "../../src/adapters/sdk/anthropic.ts";
-import { geminiTools } from "../../src/adapters/sdk/gemini.ts";
-import { mcpTools } from "../../src/adapters/sdk/mcp.ts";
+import { anthropicTools,geminiTools,mcpTools,openAITools } from "../../src/adapters/sdk/index.ts";
 import plugin, { createOpenCodeSetup } from "../../src/adapters/opencode/index.ts";
 import { SERVER_NAME, SERVER_INSTRUCTIONS, parseArgs } from "../../src/adapters/mcp/server.ts";
 
@@ -66,5 +63,5 @@ test("native OpenCode V2 uses the editor callback and projects browser results",
 test("MCP options and instructions are provider-neutral", () => {
   assert.equal(SERVER_NAME, "opencode-browser-plugin");
   assert.match(SERVER_INSTRUCTIONS, /browser_run/);
-  assert.deepEqual(parseArgs(["--transport=http", "--toolset", "debug", "--port=4321"]), { transport: "http", toolset: "debug", host: "127.0.0.1", port: 4321, authTokenEnv: "AGENT_BROWSER_AUTH_TOKEN", allowedOrigins: [], blockedOrigins: [] });
+  assert.deepEqual(parseArgs(["--transport=http", "--port=4321"]), { transport: "http", host: "127.0.0.1", port: 4321, authTokenEnv: "AGENT_BROWSER_AUTH_TOKEN", allowedOrigins: [], blockedOrigins: [] });
 });

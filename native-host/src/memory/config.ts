@@ -2,10 +2,11 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { PRODUCT } from "../../../src/shared/product.ts";
 import { record } from "../../../src/shared/values.ts";
 import { managedDatabase,prepareRows,sqlProjection,type Database } from "./database.ts";
 
-const PRODUCT_DIR = "opencode-browser-plugin";
+const PRODUCT_DIR = PRODUCT.pluginId;
 const MEMORY_DIR = "action-memory";
 
 export const MEMORY_ENV_DIR = "OPENCODE_BROWSER_MEMORY_DIR";

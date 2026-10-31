@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
 import { NativeRpc } from "../../extension-src/entrypoints/background/native-rpc.ts";
 import { deadlineError } from "../../src/shared/deadline.ts";

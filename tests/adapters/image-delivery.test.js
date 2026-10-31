@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { createOpenCodeSetup } from "../../src/adapters/opencode/index.ts";
 import { mcpImageContent, sanitizeImagePayloads } from "../../src/adapters/mcp/server.ts";
 

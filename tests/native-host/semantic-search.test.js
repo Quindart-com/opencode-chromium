@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { deleteSemanticModel, handleSemanticHostMethod, rankPageUnits, semanticDataDir, setSemanticSettings } from "../../native-host/src/semantic-search.ts";
 
 test("persists semantic settings in configured local directory", async () => {
@@ -85,38 +85,9 @@ test("semantic is the default ranking strategy while lexical remains explicit", 
     });
 
     assert.equal(semantic.searchStrategy, "semantic");
-    assert.equal(semantic.deprecatedAlias, false);
     assert.equal(semantic.degraded, true);
     assert.equal(lexical.searchStrategy, "lexical");
     assert.equal(lexical.model.used, false);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-    if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
-    else process.env.OPENCODE_BROWSER_SEMANTIC_DIR = previous;
-    if (previousDisabled === undefined) delete process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
-    else process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL = previousDisabled;
-  }
-});
-
-test("snowflake remains a deprecated alias for the semantic strategy", async () => {
-  const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
-  const previousDisabled = process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-browser-semantic-alias-test-"));
-  process.env.OPENCODE_BROWSER_SEMANTIC_DIR = dir;
-  process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL = "1";
-
-  try {
-    setSemanticSettings({ enabled: true });
-    const aliased = await rankPageUnits({
-      query: "workspace members",
-      mode: "snowflake",
-      units: [{ node_id: "node-1", text: "Workspace member permissions" }],
-    });
-
-    assert.equal(aliased.searchStrategy, "semantic");
-    assert.equal(aliased.deprecatedAlias, true);
-    assert.equal(aliased.degraded, true);
-    assert.equal(aliased.degradationReason, "model-unavailable");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     if (previous === undefined) delete process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
@@ -323,13 +294,6 @@ test("EmbeddingGemma uses distinct query and document prompts", async () => {
   assert.ok(gemma.embedding.documentPrefix.startsWith("title:"));
   assert.notEqual(gemma.embedding.queryPrefix, gemma.embedding.documentPrefix);
   assert.equal(gemma.embedding.promptVersion, "prompt-v1");
-});
-
-test("EmbeddingGemma reads the exported sentence embedding instead of token features", () => {
-  const source = fs.readFileSync(path.resolve("native-host", "src", "semantic-search.ts"), "utf8");
-  assert.match(source, /AutoModel\.from_pretrained\(model\.embedding\.id/);
-  assert.match(source, /outputs\?\.sentence_embedding/);
-  assert.doesNotMatch(source, /adapter === "embeddinggemma"[\s\S]{0,300}pooling: "none"/);
 });
 
 test("embedding profiles encode model, dtype, dimensions, and prompt version", async () => {

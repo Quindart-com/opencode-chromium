@@ -1,12 +1,12 @@
-import { createRuntimeUpdater,installGlobalRelease,newerRelease,releaseVersion } from "../../native-host/src/runtime-updates.ts";
-import { npmMetadata } from "./npm-metadata.ts";
-import { record } from "../shared/values.ts";
 import fs from "node:fs";
 import path from "node:path";
-import { detectHarnesses } from "./harnesses.ts";
+import { npmMetadata } from "../control/npm-client.ts";
+import { createRuntimeUpdater,installGlobalRelease,newerRelease,releaseVersion } from "../control/update.ts";
+import { record } from "../shared/values.ts";
 import { nativeCodexPluginEnabled } from "./configuration.ts";
-import { planSkills } from "./skills.ts";
+import { detectHarnesses } from "./harnesses.ts";
 import { refreshBrowserMarketplace } from "./marketplace.ts";
+import { planSkills } from "./skills.ts";
 import { applyTransaction } from "./transaction.ts";
 
 function refreshInstalledSkills(root: string) {

@@ -1,9 +1,11 @@
+import { useEffect,useRef,useState } from "react";
 import { t } from "../../i18n";
-import { useEffect, useRef, useState } from "react";
 import { sendMessage } from "./api";
 import useLocalAction from "./useLocalAction";
 
-type Updates = { supported: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; stagedVersion?: string; loadedVersions?: string[]; blockerCount?: number; reason?: string };
+type Component = { component: string; version: string | null; state: string; label?: string };
+type Updates = { supported: boolean; controllerSupported?: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; stagedVersion?: string; loadedVersions?: string[]; blockerCount?: number; reason?: string;
+  desired?: { version: string }; fallback?: { version: string } | null; staged?: { version: string } | null; components?: Component[] };
 const labels: Record<string, string> = {
   waiting: t("runtimeScheduled"),
   downloading: t("runtimeDownloading"),
@@ -12,6 +14,9 @@ const labels: Record<string, string> = {
   reconnect_required: t("runtimeReconnectRequired"),
   ready: t("runtimeInstalled"),
   retry: t("runtimeDeferred"),
+  draining: t("runtimeDraining"),
+  approval_required: t("runtimeApprovalRequired"),
+  bridge_required: t("bridgeRequired"),
 };
 export default function RuntimeUpdates() {
   const local = useLocalAction();
@@ -45,14 +50,23 @@ export default function RuntimeUpdates() {
     } catch { setUpdates(previous); setMessage(t("runtimeSaveFail")); }
     finally { saving.current = false; revision.current++; setBusy(false); }
   }
+  async function install() {
+    const approvedMajor = updates?.state === "approval_required" ? window.confirm(t("majorUpgradeConfirm")) : false;
+    if (updates?.state === "approval_required" && !approvedMajor) return;
+    await local.start("INSTALL_RUNTIME_UPDATE", approvedMajor ? { approvedMajor: true } : {});
+  }
+  const desiredVersion = updates?.desired?.version ?? updates?.installedVersion ?? t("memoryUnknown");
+  const activeVersions = updates?.components?.filter(item => item.component === "active-worker").map(item => item.version).filter((value): value is string => !!value) ?? updates?.loadedVersions ?? [];
   return <section className="card" aria-labelledby="runtime-updates-title">
     <h2 id="runtime-updates-title">{t("updates")}</h2>
-    <button type="button" className="button button-primary" disabled={busy || local.working} onClick={() => void local.start("INSTALL_RUNTIME_UPDATE")}>{t(local.working ? "actionUpdating" : "checkInstallUpdates")}</button>
+    <button type="button" className="button button-primary" disabled={busy || local.working || updates?.supported === false} onClick={() => void install()}>{t(local.working ? "actionUpdating" : "checkInstallUpdates")}</button>
     {local.feedback && <p role="status" className={"action-feedback " + (local.error || local.action?.state === "failed" ? "is-error" : local.action?.state === "waiting" ? "is-waiting" : "")}>{local.feedback}</p>}
     <label className="checkbox-row"><input type="checkbox" checked={updates?.enabled ?? false} disabled={busy || !updates?.supported} onChange={event => void configure(event.target.checked)} /><span>{t("keepUpdated")}<small className="help-note">{t("runtimeUpdateHelp")}</small></span></label>
     <p className="help-note">{updates?.supported ? !updates.enabled ? t("updatesOff") : labels[updates.state ?? ""] ?? t("updateChecks") : updates?.reason ?? t("updateOnce")}</p>
     <p role="status" className="feedback">{message}</p>
-    {updates?.supported && <p className="help-note">{t("runtimeVersions", [updates.installedVersion ?? t("memoryUnknown"), updates.loadedVersions?.join(", ") || t("noWorkers")])}{updates.stagedVersion ? " " + t("runtimeDownloaded", updates.stagedVersion) : ""}{updates.blockerCount ? " " + t("runtimeWaiting", String(updates.blockerCount)) : ""}</p>}
+    {updates?.reason && <p className="help-note">{updates.reason}</p>}
+    {updates?.supported && <p className="help-note">{t("runtimeVersions", [desiredVersion, activeVersions.join(", ") || t("noWorkers")])}{(updates.staged?.version ?? updates.stagedVersion) ? " " + t("runtimeDownloaded", updates.staged?.version ?? updates.stagedVersion ?? "") : ""}{updates.blockerCount ? " " + t("runtimeWaiting", String(updates.blockerCount)) : ""}</p>}
+    {!!updates?.components?.length && <ul className="runtime-components">{updates.components.map((component, index) => <li key={`${component.component}-${component.label ?? index}`}><span>{component.label ?? component.component}</span><strong>{component.version ?? t("memoryUnknown")}</strong><small>{component.state}</small></li>)}</ul>}
     <a href="https://quindart-com.github.io/opencode-chromium/updates/" target="_blank" rel="noopener noreferrer">{t("whatsNew")}</a>
   </section>;
 }

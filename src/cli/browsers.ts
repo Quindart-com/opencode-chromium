@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { existingFile,findExecutable,windowsAppPath } from "../management/executable-discovery.ts";
 import os from "node:os";
 import path from "node:path";
+import { existingFile,findExecutable,windowsAppPath } from "../management/executable-discovery.ts";
 
 // One browser inventory. Where a browser keeps its profile, its native
 // messaging registration and its executable are the same facts whoever asks, so

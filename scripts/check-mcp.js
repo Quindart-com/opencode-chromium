@@ -5,7 +5,6 @@ import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createBrowserOperations } from "../src/browser/operations/index.ts";
 import { createAgentBrowserRuntime } from "../src/core/runtime.ts";
 import { createCoreRegistry, createMemoryRegistry } from "../src/core/registry.ts";
 
@@ -29,11 +28,11 @@ function collectJsonLines(buffer) {
   return results;
 }
 
-async function runServer(toolset, { exerciseCore = false, env = {} } = {}) {
+async function runServer({ exerciseCore = false, env = {} } = {}) {
   const serverPath = path.join(adapterDir(), "src", "adapters", "mcp", "server.ts");
   if (!fs.existsSync(serverPath)) throw new Error(`Adapter not found: ${serverPath}`);
 
-  const child = spawn(process.execPath, [serverPath, `--toolset=${toolset}`], { stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, ...env } });
+  const child = spawn(process.execPath, [serverPath], { stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, ...env } });
   child.stdout.setEncoding("utf8");
 
   let buffer = "";
@@ -111,11 +110,7 @@ try {
   const runtime = createAgentBrowserRuntime();
   const coreExpected = Object.keys(createCoreRegistry(runtime));
   runtime.close();
-  const hooks = await createBrowserOperations();
-  const legacyExpected = Object.keys(hooks?.tool ?? {});
-  if (legacyExpected.length === 0) throw new Error("Shared plugin exposed no legacy tools");
-
-  const tools = await runServer("core", { exerciseCore: true, env: { OPENCODE_BROWSER_MEMORY: "0" } });
+  const tools = await runServer({ exerciseCore: true, env: { OPENCODE_BROWSER_MEMORY: "0" } });
 
   const listed = new Map(tools.map((tool) => [tool.name, tool]));
   const missing = coreExpected.filter((name) => !listed.has(name));
@@ -137,9 +132,9 @@ try {
   if (schemaErrors > 0) throw new Error("One or more tools produced an invalid MCP input schema");
 
   const schemaBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
-  if (schemaBytes > 13000) throw new Error(`Core tool definitions exceed the 13000-byte context budget: ${schemaBytes}`);
+  if (schemaBytes > 11700) throw new Error(`Core tool definitions exceed the 11700-byte context budget: ${schemaBytes}`);
 
-  const memoryTools = await runServer("core", { env: { OPENCODE_BROWSER_MEMORY: "1" } });
+  const memoryTools = await runServer({ env: { OPENCODE_BROWSER_MEMORY: "1" } });
   const memoryNames = new Set(memoryTools.map((tool) => tool.name));
   const memoryExpected = Object.keys(createMemoryRegistry(runtime));
   const memoryMissing = memoryExpected.filter((name) => !memoryNames.has(name));
@@ -150,12 +145,7 @@ try {
     if (!tool.inputSchema?.properties?.["sessionId"]) throw new Error(`${name} must advertise the sessionId field`);
   }
 
-  const legacyTools = await runServer("legacy");
-  const legacyNames = new Set(legacyTools.map((tool) => tool.name));
-  const legacyMissing = legacyExpected.filter((name) => !legacyNames.has(name));
-  if (legacyMissing.length > 0) throw new Error(`Legacy MCP mode is missing tools: ${legacyMissing.join(", ")}`);
-
-  console.log(JSON.stringify({ ok: true, coreTools: tools.length, legacyTools: legacyTools.length, schemaBytes }, null, 2));
+  console.log(JSON.stringify({ ok: true, coreTools: tools.length, schemaBytes }, null, 2));
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

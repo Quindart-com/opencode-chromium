@@ -2,10 +2,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test as bunTest } from "bun:test";
 import { AgentBrowserRuntime } from "../../src/core/runtime.ts";
 import { targetSchema } from "../../src/core/registry.ts";
-import { MemoryStore } from "../../native-host/src/memory/store.ts";
+import { MemoryStore } from "../../native-host/src/memory/index.ts";
+
+const test = (name, run) => bunTest(name, async () => {
+  const cleanup = [];
+  try { return await run({ after: callback => cleanup.push(callback) }); }
+  finally { for (const callback of cleanup.reverse()) await callback(); }
+});
 import { memoryCommandSchema } from "../../native-host/src/memory/commands.ts";
 
 function fixture(t, steps) {

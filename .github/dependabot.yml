@@ -14,15 +14,6 @@ updates:
           - "minor"
           - "patch"
 
-  - package-ecosystem: "npm"
-    directory: "/packages/opencode-chromium-mcp"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/Los_Angeles"
-    open-pull-requests-limit: 5
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

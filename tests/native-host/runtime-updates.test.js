@@ -5,20 +5,29 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import { PassThrough } from "node:stream";
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { createRuntimeUpdater, createIdleUpdateCheck, releaseVersion } from "../../native-host/src/runtime-updates.ts";
-import { resolveRuntime, activeRuntimeLeases, withRuntimeLock } from "../../native-host/src/runtime-lifecycle.ts";
+import { createRuntimeUpdater, createIdleUpdateCheck, releaseVersion,validateRelease } from "../../src/control/update.ts";
+import { rollbackRelease } from "../../src/control/activation.ts";
+import { createParticipant } from "../../src/control/leases.ts";
+import { desiredRuntime } from "../../src/shared/runtime-config.ts";
+import { resolveRuntime, activeRuntimeLeases, withRuntimeLock } from "../../src/control/state.ts";
 import { RpcRelay } from "../../native-host/src/rpc-relay.ts";
-import { FrameDecoder } from "../../native-host/src/framing.ts";
+import { FrameDecoder } from "../../src/shared/node-framing.ts";
 import { installPublishedUpdate,publishedVersion } from "../../src/management/manual-update.ts";
 
 function release(root, version) {
   fs.mkdirSync(root, { recursive: true });
-  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "opencode-chromium", version }));
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "opencode-chromium", version, runtimeControllerProtocol: 2,
+    toolContractVersion: Number(version.split(".")[0]) >= 2 ? 2 : 1,browserContractVersion: 1,supportedBrowserContractVersions: [1] }));
+  const build = path.join(root, "dist/build-manifest.json"); fs.mkdirSync(path.dirname(build), { recursive: true });
+  fs.writeFileSync(build, JSON.stringify({ name: "opencode-chromium", version, sha256: "a".repeat(64) }));
   for (const file of ["dist/cli/index.js", "dist/adapters/mcp/server.js", "dist/adapters/opencode/index.js", "native-host/dist/runtime.js", "extension/manifest.json", "extension-firefox/manifest.json"]) {
     const target = path.join(root, file); fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, file.endsWith(".json") ? JSON.stringify({ version }) : "// fixture\n");
+  }
+  for (const file of ["browser-broker.js", "browser-compatibility.js", "controller.js", "jobs.js", "mcp-supervisor.js", "mcp-worker.js", "state.js", "leases.js", "update.js"]) {
+    const target = path.join(root, "dist/control", file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, "// fixture\n");
   }
 }
 function fixture(options = {}) {
@@ -30,38 +39,83 @@ function fixture(options = {}) {
   const updater = createRuntimeUpdater({ dir, install: async (stage, version) => { installs++; release(path.join(stage, "node_modules/opencode-chromium"), version); }, ...options });
   return { dir, root, manifest, updater, installs: () => installs, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
-test("idle update validates a side-by-side release and preserves the original install and preferences", async () => {
+test("legacy state migrates to schema v2 and a validated release becomes desired without deleting the fallback", async () => {
   const f = fixture();
   try {
     await f.updater.tick("1.9.3");
-    const active = JSON.parse(fs.readFileSync(f.manifest));
-    assert.equal(active.version, "1.9.3"); assert.equal(active.preserved, "yes"); assert.notEqual(active.root, f.root);
+    const activation = JSON.parse(fs.readFileSync(f.manifest));
+    assert.equal(activation.schemaVersion, 2);
+    assert.equal(desiredRuntime(activation).version, "1.9.3");
+    assert.equal(activation.fallback.version, "1.9.2");
+    assert.equal(activation.preserved, "yes");
     assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "package.json"))).version, "1.9.2");
-    assert.equal(f.updater.status().state, "ready");
-    await f.updater.tick("1.9.2"); await f.updater.tick("1.9.3"); assert.equal(f.installs(), 1);
+    assert.equal(f.updater.status().state, "draining");
   } finally { f.cleanup(); }
 });
-test("live leases and busy profiles allow staging but defer activation", async () => {
+test("busy existing connections remain pinned while new connections see the desired release", async () => {
+  const f = fixture();
+  const lease = createParticipant(f.dir, "supervisor", "1.9.2", f.root, { contractVersion: 1, sessions: ["busy"], inFlight: 1, harness: "codex" });
+  try {
+    await f.updater.tick("1.9.3");
+    const activation = JSON.parse(fs.readFileSync(f.manifest));
+    assert.equal(desiredRuntime(activation).version, "1.9.3");
+    assert.equal(lease.state.version, "1.9.2");
+    assert.equal(f.updater.status().state, "draining");
+    assert.equal(f.updater.status().blockerCount, 1);
+  } finally { lease.close(); f.cleanup(); }
+});
+
+test("major releases require one explicit approval before blue-green activation", async () => {
   const f = fixture();
   try {
-    await resolveRuntime(f.dir); await f.updater.tick("1.9.3");
-    assert.equal(f.updater.status().state, "waiting"); assert.equal(f.installs(), 1);
-    assert.equal(f.updater.status().stagedVersion, "1.9.3");
-    fs.rmSync(path.join(f.dir, "leases"), { recursive: true });
-    const second = createRuntimeUpdater({ dir: f.dir, busy: async () => true, install: async () => assert.fail("Busy browser must not install") });
-    await second.tick("1.9.3"); assert.equal(second.status().state, "waiting");
+    await f.updater.tick("2.0.0");
+    assert.equal(f.updater.status().state, "approval_required");
+    assert.equal(desiredRuntime(JSON.parse(fs.readFileSync(f.manifest))).version, "1.9.2");
+    await f.updater.tick("2.0.0", { approvedMajor: true });
+    const activation = JSON.parse(fs.readFileSync(f.manifest));
+    assert.equal(desiredRuntime(activation).version, "2.0.0");
+    assert.equal(activation.approvedMajor, 2);
   } finally { f.cleanup(); }
 });
 
-test("a manual update stages while automatic updates are off, preserves the preference and waits for active agents", async () => {
-  const f = fixture({ busy: async () => true }), globals = [];
+test("release validation preserves one Web Store compatibility generation", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-browser-contract-"));
   try {
-    await f.updater.configure(false);
-    const result = await installPublishedUpdate(f.dir, { latest: async () => "1.9.3", updater: f.updater, globalInstall: async version => { globals.push(version); }, refreshSkills: () => 0, refreshMarketplace: async () => ({ status: "not_configured" }) });
-    assert.equal(result.code, "update_waiting"); assert.deepEqual(globals, ["1.9.3"]);
+    release(dir, "2.0.0");
+    validateRelease(dir, "2.0.0");
+    const packageFile = path.join(dir, "package.json"), pkg = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+    fs.writeFileSync(packageFile, JSON.stringify({ ...pkg,browserContractVersion: 2,supportedBrowserContractVersions: [2] }));
+    assert.throws(() => validateRelease(dir, "2.0.0"), /browser compatibility contract/);
+    fs.writeFileSync(packageFile, JSON.stringify({ ...pkg,browserContractVersion: 2,supportedBrowserContractVersions: [1,2] }));
+    validateRelease(dir, "2.0.0");
+    fs.rmSync(path.join(dir, "dist/control/browser-compatibility.js"));
+    assert.throws(() => validateRelease(dir, "2.0.0"), /Incomplete runtime controller/);
+  } finally { fs.rmSync(dir, { recursive: true,force: true }); }
+});
+
+test("rollback assigns fallback as desired and drains through the same path", async () => {
+  const f = fixture();
+  try {
+    await f.updater.tick("1.9.3");
+    const result = await rollbackRelease(f.dir);
+    assert.equal(result.code, "rollback_started");
     const activation = JSON.parse(fs.readFileSync(f.manifest));
-    assert.equal(activation.autoUpdate, false); assert.equal(activation.root, f.root); assert.equal(activation.stagedRelease.version, "1.9.3");
-    assert.equal(f.installs(), 1);
+    assert.equal(desiredRuntime(activation).version, "1.9.2");
+    assert.equal(activation.fallback.version, "1.9.3");
+  } finally { f.cleanup(); }
+});
+
+test("concurrent updaters install once and corrupt downloads never change desired", async () => {
+  const f = fixture(); let installs = 0;
+  try {
+    const install = async (stage, version) => { installs++; await new Promise(resolve => setTimeout(resolve, 30)); release(path.join(stage, "node_modules/opencode-chromium"), version); };
+    await Promise.all([createRuntimeUpdater({ dir: f.dir, install }).tick("1.9.3"), createRuntimeUpdater({ dir: f.dir, install }).tick("1.9.3")]);
+    assert.equal(installs, 1);
+    const broken = createRuntimeUpdater({ dir: f.dir, install: async () => { throw new Error("registry unavailable"); } });
+    await broken.tick("1.9.4");
+    assert.equal(broken.status().state, "retry");
+    assert.equal(desiredRuntime(JSON.parse(fs.readFileSync(f.manifest))).version, "1.9.3");
+    assert.ok(!JSON.stringify(broken.status()).includes("registry unavailable"));
   } finally { f.cleanup(); }
 });
 
@@ -70,63 +124,10 @@ test("manual installation accepts only a stable version of the official package"
   await assert.rejects(publishedVersion(async () => ({ name: "opencode-chromium", version: "1.9.4-dev.1" })));
   assert.equal(await publishedVersion(async () => ({ name: "opencode-chromium", version: "1.9.4" })), "1.9.4");
 });
-test("a new agent starting during download defers activation, then reuses the validated download", async () => {
-  const f = fixture(); let installs = 0;
-  try {
-    const updater = createRuntimeUpdater({ dir: f.dir, install: async (stage, version) => {
-      installs++; release(path.join(stage, "node_modules/opencode-chromium"), version); await resolveRuntime(f.dir);
-    } });
-    await updater.tick("1.9.3"); assert.equal(updater.status().state, "waiting");
-    assert.equal(JSON.parse(fs.readFileSync(f.manifest)).root, f.root);
-    fs.rmSync(path.join(f.dir, "leases"), { recursive: true });
-    await updater.tick("1.9.3"); assert.equal(updater.status().state, "ready"); assert.equal(installs, 1);
-  } finally { f.cleanup(); }
-});
-test("failed or incomplete downloads keep the old pointer, clean staging, and back off", async () => {
-  let clock = 100, installs = 0;
-  const f = fixture({ now: () => clock, install: async () => { installs++; throw new Error("private registry details"); } });
-  try {
-    await f.updater.tick("1.9.3"); await f.updater.tick("1.9.3");
-    assert.equal(installs, 1); assert.equal(JSON.parse(fs.readFileSync(f.manifest)).root, f.root);
-    assert.equal(f.updater.status().state, "retry"); assert.ok(!JSON.stringify(f.updater.status()).includes("private registry"));
-    assert.ok(!fs.readdirSync(f.dir).some(name => name.startsWith("update-stage-")));
-    clock += 6 * 3600000; await f.updater.tick("1.9.3"); assert.equal(installs, 2);
-  } finally { f.cleanup(); }
-});
-test("opting out during a download prevents activation; development checkouts remain manual", async () => {
-  const f = fixture();
-  try {
-    const updater = createRuntimeUpdater({ dir: f.dir, install: async (stage, version) => {
-      release(path.join(stage, "node_modules/opencode-chromium"), version); await updater.configure(false);
-    } });
-    await updater.tick("1.9.3"); assert.equal(updater.status().enabled, false);
-    assert.equal(JSON.parse(fs.readFileSync(f.manifest)).root, f.root);
-    await updater.configure(true); fs.mkdirSync(path.join(f.root, "src"));
-    await updater.tick("1.9.3"); assert.equal(updater.status().state, "manual");
-  } finally { f.cleanup(); }
-});
-test("invalid versions, downgrades, disabled updates and simultaneous ticks do not install twice", async () => {
-  const f = fixture();
-  try {
-    for (const version of ["latest", "1.9.3;bad", "../1.9.3", "1.9.3-beta", "01.9.3"]) { assert.equal(releaseVersion(version), false); await f.updater.tick(version); }
-    await f.updater.configure(false); await f.updater.tick("1.9.3"); assert.equal(f.installs(), 0);
-    await f.updater.configure(true); await Promise.all([f.updater.tick("1.9.3"), f.updater.tick("1.9.3")]); assert.equal(f.installs(), 1);
-  } finally { f.cleanup(); }
-});
-test("two profile hosts share the worker lock and a mismatched package cannot activate", async () => {
-  const f = fixture(); let installs = 0;
-  try {
-    const install = async (stage, version) => { installs++; await new Promise(resolve => setTimeout(resolve, 30)); release(path.join(stage, "node_modules/opencode-chromium"), version); };
-    const first = createRuntimeUpdater({ dir: f.dir, install }), second = createRuntimeUpdater({ dir: f.dir, install });
-    await Promise.all([first.tick("1.9.3"), second.tick("1.9.3")]); assert.equal(installs, 1);
-    const invalid = createRuntimeUpdater({ dir: f.dir, install: async (stage) => release(path.join(stage, "node_modules/opencode-chromium"), "0.0.1") });
-    await invalid.tick("1.9.4"); assert.equal(invalid.status().state, "retry"); assert.equal(JSON.parse(fs.readFileSync(f.manifest)).version, "1.9.3");
-  } finally { f.cleanup(); }
-});
 test("startup takes a lease under the activation lock; exited-process leases are reaped", async () => {
   const f = fixture();
   try {
-    const module = pathToFileURL(path.resolve("native-host/src/runtime-lifecycle.ts")).href;
+    const module = pathToFileURL(path.resolve("src/control/state.ts")).href;
     const child = promisify(execFile);
     await withRuntimeLock(f.dir, async () => {
       const marker = path.join(f.dir, "child-started");

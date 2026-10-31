@@ -1,7 +1,7 @@
 import { useCallback,useEffect,useRef,useState } from "react";
 import { harnessLabels,harnessTargets,type ConnectionSnapshot } from "../../../src/shared/connections.ts";
+import type { LocalAction } from "../../../src/shared/control-protocol.ts";
 import { harnessDefinitions } from "../../../src/shared/harnesses.ts";
-import type { LocalAction } from "../../../src/shared/local-actions.ts";
 import { t } from "../../i18n";
 import { sendMessage,type NativeStatus } from "./api";
 import useLocalAction,{ localActionLabel } from "./useLocalAction";

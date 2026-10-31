@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "bun:test";
 import { CommandHealth } from "../../extension-src/entrypoints/background/command-health.ts";
 import { finalizeOwnedTabs } from "../../extension-src/entrypoints/background/finalize-session.ts";
 import { beforeDeadline } from "../../src/shared/deadline.ts";

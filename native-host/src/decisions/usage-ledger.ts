@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { legacyDecisionIdentity } from "../../../src/shared/decision-catalog.ts";
-import { record } from "../../../src/shared/values.ts";
 import type { UsageDay,UsagePeriod,UsageProvider,UsageQuery,UsageReport,UsageTotals } from "../../../src/shared/decision-usage.ts";
+import { record } from "../../../src/shared/values.ts";
 
 const empty = (): UsageTotals => ({ calls: 0, selected: 0, abstained: 0, tests: 0, inputTokens: 0, outputTokens: 0,
   reportedCost: 0, costReportedCalls: 0, usageReportedCalls: 0, averageMs: 0, lastMs: 0 });

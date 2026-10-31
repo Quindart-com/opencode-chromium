@@ -1,12 +1,12 @@
 import type { TabCdpRequest } from "../../../src/shared/cdp.ts";
+import { beforeDeadline } from "../../../src/shared/deadline.ts";
 import { record } from "../../../src/shared/values.ts";
 import type { CommandParams } from "./command-schema.ts";
 import { prepareJevScreenshot } from "./decision-image.ts";
 import type { NativeRpc } from "./native-rpc.ts";
 import type { AttachDependencies,TabOwner } from "./types.ts";
-import { beforeDeadline } from "../../../src/shared/deadline.ts";
 
-export function createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chromeCall: _chromeCall, chrome, rpc, generation, trackPending }: AttachDependencies & { rpc: Pick<NativeRpc, "request"> }) {
+export function createFirefoxAttacher({ withTabLock, getTab, isBrowserInternalUrl, attachedTabs, chrome, rpc, generation, trackPending }: AttachDependencies & { rpc: Pick<NativeRpc, "request"> }) {
   return (tabId: number, sessionId: string, deadlineAt = Date.now() + 10000) => withTabLock(tabId, async () => {
     if (isBrowserInternalUrl((await getTab(tabId)).url)) throw new Error("Agents cannot control browser or extension UI");
     if (attachedTabs.has(tabId)) return {};

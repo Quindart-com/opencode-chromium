@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { createBrowserOperations, GRANULAR_OPERATION_COUNT } from "../../src/browser/operations/index.ts";
+import { test } from "bun:test";
+import { createBrowserOperations } from "../../src/browser/operations/index.ts";
 import { createCapabilityRegistry } from "../../src/core/capabilities.ts";
 import { ApprovalStore } from "../../src/core/approvals.ts";
 import { createLogger, redact } from "../../src/core/logging.ts";
@@ -13,14 +13,11 @@ import { contractMetadata } from "../../src/core/versions.ts";
 import { createCoreRegistry } from "../../src/core/registry.ts";
 import { ArtifactStore } from "../../src/core/artifacts.ts";
 
-test("the baseline operation inventory is preserved behind the provider-neutral engine", async () => {
+test("internal browser operations retain the search behavior used by the four public tools", async () => {
   const hooks = await createBrowserOperations();
-  assert.equal(Object.keys(hooks.tool).length, GRANULAR_OPERATION_COUNT);
-  assert.equal(GRANULAR_OPERATION_COUNT, 55);
   assert.equal(hooks.tool.browser_page_search.args.mode.parse(undefined), "auto");
   assert.equal(hooks.tool.browser_page_search.args.maxResults.parse(undefined), 5);
-  const baseline = JSON.parse(fs.readFileSync(path.join(process.cwd(), "tests", "fixtures", "baseline.json"), "utf8"));
-  assert.deepEqual(Object.keys(hooks.tool), baseline.granularOperations);
+  assert.equal(typeof hooks.tool.browser_page_search.execute, "function");
 });
 
 test("runtime-read retry fields are present while writes remain explicitly classed as never retry", () => {

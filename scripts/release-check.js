@@ -25,7 +25,7 @@ if (extensionDisplayName(extensionManifest, path.join(root, "extension")) !== "o
 if (extensionManifest.version !== packageJson.version) errors.push(`Extension manifest version ${extensionManifest.version} must match package version ${packageJson.version}`);
 if (packageJson.bin?.["opencode-chromium-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("Canonical MCP binary is missing");
 if (packageJson.bin?.["opencode-chromium"] !== "./dist/cli/index.js") errors.push("Canonical CLI binary is missing");
-if (packageJson.bin?.["opencode-browser-plugin-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("Legacy MCP binary alias is missing");
+if (packageJson.bin?.["opencode-chromium-mcp"] !== "./dist/adapters/mcp/server.js") errors.push("Canonical MCP binary is missing");
 
 const forbidden = [["opencode", "plugin"].join("-"), ["browser", "core"].join("-"), ["codex", "adapter"].join("-"), ".opencode", "package-lock.json", ["scripts", "install-opencode.js"].join("/"), ["scripts", "check-opencode-plugin.js"].join("/")];
 const excluded = new Set(["node_modules", ".git", "dist", "reports"]);

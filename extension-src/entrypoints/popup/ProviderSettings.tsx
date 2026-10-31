@@ -1,7 +1,7 @@
+import { useEffect,useState } from "react";
+import { decisionChoice,decisionChoices,decisionFamilies,decisionServices } from "../../../src/shared/decision-catalog.ts";
 import { t } from "../../i18n";
-import { useEffect, useState } from "react";
 import { sendMessage } from "./api";
-import { decisionChoices,decisionFamilies,decisionServices,decisionChoice } from "../../../src/shared/decision-catalog.ts";
 import type { DecisionSettings } from "./decision-types";
 
 const providerMessages = new Map<string, string>([

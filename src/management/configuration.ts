@@ -3,11 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import { parse as parseToml,stringify as stringifyToml } from "smol-toml";
+import type { HarnessId } from "../shared/harnesses.ts";
+import { PRODUCT } from "../shared/product.ts";
 import { record } from "../shared/values.ts";
 import { deepSeekManaged,planDeepSeek } from "./deepseek.ts";
 
-export const SERVER_ID = "opencode-browser-plugin";
-import type { HarnessId } from "../shared/harnesses.ts";
+export const SERVER_ID = PRODUCT.pluginId;
 export type { HarnessId };
 export interface ConfigOptions {
   client: HarnessId;

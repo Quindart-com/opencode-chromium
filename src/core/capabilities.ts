@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { BrowserOperation } from "../browser/operation-definition.ts";
 import {
-NETWORK_INSPECT_ARGS,
-NETWORK_INSPECT_MANIFEST,
-NETWORK_INSPECT_SCHEMA,
+  NETWORK_INSPECT_ARGS,
+  NETWORK_INSPECT_MANIFEST,
+  NETWORK_INSPECT_SCHEMA,
 } from "./network-capability.ts";
 import type { BrowserContext } from "./tool-definition.ts";
 
