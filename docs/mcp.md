@@ -3,7 +3,7 @@
 The canonical MCP server is `opencode-browser-plugin` at `src/adapters/mcp/server.ts`.
 
 ```powershell
-bun run mcp
+bun src/adapters/mcp/server.ts
 bun run mcp:http
 ```
 
@@ -11,16 +11,14 @@ Options:
 
 ```text
 --transport=stdio|http
---toolset=core|debug|legacy
 --host=127.0.0.1
 --port=3210
 --auth-token-env=AGENT_BROWSER_AUTH_TOKEN
 --allowed-origin=PATTERN
 --blocked-origin=PATTERN
---managed
 ```
 
-Core mode exposes exactly `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Debug mode adds diagnostics; legacy mode exposes the preserved 55 granular operations for migration and regression testing only.
+The public surface is exactly `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Internal operations remain implementation details behind those four tools.
 
 Origin policy is server-level and never per-call. `--allowed-origin` and `--blocked-origin` accept globs such as `https://*.example.com`; equivalent environment variables are `AGENT_BROWSER_ALLOWED_ORIGINS` and `AGENT_BROWSER_BLOCKED_ORIGINS` (comma- or semicolon-separated). Requested navigations and subsequent controlled-page URLs are checked. Redirect detection does not prevent the initial network request; see [policy limits](security.md). Uploads can be restricted with `AGENT_BROWSER_ALLOWED_FILE_ROOTS`.
 

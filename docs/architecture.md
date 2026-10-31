@@ -4,16 +4,18 @@ The four public browser tools share one runtime. MCP, OpenCode and JavaScript ad
 
 | Module | Responsibility |
 | --- | --- |
+| `src/shared` | Browser-safe value contracts, product identity and utilities with no control-plane dependencies |
 | `src/core` | Session lifecycle, approvals, output budgets, artifacts and optional capabilities |
 | `src/browser` | Browser operations, URL/file policy, environment cleanup and network redaction |
 | `src/browser/operations/*-expressions.ts` | Focused page extraction and interaction helpers |
+| `src/control` | Stable runtime controller, desired/fallback state, leases, update jobs and worker supervision |
 | `src/management` | Transactional setup, configuration migration, backup and rollback |
 | `extension-src/entrypoints/background` | Native transport, owned tabs, trusted input and browser events |
 | `native-host/src/firefox` | Loopback BiDi connection, verified tab/frame bridges and protocol translation |
 | `native-host/src/decisions` | Opt-in decision providers, cancellation, bounded context and local fallback |
 | `native-host/src/memory` | Optional local action signatures, retrieval and replay validation |
 
-New modules have a 500-line ceiling. Existing large modules have explicit, decreasing budgets in `architecture-exceptions.json`; extract a responsibility without changing its contract. Management code must not import browser orchestration, and native-host decision code depends only on its subsystem and shared value contracts.
+Every production module has a 500-line ceiling and the gate has no exception list. Dependency direction is shared contracts → core/browser → adapters; management, control-plane and native-host implementations sit above those layers and must not be imported by core. The gate rejects cycles and reverse-layer imports, while native-host decision code depends only on its subsystem and shared value contracts.
 
 Production CLI, runtime and extension modules use strict TypeScript. Native-message, stored-memory and operation-result boundaries validate untrusted values. The CLI loads command modules on demand; local inference libraries load only when a model is needed. Effect owns embedding concurrency and cancellable child processes. npm packages contain compiled JavaScript and public declarations.
 
