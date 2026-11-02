@@ -9,18 +9,23 @@ test("session policy survives configuration updates and permits a safe blank tab
   assert.throws(() => assertSessionUrl(session, "https://private.example.com"), { code: "URL_POLICY_BLOCKED" });
   assert.throws(() => assertSessionUrl(session, "https://other.test"), { code: "URL_POLICY_BLOCKED" });
 });
-test("controlled popup inherits policy; unrelated or already-owned tabs are untouched", async () => {
-  const callbacks = {}, tracked = [], stopped = [], session = {};
+test("only explicitly owned tabs receive navigation policy; new tabs never inherit ownership", async () => {
+  const callbacks = {}, stopped = [], session = {};
   updateSessionPolicy(session, { url_policy: { blockedOrigins: ["blocked.test"] } });
   const owners = new Map([[1, { sessionId: "first", session }], [8, { sessionId: "other", session: {} }]]);
   installNavigationPolicy({ chrome: { tabs: { onCreated: { addListener: fn => callbacks.created = fn }, onUpdated: { addListener: fn => callbacks.updated = fn } } },
-    findOwner: id => owners.get(id), trackTab: async (id, tabId) => { tracked.push(tabId); owners.set(tabId, { sessionId: id, session }); },
-    getTab: async () => ({ url: "https://blocked.test/redirect" }), stopLoading: async id => stopped.push(id) });
-  callbacks.created({ id: 2, openerTabId: 1 }); callbacks.created({ id: 3, openerTabId: 99 }); callbacks.created({ id: 8, openerTabId: 1 });
+    findOwner: id => owners.get(id), stopLoading: async id => stopped.push(id) });
+  assert.equal(callbacks.created, undefined, "opening a tab must not grant ownership");
+  callbacks.updated(1, { url: "https://blocked.test" });
+  // A popup with a controlled opener is still unowned, even on a blocked URL.
+  callbacks.updated(2, { url: "https://blocked.test/popup", openerTabId: 1 });
+  callbacks.updated(3, { url: "chrome://newtab/" });
+  callbacks.updated(8, { url: "https://blocked.test" });
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.deepEqual(tracked, [2]); assert.deepEqual(stopped, [2]);
-  callbacks.updated(1, { url: "https://blocked.test" }); callbacks.updated(99, { url: "https://blocked.test" });
-  await new Promise(resolve => setTimeout(resolve, 0));
-  assert.deepEqual(stopped, [2, 1]); assert.equal(session.navigationWarnings.length, 2);
+  assert.deepEqual(stopped, [1]); assert.equal(session.navigationWarnings.length, 1);
   assert.equal(owners.get(8).sessionId, "other");
+  owners.set(2, { sessionId: "first", session });
+  callbacks.updated(2, { url: "https://blocked.test/redirect" });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(stopped, [1, 2]); assert.equal(session.navigationWarnings.length, 2);
 });

@@ -448,7 +448,7 @@ if (!IS_FIREFOX) chrome.debugger.onDetach.addListener(source => { if (source.tab
 if (!IS_FIREFOX) chrome.debugger.onEvent.addListener((source, method, params) => { if (source.tabId !== undefined && attachedTabs.has(source.tabId)) frameRouting.event(source, method, params); });
 if (!IS_FIREFOX)
     installChromiumEvents({ chrome, cdpEventTabId, traceBuffers, MAX_TRACE_CHUNKS, recordCdpEvent, attachedTabs });
-installNavigationPolicy({ chrome, findOwner: findTabOwner, trackTab, getTab, stopLoading: tabId => sendCdpCommand(tabId, "Page.stopLoading", {}, 2000) });
+installNavigationPolicy({ chrome, findOwner: findTabOwner, stopLoading: tabId => sendCdpCommand(tabId, "Page.stopLoading", {}, 2000) });
 chrome.tabs.onRemoved.addListener((tabId) => {
     creationRequestIds.delete(tabId);
     attachedTabs.delete(tabId);
