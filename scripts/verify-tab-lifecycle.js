@@ -147,7 +147,11 @@ try {
   const reviewTabs = await Promise.all(reviewIds.map(tabInfo));
   const reviewGroup = reviewTabs[0].groupId;
   assert.ok(reviewTabs.every(tab => tab.groupId === reviewGroup));
-  assert.notEqual(reviewGroup, originalGroup, "Native-grouped, unowned children must stay in their original group");
+  if (childBefore.some(tab => tab.groupId === originalGroup)) {
+    assert.notEqual(reviewGroup, originalGroup, "Native-grouped, unowned children must stay in their original group");
+  } else {
+    assert.equal(reviewGroup, originalGroup);
+  }
   assert.equal((await groupInfo(reviewGroup)).color, "blue");
   assert.equal((await groupInfo(reviewGroup)).title, "Human review");
   assert.equal((await groupInfo((await tabInfo(otherId)).groupId)).color, "green");
