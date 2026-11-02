@@ -1,4 +1,4 @@
-import type { Browser,WxtBrowser } from "wxt/browser";
+import type { WxtBrowser } from "wxt/browser";
 import { assertNavigationAllowed,createUrlPolicy,UrlPolicyError } from "../../../src/browser/url-policy.ts";
 import type { ExtensionSession,TabOwner } from "./types.ts";
 
@@ -12,11 +12,9 @@ export function assertSessionUrl(session: Pick<ExtensionSession, "urlPolicy"> | 
   assertNavigationAllowed(url, session?.urlPolicy ? createUrlPolicy(session.urlPolicy) : null);
 }
 
-export function installNavigationPolicy({ chrome, findOwner, trackTab, getTab, stopLoading }: {
+export function installNavigationPolicy({ chrome, findOwner, stopLoading }: {
   chrome: WxtBrowser;
   findOwner(tabId: number): TabOwner | null;
-  trackTab(sessionId: string, tabId: number, origin: string): Promise<unknown>;
-  getTab(tabId: number): Promise<Browser.tabs.Tab>;
   stopLoading(tabId: number): Promise<unknown>;
 }) {
   const inspect = async (tabId: number, url: string) => {
@@ -35,16 +33,5 @@ export function installNavigationPolicy({ chrome, findOwner, trackTab, getTab, s
   };
   chrome.tabs.onUpdated.addListener((tabId, changes) => {
     if (typeof changes.url === "string") void inspect(tabId, changes.url);
-  });
-  chrome.tabs.onCreated.addListener(tab => {
-    const owner = tab.openerTabId !== undefined && Number.isInteger(tab.openerTabId) ? findOwner(tab.openerTabId) : null;
-    const tabId = tab.id;
-    if (!owner || tabId === undefined || !Number.isInteger(tabId)) return;
-    void (async () => {
-      if (findOwner(tabId)) return;
-      await trackTab(owner.sessionId, tabId, "agent");
-      const current = await getTab(tabId);
-      await inspect(tabId, current.url ?? "about:blank");
-    })().catch(() => {});
   });
 }

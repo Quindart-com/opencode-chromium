@@ -9,9 +9,14 @@ function fixture(tabs) {
     tabs: {
       get: async id => ({ ...tabs.find(tab => tab.id === id) }),
       query: async query => tabs.filter(tab => tab.groupId === query.groupId),
-      group: async ({ tabIds, groupId = 11 + groups.size }) => {
-        groups.set(groupId, groups.get(groupId) ?? { id: groupId, windowId: tabs.find(tab => tab.id === tabIds[0]).windowId });
-        for (const tab of tabs.filter(tab => tabIds.includes(tab.id))) tab.groupId = groupId;
+      group: async ({ tabIds, groupId = 11 + groups.size, createProperties }) => {
+        assert.ok(!createProperties || !groups.has(groupId), "createProperties cannot accompany an existing group");
+        // Chrome defaults new groups to the current window, not the tab's window.
+        groups.set(groupId, groups.get(groupId) ?? { id: groupId, windowId: createProperties?.windowId ?? 99 });
+        for (const tab of tabs.filter(tab => tabIds.includes(tab.id))) {
+          tab.groupId = groupId;
+          tab.windowId = groups.get(groupId).windowId;
+        }
         return groupId;
       },
     },

@@ -15,7 +15,7 @@ export async function groupReviewTabs(session: ExtensionSession, tabIds: number[
       const members = await chrome.tabs.query({ groupId: existing.id });
       if (members.every(tab => tab.id !== undefined && reviewIds.has(tab.id))) groupId = existing.id;
     }
-    const reviewGroupId = await chrome.tabs.group({ tabIds: [first, ...rest], ...(groupId === undefined ? {} : { groupId }) });
+    const reviewGroupId = await chrome.tabs.group({ tabIds: [first, ...rest], ...(groupId === undefined ? { createProperties: { windowId } } : { groupId }) });
     await chrome.tabGroups.update(reviewGroupId, { title: session.name ?? "OpenCode", color: "blue" });
   }
 }
