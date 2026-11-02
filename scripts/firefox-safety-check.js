@@ -14,7 +14,9 @@ if (!manifest.background.scripts?.length || !manifest.browser_specific_settings.
 const result = JSON.parse(execFileSync(process.execPath, [path.join(root, "node_modules/web-ext/bin/web-ext.js"), "lint", "--source-dir", path.join(root, "extension-firefox"), "--output", "json"], { encoding: "utf8", cwd: root }));
 // React DOM's packaged dangerouslySetInnerHTML handlers are unused by our UI.
 // Pin the vendor bytes, warning code and locations; changed warnings fail.
-const reviewedVendorHash = "99c18875d3d54acd30a602bd329eeaa13cb2cc637322339f6651da00a9ff8cfc";
+// WXT 0.21.5 changes only the leading browser-shim import; the reviewed
+// React bundle after that import is byte-for-byte unchanged.
+const reviewedVendorHash = "b92fea1b4a19e33cd174064e084c71f0fe87353ab1f707e12ba0ab0cbbcec10e";
 // web-ext checks Android's inherited minimum even when the manifest does not
 // opt into Android. This exact warning is inapplicable to our desktop-only build.
 const desktopOnlyAndroidWarning = w => !manifest.browser_specific_settings.gecko_android &&
