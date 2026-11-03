@@ -1340,6 +1340,9 @@
   "checkInstallUpdates": {
     "message": "Buscar e instalar atualizações"
   },
+  "actionReleaseUnavailable": {
+    "message": "Não foi possível verificar uma versão. Verifique sua conexão e tente novamente. Sua instalação atual permanece inalterada."
+  },
   "runtimeSetupHelp": {
     "message": "Esta instalação precisa de uma configuração única. Execute este comando em um terminal e reconecte a ponte local após terminar o trabalho no navegador. As chaves e abas são preservadas."
   },

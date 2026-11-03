@@ -11,6 +11,7 @@ const labels: Record<string, string> = {
   not_installed: "statusNotInstalled", unmanaged_runtime: "actionUnmanaged",
   bridge_required: "bridgeRequired", reconnect_required: "runtimeReconnectRequired", major_approval_required: "runtimeApprovalRequired",
   rollback_started: "runtimeScheduled", reconciled: "runtimeInstalled", already_current: "runtimeInstalled",
+  release_unavailable: "actionReleaseUnavailable",
 };
 export const localActionLabel = (action: LocalAction) => t(labels[action.code] ?? (action.state === "failed" ? "actionFailed" : action.state === "waiting" ? "actionWaiting" : "actionRunning"));
 export default function useLocalAction() {

@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "runtimeControllerProtocol": 2,
   "toolContractVersion": 2,
   "browserContractVersion": 1,

@@ -32,7 +32,10 @@ export function npmCliFile() {
 
 export async function npmMetadata({ cwd = process.cwd(), env = process.env }: { cwd?: string; env?: NodeJS.ProcessEnv } = {}): Promise<unknown> {
   return new Promise((resolve, reject) => execFile(npmNode(), [npmCliFile(), "view", `${PRODUCT.packageName}@latest`, "name", "version", "--json"],
-    { windowsHide: true, timeout: 15000, maxBuffer: 65536, cwd, env }, (error, stdout) => {
-      if (error) reject(new Error("release_unavailable")); else { try { resolve(JSON.parse(stdout)); } catch { reject(new Error("invalid_release")); } }
+    // npm startup, authentication and registry metadata can exceed 15 seconds
+    // on a healthy installation. The detached update job stays pollable.
+    { windowsHide: true, timeout: 60000, maxBuffer: 65536, cwd, env }, (error, stdout) => {
+      if (error) reject(Object.assign(new Error("release_unavailable"), { code: "release_unavailable" }));
+      else { try { resolve(JSON.parse(stdout)); } catch { reject(Object.assign(new Error("invalid_release"), { code: "invalid_release" })); } }
     }));
 }
