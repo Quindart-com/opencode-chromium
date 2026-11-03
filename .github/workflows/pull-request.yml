@@ -77,7 +77,9 @@ jobs:
         if: always()
         with:
           name: firefox-parity-results
-          path: reports/*parity.json
+          path: |
+            reports/*parity.json
+            reports/page-panel-firefox/
 
   verify:
     name: Verify / Ubuntu / Node 24

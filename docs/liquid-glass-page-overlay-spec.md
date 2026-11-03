@@ -68,6 +68,8 @@ Webpage scripts / page messages --------X--------> privileged background methods
 
 The content script's JavaScript world is isolated, but its DOM is shared with an untrusted webpage. Shadow DOM provides style/component encapsulation; it is not a privilege, anti-clickjacking, or confidentiality boundary. A hostile page can obscure, remove, transform or imitate injected UI. `event.isTrusted` alone does not establish informed user approval.
 
+Scope the material stylesheet to that closed root. Attempt a constructed stylesheet where supported, with a `style.textContent` fallback inside the root: Firefox content-script Xray wrappers reject constructed-sheet adoption. The real Firefox verifier exercises this fallback on a page whose CSP blocks inline page styles and scripts; do not bypass the page policy or open the shadow root to solve it.
+
 **Decision:** use same-document Shadow DOM for live page glass and low-risk controls. Keep credentials, full local paths, permission-expanding settings, destructive operations, runtime installation/major-upgrade approval, and upload decisions in trusted extension-origin UI. The overlay can launch those flows; it cannot approve them. This preserves feature access without moving security-critical decisions into page-controlled presentation.
 
 A cross-origin extension iframe is an alternative for isolating UI internals, but its own `backdrop-filter` cannot sample the parent webpage. A split design would need a separate parent-document glass plate behind a transparent iframe, with authenticated geometry coordination, and still would not make page presentation immune to clickjacking. Do not choose this architecture by accident or weaken sender checks to support it. It is not required for the baseline.

@@ -66,7 +66,13 @@ export function installPagePanel(chrome: WxtBrowser) {
     host = document.createElement("div");
     host.id = `opencode-page-panel-${crypto.randomUUID()}`;
     const shadow = host.attachShadow({ mode: "closed" });
-    const sheet = new CSSStyleSheet(); sheet.replaceSync(material); shadow.adoptedStyleSheets = [sheet];
+    try {
+      const sheet = new CSSStyleSheet(); sheet.replaceSync(material); shadow.adoptedStyleSheets = [sheet];
+    } catch {
+      // Firefox content-script Xrays cannot adopt constructed stylesheets.
+      // Keep the fallback inside the same closed root, as WXT's shadow UI does.
+      const style = document.createElement("style"); style.textContent = material; shadow.append(style);
+    }
     const mount = document.createElement("div"); shadow.append(mount);
     root = createRoot(mount); document.documentElement.append(host);
     host.addEventListener("keydown", event => { if (event.key === "Escape") { event.stopPropagation(); post({ type: "close" }); stop(); } });

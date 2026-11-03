@@ -8,6 +8,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { executableCandidates } from '../src/cli/browsers.ts';
 import { FirefoxBackend } from '../native-host/src/firefox/backend.ts';
+import { verifyFirefoxPagePanel } from './fixtures/firefox-page-panel.js';
 
 // This test owns a disposable browser/profile and a unique native-host registration.
 // It cannot replace the installed host or connect to personal browser profiles.
@@ -43,6 +44,16 @@ const manifest = path.join(fixture, 'native.json');
 fs.writeFileSync(manifest, JSON.stringify({ name: host, description: 'Disposable extension verification host', path: launcher, type: 'stdio', allowed_extensions: ['opencode-browser-plugin@quindart.com'] }));
 let nativeKey, nativeFile, child, agent, profileId;
 const server = http.createServer((req, res) => {
+  if (req.url === '/glass.css') {
+    res.setHeader('Content-Type', 'text/css');
+    res.end('body{margin:0;font:16px/1.6 system-ui;background:#e9effb;color:#18243c}header{padding:36px;background:#d6e6fb}main{padding:36px;max-width:650px}article{padding:24px;margin:20px 0;border-radius:16px;background:#fff}h1{font-size:36px;margin:0}p{margin:8px 0}'); return;
+  }
+  if (req.url === '/glass') {
+    // Block inline page scripts and styles; extension-world styles must still work.
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'self'; script-src 'none'");
+    res.setHeader('Content-Type', 'text/html');
+    res.end('<!doctype html><html lang="en"><title>Example workspace</title><link rel="stylesheet" href="/glass.css"><header><p>EXAMPLE WORKSPACE</p><h1>A clear view of your work.</h1></header><main><article><h2>Project notes</h2><p>Synthetic content for extension UI verification.</p></article><article><h2>Next steps</h2><p>Review, plan, and build.</p></article></main></html>'); return;
+  }
   if (req.url === '/frame') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Frame fixture</p><button id="frame-choice" onclick="document.querySelector(\'#frame-result\').textContent=event.isTrusted?\'Trusted frame\':\'Synthetic frame\'">Frame choose</button><input id="frame-name"><button id="frame-prompt" onclick="prompt(123)">Frame prompt</button><p id="frame-result">Ready</p><iframe src="/leaf"></iframe>'); return; }
   if (req.url === '/leaf') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Nested frame fixture</p>'); return; }
   if (req.url === '/download') { res.setHeader('Content-Type', 'text/plain'); res.setHeader('Content-Disposition', 'attachment; filename="fixture.txt"'); res.end('owned fixture'); return; }
@@ -74,6 +85,8 @@ try {
   if (!registration) throw Error('Native extension connection did not register: ' + logs);
   profileId = registration.profileId; assert.match(registration.browserName, /Firefox|LibreWolf/); report.checks.push('real extension and native messaging handshake');
   fs.mkdirSync(path.join(runtimeDir, 'firefox'), { recursive: true }); fs.writeFileSync(path.join(runtimeDir, 'firefox', profileId + '.json'), JSON.stringify({ endpoint: 'ws://127.0.0.1:' + port + '/session' }));
+  await verifyFirefoxPagePanel({ endpoint: 'ws://127.0.0.1:' + port + '/session', profile, origin, root, report });
+  if (!process.argv.includes('--page-panel-only')) {
   Object.assign(process.env, { OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: registry });
   const { createBrowserAgent } = await import('../src/adapters/sdk/index.ts'); agent = createBrowserAgent();
   const sessionId = 'firefox-extension-verification';
@@ -173,6 +186,7 @@ try {
       console.log(JSON.stringify({ visualReady: true, windowTitle: 'OpenCode extension UI verification', disposableProfile: true }));
       await new Promise(resolve => setTimeout(resolve, 120000));
     } finally { await visual.close(); }
+  }
   }
   fs.mkdirSync(path.join(root, 'reports'), { recursive: true }); fs.writeFileSync(path.join(root, 'reports', browser + '-extension-parity.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
 } finally {
