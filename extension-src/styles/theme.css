@@ -3,7 +3,7 @@
 :root {
   color-scheme: light;
   --bg: #edf3fc;
-  --canvas-paint: radial-gradient(ellipse at 0% 8%, #d0ddf5 0%, transparent 56%), radial-gradient(ellipse at 100% 46%, #f1dfe9 0%, transparent 54%), radial-gradient(ellipse at 15% 95%, #d3e9e5 0%, transparent 52%), #edf3fc;
+  --canvas-paint: radial-gradient(ellipse at -15% 48%, #a0ddd2 0 46%, transparent 46.3%), radial-gradient(ellipse at 115% 6%, #d2c4ef 0 44%, transparent 44.3%), radial-gradient(ellipse at 94% 115%, #f0cca8 0 44%, transparent 44.3%), #edf3fc;
   --surface: rgb(255 255 255 / .10);
   --surface-raised: rgb(255 255 255 / .30);
   --surface-solid: #f5f7fc;
@@ -46,9 +46,9 @@
   :root {
     color-scheme: dark;
     --bg: #111a2c;
-    --canvas-paint: radial-gradient(ellipse at 0% 8%, #263a5a 0%, transparent 56%), radial-gradient(ellipse at 100% 46%, #382c49 0%, transparent 54%), radial-gradient(ellipse at 15% 95%, #153638 0%, transparent 52%), #111a2c;
+    --canvas-paint: radial-gradient(ellipse at -15% 48%, #003c3b 0 46%, transparent 46.3%), radial-gradient(ellipse at 115% 6%, #45235b 0 44%, transparent 44.3%), radial-gradient(ellipse at 94% 115%, #522a15 0 44%, transparent 44.3%), #111a2c;
     --surface: rgb(22 34 56 / .10);
-    --surface-raised: rgb(255 255 255 / .30);
+    --surface-raised: rgb(22 34 56 / .12);
     --surface-solid: #202838;
     --surface-border: rgb(255 255 255 / .30);
     --surface-border-strong: #8594ae;

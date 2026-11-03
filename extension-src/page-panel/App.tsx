@@ -23,6 +23,8 @@ export default function PagePanelApp(props: Props) {
   const [usage, setUsage] = useState<PagePanelUsage>({ period: "7d", provider: "current" });
   const changeUsage = (next: PagePanelUsage) => { setUsage(next); props.setUsage(next); };
   const { snapshot, unavailable, open } = props;
+  const periodLabel = t(({ "7d": "usageLast7", "30d": "usageLast30", "last-week": "usageLastWeek", "last-year": "usageLastYear", all: "usageAllTime" })[usage.period]);
+  const providerLabel = usage.provider === "current" ? t("usageCurrentProvider") : usage.provider === "all" ? t("usageAllProviders") : ({ "openrouter:jev": "OpenRouter · Jev", "typesafe:jev": "TypeSafe · Jev", "openai:openai-decisions": "OpenAI · Luna", "openrouter:openai-decisions": "OpenRouter · Luna" })[usage.provider];
   const views = ["overview", "profiles", "settings"] as const;
   const changeView = (next: PagePanelView) => { setView(next); if (scroll.current) scroll.current.scrollTop = 0; props.layoutChanged(); };
   const tabKey = (event: React.KeyboardEvent<HTMLButtonElement>, current: number) => {
@@ -61,12 +63,14 @@ export default function PagePanelApp(props: Props) {
             </section>
             <section className="glass-card" aria-labelledby="board-decisions">
               <div className="section-heading"><h2 id="board-decisions"><span className="copy">{t("decisionAssistance")}</span></h2><button type="button" onClick={() => open("settings")}><span className="copy">{t("configure")}</span></button></div>
-              <p><span className="copy">{t(!snapshot || snapshot.assistance === null ? "usageUnavailable" : snapshot.assistance ? "statusConnected" : "assistanceOff")}</span></p>
+              <p className="assistance-status"><span className="copy">{t(!snapshot || snapshot.assistance === null ? "usageUnavailable" : snapshot.assistance ? "statusConnected" : "assistanceOff")}</span><span className="usage-scope copy">{providerLabel} · {periodLabel}</span></p>
+              <dl className="metrics usage-summary">{[["usageInput", snapshot?.usage?.input], ["usageOutput", snapshot?.usage?.output]].map(([label, value]) => <div key={label as string}><dt><span className="copy">{t(label as string)}</span></dt><dd><span className="copy">{displayNumber(value as number | undefined)}</span></dd></div>)}</dl>
+              <details className="usage-disclosure" onToggle={props.layoutChanged}><summary><span className="copy">{t("usagePerformance")}</span></summary>
               <div className="usage-filters"><label><span className="copy">{t("usageProvider")}</span><select aria-label={t("usageProvider")} value={usage.provider} onChange={event => changeUsage({ ...usage, provider: event.target.value as PagePanelUsage["provider"] })}>
                 <option value="current">{t("usageCurrentProvider")}</option><option value="all">{t("usageAllProviders")}</option><option value="openrouter:jev">OpenRouter · Jev</option><option value="typesafe:jev">TypeSafe · Jev</option><option value="openai:openai-decisions">OpenAI · Luna</option><option value="openrouter:openai-decisions">OpenRouter · Luna</option>
               </select></label><label><span className="copy">{t("usagePeriod")}</span><select aria-label={t("usagePeriod")} value={usage.period} onChange={event => changeUsage({ ...usage, period: event.target.value as PagePanelUsage["period"] })}>{[["7d", "usageLast7"], ["30d", "usageLast30"], ["last-week", "usageLastWeek"], ["last-year", "usageLastYear"], ["all", "usageAllTime"]].map(([id, key]) => <option key={id} value={id}>{t(key!)}</option>)}</select></label></div>
               <dl className="metrics">{[["usageInput", snapshot?.usage?.input], ["usageOutput", snapshot?.usage?.output], ["calls", snapshot?.usage?.calls], ["reportedCost", snapshot?.usage?.cost === null ? t("notReported") : snapshot?.usage?.cost === undefined ? "—" : `$${snapshot.usage.cost.toFixed(6)}`]].map(([label, value]) => <div key={label as string}><dt><span className="copy">{t(label as string)}</span></dt><dd><span className="copy">{typeof value === "string" ? value : displayNumber(value as number | undefined)}</span></dd></div>)}</dl>
-              {snapshot?.usage && <UsageTrend days={snapshot.usage.days ?? []} />}<button type="button" onClick={() => open("overview")}><span className="copy">{t("usageServices")}</span><PanelIcon name="external" /></button>
+              {snapshot?.usage && <UsageTrend days={snapshot.usage.days ?? []} />}<button type="button" onClick={() => open("overview")}><span className="copy">{t("usageServices")}</span><PanelIcon name="external" /></button></details>
             </section>
             <section className="glass-card"><h2><span className="copy">{t("replayMemory")}</span></h2><p><span className="copy">{t(!snapshot ? "memoryChecking" : !snapshot.memory ? "memoryUnavailable" : snapshot.memory.enabled ? "memoryOn" : "memoryOff")}</span></p><details><summary><span className="copy">{t("activityStats")}</span></summary><dl className="metrics"><div><dt><span className="copy">{t("uniqueActions")}</span></dt><dd><span className="copy">{displayNumber(snapshot?.memory?.actions)}</span></dd></div><div><dt><span className="copy">{t("recipes")}</span></dt><dd><span className="copy">{displayNumber(snapshot?.memory?.recipes)}</span></dd></div></dl><button type="button" onClick={() => open("overview")}><span className="copy">{t("openPanel")}</span></button></details></section>
           </>}
@@ -75,8 +79,8 @@ export default function PagePanelApp(props: Props) {
             <section className="glass-card"><h2><span className="copy">{t("settings")}</span></h2><p><span className="copy">{t("pagePanelProtected")}</span></p><ul className="settings-list">{["decisionAssistance", "fileUploads", "actionMemory", "storageLimit", "cleanup", "updates", "localSearchModels"].map(key => <li key={key}><button type="button" onClick={() => open("settings")}><span className="copy">{t(key)}</span><PanelIcon name="external" /></button></li>)}</ul></section>
           </>}
         </div>)}
-        <footer><label><input type="checkbox" checked={opaque} disabled={props.forcedSolid} onChange={event => setOpaque(event.target.checked)} /><span className="copy">{t("pagePanelOpaque")}</span></label><button type="button" onClick={() => open(view)}><span className="copy">{t("openPanel")}</span><PanelIcon name="external" /></button></footer>
       </div>
+        <footer className="board-footer"><label><input type="checkbox" checked={opaque} disabled={props.forcedSolid} onChange={event => setOpaque(event.target.checked)} /><span className="copy">{t("pagePanelOpaque")}</span></label><button type="button" onClick={() => open(view)}><span className="copy">{t("openPanel")}</span><PanelIcon name="external" /></button></footer>
     </>}
   </div>;
 }

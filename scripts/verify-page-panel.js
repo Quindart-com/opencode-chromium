@@ -96,14 +96,34 @@ try {
       for (const tab of ["overview", "profiles", "settings"]) await contrast(`#page-tab-${tab} .copy`);
       if (view === "profiles") await contrast("#page-panel-profiles .primary span");
       await contrast(".brand-copy p .copy");
+      if (view === 'overview') {
+        assert.equal(await inspect('.usage-disclosure', 'element.open'), false, 'Detailed usage starts collapsed while input/output totals remain visible');
+        assert.ok(await inspect('.usage-summary', 'element.getBoundingClientRect().height') > 0);
+        assert.equal(await inspect('.board-footer', 'element.getBoundingClientRect().bottom <= innerHeight'), true, 'Footer remains within the viewport');
+      }
       if (uiFixture && view === 'overview') {
+        assert.equal(await inspect('#page-panel-overview > section:last-child summary', 'element.getBoundingClientRect().bottom <= element.closest(".board-scroll").getBoundingClientRect().bottom'), true, 'Populated overview keeps memory status and disclosure within the desktop content viewport');
         assert.match(await inspect('.harnesses li .status-connected'), /Connected/, 'Connected review state must contain a populated connected harness');
         assert.equal(await inspect('.harnesses', 'Array.from(element.querySelectorAll(\"img\")).every(image=>image.complete&&image.naturalWidth>0&&!image.hidden)'),true,'Connected review must load all real harness logo assets');
         await page.screenshot({path:path.join(report,`connected-overview-${theme}.png`),fullPage:true});
       }
       await page.screenshot({ path: path.join(report, `${view}-${theme}.png`), fullPage: true });
+      if (view === 'overview') {
+        await click('.usage-disclosure > summary');
+        await inspect('.usage-disclosure', '(element.scrollIntoView({block:"start"}),true)');
+        await page.screenshot({path:path.join(report,`overview-usage-expanded-${theme}.png`),fullPage:true});
+        await click('.usage-disclosure > summary');
+        await inspect('.board-scroll', '(element.scrollTop=0,true)');
+      }
     }
   }
+  await click('#page-tab-overview');
+  await click('.usage-disclosure > summary');
+  assert.equal(await inspect('.usage-disclosure', 'element.open'), true);
+  assert.equal(await inspect('.usage-filters', 'element.getBoundingClientRect().height > 0'), true);
+  assert.equal(await inspect('.board-footer', 'element.getBoundingClientRect().bottom <= innerHeight'), true, 'Expanded usage keeps footer reachable');
+  await page.keyboard.press('Enter');
+  assert.equal(await inspect('.usage-disclosure', 'element.open'), false, 'Native usage disclosure supports keyboard collapse');
   await click('#page-tab-settings');
   const opened = fixture.context.waitForEvent("page");
   await click('.settings-list button');
