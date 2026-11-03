@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { FirefoxBackend } from '../../native-host/src/firefox/backend.ts';
 import { firefoxAddonConsole } from './firefox-addon-console.js';
+import { glassTextContrast } from './glass-contrast.js';
 
 // Called only by the disposable real-extension fixture. No production test hooks.
 export async function verifyFirefoxPagePanel({ endpoint, debuggerPort, origin, root, report }) {
@@ -28,6 +29,7 @@ export async function verifyFirefoxPagePanel({ endpoint, debuggerPort, origin, r
     await inPopup(`browser.scripting.executeScript({target:{tabId:${tabId},frameIds:[0]},func:()=>{const original=Element.prototype.attachShadow;Element.prototype.attachShadow=function(options){const root=original.call(this,options);if(this.id.startsWith('opencode-page-panel-'))globalThis.__ownedPanelRoot=root;return root;};}}).then(()=>true)`);
     const inPanel = expression => inPopup(`browser.scripting.executeScript({target:{tabId:${tabId},frameIds:[0]},func:()=>(${expression})}).then(r=>r[0].result)`);
     const click = async selector => {
+      await inPanel(`(globalThis.__ownedPanelRoot.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:"nearest"}),true)`);
       const coordinates = JSON.parse(await inPanel(`(()=>{const element=globalThis.__ownedPanelRoot.querySelector(${JSON.stringify(selector)});if(!element)throw Error('Missing board control');const b=element.getBoundingClientRect();return JSON.stringify({x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)});})()`));
       await visual.send('input.performActions', { context: page.context, actions: [{ type: 'pointer', id: 'board-mouse', parameters: { pointerType: 'mouse' }, actions: [
         { type: 'pointerMove', x: coordinates.x, y: coordinates.y, origin: 'viewport' }, { type: 'pointerDown', button: 0 }, { type: 'pointerUp', button: 0 }
@@ -54,6 +56,8 @@ export async function verifyFirefoxPagePanel({ endpoint, debuggerPort, origin, r
       await click(`#page-tab-${view}`);
       await new Promise(r=>setTimeout(r,100));
       assert.equal(await inPanel(`globalThis.__ownedPanelRoot.querySelector('#page-tab-${view}').getAttribute('aria-selected')`),'true');
+      const ratio = await inPanel(`(${glassTextContrast.toString()})(globalThis.__ownedPanelRoot.querySelector('#page-tab-${view} .copy'),[[1,1,1],[233/255,239/255,251/255],[214/255,230/255,251/255]])`);
+      assert.ok(ratio >= 4.5, 'Real addon tab label has 4.5:1 composited contrast');
       await takeShot(view+'-real-addon');
     }
     await click('input[type="checkbox"]');
@@ -77,6 +81,7 @@ export async function verifyFirefoxPagePanel({ endpoint, debuggerPort, origin, r
     await visual.send('browsingContext.setViewport',{context:page.context,viewport:{width:360,height:800}});
     await new Promise(r=>setTimeout(r,200));
     assert.equal(await inPanel(`(()=>{const r=globalThis.__ownedPanelRoot.host.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.width<=innerWidth;})()`),true);
+    assert.equal(await inPanel(`globalThis.__ownedPanelRoot.querySelector('.board').classList.contains('opaque')`),true,'Narrow layouts default to solid material for readability');
     await takeShot('overview-narrow-real-addon');
     report.checks.push('idempotent reopening and narrow viewport containment');
     await click('.board-tools button:last-child');

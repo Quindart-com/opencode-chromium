@@ -124,6 +124,16 @@ jobs:
       - run: bun run firefox:submit -- --dry-run
       - run: node scripts/verify-uploads.js
       - run: node scripts/verify-cursor.js
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: design-review-states
+          path: |
+            reports/page-panel-review/
+            reports/popup-review/
+            reports/onboarding-review/
+            reports/state-review/
+            reports/upload-confirmation.png
 
   package-smoke:
     name: Package / Node 24

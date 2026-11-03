@@ -150,33 +150,34 @@ Separate visual layers so foreground labels/icons remain sharp:
 ```text
 owned transparent layout group
   material plate (non-interactive; backdrop blur / optional displacement)
-  stable contrast scrim under reading areas
+  solid contrast variant when needed
   crisp text, icons and interactive controls
 ```
 
-Material design targets:
-
-- Near-clear white material fill: **6–12%**; white rim **60%**.
-- Inner highlights: **+2/+2, blur 3** and **−2/−2, blur 6**.
-- Depth shadow: **Y 12, blur 28, 16%**; confirm shadow hue against each theme.
-- Figma native GLASS: refraction **0.7**, depth **18**, dispersion **0.15**, effect radius **10**. These numbers do not map to CSS filter values; effect radius is not a substitute for the component corner radius.
-- Transparent board areas reveal the actual example webpage. Tabs and buttons have a beveled glass treatment.
-
-Do not replace this direction with a wholly opaque or 84%-white board. Keep the near-clear outer material and beveled controls; use a **localized contrast backing under text/input reading areas** and opaque accessibility variants. Near-clear fill alone cannot guarantee readable text on arbitrary webpages. If the design disallows any text backing, record that as an accessibility blocker rather than claiming a universal contrast pass. Layer blur must never blur the foreground text.
-
-Contrast-protection tokens from the earlier feasibility study (these are for local reading areas/fallback, not the near-clear outer material):
+Implemented material uses the denser full-screen suite, not the separate art-directed study. All text and parent groups remain at opacity 1; the alpha values below apply only to fills.
 
 | Token | Light | Dark |
 |---|---|---|
-| Glass fallback | #F5F7FC | #202838 |
-| Reading backing | white at 86% | #1B2232 at 90% |
+| Shell/card/button fill | white 10% | #162238 10% |
+| Selected tab fill | white 30% | white 30% |
+| Other tabs and fields | white 12% | #162238 12% |
+| Glass rim | 1px white 60% | 1px white 30% |
 | Primary text | #172033 | #F2F5FC |
+| Button/tab text | #172033 | #F3F5FC |
 | Secondary text | #43516A | #BDCAE0 |
-| Essential control border | #65758E | #8594AE |
-| Accent/focus | #2356D8 | #A7C0FF |
-| Primary button text | white | #10182B |
+| Field border | #65758E | #8594AE |
+| Solid fallback | #F5F7FC | #202838 |
+| Inner highlight +2/+2, blur 3 | white 55% | white 24% |
+| Inner highlight -2/-2, blur 6 | white 40% | white 15% |
+| Shadow 0/8, blur 20, spread -4 | #121A2E 13% | #121A2E 22% |
 
-Use 16px backdrop blur and saturation 115% only as a baseline engineering starting point, not a translation of the Figma native GLASS parameters. Confirm the final board/control corner radii against the approved design (the earlier study used 18px/8px). Implement the reported highlights as bounded pseudo-element gradients and inset shadows on non-interactive plates, leaving labels sharp. Set `--glass-fill` to the 6–12% outer material; use separate `--reading-fill` tokens for local label/content protection. Glass styling applies to buttons/tabs too, with high-contrast selected, hover, focus, pressed, busy and disabled states. Transparent empty areas must actually show page content, not a fake screenshot or an opaque extension canvas.
+Use shell/card/button/tab/field corner radii of 32/24/22/20/20px respectively. Tabs are at least 44px high; fields 40px; action buttons 36–40px. Fields deliberately have no GLASS effect. A 2px foreground marker supplements the active tab's subtle translucent fill so selection does not depend on a small alpha difference.
+
+The suite's native GLASS targets are radius 8, refraction .7, depth 18, angle -45 degrees, dispersion .12, intensity .75 light/.45 dark. These are visual targets, not CSS equivalents. The standard renderer uses backdrop blur 16px/saturation 115% plus the bounded inset highlights and shadows. Text is never filtered or faded. The separate material study's radius 10/dispersion .15 and stronger shadow are not mixed into these tokens.
+
+Clear fills cannot guarantee readable foregrounds over arbitrary websites. The renderer therefore defaults to solid material below 480px and when nine bounded CSS-background samples do not support 4.5:1 for the text/control palette. Unknown images, color spaces, blends or deep ancestry also choose solid. This uses CSS colors only, with at most 32 ancestors per sample; it reads no screenshots/canvas pixels, collects no page text and transmits no samples. Scroll, resize and page-theme changes trigger bounded frame-coalesced refreshes; listeners and observers are removed on close.
+
+The existing transparency checkbox permits an explicit clear/solid choice for the current opening. System reduced-transparency, increased-contrast and forced-color preferences take precedence. Manual clear mode is an aesthetic choice, not a universal WCAG guarantee. The heuristic cannot model every raster, animation or compositor effect; it must not be marketed as pixel-level contrast verification. Tests separately show the clear material over matching review backdrops and the default solid fallback over incompatible colors and constrained layouts.
 
 ```css
 .glass-plate {
@@ -282,6 +283,6 @@ Read during this task through official documentation repositories:
 - User preferences: https://github.com/w3c/csswg-drafts/blob/main/mediaqueries-5/Overview.bs
 - WCAG text/non-text contrast: https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html and https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html ; corresponding W3C repository source inspected.
 
-An isolated Chromium material study verified CSS blur, computed opaque fallbacks under emulated preference media, and calculated text contrast on black/white backdrops. It was not a real injected-overlay test, an SVG refraction test, an actual-OS preference test, a Firefox run or a GPU benchmark. This spec makes no such readiness claim.
+The automated verifiers distinguish packaged-renderer fixtures, real-extension authorization/consent checks and screenshot review. They cover clear material on controlled light/dark backdrops, solid contrast fallbacks, selection frames and the protected flows. No SVG displacement, physical refraction, actual-OS preference propagation or GPU-performance certification is claimed. Keep the PR in draft until the full visual review is accepted.
 
 Native platform material references: https://developer.apple.com/design/human-interface-guidelines/materials and https://developer.apple.com/documentation/technologyoverviews/liquid-glass . CSS styling does not claim native-platform optical parity.

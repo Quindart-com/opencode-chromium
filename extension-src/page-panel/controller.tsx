@@ -4,6 +4,7 @@ import { record } from "../../src/shared/values.ts";
 import PagePanelApp from "./App.tsx";
 import type { PagePanelSnapshot,PagePanelView,PagePanelUsage } from "./protocol.ts";
 import material from "./material.css?inline";
+import { needsSolidMaterial } from "./material-safety.ts";
 
 /** Same-document material; closed Shadow DOM encapsulates styles, not authorization. */
 export function installPagePanel(chrome: WxtBrowser) {
@@ -11,10 +12,17 @@ export function installPagePanel(chrome: WxtBrowser) {
   let snapshot: PagePanelSnapshot | null = null, unavailable = false, minimized = false;
   let usage: PagePanelUsage = { period: "7d", provider: "current" };
   let timer: ReturnType<typeof setInterval> | undefined;
+  let materialFrame = 0;
+  let media: MediaQueryList[] = [];
+  let pageStyle: MutationObserver | undefined;
+  const refreshMaterial = () => { if (!materialFrame) materialFrame = requestAnimationFrame(() => { materialFrame = 0; if (host) render(); }); };
   let previousFocus: HTMLElement | null = null;
   let drag: { id: number; x: number; y: number; left: number; top: number } | null = null;
   const stop = () => {
     clearInterval(timer); timer = undefined;
+    cancelAnimationFrame(materialFrame); materialFrame = 0; pageStyle?.disconnect(); pageStyle = undefined;
+    window.removeEventListener("scroll", refreshMaterial, true);
+    for (const query of media) query.removeEventListener("change", refreshMaterial); media = [];
     window.removeEventListener("pagehide", stop); window.removeEventListener("resize", resize);
     window.visualViewport?.removeEventListener("resize", resize); window.visualViewport?.removeEventListener("scroll", resize);
     window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", release); window.removeEventListener("pointercancel", release);
@@ -35,6 +43,7 @@ export function installPagePanel(chrome: WxtBrowser) {
     host.style.setProperty("--panel-top", `${Math.max(minY + 8, Math.min(top, minY + height - Math.min(bounds.height, height - 16) - 8))}px`);
     host.style.setProperty("--panel-right", "auto");
     host.style.setProperty("--panel-height", `${Math.max(80, height - 28)}px`);
+    refreshMaterial();
   };
   const resize = () => { const rect = host?.getBoundingClientRect(); if (rect) position(rect.left, rect.top); };
   const move = (event: PointerEvent) => {
@@ -43,7 +52,9 @@ export function installPagePanel(chrome: WxtBrowser) {
   };
   const release = () => { drag = null; };
   function render() {
+    const forcedSolid = !CSS.supports("backdrop-filter", "blur(1px)") || media.slice(1).some(query => query.matches);
     root?.render(<PagePanelApp snapshot={snapshot} unavailable={unavailable} minimized={minimized}
+      solid={forcedSolid || !host || needsSolidMaterial(host)} forcedSolid={forcedSolid} layoutChanged={refreshMaterial}
       setUsage={next => { usage = next; snapshot = null; post({ type: "refresh", usage }); render(); }}
       open={(view: PagePanelView) => post({ type: "open", view })} close={() => { post({ type: "close" }); stop(); }}
       minimize={() => { minimized = !minimized; render(); requestAnimationFrame(resize); }}
@@ -99,6 +110,12 @@ export function installPagePanel(chrome: WxtBrowser) {
     window.addEventListener("pagehide", stop); window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize); window.visualViewport?.addEventListener("scroll", resize);
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", release); window.addEventListener("pointercancel", release);
+    media = ["(prefers-color-scheme: dark)", "(prefers-reduced-transparency: reduce)", "(prefers-contrast: more)", "(forced-colors: active)"].map(query => matchMedia(query));
+    for (const query of media) query.addEventListener("change", refreshMaterial);
+    window.addEventListener("scroll", refreshMaterial, { capture: true, passive: true });
+    pageStyle = new MutationObserver(refreshMaterial);
+    pageStyle.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
+    if (document.body) pageStyle.observe(document.body, { attributes: true, attributeFilter: ["class", "style"] });
     render();
   };
   const listener = (value: unknown, sender: Browser.runtime.MessageSender, respond: (response: unknown) => void) => {

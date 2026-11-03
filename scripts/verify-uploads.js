@@ -43,7 +43,7 @@ const server = http.createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 origin = `http://127.0.0.1:${server.address().port}`;
 try {
-  browser = await chromium.launch({ headless: true, channel: process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
+  browser = await chromium.launch({ headless: true, executablePath: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE || undefined, channel: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE ? undefined : process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
   const context = await browser.newContext({ viewport: { width: 500, height: 560 } });
   const website = await context.newPage();
   await website.goto(`${origin}/website`);
@@ -101,6 +101,18 @@ try {
   await approved;
   assert.equal(await website.locator("#document").evaluate(input => input.files[0].name), "private-document.txt");
   assert.equal(await website.locator("#document").evaluate(input => input.files[0].text()), "approved fixture contents", "files remain readable when the website submits later");
+  const expiredWindow = await chrome.windows.create({url:`${origin}/upload-confirm.html?token=${crypto.randomUUID()}`,type:'popup'});
+  const expired = windows.get(expiredWindow.id).page;
+  await expired.getByRole('alert').waitFor();
+  assert.equal(await expired.getByRole('button',{name:'Allow upload',exact:true}).count(),0,'Expired requests cannot offer approval');
+  assert.equal(await expired.locator('.upload-files').count(),0,'Expired requests reveal no file details');
+  fs.mkdirSync('reports/state-review',{recursive:true});
+  for (const theme of ['light','dark']) for (const width of [500,360]) {
+    await expired.emulateMedia({colorScheme:theme}); await expired.setViewportSize({width,height:560});
+    assert.equal(await expired.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Upload failure fits narrow layouts');
+    await expired.screenshot({path:`reports/state-review/upload-expired-${width}-${theme}.png`,fullPage:true});
+  }
+  await expired.close();
   console.log("Upload browser checks passed: picker interception, cancel, trusted approval, preserved file content.");
 } finally {
   await browser?.close(); await new Promise(resolve => server.close(resolve));
