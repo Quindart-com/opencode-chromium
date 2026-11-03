@@ -47,6 +47,7 @@ export default function PagePanelApp(props: Props) {
         {unavailable && <p role="status" className="notice"><span className="copy">{t("usageUnavailable")}</span></p>}
         {views.map(name => <div key={name} id={`page-panel-${name}`} role="tabpanel" aria-labelledby={`page-tab-${name}`} hidden={view !== name}>
           {name === "overview" && <>
+            <div className="board-intro"><h2>{t("readyWhenYouAre")}</h2></div>
             <section className="glass-card" aria-labelledby="board-connections">
               <div className="section-heading"><h2 id="board-connections"><span className="copy">{t("harnessConnections")}</span></h2><span className="copy profile">{t("thisProfile")}</span></div>
               <p className="bridge"><i className={snapshot?.connected ? "online" : "offline"} /><span className={snapshot?.connected ? "copy status-connected" : "copy"}>{t(!snapshot ? "checkingConnection" : snapshot.connected ? "bridgeReady" : "bridgeUnavailable")}</span></p>

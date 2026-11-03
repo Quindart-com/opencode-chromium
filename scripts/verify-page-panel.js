@@ -11,7 +11,7 @@ const server = http.createServer((request, response) => {
   if (request.url !== "/") {
     const file = path.resolve("extension", "." + new URL(request.url, "http://localhost").pathname);
     if (!file.startsWith(path.resolve("extension") + path.sep) || !fs.existsSync(file)) { response.writeHead(404).end(); return; }
-    response.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(file)] ?? "application/octet-stream");
+    response.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".woff2": "font/woff2", ".svg": "image/svg+xml" }[path.extname(file)] ?? "application/octet-stream");
     response.end(fs.readFileSync(file)); return;
   }
   response.setHeader("Content-Type", "text/html");
@@ -96,6 +96,11 @@ try {
       for (const tab of ["overview", "profiles", "settings"]) await contrast(`#page-tab-${tab} .copy`);
       if (view === "profiles") await contrast("#page-panel-profiles .primary span");
       await contrast(".brand-copy p .copy");
+      if (uiFixture && view === 'overview') {
+        assert.match(await inspect('.harnesses li .status-connected'), /Connected/, 'Connected review state must contain a populated connected harness');
+        assert.equal(await inspect('.harnesses', 'Array.from(element.querySelectorAll(\"img\")).every(image=>image.complete&&image.naturalWidth>0&&!image.hidden)'),true,'Connected review must load all real harness logo assets');
+        await page.screenshot({path:path.join(report,`connected-overview-${theme}.png`),fullPage:true});
+      }
       await page.screenshot({ path: path.join(report, `${view}-${theme}.png`), fullPage: true });
     }
   }

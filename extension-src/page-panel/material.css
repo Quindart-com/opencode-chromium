@@ -9,7 +9,7 @@
   position: fixed !important; inset: var(--panel-top, 18px) var(--panel-right, 18px) auto var(--panel-left, auto) !important;
   width: min(420px, calc(100vw - 28px)) !important; max-height: var(--panel-height, calc(100dvh - 36px)) !important;
   z-index: 2147483646 !important; pointer-events: none !important; margin: 0 !important;
-  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font: 13px/1.5 "OpenCode Inter", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
   direction: ltr !important; text-align: left !important;
 }
 @media (prefers-color-scheme: dark) { :host {
@@ -23,10 +23,10 @@
 @supports (backdrop-filter: blur(1px)) { .board { background: var(--glass); backdrop-filter: blur(16px) saturate(115%); } }
 .copy { box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .board-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px; }
-.brand-logo { width: 30px; height: 30px; flex: none; }
+.brand-logo { width: 32px; height: 32px; flex: none; }
 .brand-copy { flex: 1; min-width: 130px; padding: 4px 7px; border-radius: 8px; background: transparent; }
 h1, h2, p, dl { margin: 0; }
-h1 { font-size: 16px; font-weight: 650; letter-spacing: -.4px; line-height: 1.4; }
+h1 { font-size: 17px; font-weight: 600; letter-spacing: -.4px; line-height: 1.25; }
 .brand-copy p { margin-top: 4px; font-size: 10px; }
 p { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 h2 { font-size: 14px; font-weight: 650; }
@@ -98,3 +98,6 @@ option { background: var(--solid); color: var(--ink); }
 
 .harness-icon { position: relative; overflow: hidden; }
 .harness-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; }
+
+.board-intro { margin: 2px 2px 18px; }
+.board-intro h2 { font-size: 22px; font-weight: 600; line-height: 1.2; letter-spacing: -.5px; }

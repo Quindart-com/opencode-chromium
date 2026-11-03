@@ -15,7 +15,11 @@ const fixtureMessages = Object.fromEntries(Object.entries(locale).map(([key, val
 buildUpdatePage();
 const server = http.createServer(async (request, response) => {
   if (request.url?.startsWith("/updates/")) {
-    const logo = request.url.split("?")[0] === "/updates/logo.svg";
+    const pathname = request.url.split('?')[0];
+    if (['/updates/theme.css','/updates/InterVariable.woff2','/updates/archive.js'].includes(pathname)) {
+      response.setHeader('Content-Type',pathname.endsWith('.css')?'text/css':pathname.endsWith('.js')?'text/javascript':'font/woff2');response.end(fs.readFileSync(path.join(root,'docs',pathname.slice(1))));return;
+    }
+    const logo = pathname === "/updates/logo.svg";
     response.setHeader("Content-Type", logo ? "image/svg+xml" : "text/html");
     response.end(logo ? fs.readFileSync(path.join(root, "docs/updates/logo.svg")) :
       fs.readFileSync(path.join(root, "docs/updates/index.html"), "utf8").replace(/^---[\s\S]*?---\s*/, "").replace("{% include release-notes.html %}", fs.readFileSync(path.join(root, "docs/_includes/release-notes.html"), "utf8")));
@@ -31,7 +35,7 @@ const server = http.createServer(async (request, response) => {
   const file = path.resolve(extension, "." + new URL(request.url, "http://localhost").pathname);
   if (!file.startsWith(extension + path.sep) || !fs.existsSync(file)) { response.writeHead(404).end(); return; }
   const content = fs.readFileSync(file);
-  response.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(file)] ?? "application/octet-stream");
+  response.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".woff2": "font/woff2" }[path.extname(file)] ?? "application/octet-stream");
   response.end(path.extname(file) === ".html" ? content.toString().replace("<head>", `<head><script>globalThis.chrome={i18n:{getUILanguage:()=>"en",getMessage:(key,values)=>{let result=(${JSON.stringify(fixtureMessages)})[key]||key;for(const [index,value] of (Array.isArray(values)?values:values===undefined?[]:[values]).entries())result=result.replaceAll("$"+(index+1),value);return result}},runtime:{id:'fixture',getManifest:()=>({version:${JSON.stringify(version)}}),getURL:p=>p},action:{openPopup:async()=>{document.documentElement.dataset.panelOpened='true'}},storage:{local:{get:async()=>fetch('/preferences').then(r=>r.json()),set:async v=>fetch('/preferences',{method:'POST',body:JSON.stringify(v)})}}};</script>`) : content);
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -68,10 +72,24 @@ try {
     await page.goto(`${origin}/updates/#v${version}`);
     await page.getByRole("heading", { name: "What’s new in your browser tools." }).waitFor();
     assert.ok(await page.locator(`article[id="v${version}"]`).isVisible());
+    const older = page.locator('article[id="v2.0.2"] details');
+    if(await older.count()) {
+      if (await older.evaluate(element => element.open)) await older.locator('summary').click();
+      await older.locator('summary').click();
+      await page.waitForFunction(() => document.querySelector('article[id="v2.0.2"] summary')?.getAttribute('aria-expanded') === 'true');
+      assert.equal(await older.locator('summary').getAttribute('aria-expanded'),'true');
+      await older.getByText('Show fewer changes',{exact:true}).click();
+      await page.waitForFunction(() => document.querySelector('article[id="v2.0.2"] summary')?.getAttribute('aria-expanded') === 'false');
+      assert.equal(await older.locator('summary').getAttribute('aria-expanded'),'false');
+    }
     for (const article of await page.locator("article").all()) assert.ok(await article.locator("li, p").count(), "Every release has notes or a full-notes link");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await page.getByRole("heading", { name: "Keep your tools in step." }).waitFor();
-    await page.getByText("First time using automatic updates?").click();
+    const setup = page.locator(".setup details");
+    if (!(await setup.evaluate(element => element.open))) {
+      await setup.locator("summary").click();
+    }
+    await page.waitForFunction(() => document.querySelector(".setup details summary")?.getAttribute("aria-expanded") === "true");
     await page.screenshot({ path: path.join(screenshots, `hosted-updates-${width}-${theme}.png`), fullPage: true });
   }
   console.log(JSON.stringify({ ok: true, states: 12, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus", "hosted version anchors and update guidance"] }));

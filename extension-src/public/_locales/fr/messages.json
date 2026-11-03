@@ -1417,5 +1417,50 @@
   },
   "pagePanelStatusUnavailable": {
     "message": "L’état de la connexion est indisponible. Ouvrez le panneau de l’extension pour plus de détails."
+  },
+  "majorReviewTitle": {
+    "message": "Vérifier la mise à niveau majeure"
+  },
+  "majorReviewVersions": {
+    "message": "Actuelle : $1 · Disponible : $2"
+  },
+  "majorReviewUnavailable": {
+    "message": "Les versions sont indisponibles. Revenez aux réglages et recherchez à nouveau les mises à jour."
+  },
+  "majorApprove": {
+    "message": "Approuver la mise à niveau"
+  },
+  "majorNotNow": {
+    "message": "Pas maintenant"
+  },
+  "majorBackSettings": {
+    "message": "Retour aux réglages"
+  },
+  "readyWhenYouAre": {
+    "message": "Prêt quand vous le serez"
+  },
+  "uploadPreparationTitle": {
+    "message": "Impossible de préparer l’envoi"
+  },
+  "uploadPreparationDetails": {
+    "message": "Les fichiers n’ont pas pu être préparés. Rien n’a été envoyé. Demandez un nouvel envoi et vérifiez sa destination et son fichier."
+  },
+  "uploadApprovalUnavailable": {
+    "message": "L’approbation est indisponible tant que la demande est incomplète."
+  },
+  "uploadReviewNew": {
+    "message": "Examiner la nouvelle demande"
+  },
+  "uploadCancelRequest": {
+    "message": "Annuler la demande"
+  },
+  "uploadBackPreview": {
+    "message": "Retour à l’aperçu"
+  },
+  "uploadNewUnavailable": {
+    "message": "Demandez un nouvel envoi à votre agent. Vérifiez la destination et le fichier dans la nouvelle fenêtre de confirmation."
+  },
+  "uploadRequestUnavailable": {
+    "message": "La demande n’a pas pu être chargée. Fermez cette fenêtre et demandez un nouvel envoi."
   }
 }

@@ -1417,5 +1417,50 @@
   },
   "pagePanelStatusUnavailable": {
     "message": "Connection status is unavailable. Open the extension panel for details."
+  },
+  "majorReviewTitle": {
+    "message": "Review major upgrade"
+  },
+  "majorReviewVersions": {
+    "message": "Current: $1 · Available: $2"
+  },
+  "majorReviewUnavailable": {
+    "message": "Version details are unavailable. Return to Settings and check for updates again."
+  },
+  "majorApprove": {
+    "message": "Approve upgrade"
+  },
+  "majorNotNow": {
+    "message": "Not now"
+  },
+  "majorBackSettings": {
+    "message": "Back to Settings"
+  },
+  "readyWhenYouAre": {
+    "message": "Ready when you are"
+  },
+  "uploadPreparationTitle": {
+    "message": "Couldn’t prepare upload"
+  },
+  "uploadPreparationDetails": {
+    "message": "Your files could not be prepared. Nothing was sent. Request a new upload and review its destination and file again."
+  },
+  "uploadApprovalUnavailable": {
+    "message": "Approval is unavailable until the request is complete."
+  },
+  "uploadReviewNew": {
+    "message": "Review new request"
+  },
+  "uploadCancelRequest": {
+    "message": "Cancel request"
+  },
+  "uploadBackPreview": {
+    "message": "Back to consent preview"
+  },
+  "uploadNewUnavailable": {
+    "message": "Ask your agent to request a new upload. Review its destination and file in the new confirmation window."
+  },
+  "uploadRequestUnavailable": {
+    "message": "The request could not be loaded. Close this window and request a new upload."
   }
 }

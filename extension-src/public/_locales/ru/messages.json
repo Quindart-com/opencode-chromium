@@ -1417,5 +1417,50 @@
   },
   "pagePanelStatusUnavailable": {
     "message": "Состояние подключения недоступно. Откройте панель расширения для подробностей."
+  },
+  "majorReviewTitle": {
+    "message": "Проверка крупного обновления"
+  },
+  "majorReviewVersions": {
+    "message": "Текущая: $1 · Доступна: $2"
+  },
+  "majorReviewUnavailable": {
+    "message": "Сведения о версиях недоступны. Вернитесь в настройки и повторите проверку обновлений."
+  },
+  "majorApprove": {
+    "message": "Одобрить обновление"
+  },
+  "majorNotNow": {
+    "message": "Не сейчас"
+  },
+  "majorBackSettings": {
+    "message": "Назад в настройки"
+  },
+  "readyWhenYouAre": {
+    "message": "Готово, когда готовы вы"
+  },
+  "uploadPreparationTitle": {
+    "message": "Не удалось подготовить загрузку"
+  },
+  "uploadPreparationDetails": {
+    "message": "Не удалось подготовить файлы. Ничего не отправлено. Запросите новую загрузку и проверьте сайт назначения и файл."
+  },
+  "uploadApprovalUnavailable": {
+    "message": "Одобрение недоступно, пока запрос не завершён."
+  },
+  "uploadReviewNew": {
+    "message": "Проверить новый запрос"
+  },
+  "uploadCancelRequest": {
+    "message": "Отменить запрос"
+  },
+  "uploadBackPreview": {
+    "message": "Назад к предпросмотру"
+  },
+  "uploadNewUnavailable": {
+    "message": "Попросите агента создать новый запрос загрузки. Проверьте сайт назначения и файл в новом окне подтверждения."
+  },
+  "uploadRequestUnavailable": {
+    "message": "Не удалось получить запрос. Закройте окно и запросите новую загрузку."
   }
 }

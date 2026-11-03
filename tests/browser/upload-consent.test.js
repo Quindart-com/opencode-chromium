@@ -4,17 +4,18 @@ import { createUploadConsent } from "../../extension-src/entrypoints/background/
 import { guardedCdp } from "../../extension-src/entrypoints/background/upload-gate.ts";
 import { createDebuggerAttacher } from "../../extension-src/entrypoints/background/debugger-attach.ts";
 
-function fixture(timeoutMs = 1000) {
+function fixture(timeoutMs = 1000, overrides = {}) {
+  let nextWindow = 7, nextTab = 9;
   const settings = {}; let removed, navigated; const calls = [];
   const chrome = { runtime: { id: "extension", getURL: page => new URL(page, "chrome-extension://extension/").href }, storage: { local: {
     get: async () => settings, set: async value => Object.assign(settings, value),
   } }, tabs: { onUpdated: { addListener: listener => { navigated = listener; } } }, windows: { onRemoved: { addListener: listener => { removed = listener; } },
-    create: async () => ({ id: 7, tabs: [{ id: 9 }] }), remove: async id => { calls.push(["close", id]); },
+    create: async ({url}) => { const window = {id:nextWindow++,tabs:[{id:nextTab++}]};calls.push(["open",url,window.id,window.tabs[0].id]);return window; }, update: async (id,change) => {calls.push(["focus",id,change]);return {id};}, remove: async id => { calls.push(["close", id]); },
   } };
   const consent = createUploadConsent({ chrome, timeoutMs,
     describe: async files => ({ token: "request", files: files.map(path => ({ path, name: "photo.png", size: 12 })) }),
     snapshot: async () => { calls.push(["snapshot"]); return { files: ["approved-copy.png"] }; },
-    release: async () => calls.push(["release"]),
+    release: async () => calls.push(["release"]), ...overrides,
   });
   const sender = { id: "extension", url: "chrome-extension://extension/upload-confirm.html?token=request", tab: { id: 9 } };
   return { consent, chrome, calls, sender, closed: () => removed(7), navigated: tabId => navigated(tabId, { url: "https://next.test" }) };
@@ -97,4 +98,51 @@ test("every agent debugger attachment intercepts the file picker; extension tabs
   await createDebuggerAttacher(deps)(42, "session");
   assert.deepEqual(methods, ["Page.enable", "Page.setInterceptFileChooserDialog"]);
   await assert.rejects(createDebuggerAttacher({ ...deps, getTab: async () => ({ url: "chrome-extension://extension/upload-confirm.html" }) })(99, "session"), /extension UI/);
+});
+
+function failureSender(f) {
+  const opened = f.calls.filter(call => call[0] === 'open').at(-1);
+  return {id:'extension',url:opened[1],tab:{id:opened[3]}};
+}
+test('preparation failures reveal no files and cannot be used as consent', async () => {
+  let sent=false;
+  const f=fixture(1000,{describe:async()=>{throw Error('unreadable');}});
+  await assert.rejects(f.consent.withFiles(['file'],'https://example.test',async()=>{sent=true;}),/unreadable/);
+  const sender=failureSender(f),token=new URL(sender.url).searchParams.get('token');
+  assert.deepEqual(await f.consent.message({type:'GET_UPLOAD_REQUEST',token},sender),{preparationFailed:true,nothingSent:true,newRequestAvailable:false});
+  await assert.rejects(f.consent.message({type:'RESOLVE_UPLOAD_REQUEST',token,allow:true},sender),/unavailable/);
+  await assert.rejects(f.consent.message({type:'GET_UPLOAD_REQUEST',token},{...sender,tab:{id:123}}),/another window/);
+  assert.equal(sent,false);
+  await f.consent.message({type:'RESOLVE_UPLOAD_REQUEST',token,allow:false},sender);
+  assert.equal(f.consent.idle(),true);
+});
+test('immutable-copy failure opens a failure-only review before any attachment',async()=>{
+  let sent=false;const f=fixture(1000,{snapshot:async()=>{throw Error('changed');}});
+  const result=f.consent.withFiles(['file'],'https://example.test',async()=>{sent=true;}).catch(error=>error);
+  await tick();await f.consent.message({type:'RESOLVE_UPLOAD_REQUEST',token:'request',allow:true},f.sender);
+  assert.match((await result).message,/changed/);assert.equal(sent,false);
+  const sender=failureSender(f),token=new URL(sender.url).searchParams.get('token');
+  assert.equal((await f.consent.message({type:'GET_UPLOAD_REQUEST',token},sender)).nothingSent,true);
+  await f.consent.message({type:'RESOLVE_UPLOAD_REQUEST',token,allow:false},sender);
+});
+test('review new request only focuses a fresh consent window and never approves it',async()=>{
+  let described=0,sent=false;const freshToken=crypto.randomUUID();
+  const f=fixture(1000,{describe:async files=>{if(++described===1)throw Error('unreadable');return {token:freshToken,files:files.map(path=>({path,name:'fresh.txt',size:4}))};}});
+  await assert.rejects(f.consent.withFiles(['file'],'https://example.test',async()=>{}));
+  const sender=failureSender(f),token=new URL(sender.url).searchParams.get('token');
+  assert.deepEqual(await f.consent.message({type:'REVIEW_UPLOAD_REQUEST',token},sender),{reviewing:false});
+  const fresh=f.consent.withFiles(['fresh'],'https://example.test',async()=>{sent=true;});await tick();
+  assert.equal((await f.consent.message({type:'GET_UPLOAD_REQUEST',token},sender)).newRequestAvailable,true);
+  const freshSender=failureSender(f);
+  await f.consent.message({type:'REVIEW_UPLOAD_REQUEST',token},sender);
+  assert.equal(sent,false);assert.equal(f.calls.find(call=>call[0]==='focus')[1],8);
+  await assert.rejects(f.consent.message({type:'RESOLVE_UPLOAD_REQUEST',token,allow:true},sender),/expired/);
+  await f.consent.message({type:'RESOLVE_UPLOAD_REQUEST',token:freshToken,allow:true},freshSender);await fresh;assert.equal(sent,true);
+});
+test('attachment failures do not make an unproven nothing-was-sent claim',async()=>{
+  const f=fixture();
+  const result=f.consent.withFiles(['file'],'https://example.test',async()=>{throw Error('uncertain attachment');}).catch(error=>error);
+  await tick();await f.consent.message({type:'RESOLVE_UPLOAD_REQUEST',token:'request',allow:true},f.sender);
+  assert.match((await result).message,/uncertain/);
+  assert.equal(f.calls.filter(call=>call[0]==='open').length,1);
 });

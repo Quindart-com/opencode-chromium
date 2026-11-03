@@ -1417,5 +1417,50 @@
   },
   "pagePanelStatusUnavailable": {
     "message": "连接状态不可用。请打开扩展面板查看详情。"
+  },
+  "majorReviewTitle": {
+    "message": "审核主版本升级"
+  },
+  "majorReviewVersions": {
+    "message": "当前版本：$1 · 可用版本：$2"
+  },
+  "majorReviewUnavailable": {
+    "message": "无法获取版本详情。请返回设置并重新检查更新。"
+  },
+  "majorApprove": {
+    "message": "批准升级"
+  },
+  "majorNotNow": {
+    "message": "暂时不升级"
+  },
+  "majorBackSettings": {
+    "message": "返回设置"
+  },
+  "readyWhenYouAre": {
+    "message": "随时准备就绪"
+  },
+  "uploadPreparationTitle": {
+    "message": "无法准备上传"
+  },
+  "uploadPreparationDetails": {
+    "message": "无法准备文件。未发送任何内容。请重新请求上传，并再次确认目标网站和文件。"
+  },
+  "uploadApprovalUnavailable": {
+    "message": "请求完整之前无法批准上传。"
+  },
+  "uploadReviewNew": {
+    "message": "审核新请求"
+  },
+  "uploadCancelRequest": {
+    "message": "取消请求"
+  },
+  "uploadBackPreview": {
+    "message": "返回授权预览"
+  },
+  "uploadNewUnavailable": {
+    "message": "请让智能体重新请求上传，并在新的确认窗口中审核目标网站和文件。"
+  },
+  "uploadRequestUnavailable": {
+    "message": "无法加载请求。请关闭此窗口并重新请求上传。"
   }
 }

@@ -13,6 +13,7 @@ export function installPagePanel(chrome: WxtBrowser) {
   let usage: PagePanelUsage = { period: "7d", provider: "current" };
   let timer: ReturnType<typeof setInterval> | undefined;
   let materialFrame = 0;
+  let face: FontFace | undefined;
   let media: MediaQueryList[] = [];
   let pageStyle: MutationObserver | undefined;
   const refreshMaterial = () => { if (!materialFrame) materialFrame = requestAnimationFrame(() => { materialFrame = 0; if (host) render(); }); };
@@ -20,6 +21,7 @@ export function installPagePanel(chrome: WxtBrowser) {
   let drag: { id: number; x: number; y: number; left: number; top: number } | null = null;
   const stop = () => {
     clearInterval(timer); timer = undefined;
+    if (face) { try { document.fonts.delete(face); } catch {} face = undefined; }
     cancelAnimationFrame(materialFrame); materialFrame = 0; pageStyle?.disconnect(); pageStyle = undefined;
     window.removeEventListener("scroll", refreshMaterial, true);
     for (const query of media) query.removeEventListener("change", refreshMaterial); media = [];
@@ -86,6 +88,11 @@ export function installPagePanel(chrome: WxtBrowser) {
     }
     const mount = document.createElement("div"); shadow.append(mount);
     root = createRoot(mount); document.documentElement.append(host);
+    try {
+      const font = new FontFace("OpenCode Inter", `url("${chrome.runtime.getURL("/fonts/InterVariable.woff2")}")`, { weight: "100 900" });
+      face = font; document.fonts.add(font);
+      void font.load().then(() => { if (face === font && host) resize(); }).catch(() => {});
+    } catch { /* Page policies or engine wrappers may require the system fallback. */ }
     host.addEventListener("keydown", event => { if (event.key === "Escape") { event.stopPropagation(); post({ type: "close" }); stop(); } });
     port = chrome.runtime.connect({ name: `page-panel:${instance}` });
     const current = port;

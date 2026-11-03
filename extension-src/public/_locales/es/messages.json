@@ -1417,5 +1417,50 @@
   },
   "pagePanelStatusUnavailable": {
     "message": "El estado de conexión no está disponible. Abre el panel de la extensión para ver los detalles."
+  },
+  "majorReviewTitle": {
+    "message": "Revisar actualización principal"
+  },
+  "majorReviewVersions": {
+    "message": "Actual: $1 · Disponible: $2"
+  },
+  "majorReviewUnavailable": {
+    "message": "Los detalles de versión no están disponibles. Vuelve a Configuración y busca actualizaciones."
+  },
+  "majorApprove": {
+    "message": "Aprobar actualización"
+  },
+  "majorNotNow": {
+    "message": "Ahora no"
+  },
+  "majorBackSettings": {
+    "message": "Volver a Configuración"
+  },
+  "readyWhenYouAre": {
+    "message": "Listo cuando tú lo estés"
+  },
+  "uploadPreparationTitle": {
+    "message": "No se pudo preparar la carga"
+  },
+  "uploadPreparationDetails": {
+    "message": "No se pudieron preparar los archivos. No se envió nada. Solicita una nueva carga y revisa su destino y archivo."
+  },
+  "uploadApprovalUnavailable": {
+    "message": "No se puede aprobar hasta que la solicitud esté completa."
+  },
+  "uploadReviewNew": {
+    "message": "Revisar nueva solicitud"
+  },
+  "uploadCancelRequest": {
+    "message": "Cancelar solicitud"
+  },
+  "uploadBackPreview": {
+    "message": "Volver a la vista previa"
+  },
+  "uploadNewUnavailable": {
+    "message": "Pide a tu agente una nueva carga. Revisa el destino y el archivo en la nueva ventana de confirmación."
+  },
+  "uploadRequestUnavailable": {
+    "message": "No se pudo cargar la solicitud. Cierra esta ventana y solicita una nueva carga."
   }
 }

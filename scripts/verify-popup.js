@@ -67,7 +67,7 @@ const server = http.createServer(async (req, res) => {
         const job = { id: randomUUID(), kind: message.type === "START_HARNESS_RECONNECT" ? "reconnect" : message.type === "INSTALL_RUNTIME_UPDATE" ? "update" : "diagnose", target: message.params?.target, state: "queued", code: "queued", updatedAt: Date.now() };
         if (job.kind === "update") {
           updateParams.push(message.params);
-          if (updateStartCode && !(updateStartCode === "major_approval_required" && message.params?.approvedMajor === true)) { job.state = "blocked"; job.code = updateStartCode; }
+          if (updateStartCode && !(updateStartCode === "major_approval_required" && message.params?.approvedMajor === true)) { job.state = "blocked"; job.code = updateStartCode; if(updateStartCode === "major_approval_required") job.details = {targetVersion:"3.0.0"}; }
         }
         localJobs.set(job.id, job); harnessConnections.actions.unshift(job);
         setTimeout(() => {
@@ -127,7 +127,7 @@ const server = http.createServer(async (req, res) => {
     }
     const file = path.resolve(root, "extension", "." + new URL(req.url, "http://localhost").pathname);
     if (!file.startsWith(path.join(root, "extension") + path.sep)) { res.writeHead(403).end(); return; }
-    const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml" }[path.extname(file)];
+    const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".woff2": "font/woff2", ".svg": "image/svg+xml" }[path.extname(file)];
     res.setHeader("Content-Type", type ?? "application/octet-stream");
     const data = fs.readFileSync(file);
     res.end(process.argv.includes("--serve") && path.extname(file) === ".html" ? data.toString().replace("<head>", '<head><script src="/fixture-bootstrap.js"></script>') : data);
@@ -404,6 +404,13 @@ try {
   const updateButton = page.locator(".version-notice").getByRole("button", { name: "Update CLI", exact: true });
   await updateButton.click();
   await page.locator(".version-notice [role=status]").waitFor();
+  const beforeApproval = updateParams.length;
+  await updateButton.click();
+  const review = page.getByRole('region',{name:'Review major upgrade',exact:true});
+  await review.waitFor();
+  assert.equal(await page.getByRole('tab',{name:'Settings',exact:true}).getAttribute('aria-selected'),'true');
+  await review.getByRole('button',{name:'Approve upgrade',exact:true}).evaluate(button=>button.click());
+  assert.equal(updateParams.length,beforeApproval,'Synthetic approval must not dispatch an update');
   const approvalViewport = page.viewportSize();
   const approvalTheme = await page.evaluate(() => matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
   const stateReview = path.join(root, 'reports', 'state-review'); fs.mkdirSync(stateReview, {recursive:true});
@@ -412,12 +419,13 @@ try {
     await page.screenshot({path:path.join(stateReview,`major-upgrade-approval-${width}-${theme}.png`),fullPage:true,animations:'disabled'});
   }
   await page.setViewportSize(approvalViewport); await page.emulateMedia({colorScheme:approvalTheme});
-  const beforeApproval = updateParams.length;
-  page.once("dialog", dialog => dialog.dismiss());
-  await updateButton.click();
-  assert.equal(updateParams.length, beforeApproval, "canceling approval cannot start another job");
-  page.once("dialog", dialog => dialog.accept());
-  await updateButton.click();
+  await review.getByRole('button',{name:'Not now',exact:true}).click();
+  assert.equal(updateParams.length,beforeApproval,'Not now must leave the selected runtime unchanged');
+  await page.getByRole('tab',{name:'Overview',exact:true}).click(); await updateButton.click(); await review.waitFor();
+  await review.getByRole('button',{name:'Back to Settings',exact:true}).click();
+  assert.equal(updateParams.length,beforeApproval,'Returning to Settings cannot approve');
+  await page.getByRole('tab',{name:'Overview',exact:true}).click(); await updateButton.click(); await review.waitFor();
+  await review.getByRole('button',{name:'Approve upgrade',exact:true}).click();
   await page.locator(".version-notice").getByText("Update ready; activates when browser work is idle", { exact: true }).waitFor();
   assert.equal(updateParams.at(-1).approvedMajor, true);
   updateStartCode = null;

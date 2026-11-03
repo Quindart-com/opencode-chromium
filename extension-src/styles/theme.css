@@ -1,79 +1,93 @@
-/* Shared semantic colors for the popup, setup guide, and upload confirmation. */
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url("/fonts/InterVariable.woff2") format("woff2"); }
+/* Trusted extension surfaces use their own backdrop, never webpage pixels. */
 :root {
   color-scheme: light;
-  --bg: #f5f5f3;
-  --surface: #ffffff;
-  --surface-raised: #f8f8f6;
-  --surface-border: #e5e5e0;
-  --surface-border-strong: #c8cbc4;
-  --text: #202620;
-  --text-muted: #60685f;
-  --text-faint: #687267;
-  --section-label: #60685f;
-  --accent: #285b43;
-  --accent-hover: #194832;
-  --accent-soft: #edf4ee;
-  --accent-border: #b6cebd;
+  --bg: #edf3fc;
+  --canvas-paint: radial-gradient(ellipse at 0% 8%, #d0ddf5 0%, transparent 56%), radial-gradient(ellipse at 100% 46%, #f1dfe9 0%, transparent 54%), radial-gradient(ellipse at 15% 95%, #d3e9e5 0%, transparent 52%), #edf3fc;
+  --surface: rgb(255 255 255 / .10);
+  --surface-raised: rgb(255 255 255 / .30);
+  --surface-solid: #f5f7fc;
+  --surface-border: rgb(255 255 255 / .60);
+  --surface-border-strong: #65758e;
+  --text: #172033;
+  --control-ink: #172033;
+  --text-muted: #43516a;
+  --text-faint: #52617b;
+  --section-label: #43516a;
+  --accent: #2356d8;
+  --accent-hover: #1946ba;
+  --accent-soft: rgb(255 255 255 / .30);
+  --accent-border: #65758e;
   --primary-text: #ffffff;
-  --focus-ring: #285b4330;
-  --ok: #22724b;
+  --focus-ring: #2356d830;
+  --ok: #1d6b49;
   --ok-ink: #ffffff;
-  --ok-soft: #edf6ef;
-  --ok-border: #b9d8c2;
-  --warn: #8c5918;
-  --warn-soft: #fcf5e9;
-  --warn-border: #e5cda6;
-  --bad: #ab3636;
+  --ok-soft: rgb(213 240 225 / .45);
+  --ok-border: #81ad97;
+  --warn: #78501b;
+  --warn-soft: rgb(255 237 199 / .40);
+  --warn-border: #b48a49;
+  --bad: #9f2e36;
   --bad-ink: #ffffff;
-  --bad-soft: #fcf0ee;
-  --bad-border: #e8c0bb;
-  --input-bg: #ffffff;
-  --button-bg: #ffffff;
-  --button-hover: #f0f2ed;
-  --button-border: #d6d9d1;
-  --disabled-bg: #efefeb;
-  --disabled-text: #737b70;
-  --disabled-primary-bg: #dce6dd;
-  --disabled-primary-text: #596c5c;
+  --bad-soft: rgb(255 222 224 / .40);
+  --bad-border: #c27f85;
+  --input-bg: rgb(255 255 255 / .12);
+  --button-bg: rgb(255 255 255 / .10);
+  --button-hover: rgb(255 255 255 / .22);
+  --button-border: rgb(255 255 255 / .60);
+  --disabled-bg: rgb(255 255 255 / .12);
+  --disabled-text: #52617b;
+  --disabled-primary-bg: rgb(255 255 255 / .12);
+  --disabled-primary-text: #52617b;
+  --material-shadow: inset 2px 2px 3px #ffffff8c, inset -2px -2px 6px #ffffff66, 0 8px 20px -4px #121a2e21;
   --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
-
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #151815;
-    --surface: #1d211d;
-    --surface-raised: #242924;
-    --surface-border: #343b33;
-    --surface-border-strong: #505c4e;
-    --text: #edf0e9;
-    --text-muted: #acb5a6;
-    --text-faint: #a0ad99;
-    --section-label: #acb5a6;
-    --accent: #acd0af;
-    --accent-hover: #c4e2c5;
-    --accent-soft: #2a3b2d;
-    --accent-border: #526e55;
-    --primary-text: #17251a;
-    --focus-ring: #acd0af40;
-    --ok: #9acdAB;
-    --ok-ink: #16291d;
-    --ok-soft: #26392c;
-    --ok-border: #46624e;
-    --warn: #e7bd7e;
-    --warn-soft: #372e20;
-    --warn-border: #6f5834;
-    --bad: #eda59b;
+    --bg: #111a2c;
+    --canvas-paint: radial-gradient(ellipse at 0% 8%, #263a5a 0%, transparent 56%), radial-gradient(ellipse at 100% 46%, #382c49 0%, transparent 54%), radial-gradient(ellipse at 15% 95%, #153638 0%, transparent 52%), #111a2c;
+    --surface: rgb(22 34 56 / .10);
+    --surface-raised: rgb(255 255 255 / .30);
+    --surface-solid: #202838;
+    --surface-border: rgb(255 255 255 / .30);
+    --surface-border-strong: #8594ae;
+    --text: #f2f5fc;
+    --control-ink: #f3f5fc;
+    --text-muted: #bdcae0;
+    --text-faint: #b5c2d9;
+    --section-label: #bdcae0;
+    --accent: #a7c0ff;
+    --accent-hover: #c2d3ff;
+    --accent-soft: rgb(255 255 255 / .12);
+    --accent-border: #8594ae;
+    --primary-text: #10182b;
+    --focus-ring: #a7c0ff40;
+    --ok: #96d6af;
+    --ok-ink: #10251a;
+    --ok-soft: rgb(38 70 57 / .45);
+    --ok-border: #75a68b;
+    --warn: #f0cc93;
+    --warn-soft: rgb(85 64 33 / .40);
+    --warn-border: #b18c52;
+    --bad: #ffb4ae;
     --bad-ink: #311b18;
-    --bad-soft: #392824;
-    --bad-border: #715048;
-    --input-bg: #1a1e1a;
-    --button-bg: #272d26;
-    --button-hover: #333c30;
-    --button-border: #4b5648;
-    --disabled-bg: #2a2e28;
-    --disabled-text: #9aa592;
-    --disabled-primary-bg: #344333;
-    --disabled-primary-text: #9aaf97;
+    --bad-soft: rgb(91 44 54 / .40);
+    --bad-border: #c18b94;
+    --input-bg: rgb(22 34 56 / .12);
+    --button-bg: rgb(22 34 56 / .10);
+    --button-hover: rgb(22 34 56 / .24);
+    --button-border: rgb(255 255 255 / .30);
+    --disabled-bg: rgb(22 34 56 / .12);
+    --disabled-text: #b5c2d9;
+    --disabled-primary-bg: rgb(22 34 56 / .12);
+    --disabled-primary-text: #b5c2d9;
+    --material-shadow: inset 2px 2px 3px #ffffff3d, inset -2px -2px 6px #ffffff26, 0 8px 20px -4px #121a2e38;
   }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root { --canvas-paint: var(--bg); --surface: var(--surface-solid); --surface-raised: var(--surface-solid); --input-bg: var(--surface-solid); --button-bg: var(--surface-solid); --button-hover: var(--surface-solid); --surface-border: var(--surface-border-strong); --button-border: var(--surface-border-strong); --material-shadow: none; }
+}
+@media (forced-colors: active) {
+  :root { --canvas-paint: Canvas; --bg: Canvas; --surface: Canvas; --surface-raised: Canvas; --surface-solid: Canvas; --text: CanvasText; --control-ink: ButtonText; --text-muted: CanvasText; --text-faint: CanvasText; --surface-border: ButtonText; --surface-border-strong: ButtonText; --button-bg: ButtonFace; --button-hover: ButtonFace; --button-border: ButtonText; --input-bg: Field; --accent: LinkText; --material-shadow: none; }
 }
