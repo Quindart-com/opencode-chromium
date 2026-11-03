@@ -2,28 +2,24 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { FirefoxBackend } from '../../native-host/src/firefox/backend.ts';
+import { firefoxAddonConsole } from './firefox-addon-console.js';
 
 // Called only by the disposable real-extension fixture. No production test hooks.
-export async function verifyFirefoxPagePanel({ endpoint, profile, origin, root, report }) {
+export async function verifyFirefoxPagePanel({ endpoint, debuggerPort, origin, root, report }) {
   const visual = new FirefoxBackend({ endpoint });
   await visual.connect();
   const existing = new Set((await visual.send('browsingContext.getTree', {})).contexts.map(item => item.context));
+  let addon;
   try {
-    const pref = fs.readFileSync(path.join(profile, 'prefs.js'), 'utf8');
-    const entry = pref.split('\n').find(line => line.startsWith('user_pref("extensions.webextensions.uuids",'));
-    assert.ok(entry, 'Owned test profile has an installed extension UUID');
-    const uuids = JSON.parse(JSON.parse(entry.slice(entry.indexOf(',') + 1).trim().replace(/\);$/, '')));
-    const uuid = uuids['opencode-browser-plugin@quindart.com']; assert.ok(uuid);
     const page = await visual.send('browsingContext.create', { type: 'tab' });
     await visual.send('browsingContext.navigate', { context: page.context, url: origin + '/glass', wait: 'complete' });
-    const popup = await visual.send('browsingContext.create', { type: 'tab' });
-    await visual.send('browsingContext.navigate', { context: popup.context, url: `moz-extension://${uuid}/popup.html`, wait: 'complete' });
     const evaluate = async (context, expression) => {
       const result = await visual.send('script.evaluate', { target: { context }, expression, awaitPromise: true });
       if (result.type === 'exception') throw Error('Owned fixture evaluation failed: ' + JSON.stringify(result.exceptionDetails));
       return result.result.value;
     };
-    const inPopup = expression => evaluate(popup.context, expression);
+    addon = await firefoxAddonConsole(debuggerPort);
+    const inPopup = addon.evaluate;
     const tabId = await inPopup(`(async()=>{const t=(await browser.tabs.query({})).find(t=>t.url===${JSON.stringify(origin + '/glass')});return t?.id;})()`);
     assert.equal(typeof tabId, 'number');
     // Capture a reference in this extension's isolated world for automation only.
@@ -93,7 +89,9 @@ export async function verifyFirefoxPagePanel({ endpoint, profile, origin, root, 
   } finally {
     try {
       const tree = await visual.send('browsingContext.getTree', {});
-      for (const item of tree.contexts) if (!existing.has(item.context)) await visual.send('browsingContext.close', { context: item.context });
-    } finally { await visual.close(); }
+      for (const item of tree.contexts) if (!existing.has(item.context) && item.url?.startsWith(origin + '/')) await visual.send('browsingContext.close', { context: item.context });
+    } finally {
+      try { await addon?.close(); } finally { await visual.close(); }
+    }
   }
 }

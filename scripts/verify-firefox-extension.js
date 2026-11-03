@@ -79,13 +79,13 @@ try {
     nativeFile = path.join(dir, host + '.json'); fs.copyFileSync(manifest, nativeFile);
   }
   child = spawn(process.execPath, [path.join(root, 'node_modules/web-ext/bin/web-ext.js'), 'run', '--source-dir', source, '--firefox', executable, '--firefox-profile', profile, '--keep-profile-changes', '--no-reload', '--no-input', '--no-config-discovery', '--verbose', ...(process.argv.includes('--visual') ? [] : ['--args=--headless']), '--args=--remote-debugging-port=' + port], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  let logs = ''; for (const stream of [child.stdout, child.stderr]) stream.on('data', data => { logs = (logs + data).slice(0, 20000); });
+  let logs = '', debuggerPort; for (const stream of [child.stdout, child.stderr]) stream.on('data', data => { logs = (logs + data).slice(-20000); const found = logs.match(/Connected to the remote Firefox debugger on port (\d+)/); if (found) debuggerPort = Number(found[1]); });
   let registration;
   for (let i = 0; i < 100; i++) { const file = fs.readdirSync(registry).find(f => f.endsWith('.json')); if (file) { registration = JSON.parse(fs.readFileSync(path.join(registry, file), 'utf8')); break; } if (child.exitCode !== null) throw Error('Test browser exited: ' + logs); await new Promise(resolve => setTimeout(resolve, 300)); }
   if (!registration) throw Error('Native extension connection did not register: ' + logs);
   profileId = registration.profileId; assert.match(registration.browserName, /Firefox|LibreWolf/); report.checks.push('real extension and native messaging handshake');
   fs.mkdirSync(path.join(runtimeDir, 'firefox'), { recursive: true }); fs.writeFileSync(path.join(runtimeDir, 'firefox', profileId + '.json'), JSON.stringify({ endpoint: 'ws://127.0.0.1:' + port + '/session' }));
-  await verifyFirefoxPagePanel({ endpoint: 'ws://127.0.0.1:' + port + '/session', profile, origin, root, report });
+  await verifyFirefoxPagePanel({ endpoint: 'ws://127.0.0.1:' + port + '/session', debuggerPort, origin, root, report });
   if (!process.argv.includes('--page-panel-only')) {
   Object.assign(process.env, { OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: registry });
   const { createBrowserAgent } = await import('../src/adapters/sdk/index.ts'); agent = createBrowserAgent();

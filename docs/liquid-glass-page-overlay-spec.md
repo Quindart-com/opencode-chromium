@@ -256,6 +256,8 @@ Required new tests:
 
 Preserved regression commands include `bun run build`, both extension builds, `bun run typecheck:extension`, `bun run check`, `bun run verify:popup`, `bun run check:firefox`, onboarding and upload verifiers, and real-extension browser fixtures. Select focused tests after each stage and run the full relevant gate before release. Do not claim this proposed overlay has passed them yet.
 
+For real Firefox UI verification, let the temporary add-on open and close its trusted page through its own `tabs` API. Firefox 157 restricts privileged WebDriver navigation and execution contexts. The fixture reuses `web-ext`'s existing loopback debugger, scoped to that temporary add-on, for extension-page inspection; WebDriver interacts only with the owned HTTP fixture. Do not enable system access, alter browser policies, or add production debug hooks to bypass those restrictions.
+
 ## 13. Figma handoff requirements
 
 The new direction must show actual website content beneath the board, not a screenshot pretending the toolbar popup is transparent. Mark the website as example context, not a component/data source. Include glass buttons, tabs and controls plus clear focus/pressed/loading/disabled variants. Annotate standard glass versus experimental displacement and the opaque fallback.
