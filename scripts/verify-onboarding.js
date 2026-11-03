@@ -95,6 +95,8 @@ try {
     // Preserve a real viewport capture for material review, alongside content coverage.
     await page.evaluate(() => scrollTo(0, 0));
     if (width === 390) {
+      const header = await page.locator('header').boundingBox();
+      assert.ok(header.height >= 34 && header.height <= 36, `Mobile header keeps the reference row height; got ${header.height}`);
       const title = await page.locator('.intro h1').boundingBox();
       const firstCard = await page.locator('article').first().boundingBox();
       assert.ok(title.y >= 136 && title.y <= 142, `Mobile title layout follows the reference baseline; got ${title.y}`);
