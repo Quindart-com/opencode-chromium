@@ -4,6 +4,7 @@
   color-scheme: light;
   --bg: #edf3fc;
   --canvas-paint: radial-gradient(ellipse at -15% 48%, #a0ddd2 0 46%, transparent 46.3%), radial-gradient(ellipse at 115% 6%, #d2c4ef 0 44%, transparent 44.3%), radial-gradient(ellipse at 94% 115%, #f0cca8 0 44%, transparent 44.3%), #edf3fc;
+  --consent-paint: radial-gradient(ellipse at 0% 12%, #bedbfa 0%, transparent 60%), radial-gradient(ellipse at 100% 42%, #e7cbe5 0%, transparent 62%), radial-gradient(ellipse at 18% 96%, #bde5e8 0%, transparent 60%), #edf3fc;
   --surface: rgb(255 255 255 / .10);
   --surface-raised: rgb(255 255 255 / .30);
   --surface-solid: #f5f7fc;
@@ -47,6 +48,7 @@
     color-scheme: dark;
     --bg: #111a2c;
     --canvas-paint: radial-gradient(ellipse at -15% 48%, #003c3b 0 46%, transparent 46.3%), radial-gradient(ellipse at 115% 6%, #45235b 0 44%, transparent 44.3%), radial-gradient(ellipse at 94% 115%, #522a15 0 44%, transparent 44.3%), #111a2c;
+    --consent-paint: radial-gradient(ellipse at 0% 12%, #1c3544 0%, transparent 60%), radial-gradient(ellipse at 100% 42%, #432b3f 0%, transparent 62%), radial-gradient(ellipse at 18% 96%, #332b4d 0%, transparent 60%), #111a2c;
     --surface: rgb(22 34 56 / .10);
     --surface-raised: rgb(22 34 56 / .12);
     --surface-solid: #202838;
@@ -86,8 +88,8 @@
   }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  :root { --canvas-paint: var(--bg); --surface: var(--surface-solid); --surface-raised: var(--surface-solid); --input-bg: var(--surface-solid); --button-bg: var(--surface-solid); --button-hover: var(--surface-solid); --surface-border: var(--surface-border-strong); --button-border: var(--surface-border-strong); --material-shadow: none; }
+  :root { --canvas-paint: var(--bg); --consent-paint: var(--bg); --surface: var(--surface-solid); --surface-raised: var(--surface-solid); --input-bg: var(--surface-solid); --button-bg: var(--surface-solid); --button-hover: var(--surface-solid); --surface-border: var(--surface-border-strong); --button-border: var(--surface-border-strong); --material-shadow: none; }
 }
 @media (forced-colors: active) {
-  :root { --canvas-paint: Canvas; --bg: Canvas; --surface: Canvas; --surface-raised: Canvas; --surface-solid: Canvas; --text: CanvasText; --control-ink: ButtonText; --text-muted: CanvasText; --text-faint: CanvasText; --surface-border: ButtonText; --surface-border-strong: ButtonText; --button-bg: ButtonFace; --button-hover: ButtonFace; --button-border: ButtonText; --input-bg: Field; --accent: LinkText; --material-shadow: none; }
+  :root { --canvas-paint: Canvas; --consent-paint: Canvas; --bg: Canvas; --surface: Canvas; --surface-raised: Canvas; --surface-solid: Canvas; --text: CanvasText; --control-ink: ButtonText; --text-muted: CanvasText; --text-faint: CanvasText; --surface-border: ButtonText; --surface-border-strong: ButtonText; --button-bg: ButtonFace; --button-hover: ButtonFace; --button-border: ButtonText; --input-bg: Field; --accent: LinkText; --material-shadow: none; }
 }

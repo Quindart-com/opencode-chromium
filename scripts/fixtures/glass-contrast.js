@@ -11,6 +11,9 @@ export function glassTextContrast(element, backdrops = [[0, 0, 0], [1, 1, 1]]) {
   const luminance = color => color.map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index], 0);
   const layers = [];
   for (let node = element; node; node = node.parentElement ?? node.getRootNode().host) {
+    // Explicit backdrops describe the body's painted image/gradient, not just its
+    // fallback backgroundColor; stop before that color can conceal those samples.
+    if (node === document.body || node === document.documentElement) break;
     layers.push(rgba(getComputedStyle(node).backgroundColor));
     if (node.id.startsWith('opencode-page-panel-')) break;
   }

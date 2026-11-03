@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { chromium } from "playwright";
+import { glassTextContrast } from "./fixtures/glass-contrast.js";
 import { createUploadFiles } from "../native-host/src/uploads.ts";
 import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.ts";
 import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.ts";
@@ -116,12 +117,27 @@ try {
   assert.equal(await failure.getByRole('button',{name:'Allow upload',exact:true}).count(),0);
   assert.equal(await failure.getByRole('button',{name:'Back to consent preview',exact:true}).isDisabled(),true);
   fs.mkdirSync('reports/state-review',{recursive:true});
+  const contrastReview = [];
   for(const theme of ['light','dark'])for(const width of [360,500]) {
     await failure.emulateMedia({colorScheme:theme});await failure.setViewportSize({width,height:width===360?427:560});
     await failure.evaluate(()=>document.fonts.ready);
+    const cancel = failure.getByRole('button',{name:'Cancel request',exact:true});
+    const colors = theme === 'light' ? ['#edf3fc','#bedbfa','#e7cbe5','#bde5e8'] : ['#111a2c','#1c3544','#432b3f','#332b4d'];
+    const backdrops = colors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+    let previousPhase = 0;
+    for (const phaseMs of [0,40,140]) {
+      if (phaseMs > previousPhase) await failure.waitForTimeout(phaseMs-previousPhase);
+      previousPhase = phaseMs;
+      assert.equal(await cancel.isEnabled(),true,'Failure cancellation must stay enabled before a user action');
+      const ratio = await cancel.evaluate(glassTextContrast,backdrops);
+      contrastReview.push({theme,width,phaseMs,ratio,...await cancel.evaluate(element=>({color:getComputedStyle(element).color,disabled:element.disabled,focused:document.activeElement===element}))});
+      assert.ok(ratio >= 4.5, `Enabled Cancel request needs 4.5:1 contrast during theme changes (${theme}, ${phaseMs}ms); got ${ratio}`);
+    }
+
     assert.equal(await failure.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
     await failure.screenshot({path:`reports/state-review/upload-preparation-failure-${width}-${theme}.png`,fullPage:true});
   }
+  fs.writeFileSync('reports/state-review/upload-control-contrast.json',JSON.stringify(contrastReview,null,2));
   assert.equal(await failure.getByRole('button',{name:'Review new request',exact:true}).isDisabled(),true);
   fs.writeFileSync(file,'fresh request after failure');
   const freshUpload = upload();
@@ -131,6 +147,19 @@ try {
   assert.equal(await website.locator('#document').evaluate(input=>input.files.length),0,'Reviewing a fresh request cannot approve it');
   await freshConfirmation.getByRole('button',{name:'Allow upload',exact:true}).click(); await freshUpload;
   assert.equal(await website.locator('#document').evaluate(input=>input.files[0].text()),'fresh request after failure');
+  // A real failure cancellation must close its own informational surface without attachment.
+  await website.locator('#document').evaluate(input=>{input.value='';});
+  fs.writeFileSync(file,'before cancelled preparation');
+  const cancelledPreparation = upload().then(()=>null,error=>error);
+  confirmation = await requestPage();fs.writeFileSync(file,'changed before preparation');
+  const cancelledFailureOpened = context.waitForEvent('page');
+  await confirmation.getByRole('button',{name:'Allow upload',exact:true}).click();
+  const cancelledFailure = await cancelledFailureOpened;
+  await cancelledFailure.getByRole('heading',{name:'Couldn’t prepare upload',exact:true}).waitFor();
+  assert.match((await cancelledPreparation).message,/changed/i);
+  const closedFailure = cancelledFailure.waitForEvent('close');
+  await cancelledFailure.getByRole('button',{name:'Cancel request',exact:true}).click();await closedFailure;
+  assert.equal(await website.locator('#document').evaluate(input=>input.files.length),0,'Cancelling a failure cannot attach files');
   const expiredWindow = await chrome.windows.create({url:`${origin}/upload-confirm.html?token=${crypto.randomUUID()}`,type:'popup'});
   const expired = windows.get(expiredWindow.id).page;
   await expired.getByRole('alert').waitFor();

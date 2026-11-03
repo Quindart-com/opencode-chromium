@@ -162,6 +162,10 @@ try {
   }, fixtureMessages);
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   console.log("Popup loaded");
+  await page.evaluate(() => { const probe=document.createElement('span');probe.id='fixture-contrast-probe';probe.style.color='#fff';probe.textContent='Contrast probe';document.body.append(probe); });
+  assert.equal(await page.locator('#fixture-contrast-probe').evaluate(glassTextContrast,[[1,1,1]]),1,'Body fallback color must not conceal an explicit painted backdrop sample');
+  await page.locator('#fixture-contrast-probe').evaluate(element=>element.remove());
+
   const connections = page.getByRole("region", { name: "Harness connections", exact: true });
   await connections.getByText("Codex", { exact: true }).waitFor();
   await connections.getByText("DeepSeek Harness", { exact: true }).waitFor();
@@ -417,6 +421,12 @@ try {
   const stateReview = path.join(root, 'reports', 'state-review'); fs.mkdirSync(stateReview, {recursive:true});
   for (const theme of ['light','dark']) for (const width of [420,360]) {
     await page.emulateMedia({colorScheme:theme}); await page.setViewportSize({width,height:600});
+    const colors = theme === 'light' ? ['#edf3fc','#bedbfa','#e7cbe5','#bde5e8'] : ['#111a2c','#1c3544','#432b3f','#332b4d'];
+    const backdrops = colors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+    for (const control of await review.locator('button').all()) {
+      assert.ok(await control.evaluate(glassTextContrast,backdrops) >= 4.5,'Guarded upgrade controls retain contrast immediately after theme changes');
+    }
+
     await page.screenshot({path:path.join(stateReview,`major-upgrade-approval-${width}-${theme}.png`),fullPage:true,animations:'disabled'});
   }
   await page.setViewportSize(approvalViewport); await page.emulateMedia({colorScheme:approvalTheme});

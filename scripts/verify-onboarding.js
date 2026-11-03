@@ -94,6 +94,13 @@ try {
     // Full-document captures can miscompose viewport-fixed backdrops after scrolling.
     // Preserve a real viewport capture for material review, alongside content coverage.
     await page.evaluate(() => scrollTo(0, 0));
+    if (width === 390) {
+      const title = await page.locator('.intro h1').boundingBox();
+      const firstCard = await page.locator('article').first().boundingBox();
+      assert.ok(title.y >= 136 && title.y <= 142, `Mobile title layout follows the reference baseline; got ${title.y}`);
+      assert.ok(firstCard.y >= 343 && firstCard.y <= 351, `Mobile first card follows the reference spacing; got ${firstCard.y}`);
+    }
+
     await page.screenshot({ path: path.join(screenshots, `hosted-updates-${width}-${theme}-viewport.png`) });
   }
   console.log(JSON.stringify({ ok: true, states: 16, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus", "hosted version anchors and update guidance"] }));

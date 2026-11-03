@@ -276,7 +276,7 @@ body.upload-confirm-page { width: auto; min-width: 300px; }
 .upload-actions .button { min-height: 40px; }
 
 @media (prefers-reduced-motion: no-preference) {
-  button, a, input, select { transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+  /* Theme colors change atomically: interpolated foregrounds can become unreadable. */
   button.switch > span { transition: transform 120ms ease; }
 }
 @media (max-width: 360px) {
@@ -319,3 +319,5 @@ body.upload-confirm-page { width: auto; min-width: 300px; }
 .failure-content p { margin: 0; font-size: 12px; line-height: 1.6; }
 
 .version-notice-slot { display: contents; }
+
+body.upload-confirm-page, body:has(.major-review) { background: var(--consent-paint); background-attachment: fixed; }
