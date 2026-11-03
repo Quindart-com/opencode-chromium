@@ -26,7 +26,7 @@ class AddonClient extends FirefoxRDPClient {
 
 async function until(read, label) {
   for (let attempt = 0; attempt < 200; attempt++) {
-    const value = read(); if (value) return value;
+    const value = await read(); if (value) return value;
     await new Promise(resolve => setTimeout(resolve, 25));
   }
   throw Error(`Timed out waiting for ${label}`);
@@ -49,17 +49,32 @@ export async function firefoxAddonConsole(port) {
     const target = async suffix => until(() => [...client.targets.values()].find(item => item.addonId === addonId && item.url?.endsWith(suffix)), 'owned addon target');
     const evaluate = async (consoleActor, expression) => {
       const queued = await client.request({ to: consoleActor, type: 'evaluateJSAsync',
-        text: `(async()=>JSON.stringify(await (${expression})))()`, mapped: { await: true }, disableBreaks: true });
+        text: `(async()=>{
+          try { return JSON.stringify({ok:true,value:await (${expression})}); }
+          catch(error) {
+            const name=['Error','TypeError','ReferenceError','SyntaxError','SecurityError'].includes(error?.name)?error.name:'UnknownError';
+            const message=String(error?.message);
+            const reason=message.includes('browser is not defined')?'browser binding unavailable'
+              :/context.*invalid|invalid.*context/i.test(message)?'context invalidated'
+              :/permission|denied/i.test(message)?'permission denied'
+              :/not a function/i.test(message)?'API unavailable'
+              :/content security|unsafe-eval|CSP/i.test(message)?'CSP restriction':'evaluation rejected';
+            return JSON.stringify({ok:false,name,reason});
+          }
+        })()`, mapped: { await: true }, disableBreaks: true });
       const answer = await until(() => client.evaluations.get(queued.resultID), 'addon evaluation');
       client.evaluations.delete(queued.resultID);
       assert.ok(!answer.exception && !answer.topLevelAwaitRejected, 'Owned addon evaluation must succeed');
       assert.equal(typeof answer.result, 'string', 'Fixture results must be bounded JSON primitives');
-      return JSON.parse(answer.result);
+      const envelope = JSON.parse(answer.result);
+      assert.equal(envelope.ok, true, `Owned addon evaluation: ${envelope.name ?? 'UnknownError'} (${envelope.reason ?? 'unknown'})`);
+      return envelope.value;
     };
     const background = await target('/_generated_background_page.html');
     // The extension opens its own page through the supported tabs API.
     await evaluate(background.consoleActor, "browser.tabs.create({url:browser.runtime.getURL('/popup.html#page-panel-fixture'),active:false}).then(()=>true)");
     const popup = await target('/popup.html#page-panel-fixture');
+    await until(() => evaluate(popup.consoleActor, "document.readyState === 'complete' && typeof browser === 'object' && typeof browser.tabs?.query === 'function'"), 'trusted popup document and APIs');
     return {
       evaluate: expression => evaluate(popup.consoleActor, expression),
       close: async () => {
