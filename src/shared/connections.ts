@@ -19,6 +19,7 @@ export interface HarnessConnection extends ClientIdentity {
   state: "responding" | "stale" | "unidentified";
 }
 export interface ConnectionSnapshot {
+  controllerSupported?: boolean;
   observedAt: number;
   host: { version: string | null; pid: number };
   clients: HarnessConnection[];

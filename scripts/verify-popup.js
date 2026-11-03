@@ -36,6 +36,8 @@ if (storeFixture) decisionSettings = { ...decisionSettings, provider: "off", sha
 let uploadSettings = { allowWithoutConfirmation: false };
 let semanticSettings = { enabled: true, modelId: SEMANTIC_MODELS.find(model => model.role === "adaptive").id, deepModelId: SEMANTIC_MODELS.find(model => model.role === "deep").id, strategyPreference: "auto" };
 let runtimeUpdates = { supported: true, enabled: true, state: "waiting", targetVersion: "1.9.3", installedVersion: "1.9.2" };
+let updateStartCode = null, bridgeReconnects = 0;
+const updateParams = [];
 let harnessConnections = { observedAt: Date.now(), host: { version: fixtureVersion, pid: 42 }, clients: [
   { id: "fixture-codex", harness: "codex", harnessVersion: "1.2.3", runtimeVersion: "1.10.1", transport: "mcp", pid: 43, phase: "used", connectedAt: Date.now(), lastSeenAt: Date.now(), lastActionAt: Date.now(), pending: 0, state: "responding" },
   { id: "fixture-dsh", harness: "dsh", harnessVersion: "0.2.0", runtimeVersion: "1.9.4", transport: "mcp", pid: 44, phase: "initialized", connectedAt: Date.now() - 60000, lastSeenAt: Date.now() - 60000, lastActionAt: null, pending: 0, state: "stale" },
@@ -63,8 +65,13 @@ const server = http.createServer(async (req, res) => {
       if (message.type === "GET_HARNESS_CONNECTIONS") result = { result: harnessConnections };
       else if (["START_HARNESS_RECONNECT", "RUN_CONNECTION_DOCTOR", "INSTALL_RUNTIME_UPDATE"].includes(message.type)) {
         const job = { id: randomUUID(), kind: message.type === "START_HARNESS_RECONNECT" ? "reconnect" : message.type === "INSTALL_RUNTIME_UPDATE" ? "update" : "diagnose", target: message.params?.target, state: "queued", code: "queued", updatedAt: Date.now() };
+        if (job.kind === "update") {
+          updateParams.push(message.params);
+          if (updateStartCode && !(updateStartCode === "major_approval_required" && message.params?.approvedMajor === true)) { job.state = "blocked"; job.code = updateStartCode; }
+        }
         localJobs.set(job.id, job); harnessConnections.actions.unshift(job);
         setTimeout(() => {
+          if (job.state === "blocked") return;
           job.state = job.kind === "update" ? "waiting" : "succeeded"; job.code = job.kind === "update" ? "update_waiting" : job.kind === "diagnose" ? "healthy" : "refreshed"; job.updatedAt = Date.now();
           if (job.kind === "reconnect") {
             const row = harnessConnections.clients.find(client => client.harness === job.target);
@@ -75,7 +82,7 @@ const server = http.createServer(async (req, res) => {
       }
       else if (message.type === "GET_LOCAL_ACTION") result = { result: localJobs.get(message.params.id) ?? null };
       else if (message.type === "DISCONNECT_HARNESS") { harnessConnections = { ...harnessConnections, clients: harnessConnections.clients.filter(client => client.id !== message.params.id) }; result = { result: harnessConnections }; }
-      else if (message.type === "RECONNECT_NATIVE_HOST") result = { result: { reconnecting: true } };
+      else if (message.type === "RECONNECT_NATIVE_HOST") { bridgeReconnects++; result = { result: { reconnecting: true } }; }
       else if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
       else if (message.type === "GET_RUNTIME_UPDATES") result = { result: runtimeUpdates };
       else if (message.type === "SET_RUNTIME_UPDATES") { runtimeUpdates = { ...runtimeUpdates, enabled: message.enabled }; result = { result: runtimeUpdates }; }
@@ -357,11 +364,63 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Your extension is behind your local tools" }).waitFor();
   assert.equal(await page.locator(".update-command").count(), 0, "do not recommend downgrading newer local tools");
+  // Reproduce the reported 2.0.1 extension / 1.10.2 host mismatch.
+  await page.addInitScript(() => { globalThis.fixtureCurrentVersion = "2.0.1"; });
+  versionStatus.nativeHostVersion = "1.10.2"; versionStatus.clientVersions = ["1.10.2"];
+  const modernUpdates = runtimeUpdates;
+  runtimeUpdates = { ...runtimeUpdates, supported: false, controllerSupported: false, state: "bridge_required" };
+  const jobsBeforeSetup = localJobs.size;
+  await page.reload();
+  const migration = page.locator(".version-notice .runtime-setup");
+  await migration.waitFor();
+  assert.equal(await page.locator(".version-notice").getByRole("button", { name: "Update CLI", exact: true }).count(), 0);
+  assert.equal(await migration.locator("code").textContent(), "npx -y opencode-chromium@latest setup --all");
+  await migration.getByRole("button", { name: "Copy setup command", exact: true }).click();
+  assert.equal(await page.evaluate(() => globalThis.fixtureCopiedText), "npx -y opencode-chromium@latest setup --all");
+  await migration.getByRole("button", { name: "Reconnect local bridge", exact: true }).click();
+  await migration.getByRole("status").getByText("Reconnecting the local bridge…", { exact: true }).waitFor();
+  assert.equal(bridgeReconnects, 1);
+  assert.equal(localJobs.size, jobsBeforeSetup, "legacy recovery must not queue an update that cannot run");
+  await page.screenshot({ path: path.join(root, "reports", "popup-legacy-runtime-recovery.png"), fullPage: true });
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  await page.locator('[aria-labelledby="runtime-updates-title"] .runtime-setup').waitFor();
+  assert.equal(await page.locator(".runtime-setup").count(), 1, "Settings has one setup action");
+  assert.equal(await page.getByRole("button", { name: "Check and install updates", exact: true }).count(), 0);
+  // Also recover when capabilities disappear between rendering and clicking.
+  runtimeUpdates = modernUpdates; updateStartCode = "bridge_required";
+  await page.reload();
+  await page.locator(".version-notice").getByRole("button", { name: "Update CLI", exact: true }).click();
+  await migration.waitFor();
+  // Major approval stays actionable without being mislabeled as setup.
+  updateStartCode = "major_approval_required";
+  await page.reload();
+  const updateButton = page.locator(".version-notice").getByRole("button", { name: "Update CLI", exact: true });
+  await updateButton.click();
+  await page.locator(".version-notice [role=status]").waitFor();
+  const beforeApproval = updateParams.length;
+  page.once("dialog", dialog => dialog.dismiss());
+  await updateButton.click();
+  assert.equal(updateParams.length, beforeApproval, "canceling approval cannot start another job");
+  page.once("dialog", dialog => dialog.accept());
+  await updateButton.click();
+  await page.locator(".version-notice").getByText("Update ready; activates when browser work is idle", { exact: true }).waitFor();
+  assert.equal(updateParams.at(-1).approvedMajor, true);
+  updateStartCode = null;
+  await page.addInitScript(() => { globalThis.fixtureCurrentVersion = "1.9.1"; });
   versionStatus.nativeHostVersion = "1.9.1";
   versionStatus.clientVersions = ["1.9.1"];
   await page.reload();
   await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Bridge connected");
   assert.equal(await page.locator(".version-notice").count(), 0, "matching versions clear the notice");
+  const inventory = harnessConnections.harnesses;
+  delete harnessConnections.harnesses;
+  harnessConnections.controllerSupported = true;
+  await page.reload();
+  await page.getByText("CLI ready", { exact: true }).waitFor();
+  assert.equal(await page.locator(".connection-upgrade").count(), 0, "a current controller must not be told to update for missing legacy inventory");
+  await page.getByText("Connection help", { exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: fixtureMessages.runConnectionChecks, exact: true }).isEnabled(), true);
+  harnessConnections.harnesses = inventory;
   const reviewDirectory = path.join(root, "reports", "popup-review");
   fs.mkdirSync(reviewDirectory, { recursive: true });
   const currentVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;

@@ -2,6 +2,8 @@ import { useEffect,useRef,useState } from "react";
 import { t } from "../../i18n";
 import { sendMessage } from "./api";
 import useLocalAction from "./useLocalAction";
+import { requiresRuntimeSetup } from "../../runtime-update";
+import RuntimeSetup from "./RuntimeSetup";
 
 type Component = { component: string; version: string | null; state: string; label?: string };
 type Updates = { supported: boolean; controllerSupported?: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; stagedVersion?: string; loadedVersions?: string[]; blockerCount?: number; reason?: string;
@@ -51,20 +53,22 @@ export default function RuntimeUpdates() {
     finally { saving.current = false; revision.current++; setBusy(false); }
   }
   async function install() {
-    const approvedMajor = updates?.state === "approval_required" ? window.confirm(t("majorUpgradeConfirm")) : false;
-    if (updates?.state === "approval_required" && !approvedMajor) return;
+    const approvalRequired = updates?.state === "approval_required" || local.action?.code === "major_approval_required";
+    const approvedMajor = approvalRequired ? window.confirm(t("majorUpgradeConfirm")) : false;
+    if (approvalRequired && !approvedMajor) return;
     await local.start("INSTALL_RUNTIME_UPDATE", approvedMajor ? { approvedMajor: true } : {});
   }
   const desiredVersion = updates?.desired?.version ?? updates?.installedVersion ?? t("memoryUnknown");
   const activeVersions = updates?.components?.filter(item => item.component === "active-worker").map(item => item.version).filter((value): value is string => !!value) ?? updates?.loadedVersions ?? [];
+  const needsSetup = requiresRuntimeSetup(updates) || requiresRuntimeSetup(local.action);
   return <section className="card" aria-labelledby="runtime-updates-title">
     <h2 id="runtime-updates-title">{t("updates")}</h2>
-    <button type="button" className="button button-primary" disabled={busy || local.working || updates?.supported === false} onClick={() => void install()}>{t(local.working ? "actionUpdating" : "checkInstallUpdates")}</button>
+    {needsSetup ? <RuntimeSetup /> : <button type="button" className="button button-primary" disabled={busy || local.working || updates?.supported === false} onClick={() => void install()}>{t(local.working ? "actionUpdating" : "checkInstallUpdates")}</button>}
     {local.feedback && <p role="status" className={"action-feedback " + (local.error || local.action?.state === "failed" ? "is-error" : local.action?.state === "waiting" ? "is-waiting" : "")}>{local.feedback}</p>}
     <label className="checkbox-row"><input type="checkbox" checked={updates?.enabled ?? false} disabled={busy || !updates?.supported} onChange={event => void configure(event.target.checked)} /><span>{t("keepUpdated")}<small className="help-note">{t("runtimeUpdateHelp")}</small></span></label>
-    <p className="help-note">{updates?.supported ? !updates.enabled ? t("updatesOff") : labels[updates.state ?? ""] ?? t("updateChecks") : updates?.reason ?? t("updateOnce")}</p>
+    {!needsSetup && <p className="help-note">{updates?.supported ? !updates.enabled ? t("updatesOff") : labels[updates.state ?? ""] ?? t("updateChecks") : updates?.reason ?? t("updateOnce")}</p>}
     <p role="status" className="feedback">{message}</p>
-    {updates?.reason && <p className="help-note">{updates.reason}</p>}
+    {!needsSetup && updates?.reason && <p className="help-note">{updates.reason}</p>}
     {updates?.supported && <p className="help-note">{t("runtimeVersions", [desiredVersion, activeVersions.join(", ") || t("noWorkers")])}{(updates.staged?.version ?? updates.stagedVersion) ? " " + t("runtimeDownloaded", updates.staged?.version ?? updates.stagedVersion ?? "") : ""}{updates.blockerCount ? " " + t("runtimeWaiting", String(updates.blockerCount)) : ""}</p>}
     {!!updates?.components?.length && <ul className="runtime-components">{updates.components.map((component, index) => <li key={`${component.component}-${component.label ?? index}`}><span>{component.label ?? component.component}</span><strong>{component.version ?? t("memoryUnknown")}</strong><small>{component.state}</small></li>)}</ul>}
     <a href="https://quindart-com.github.io/opencode-chromium/updates/" target="_blank" rel="noopener noreferrer">{t("whatsNew")}</a>

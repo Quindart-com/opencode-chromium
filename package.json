@@ -1,6 +1,6 @@
 {
   "name": "opencode-chromium",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "runtimeControllerProtocol": 2,
   "toolContractVersion": 2,
   "browserContractVersion": 1,
@@ -160,15 +160,15 @@
     "@jridgewell/trace-mapping": "^0.3.31",
     "@modelcontextprotocol/node": "2.1.2",
     "@modelcontextprotocol/server": "2.4.0",
-    "@opencode-ai/plugin": "1.19.4",
-    "effect": "4.0.7",
+    "@opencode-ai/plugin": "1.19.5",
+    "effect": "4.1.0",
     "jsonc-parser": "^3.3.1",
     "pngjs": "7.0.0",
     "smol-toml": "^1.9.0",
     "ws": "^8.22.0",
     "yaml": "^2.9.0",
     "zod": "4.6.7",
-    "devtools-protocol": "0.0.1727723",
+    "devtools-protocol": "0.0.1729950",
     "webdriver-bidi-protocol": "1.0.2"
   },
   "devDependencies": {
@@ -193,6 +193,7 @@
   },
   "overrides": {
     "adm-zip": "0.6.1",
-    "protobufjs": "7.6.5"
+    "protobufjs": "7.6.5",
+    "zod": "4.6.7"
   }
 }

@@ -18,7 +18,7 @@ export default function HarnessConnections({ status, profileLabel }: { status: N
       const response = await sendMessage<{ result?: ConnectionSnapshot }>({ type: "GET_HARNESS_CONNECTIONS" });
       if (revision !== operation.current) return;
       if (!response.result?.host || !Array.isArray(response.result.clients)) { setSnapshot(null); setUnsupported(true); return; }
-      setSnapshot(response.result ?? null); setUnsupported(!response.result?.harnesses);
+      setSnapshot(response.result ?? null); setUnsupported(!response.result?.harnesses && response.result?.controllerSupported !== true);
     } catch { if (revision === operation.current) { setSnapshot(null); setUnsupported(true); } }
   }, []);
   useEffect(() => {

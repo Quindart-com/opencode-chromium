@@ -4,6 +4,8 @@ opencode-chromium separates the globally installed CLI, stable controller, desir
 
 Run `opencode-chromium setup --all` once to install the fixed controller and stable `host.mjs`, `mcp.mjs`, and `plugin.mjs` launchers. Harness and native-messaging configuration always targets those launchers, never a release directory or source checkout. Credentials, memory, artifacts, profiles, and settings remain in stable data directories outside immutable releases.
 
+For a 1.x host, use `npx -y opencode-chromium@latest setup --all` in a terminal so setup runs from the current published package, rather than the old installed CLI. Run it outside a source checkout and use Node.js 24 or newer. After browser work finishes, choose **Reconnect local bridge** in the extension and reconnect MCP in your agent once. The older host cannot install the new controller through its update API; the extension shows this setup path instead of repeatedly offering an update that cannot start. Saved keys and tabs are preserved.
+
 ## Blue-green activation
 
 An update is downloaded into a unique staging directory and checked for package identity, version, release metadata, required entrypoints, and hashes. Validation must finish before the release becomes `desired`; a merely staged release is never a fallback.

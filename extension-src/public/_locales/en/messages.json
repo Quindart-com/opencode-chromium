@@ -1340,6 +1340,9 @@
   "checkInstallUpdates": {
     "message": "Check and install updates"
   },
+  "runtimeSetupHelp": {
+    "message": "This installation needs a one-time setup. Run this command in a terminal, then reconnect the local bridge after browser work finishes. Saved keys and tabs are preserved."
+  },
   "updateAutomaticHelp": {
     "message": "The CLI updates in the background. Running agents and saved keys are preserved."
   },
