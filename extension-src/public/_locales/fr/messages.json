@@ -1340,6 +1340,9 @@
   "checkInstallUpdates": {
     "message": "Vérifier et installer les mises à jour"
   },
+  "actionReleaseUnavailable": {
+    "message": "Impossible de rechercher une version. Vérifiez votre connexion et réessayez. Votre installation actuelle reste inchangée."
+  },
   "runtimeSetupHelp": {
     "message": "Cette installation nécessite une configuration unique. Exécutez cette commande dans un terminal, puis reconnectez la liaison locale une fois le travail dans le navigateur terminé. Les clés et les onglets sont conservés."
   },

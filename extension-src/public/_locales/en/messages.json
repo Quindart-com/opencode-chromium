@@ -1340,6 +1340,9 @@
   "checkInstallUpdates": {
     "message": "Check and install updates"
   },
+  "actionReleaseUnavailable": {
+    "message": "Could not check for a release. Check your connection and try again. Your current installation is unchanged."
+  },
   "runtimeSetupHelp": {
     "message": "This installation needs a one-time setup. Run this command in a terminal, then reconnect the local bridge after browser work finishes. Saved keys and tabs are preserved."
   },
