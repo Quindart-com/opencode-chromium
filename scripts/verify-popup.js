@@ -476,6 +476,8 @@ try {
         assert.equal(stableDetails, 3, "full-page review includes every asynchronously loaded expandable feature");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} fits ${width}px ${theme}`);
         await page.screenshot({ path: path.join(reviewDirectory, `${view.toLowerCase()}-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
+        await page.evaluate(() => scrollTo(0, 0));
+        await page.screenshot({ path: path.join(reviewDirectory, `${view.toLowerCase()}-${width}-${theme}-viewport.png`), animations: "disabled" });
       }
       assert.ok(Math.max(...measuredWidths) - Math.min(...measuredWidths) < 1, `all views share a stable width at ${width}px ${theme}`);
     }

@@ -91,6 +91,10 @@ try {
     }
     await page.waitForFunction(() => document.querySelector(".setup details summary")?.getAttribute("aria-expanded") === "true");
     await page.screenshot({ path: path.join(screenshots, `hosted-updates-${width}-${theme}.png`), fullPage: true });
+    // Full-document captures can miscompose viewport-fixed backdrops after scrolling.
+    // Preserve a real viewport capture for material review, alongside content coverage.
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({ path: path.join(screenshots, `hosted-updates-${width}-${theme}-viewport.png`) });
   }
   console.log(JSON.stringify({ ok: true, states: 12, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus", "hosted version anchors and update guidance"] }));
 } finally { await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
