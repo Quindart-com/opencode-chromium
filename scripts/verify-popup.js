@@ -416,7 +416,7 @@ try {
   const approvalTheme = await page.evaluate(() => matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
   const stateReview = path.join(root, 'reports', 'state-review'); fs.mkdirSync(stateReview, {recursive:true});
   for (const theme of ['light','dark']) for (const width of [420,360]) {
-    await page.emulateMedia({colorScheme:theme}); await page.setViewportSize({width,height:900});
+    await page.emulateMedia({colorScheme:theme}); await page.setViewportSize({width,height:600});
     await page.screenshot({path:path.join(stateReview,`major-upgrade-approval-${width}-${theme}.png`),fullPage:true,animations:'disabled'});
   }
   await page.setViewportSize(approvalViewport); await page.emulateMedia({colorScheme:approvalTheme});

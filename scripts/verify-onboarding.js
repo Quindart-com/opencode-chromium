@@ -67,8 +67,8 @@ try {
   await page.reload(); assert.equal(await preference.isChecked(), false);
   await page.keyboard.press("Tab");
   assert.ok(await page.evaluate(() => document.activeElement?.matches(":focus-visible")));
-  for (const width of [1280, 360]) for (const theme of ["light", "dark"]) {
-    await page.setViewportSize({ width, height: 1000 }); await page.emulateMedia({ colorScheme: theme });
+  for (const width of [1440, 1280, 390, 360]) for (const theme of ["light", "dark"]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 }); await page.emulateMedia({ colorScheme: theme });
     await page.goto(`${origin}/updates/#v${version}`);
     await page.getByRole("heading", { name: "What’s new in your browser tools." }).waitFor();
     assert.ok(await page.locator(`article[id="v${version}"]`).isVisible());
@@ -96,5 +96,5 @@ try {
     await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({ path: path.join(screenshots, `hosted-updates-${width}-${theme}-viewport.png`) });
   }
-  console.log(JSON.stringify({ ok: true, states: 12, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus", "hosted version anchors and update guidance"] }));
+  console.log(JSON.stringify({ ok: true, states: 16, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus", "hosted version anchors and update guidance"] }));
 } finally { await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
