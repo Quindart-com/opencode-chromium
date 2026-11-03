@@ -1,4 +1,5 @@
 import type { NativeRpc } from "./native-rpc.ts";
+import { runtimeSetupCommand } from "../../runtime-update.ts";
 
 /** Connection controls are restricted to our panel, never content scripts or pages. */
 export async function connectionPanelMessage(message: { type: string; params?: Record<string, unknown>; enabled?: unknown }, sender: { id?: string; tab?: { url?: string }; url?: string; frameId?: number }, dependencies: {
@@ -10,13 +11,17 @@ export async function connectionPanelMessage(message: { type: string; params?: R
     try { return await dependencies.rpc.request("control.capabilities", {}, { timeoutMs: 1500 }) as { protocolVersion?: number; methods?: string[] }; }
     catch { return null; }
   };
-  if (message.type === "GET_HARNESS_CONNECTIONS") return dependencies.rpc.request("connections.list", {}, { timeoutMs: 2500 });
+  if (message.type === "GET_HARNESS_CONNECTIONS") {
+    const snapshot = await dependencies.rpc.request("connections.list", {}, { timeoutMs: 2500 });
+    const supported = await capabilities();
+    return supported?.protocolVersion === 2 && snapshot && typeof snapshot === "object" ? { ...snapshot, controllerSupported: true } : snapshot;
+  }
   if (message.type === "GET_RUNTIME_UPDATES") {
     const supported = await capabilities();
     if (supported?.protocolVersion === 2) return dependencies.rpc.request("control.status", {}, { timeoutMs: 2500 });
     const legacy = await dependencies.rpc.request("runtime.updateStatus", {}, { timeoutMs: 2500 }).catch(() => null);
     return { ...(legacy && typeof legacy === "object" ? legacy : {}),supported: false,controllerSupported: false,state: "bridge_required",
-      reason: "Run opencode-chromium setup --all once to install the stable update controller. The current runtime remains available." };
+      reason: `Run ${runtimeSetupCommand} once to enable updates from the extension. Your current runtime remains available.` };
   }
   if (message.type === "SET_RUNTIME_UPDATES") {
     const supported = await capabilities();

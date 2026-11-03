@@ -1340,6 +1340,9 @@
   "checkInstallUpdates": {
     "message": "Buscar e instalar actualizaciones"
   },
+  "runtimeSetupHelp": {
+    "message": "Esta instalación requiere una configuración inicial. Ejecuta este comando en una terminal y vuelve a conectar el enlace local cuando termine el trabajo en el navegador. Las claves y las pestañas se conservan."
+  },
   "updateAutomaticHelp": {
     "message": "El CLI se actualiza en segundo plano. Los agentes y las claves se conservan."
   },

@@ -9,7 +9,7 @@ const labels: Record<string, string> = {
   plugin_reload_required: "actionPluginReload",
   needs_attention: "actionNeedsAttention", updated: "actionUpdated", update_waiting: "actionUpdateWaiting",
   not_installed: "statusNotInstalled", unmanaged_runtime: "actionUnmanaged",
-  bridge_required: "connectionsUnsupported", major_approval_required: "runtimeReconnectRequired",
+  bridge_required: "bridgeRequired", reconnect_required: "runtimeReconnectRequired", major_approval_required: "runtimeApprovalRequired",
   rollback_started: "runtimeScheduled", reconciled: "runtimeInstalled", already_current: "runtimeInstalled",
 };
 export const localActionLabel = (action: LocalAction) => t(labels[action.code] ?? (action.state === "failed" ? "actionFailed" : action.state === "waiting" ? "actionWaiting" : "actionRunning"));

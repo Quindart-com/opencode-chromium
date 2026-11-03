@@ -2,8 +2,7 @@ import { useEffect,useState } from "react";
 import { t } from "../../i18n";
 import { sendMessage,type NativeStatus,type Profile } from "./api";
 import HarnessConnections from "./HarnessConnections";
-
-const setupCommand = "npx -y opencode-chromium@latest setup --all";
+import { runtimeSetupCommand as setupCommand } from "../../runtime-update";
 
 export default function ConnectionSummary({ status }: { status: NativeStatus }): React.JSX.Element {
   const [profile, setProfile] = useState<Profile | null>(null);

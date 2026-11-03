@@ -1340,6 +1340,9 @@
   "checkInstallUpdates": {
     "message": "Buscar e instalar atualizações"
   },
+  "runtimeSetupHelp": {
+    "message": "Esta instalação precisa de uma configuração única. Execute este comando em um terminal e reconecte a ponte local após terminar o trabalho no navegador. As chaves e abas são preservadas."
+  },
   "updateAutomaticHelp": {
     "message": "O CLI atualiza em segundo plano. Os agentes e as chaves são preservados."
   },

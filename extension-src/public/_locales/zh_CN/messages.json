@@ -1340,6 +1340,9 @@
   "checkInstallUpdates": {
     "message": "检查并安装更新"
   },
+  "runtimeSetupHelp": {
+    "message": "此安装需要一次性设置。请在终端中运行此命令，待浏览器工作结束后重新连接本地桥接。保存的密钥和标签页将保留。"
+  },
   "updateAutomaticHelp": {
     "message": "CLI 将在后台更新，运行中的代理和已保存的密钥会保留。"
   },
