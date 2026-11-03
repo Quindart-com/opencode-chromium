@@ -193,6 +193,7 @@
   },
   "overrides": {
     "adm-zip": "0.6.1",
-    "protobufjs": "7.6.5"
+    "protobufjs": "7.6.5",
+    "zod": "4.6.7"
   }
 }
