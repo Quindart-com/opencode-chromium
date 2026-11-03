@@ -40,7 +40,8 @@ function fixture(options: { senderDocument?: string; senderFrame?: number; injec
 }
 
 test("page projection strips identifiers, credentials, raw native errors and invalid counters", () => {
-  const raw = { apiKey: "do-not-forward", profileId: "private-profile", cacheDir: "/example/private", error: "private failure" };
+  // Fresh non-credential data exercises projection without a hardcoded key literal.
+  const raw = { apiKey: crypto.randomUUID(), profileId: "private-profile", cacheDir: "/example/private", error: "private failure" };
   const result = projectPagePanel(true,
     { ...raw, clients: [{ harness: "codex", state: "responding", id: "private-client", pid: 42 }], harnesses: [{ harness: "codex", installed: true, version: "/example/private" }] },
     { ...raw, ready: true, usage: { inputTokens: -1, outputTokens: Infinity, calls: 3, costReportedCalls: 0 } },
