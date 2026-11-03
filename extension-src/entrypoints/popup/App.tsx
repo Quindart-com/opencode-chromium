@@ -9,6 +9,7 @@ import ProviderSettings from "./ProviderSettings";
 import RuntimeUpdates from "./RuntimeUpdates";
 import UploadSettings from "./UploadSettings";
 import VersionNotice from "./VersionNotice";
+import PanelIcon from "./PanelIcon";
 
 const t = (key: "connected" | "checking" | "reconnecting" | "notConnected" | "localAutomation" | "extensionViews" | "overview" | "profiles" | "settings" | "setupGuide" | "sourceGithub") => browser.i18n.getMessage(key);
 
@@ -118,6 +119,7 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
             type="button"
             onClick={() => onChange(view)}
           >
+            <PanelIcon name={view} />
             {t(view)}
           </button>
         );
@@ -127,7 +129,18 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
 }
 
 export default function App(): React.JSX.Element {
-  const [activeView, setActiveView] = useState<ViewName>("overview");
+  const [activeView, setActiveView] = useState<ViewName>(() => {
+    const requested = window.location.hash.slice(1);
+    return requested === "profiles" || requested === "settings" ? requested : "overview";
+  });
+  const [pagePanelFeedback, setPagePanelFeedback] = useState("");
+  const [openingPagePanel, setOpeningPagePanel] = useState(false);
+  async function openPagePanel() {
+    setOpeningPagePanel(true); setPagePanelFeedback("");
+    try { const response = await sendMessage<{ ok?: boolean }>({ type: "PAGE_PANEL_OPEN" }); if (!response.ok) throw new Error("Unavailable"); }
+    catch { setPagePanelFeedback(browser.i18n.getMessage("pagePanelUnavailable")); }
+    finally { setOpeningPagePanel(false); }
+  }
   const nativeStatus = useNativeStatus();
   const changeView = (view: ViewName) => {
     setActiveView(view);
@@ -139,6 +152,7 @@ export default function App(): React.JSX.Element {
       <Header status={nativeStatus} />
       <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
       <ViewTabs active={activeView} onChange={changeView} />
+      <div className="page-panel-launch"><button type="button" disabled={openingPagePanel} onClick={() => void openPagePanel()}><PanelIcon name="external" />{browser.i18n.getMessage("pagePanelOpen")}</button>{pagePanelFeedback && <p role="status">{pagePanelFeedback}</p>}</div>
       <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={activeView !== "overview"}>
         {activeView === "overview" && <><ConnectionSummary status={nativeStatus} /><DecisionOverview onConfigure={() => changeView("settings")} /><MemoryView /></>}
       </div>
@@ -149,9 +163,10 @@ export default function App(): React.JSX.Element {
         {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><RuntimeUpdates /><ConnectionView status={nativeStatus} view="settings" /></>}
       </div>
       <footer id="app-footer">
-        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">{t("setupGuide")}</a>
+        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener"><PanelIcon name="help" />{t("setupGuide")}</a>
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
           {t("sourceGithub")}
+          <PanelIcon name="external" />
         </a>
       </footer>
     </main>

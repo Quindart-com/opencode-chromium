@@ -45,7 +45,7 @@ export default defineConfig({
     web_accessible_resources: [
       {
         matches: ["<all_urls>"],
-        resources: ["popup.html"],
+        resources: ["popup.html", "images/icon48.png", "images/harness/*.svg", "images/harness/*.png"],
       },
     ],
   },

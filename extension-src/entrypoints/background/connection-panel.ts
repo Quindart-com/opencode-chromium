@@ -5,7 +5,7 @@ import { runtimeSetupCommand } from "../../runtime-update.ts";
 export async function connectionPanelMessage(message: { type: string; params?: Record<string, unknown>; enabled?: unknown }, sender: { id?: string; tab?: { url?: string }; url?: string; frameId?: number }, dependencies: {
   extensionId: string; panelUrl?: string; rpc: NativeRpc; idle(): boolean;
 }) {
-  const ownPanelTab = dependencies.panelUrl && sender.url === dependencies.panelUrl && sender.tab?.url === dependencies.panelUrl && sender.frameId === 0;
+  const ownPanelTab = dependencies.panelUrl && sender.url?.split(/[?#]/)[0] === dependencies.panelUrl && sender.tab?.url?.split(/[?#]/)[0] === dependencies.panelUrl && sender.frameId === 0;
   if (sender.id !== dependencies.extensionId || sender.tab && !ownPanelTab) throw new Error("Open connection controls from the extension panel");
   const capabilities = async () => {
     try { return await dependencies.rpc.request("control.capabilities", {}, { timeoutMs: 1500 }) as { protocolVersion?: number; methods?: string[] }; }

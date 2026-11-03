@@ -3,6 +3,7 @@ import { browser as chrome } from "wxt/browser";
 import { versionNotice } from "../../version-status.ts";
 import { connectionPanelMessage } from "./connection-panel.ts";
 import { NativeRpc } from "./native-rpc.ts";
+import { trustedPanelSender } from "./panel-sender.ts";
 import { popupMessageSchema,uploadMessageSchema } from "./popup-schema.ts";
 import type { BackgroundRuntimeDependencies as Dependencies } from "./types.ts";
 
@@ -32,8 +33,8 @@ function broadcastNativeStatus() {
     }
 }
 chrome.runtime.onConnect.addListener((port) => {
-    if (port.name !== "popup-status")
-        return;
+    if (port.name !== "popup-status") return;
+    if (!port.sender || !trustedPanelSender(port.sender, chrome.runtime.id, chrome.runtime.getURL("/popup.html"))) { port.disconnect(); return; }
     statusPorts.add(port);
     try {
         port.postMessage({ type: "STATUS_SNAPSHOT", status: { ...hostStatus } });
@@ -48,6 +49,10 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
     const parsed = popupMessageSchema.safeParse(value);
     if (!parsed.success) return false;
     const message = parsed.data;
+    if (message.type.startsWith("PAGE_PANEL_")) return false;
+    const cursorMessage = ["OPENCODE_CURSOR_ARRIVED", "OPENCODE_GET_CURSOR_STATE"].includes(message.type);
+    const trusted = cursorMessage ? sender.id === chrome.runtime.id && sender.tab?.id !== undefined && sender.frameId === 0 : trustedPanelSender(sender, chrome.runtime.id, chrome.runtime.getURL("/popup.html")) || ["GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST"].includes(message.type);
+    if (!trusted) { sendResponse({ error: "Open controls from the extension panel" }); return false; }
     if (["GET_HARNESS_CONNECTIONS", "DISCONNECT_HARNESS", "RECONNECT_NATIVE_HOST", "START_HARNESS_RECONNECT", "RUN_CONNECTION_DOCTOR", "INSTALL_RUNTIME_UPDATE", "GET_LOCAL_ACTION", "GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message.type)) {
         connectionPanelMessage(message, sender, { extensionId: chrome.runtime.id, panelUrl: chrome.runtime.getURL("/popup.html"), rpc, idle: connectionIdle })
             .then(result => sendResponse({ result })).catch(error => sendResponse({ error: errorMessage(error) }));

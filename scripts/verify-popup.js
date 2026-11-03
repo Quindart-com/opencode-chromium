@@ -227,6 +227,13 @@ try {
   await dashboard.getByRole("img", { name: "Token usage", exact: true }).waitFor();
   await page.screenshot({ path: path.join(root, "reports", "popup-usage-providers.png"), fullPage: true });
   await dashboard.screenshot({ path: path.join(root, "reports", "popup-usage-card.png"), animations: "disabled" });
+  const comparison = dashboard.locator(".usage-comparison");
+  assert.equal(await comparison.getAttribute("open"), null, "service comparison stays secondary until requested");
+  await comparison.locator("summary").click();
+  await comparison.getByRole("button", { name: /OpenAI Platform/ }).click();
+  await page.waitForFunction(() => document.querySelector(".usage-metrics dd")?.textContent === "350");
+  assert.equal(await dashboard.getByRole("combobox", { name: "Service", exact: true }).inputValue(), "openai:openai-decisions", "comparison rows still select their service");
+  await comparison.locator("summary").click();
   await dashboard.getByRole("combobox", { name: "Service", exact: true }).selectOption("current");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
   assert.equal(await page.locator("#memory-replays").textContent(), "0");

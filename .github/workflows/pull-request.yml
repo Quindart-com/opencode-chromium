@@ -34,11 +34,15 @@ jobs:
         timeout-minutes: 5
       - run: node scripts/verify-tab-lifecycle.js
         timeout-minutes: 3
+      - run: node scripts/verify-page-panel.js
+        timeout-minutes: 3
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: browser-reliability
-          path: reports/browser-reliability.json
+          path: |
+            reports/browser-reliability.json
+            reports/page-panel-review/
 
   firefox-integration:
     name: Firefox / extension and native host / Node 24
@@ -113,6 +117,7 @@ jobs:
         if: steps.chromium-cache.outputs.cache-hit != 'true'
         run: bunx playwright install --only-shell chromium
       - run: node scripts/verify-popup.js
+      - run: node scripts/verify-page-panel.js --ui-fixture
       - run: node scripts/verify-onboarding.js && node scripts/verify-browsing-capabilities.js
       - run: bun run firefox:submit -- --dry-run
       - run: node scripts/verify-uploads.js

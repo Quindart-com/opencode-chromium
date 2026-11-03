@@ -48,9 +48,9 @@ export default function DecisionOverview({ onConfigure }: { onConfigure: () => v
       <div><dt>{t("calls")}</dt><dd>{number(usage?.calls)}</dd></div><div><dt>{t("reportedCost")}</dt><dd className={usage?.costReportedCalls ? "" : "metric-unreported"}>{usage?.costReportedCalls ? "$" + usage.reportedCost.toFixed(6) : t("notReported")}</dd></div>
     </dl>
     {usage?.daily && <UsageTrend days={usage.daily} />}
-    {usage?.providers && <div className="usage-comparison"><h3>{t("usageServices")}</h3><table><thead><tr><th>{t("usageProvider")}</th><th>{t("calls")}</th><th>{t("usageInput")}</th><th>{t("usageOutput")}</th></tr></thead><tbody>
+    {usage?.providers && <details className="usage-comparison"><summary>{t("usageServices")}</summary><table><thead><tr><th>{t("usageProvider")}</th><th>{t("calls")}</th><th>{t("usageInput")}</th><th>{t("usageOutput")}</th></tr></thead><tbody>
       {usage.providers.map(row => <tr key={row.id} className={usage.selectedProvider === row.id ? "is-selected" : ""}><th scope="row"><button type="button" onClick={() => { setLoading(true); setProvider(row.id); }}>{service(row.route)}{model(row.provider) && <small>{model(row.provider)}</small>}</button></th><td>{number(row.calls)}</td><td>{number(row.inputTokens)}</td><td>{number(row.outputTokens)}</td></tr>)}
-    </tbody></table></div>}
+    </tbody></table></details>}
     <p className="usage-footnote">{usage ? t("usageLocalHistory", [String(usage.tests), String(usage.usageReportedCalls), String(usage.calls)]) : t("loading")}{usage?.calls ? " · " + Math.round(usage.averageMs) + " ms" : ""}</p>
     {usage && usage.costReportedCalls < usage.calls && <p className="usage-footnote">{t("usageAccountingIncomplete")}</p>}
     {efficiency && <details className="advanced-details"><summary>{t("usageSavingsGlobal")}</summary><p className="help-note">{t("efficiencyReport", [number(efficiency.skipped), number(efficiency.cacheHits), number(efficiency.coalesced), number(efficiency.budgetSkipped)])}</p></details>}

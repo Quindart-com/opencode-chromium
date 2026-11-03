@@ -1376,8 +1376,46 @@
   "catalogInvalid": {
     "message": "Não foi possível carregar o catálogo personalizado. Os modelos integrados estão disponíveis."
   },
-  "bridgeRequired": { "message": "Execute opencode-chromium setup --all uma vez para instalar o controlador de atualização estável." },
-  "runtimeDraining": { "message": "Novas conexões usam o runtime atualizado. As sessões existentes terminarão na versão atual." },
-  "runtimeApprovalRequired": { "message": "Uma atualização principal está disponível e precisa da sua aprovação." },
-  "majorUpgradeConfirm": { "message": "Atualizar para a nova versão principal? As sessões existentes não serão interrompidas, mas comandos legados removidos não estarão disponíveis para novas conexões." }
+  "bridgeRequired": {
+    "message": "Execute opencode-chromium setup --all uma vez para instalar o controlador de atualização estável."
+  },
+  "runtimeDraining": {
+    "message": "Novas conexões usam o runtime atualizado. As sessões existentes terminarão na versão atual."
+  },
+  "runtimeApprovalRequired": {
+    "message": "Uma atualização principal está disponível e precisa da sua aprovação."
+  },
+  "majorUpgradeConfirm": {
+    "message": "Atualizar para a nova versão principal? As sessões existentes não serão interrompidas, mas comandos legados removidos não estarão disponíveis para novas conexões."
+  },
+  "pagePanelOpen": {
+    "message": "Abrir nesta página"
+  },
+  "pagePanelUnavailable": {
+    "message": "Esta página não pode exibir o painel integrado. Use o painel da extensão."
+  },
+  "pagePanelClose": {
+    "message": "Fechar painel"
+  },
+  "pagePanelMinimize": {
+    "message": "Minimizar painel"
+  },
+  "pagePanelRestore": {
+    "message": "Restaurar painel"
+  },
+  "pagePanelMove": {
+    "message": "Mover painel (teclas de seta)"
+  },
+  "pagePanelProtected": {
+    "message": "As configurações sensíveis e aprovações abrem no painel da extensão, separado deste site."
+  },
+  "pagePanelManageProfiles": {
+    "message": "Gerenciar perfis"
+  },
+  "pagePanelOpaque": {
+    "message": "Reduzir transparência"
+  },
+  "pagePanelStatusUnavailable": {
+    "message": "O status da conexão não está disponível. Abra o painel da extensão para ver os detalhes."
+  }
 }

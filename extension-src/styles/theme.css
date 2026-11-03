@@ -1,0 +1,79 @@
+/* Shared semantic colors for the popup, setup guide, and upload confirmation. */
+:root {
+  color-scheme: light;
+  --bg: #f5f5f3;
+  --surface: #ffffff;
+  --surface-raised: #f8f8f6;
+  --surface-border: #e5e5e0;
+  --surface-border-strong: #c8cbc4;
+  --text: #202620;
+  --text-muted: #60685f;
+  --text-faint: #687267;
+  --section-label: #60685f;
+  --accent: #285b43;
+  --accent-hover: #194832;
+  --accent-soft: #edf4ee;
+  --accent-border: #b6cebd;
+  --primary-text: #ffffff;
+  --focus-ring: #285b4330;
+  --ok: #22724b;
+  --ok-ink: #ffffff;
+  --ok-soft: #edf6ef;
+  --ok-border: #b9d8c2;
+  --warn: #8c5918;
+  --warn-soft: #fcf5e9;
+  --warn-border: #e5cda6;
+  --bad: #ab3636;
+  --bad-ink: #ffffff;
+  --bad-soft: #fcf0ee;
+  --bad-border: #e8c0bb;
+  --input-bg: #ffffff;
+  --button-bg: #ffffff;
+  --button-hover: #f0f2ed;
+  --button-border: #d6d9d1;
+  --disabled-bg: #efefeb;
+  --disabled-text: #737b70;
+  --disabled-primary-bg: #dce6dd;
+  --disabled-primary-text: #596c5c;
+  --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #151815;
+    --surface: #1d211d;
+    --surface-raised: #242924;
+    --surface-border: #343b33;
+    --surface-border-strong: #505c4e;
+    --text: #edf0e9;
+    --text-muted: #acb5a6;
+    --text-faint: #a0ad99;
+    --section-label: #acb5a6;
+    --accent: #acd0af;
+    --accent-hover: #c4e2c5;
+    --accent-soft: #2a3b2d;
+    --accent-border: #526e55;
+    --primary-text: #17251a;
+    --focus-ring: #acd0af40;
+    --ok: #9acdAB;
+    --ok-ink: #16291d;
+    --ok-soft: #26392c;
+    --ok-border: #46624e;
+    --warn: #e7bd7e;
+    --warn-soft: #372e20;
+    --warn-border: #6f5834;
+    --bad: #eda59b;
+    --bad-ink: #311b18;
+    --bad-soft: #392824;
+    --bad-border: #715048;
+    --input-bg: #1a1e1a;
+    --button-bg: #272d26;
+    --button-hover: #333c30;
+    --button-border: #4b5648;
+    --disabled-bg: #2a2e28;
+    --disabled-text: #9aa592;
+    --disabled-primary-bg: #344333;
+    --disabled-primary-text: #9aaf97;
+  }
+}
