@@ -301,25 +301,8 @@ The hosted archive preserves authoritative release text, anchors and existing li
 
 The default contextual overview preserves all harness connection rows, assistance status, input/output token totals with their current service/period scope, and memory status. Filters, call counts, cost and trend remain in a native Usage and performance disclosure. Its footer sits outside the scroll region so its material preference and trusted-panel handoff remain reachable when details expand or the viewport narrows. These controls intentionally retain functional information and accessibility capabilities absent from the compact prototype study. Populated connection screenshots use synthetic renderer data; separate real-addon fixtures establish injection and authorization.
 
-Regular trusted views use decorative colored forms. Guarded major-upgrade review and upload windows use soft cyan/lilac/pink gradients. Their control colors change atomically on theme changes. Browser checks cover initial, 40ms and 140ms phases, enabled state and a real failure-cancel click that attaches no files. Modeled contrast uses painted backdrop samples rather than allowing the body's opaque fallback color to conceal them. Runtime rendering never reads webpage pixels.
+Standalone trusted pages use a plain white canvas, including when the system prefers dark mode. Design-only gradients and colored artwork are omitted from the shipped UI. The injected page board remains separate: it samples the real webpage behind it and keeps its contrast-driven opaque fallback.
 
-### Archive artwork and optical interpretation
+Brand rows and headings are plain text/logo content without glass capsules. The archive's Get started link has its own glass action treatment. Informational cards retain the suite's grouping and spacing; text itself receives no pill surface.
 
-The archive reproduces four opaque, normally blended ellipse primitives in back-to-front order. Each has border-radius 50%, transform-origin 0 0, no stroke, blur or shadow; the viewport clips the group. Boxes below are normalized to canvas width and height:
-
-| Ellipse | x | y | width | height | CSS rotation | Light fill | Dark fill |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Purple | .30 | .40 | .70 | .35 | +22deg | #C6ACDF | #4B4A77 |
-| Teal | .58 | .08 | .24 | 1.10 | -25deg | #93CCD0 | #2D6B70 |
-| Lilac | .82 | .20 | .20 | 1.00 | -25deg | #D4A2D7 | #6E4878 |
-| Orange | .88 | .55 | .18 | .60 | -25deg | #E4B484 | #7B5848 |
-
-The first CSS matrix is (.9271838665,.3746065795,-.3746065795,.9271838665); the others are (.9063078165,-.4226182699,.4226182699,.9063078165). Translation comes from each normalized box; rotation occurs around its top-left origin.
-
-Canvas stops are #F6EFF5→#CEE8EA in light mode and #15243B→#162B3C in dark mode. The normalized box-to-gradient transform is [[.8,.6,0],[-.6,.8,.3]]. SVG applies its inverse matrix (.8,.6,-.6,.8,.18,-.24) in objectBoundingBox coordinates with preserveAspectRatio=none. This preserves the non-square canvas mapping. Renderer tests rasterize only this owned static SVG and check the independent color field t=.8u+.6v; background-only captures and a geometry/color report accompany the full UI evidence.
-
-Glass surfaces retain the 10% theme fills, 32px shell radius and measured white rims. Additional inset highlights use (2,2), blur3 and(-2,-2), blur6 at .55/.40 in light and .24/.15 in dark, plus the measured 0/8/20/-4 depth shadow at .13/.22. Native GLASS radius 8, refraction .7, depth 18 and dispersion .12 remain visual targets. Ordinary CSS backdrop blur has no exact equivalence to those optics; the 16px CSS blur is an engineering approximation, and no arbitrary saturation is added to the supplied palette. Solid/contrast alternatives hide decorative artwork and remove blur/highlights.
-
-The reference foregrounds do not provide 4.5:1 contrast over every responsive placement of the actual artwork. Archive-only secondary text uses #35435C(light) and #D9E3F2(dark); links use #1D3F8F and #CCD9FF. Primary text stays at its original full opacity. Modeled renderer checks require 4.5:1 over every supplied art/gradient color. This deliberate text-color deviation preserves the artwork and layout while improving readability.
-
-The hosted archive uses natural document scrolling and an 880px maximum-width shell, keeping all release anchors and content accessible. At 390px, a 34px header capsule and separate intro spacing preserve the title layout near y139 (visible glyphs near y145) and first article near y347. The reading layout remains responsive at other widths.
+The hosted archive uses natural document scrolling and an 880px maximum-width shell, retaining release anchors and content. Browser checks cover the plain canvas, unboxed brand row, glass action, contrast, responsive layouts, and disclosure behavior. Guarded upload and major-upgrade actions keep their explicit approval semantics.

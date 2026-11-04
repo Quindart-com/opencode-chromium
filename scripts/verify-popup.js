@@ -421,7 +421,7 @@ try {
   const stateReview = path.join(root, 'reports', 'state-review'); fs.mkdirSync(stateReview, {recursive:true});
   for (const theme of ['light','dark']) for (const width of [420,360]) {
     await page.emulateMedia({colorScheme:theme}); await page.setViewportSize({width,height:600});
-    const colors = theme === 'light' ? ['#edf3fc','#bedbfa','#e7cbe5','#bde5e8'] : ['#111a2c','#1c3544','#432b3f','#332b4d'];
+    const colors = ['#ffffff']; // Standalone review pages use the same white canvas in either system theme.
     const backdrops = colors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
     for (const control of await review.locator('button').all()) {
       assert.ok(await control.evaluate(glassTextContrast,backdrops) >= 4.5,'Guarded upgrade controls retain contrast immediately after theme changes');

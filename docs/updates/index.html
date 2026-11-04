@@ -11,19 +11,10 @@ layout: null
   <title>What’s new · OpenCode Browser</title>
   <link rel="stylesheet" href="theme.css">
   <style>
-    :root { --canvas:var(--bg); --muted:#35435c; --accent:#1d3f8f; --line:var(--surface-border-strong); --soft:var(--accent-soft); --archive-start:#f6eff5; --archive-end:#cee8ea; --archive-purple:#c6acdf; --archive-teal:#93ccd0; --archive-lilac:#d4a2d7; --archive-orange:#e4b484; --archive-shadow:inset 2px 2px 3px #ffffff8c,inset -2px -2px 6px #ffffff66,0 8px 20px -4px #121a2e21; font:15px/1.65 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+    :root { --canvas:var(--bg); --muted:#35435c; --accent:#1d3f8f; --line:var(--surface-border-strong); --soft:var(--accent-soft); --archive-shadow:inset 2px 2px 3px #ffffff8c,inset -2px -2px 6px #ffffff66,0 8px 20px -4px #121a2e21; font:15px/1.65 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
     * { box-sizing:border-box; } body { margin:0; background:transparent; min-height:100vh; isolation:isolate; }
-    .archive-backdrop { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-1; overflow:hidden; pointer-events:none; }
-    .archive-canvas { position:absolute; inset:0; width:100%; height:100%; }
-    .archive-backdrop i { position:absolute; display:block; border-radius:50%; transform-origin:0 0; }
-    .archive-backdrop i:nth-of-type(1) { left:30%; top:40%; width:70%; height:35%; background:var(--archive-purple); transform:matrix(.9271838665,.3746065795,-.3746065795,.9271838665,0,0); }
-    .archive-backdrop i:nth-of-type(2) { left:58%; top:8%; width:24%; height:110%; background:var(--archive-teal); transform:matrix(.9063078165,-.4226182699,.4226182699,.9063078165,0,0); }
-    .archive-backdrop i:nth-of-type(3) { left:82%; top:20%; width:20%; height:100%; background:var(--archive-lilac); transform:matrix(.9063078165,-.4226182699,.4226182699,.9063078165,0,0); }
-    .archive-backdrop i:nth-of-type(4) { left:88%; top:55%; width:18%; height:60%; background:var(--archive-orange); transform:matrix(.9063078165,-.4226182699,.4226182699,.9063078165,0,0); }
-    @media(prefers-color-scheme:dark){:root{--muted:#d9e3f2;--accent:#ccd9ff;--archive-start:#15243b;--archive-end:#162b3c;--archive-purple:#4b4a77;--archive-teal:#2d6b70;--archive-lilac:#6e4878;--archive-orange:#7b5848;--archive-shadow:inset 2px 2px 3px #ffffff3d,inset -2px -2px 6px #ffffff26,0 8px 20px -4px #121a2e38;}}
-    @media(prefers-reduced-transparency:reduce),(prefers-contrast:more),(forced-colors:active){.archive-backdrop{display:none}}
      main { width:calc(100% - 30px); max-width:880px; margin:76px auto; padding:48px; display:flex; flex-direction:column; gap:28px; border:1px solid var(--surface-border); border-radius:32px; overflow:clip; background:var(--surface); box-shadow:var(--archive-shadow); }
-    header { position:relative; padding:0 16px; border:1px solid var(--surface-border); border-radius:24px; background:var(--surface); box-shadow:var(--archive-shadow); backdrop-filter:blur(16px); display:flex; align-items:center; gap:12px; min-height:34px; } header a { display:inline-flex; align-items:center; min-height:32px; color:var(--text); text-decoration:none; font-size:14px; line-height:21px; font-weight:600; } header img { width:32px; height:32px; } header nav a { font-size:11px; line-height:16.5px; font-weight:500; } header nav { margin-left:auto; font-size:11px; line-height:16.5px; font-weight:500; }
+    header { position:relative; padding:0; display:flex; align-items:center; gap:12px; min-height:34px; } header a { display:inline-flex; align-items:center; min-height:32px; color:var(--text); text-decoration:none; font-size:14px; line-height:21px; font-weight:600; } header img { width:32px; height:32px; } header nav a { padding:6px 14px; border:1px solid var(--button-border); border-radius:22px; background:var(--button-bg); box-shadow:var(--material-shadow); font-size:11px; line-height:16.5px; font-weight:500; } header nav { margin-left:auto; font-size:11px; line-height:16.5px; font-weight:500; }
     header::after { content:""; position:absolute; left:0; right:0; bottom:-15px; height:1px; background:var(--surface-border); }
     .intro { padding:0; } h1 { font-size:52.8px; font-weight:550; line-height:1.1; letter-spacing:-.05em; text-wrap:balance; margin:0 0 16px; } .intro p { margin:0; font-size:16.8px; line-height:27px; color:var(--muted); }
     h2 { font-size:24px; font-weight:500; line-height:1.3; margin:0 0 20px; letter-spacing:-.015em; } h2 a { color:var(--text); text-decoration:none; } h3 { font-size:1.1rem; margin:0 0 12px; }
@@ -32,20 +23,12 @@ layout: null
     details { margin-top:16px; } summary { cursor:pointer; font-size:13px; font-weight:500; } details ul { margin-top:16px; } .details-open-label { display:none; } details[open] > summary .details-open-label { display:inline; } details[open] > summary .details-closed-label { display:none; } .setup { background:var(--surface); border:1px solid var(--line); border-radius:24px; padding:24px; box-shadow:var(--archive-shadow); margin:0; } code { font-size:.88em; overflow-wrap:anywhere; } .setup code { display:block; padding:12px 0; }
     footer { border-top:1px solid var(--line); padding:24px 0; color:var(--muted); font-size:.85rem; } footer nav { display:flex; gap:24px; flex-wrap:wrap; } :focus-visible { outline:3px solid var(--accent); outline-offset:4px; } ::selection { background:var(--soft); color:var(--text); } html { scrollbar-color:var(--muted) var(--canvas); }
 
-    @media (max-width:600px) { main { margin:24px auto; padding:24px; } h1 { font-size:32px; } header { gap:8px; padding:0 10px; margin-bottom:28px; } header::after { bottom:-43px; } .intro { margin-bottom:12px; } header nav { font-size:11px; white-space:nowrap; } .setup { padding:20px; } }
+    @media (max-width:600px) { main { margin:24px auto; padding:24px; } h1 { font-size:32px; } header { gap:8px; padding:0; margin-bottom:28px; } header::after { bottom:-43px; } .intro { margin-bottom:12px; } header nav { font-size:11px; white-space:nowrap; } .setup { padding:20px; } }
     @media(prefers-reduced-transparency:reduce),(prefers-contrast:more),(forced-colors:active){:root{--archive-shadow:none}article,header{backdrop-filter:none;}}
     @media(forced-colors:active){:root{--muted:CanvasText;--accent:LinkText;}}
   </style>
 </head>
-<body><div class="archive-backdrop" aria-hidden="true">
-  <!-- The design maps normalized box coordinates into gradient space with
-       [ .8 .6 0 ; -.6 .8 .3 ]. SVG maps the other way, so use its inverse.
-       objectBoundingBox plus preserveAspectRatio=none retains the non-square canvas. -->
-  <svg class="archive-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none" focusable="false">
-    <defs><linearGradient id="archive-canvas-gradient" gradientUnits="objectBoundingBox" x1="0" y1=".5" x2="1" y2=".5" gradientTransform="matrix(.8 .6 -.6 .8 .18 -.24)" color-interpolation="sRGB"><stop offset="0" style="stop-color:var(--archive-start)"/><stop offset="1" style="stop-color:var(--archive-end)"/></linearGradient></defs>
-    <rect width="1" height="1" fill="url(#archive-canvas-gradient)"/>
-  </svg><i></i><i></i><i></i><i></i>
-</div><main>
+<body><main>
   <header><img src="logo.svg" alt=""><a href="https://github.com/Quindart-com/opencode-chromium">OpenCode Browser</a><nav aria-label="Help"><a href="https://github.com/Quindart-com/opencode-chromium#readme">Get started</a></nav></header>
   <section class="intro"><h1>What’s new in your browser tools.</h1><p>New capabilities, useful fixes and the details that help you get back to browsing.</p></section>
   {% include release-notes.html %}

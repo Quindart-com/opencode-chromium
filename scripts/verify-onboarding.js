@@ -4,7 +4,6 @@ import http from "node:http";
 import path from "node:path";
 import { chromium } from "playwright";
 import { glassTextContrast } from "./fixtures/glass-contrast.js";
-import { inspectArchiveArtwork } from "./fixtures/archive-artwork.js";
 import { buildUpdatePage } from "./build-update-page.js";
 
 const root = process.cwd(), extension = path.join(root, "extension");
@@ -101,34 +100,23 @@ try {
       scrollTo(0, 0);
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     });
-    const artwork = await page.evaluate(inspectArchiveArtwork);
-    const colors = theme === 'light' ? ['#c6acdf','#93ccd0','#d4a2d7','#e4b484'] : ['#4b4a77','#2d6b70','#6e4878','#7b5848'];
-    const gradient = theme === 'light' ? ['#f6eff5','#cee8ea'] : ['#15243b','#162b3c'];
-    const rgb = hex => [1,3,5].map(index=>parseInt(hex.slice(index,index+2),16));
-    assert.equal(artwork.shapes.length,4,'The backdrop contains four full ellipse primitives');
-    assert.deepEqual(artwork.stops,gradient.map(rgb));
-    const ratios = [[.30,.40,.70,.35],[.58,.08,.24,1.10],[.82,.20,.20,1],[.88,.55,.18,.60]];
-    const matrices = [[.9271838665,.3746065795,-.3746065795,.9271838665],[.9063078165,-.4226182699,.4226182699,.9063078165]];
-    for (const [index,shape] of artwork.shapes.entries()) {
-      const expected = ratios[index].map((ratio,axis)=>ratio*artwork.canvas[axis%2]);
-      assert.ok(shape.box.every((value,axis)=>Math.abs(value-expected[axis])<.03),'Ellipse dimensions/translation match the normalized reference');
-      assert.ok(shape.matrix.every((value,axis)=>Math.abs(value-matrices[index===0?0:1][axis])<.000001),'Ellipse rotation preserves the supplied CSS matrix');
-      assert.deepEqual(shape.color,rgb(colors[index]));
-      assert.equal(shape.origin,'0px 0px');assert.equal(shape.opacity,'1');assert.equal(shape.filter,'none');assert.equal(shape.shadow,'none');assert.equal(shape.blend,'normal');assert.equal(shape.radius,'50%');
-    }
-    assert.ok(artwork.samples.every(sample=>sample.maxError<=2),'Rasterized SVG gradient matches the normalized matrix across non-square canvases');
-    const backdrops = [...gradient,...colors].map(color=>rgb(color).map(channel=>channel/255));
+    assert.equal(await page.locator('.archive-backdrop').count(), 0, 'Design-only artwork is absent');
+    const canvas = await page.locator('html').evaluate(element => getComputedStyle(element).backgroundColor);
+    assert.equal(canvas, 'rgb(255, 255, 255)', 'Standalone archive keeps a white canvas in either system theme');
+    assert.equal(await page.locator('header').evaluate(element => getComputedStyle(element).boxShadow), 'none', 'Brand row has no glass capsule');
+    assert.notEqual(await page.locator('header nav a').evaluate(element => getComputedStyle(element).boxShadow), 'none', 'Get started retains its action treatment');
+    const backdrops = [[1,1,1]];
     let minimumContrast = Infinity;
     for (const label of await page.locator('main h1,main h2,.intro p,article li,summary,footer a,header a').all()) {
       if (!(await label.isVisible())) continue;
       const ratio=await label.evaluate(glassTextContrast,backdrops);minimumContrast=Math.min(minimumContrast,ratio);
-      assert.ok(ratio>=4.5,`Archive text retains 4.5:1 contrast over the supplied artwork colors; got ${ratio}`);
+      assert.ok(ratio>=4.5,`Archive text retains 4.5:1 contrast on the white canvas; got ${ratio}`);
     }
-    artworkReview.push({width,theme,...artwork,minimumContrast});
+    artworkReview.push({width,theme,canvas,minimumContrast});
 
     if (width === 390) {
       const header = await page.locator('header').boundingBox();
-      assert.ok(header.height >= 34 && header.height <= 36, `Mobile header keeps the reference row height; got ${header.height}`);
+      assert.ok(header.height >= 34 && header.height <= 38, `Mobile header keeps the reference row height; got ${header.height}`);
       const title = await page.locator('.intro h1').boundingBox();
       const firstCard = await page.locator('article').first().boundingBox();
       assert.ok(title.y >= 136 && title.y <= 142, `Mobile title layout follows the reference baseline; got ${title.y}`);
@@ -136,16 +124,7 @@ try {
     }
 
     await page.screenshot({ path: path.join(screenshots, `hosted-updates-${width}-${theme}-viewport.png`) });
-    await page.locator('main').evaluate(element=>{element.style.visibility='hidden';});
-    try { await page.screenshot({path:path.join(screenshots,`archive-backdrop-${width}-${theme}.png`)}); }
-    finally {
-      await page.locator('main').evaluate(async element => {
-        element.style.visibility = '';
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      });
-    }
-
   }
-  fs.writeFileSync(path.join(screenshots,"archive-artwork-review.json"),JSON.stringify(artworkReview,null,2));
-  console.log(JSON.stringify({ ok: true, states: 16, checks: ["narrow and desktop overflow", "light and dark themes", "clipboard", "panel action", "persisted update preference", "keyboard focus", "hosted version anchors and update guidance"] }));
+  fs.writeFileSync(path.join(screenshots, 'archive-surface-review.json'), JSON.stringify(artworkReview, null, 2));
+  console.log(JSON.stringify({ ok: true, states: 16, checks: ['white standalone canvas', 'plain brand row and glass action', 'narrow and desktop overflow', 'clipboard', 'panel action', 'persisted update preference', 'keyboard focus', 'hosted version anchors and update guidance'] }));
 } finally { await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
