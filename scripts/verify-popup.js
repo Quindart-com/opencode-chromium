@@ -6,6 +6,7 @@ import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { glassTextContrast } from "./fixtures/glass-contrast.js";
 import { versionNotice } from "../extension-src/version-status.ts";
 import { MemoryStore } from "../native-host/dist/memory/index.js";
 import { saveAndTestProvider } from "../native-host/dist/decisions/connection.js";
@@ -67,7 +68,7 @@ const server = http.createServer(async (req, res) => {
         const job = { id: randomUUID(), kind: message.type === "START_HARNESS_RECONNECT" ? "reconnect" : message.type === "INSTALL_RUNTIME_UPDATE" ? "update" : "diagnose", target: message.params?.target, state: "queued", code: "queued", updatedAt: Date.now() };
         if (job.kind === "update") {
           updateParams.push(message.params);
-          if (updateStartCode && !(updateStartCode === "major_approval_required" && message.params?.approvedMajor === true)) { job.state = "blocked"; job.code = updateStartCode; }
+          if (updateStartCode && !(updateStartCode === "major_approval_required" && message.params?.approvedMajor === true)) { job.state = "blocked"; job.code = updateStartCode; if(updateStartCode === "major_approval_required") job.details = {targetVersion:"3.0.0"}; }
         }
         localJobs.set(job.id, job); harnessConnections.actions.unshift(job);
         setTimeout(() => {
@@ -127,7 +128,7 @@ const server = http.createServer(async (req, res) => {
     }
     const file = path.resolve(root, "extension", "." + new URL(req.url, "http://localhost").pathname);
     if (!file.startsWith(path.join(root, "extension") + path.sep)) { res.writeHead(403).end(); return; }
-    const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml" }[path.extname(file)];
+    const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".woff2": "font/woff2", ".svg": "image/svg+xml" }[path.extname(file)];
     res.setHeader("Content-Type", type ?? "application/octet-stream");
     const data = fs.readFileSync(file);
     res.end(process.argv.includes("--serve") && path.extname(file) === ".html" ? data.toString().replace("<head>", '<head><script src="/fixture-bootstrap.js"></script>') : data);
@@ -161,6 +162,10 @@ try {
   }, fixtureMessages);
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   console.log("Popup loaded");
+  await page.evaluate(() => { const probe=document.createElement('span');probe.id='fixture-contrast-probe';probe.style.color='#fff';probe.textContent='Contrast probe';document.body.append(probe); });
+  assert.equal(await page.locator('#fixture-contrast-probe').evaluate(glassTextContrast,[[1,1,1]]),1,'Body fallback color must not conceal an explicit painted backdrop sample');
+  await page.locator('#fixture-contrast-probe').evaluate(element=>element.remove());
+
   const connections = page.getByRole("region", { name: "Harness connections", exact: true });
   await connections.getByText("Codex", { exact: true }).waitFor();
   await connections.getByText("DeepSeek Harness", { exact: true }).waitFor();
@@ -227,6 +232,13 @@ try {
   await dashboard.getByRole("img", { name: "Token usage", exact: true }).waitFor();
   await page.screenshot({ path: path.join(root, "reports", "popup-usage-providers.png"), fullPage: true });
   await dashboard.screenshot({ path: path.join(root, "reports", "popup-usage-card.png"), animations: "disabled" });
+  const comparison = dashboard.locator(".usage-comparison");
+  assert.equal(await comparison.getAttribute("open"), null, "service comparison stays secondary until requested");
+  await comparison.locator("summary").click();
+  await comparison.getByRole("button", { name: /OpenAI Platform/ }).click();
+  await page.waitForFunction(() => document.querySelector(".usage-metrics dd")?.textContent === "350");
+  assert.equal(await dashboard.getByRole("combobox", { name: "Service", exact: true }).inputValue(), "openai:openai-decisions", "comparison rows still select their service");
+  await comparison.locator("summary").click();
   await dashboard.getByRole("combobox", { name: "Service", exact: true }).selectOption("current");
   await page.waitForFunction(() => document.querySelector("#memory-executions")?.textContent === "1", null, { timeout: 15000 });
   assert.equal(await page.locator("#memory-replays").textContent(), "0");
@@ -398,11 +410,33 @@ try {
   await updateButton.click();
   await page.locator(".version-notice [role=status]").waitFor();
   const beforeApproval = updateParams.length;
-  page.once("dialog", dialog => dialog.dismiss());
   await updateButton.click();
-  assert.equal(updateParams.length, beforeApproval, "canceling approval cannot start another job");
-  page.once("dialog", dialog => dialog.accept());
-  await updateButton.click();
+  const review = page.getByRole('region',{name:'Review major upgrade',exact:true});
+  await review.waitFor();
+  assert.equal(await page.getByRole('tab',{name:'Settings',exact:true}).getAttribute('aria-selected'),'true');
+  await review.getByRole('button',{name:'Approve upgrade',exact:true}).evaluate(button=>button.click());
+  assert.equal(updateParams.length,beforeApproval,'Synthetic approval must not dispatch an update');
+  const approvalViewport = page.viewportSize();
+  const approvalTheme = await page.evaluate(() => matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+  const stateReview = path.join(root, 'reports', 'state-review'); fs.mkdirSync(stateReview, {recursive:true});
+  for (const theme of ['light','dark']) for (const width of [420,360]) {
+    await page.emulateMedia({colorScheme:theme}); await page.setViewportSize({width,height:600});
+    const colors = theme === 'light' ? ['#edf3fc','#bedbfa','#e7cbe5','#bde5e8'] : ['#111a2c','#1c3544','#432b3f','#332b4d'];
+    const backdrops = colors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+    for (const control of await review.locator('button').all()) {
+      assert.ok(await control.evaluate(glassTextContrast,backdrops) >= 4.5,'Guarded upgrade controls retain contrast immediately after theme changes');
+    }
+
+    await page.screenshot({path:path.join(stateReview,`major-upgrade-approval-${width}-${theme}.png`),fullPage:true,animations:'disabled'});
+  }
+  await page.setViewportSize(approvalViewport); await page.emulateMedia({colorScheme:approvalTheme});
+  await review.getByRole('button',{name:'Not now',exact:true}).click();
+  assert.equal(updateParams.length,beforeApproval,'Not now must leave the selected runtime unchanged');
+  await page.getByRole('tab',{name:'Overview',exact:true}).click(); await updateButton.click(); await review.waitFor();
+  await review.getByRole('button',{name:'Back to Settings',exact:true}).click();
+  assert.equal(updateParams.length,beforeApproval,'Returning to Settings cannot approve');
+  await page.getByRole('tab',{name:'Overview',exact:true}).click(); await updateButton.click(); await review.waitFor();
+  await review.getByRole('button',{name:'Approve upgrade',exact:true}).click();
   await page.locator(".version-notice").getByText("Update ready; activates when browser work is idle", { exact: true }).waitFor();
   assert.equal(updateParams.at(-1).approvedMajor, true);
   updateStartCode = null;
@@ -451,8 +485,18 @@ try {
           if (stableDetails < 3) await page.waitForTimeout(50);
         }
         assert.equal(stableDetails, 3, "full-page review includes every asynchronously loaded expandable feature");
+        const backdropColors = theme === 'light' ? ['#edf3fc','#a0ddd2','#d2c4ef','#f0cca8'] : ['#111a2c','#003c3b','#45235b','#522a15'];
+        const backdrops = backdropColors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+        for (const label of await page.locator('main h1,.view-tab,.view-panel:not([hidden]) h2,.view-panel:not([hidden]) p,#app-footer a').all()) {
+          if (!(await label.isVisible())) continue;
+          const ratio = await label.evaluate(glassTextContrast, backdrops);
+          assert.ok(ratio >= 4.5, `${view} ${theme} text needs 4.5:1 on every owned backdrop form; got ${ratio}`);
+        }
+
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} fits ${width}px ${theme}`);
         await page.screenshot({ path: path.join(reviewDirectory, `${view.toLowerCase()}-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
+        await page.evaluate(() => scrollTo(0, 0));
+        await page.screenshot({ path: path.join(reviewDirectory, `${view.toLowerCase()}-${width}-${theme}-viewport.png`), animations: "disabled" });
       }
       assert.ok(Math.max(...measuredWidths) - Math.min(...measuredWidths) < 1, `all views share a stable width at ${width}px ${theme}`);
     }

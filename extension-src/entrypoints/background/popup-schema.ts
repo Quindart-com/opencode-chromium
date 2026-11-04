@@ -25,5 +25,6 @@ export const uploadMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("GET_UPLOAD_SETTINGS") }),
   z.object({ type: z.literal("SET_UPLOAD_SETTINGS"), allowWithoutConfirmation: z.boolean() }),
   z.object({ type: z.literal("GET_UPLOAD_REQUEST"), token: z.string() }),
+  z.object({ type: z.literal("REVIEW_UPLOAD_REQUEST"), token: z.string() }),
   z.object({ type: z.literal("RESOLVE_UPLOAD_REQUEST"), token: z.string(), allow: z.boolean() }),
 ]);

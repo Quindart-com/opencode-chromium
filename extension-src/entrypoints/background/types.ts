@@ -76,4 +76,5 @@ export type UploadMessage =
   | { type: "GET_UPLOAD_SETTINGS" }
   | { type: "SET_UPLOAD_SETTINGS"; allowWithoutConfirmation: boolean }
   | { type: "GET_UPLOAD_REQUEST"; token: string }
+  | { type: "REVIEW_UPLOAD_REQUEST"; token: string }
   | { type: "RESOLVE_UPLOAD_REQUEST"; token: string; allow: boolean };

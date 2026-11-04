@@ -1376,8 +1376,91 @@
   "catalogInvalid": {
     "message": "The custom model catalog could not be loaded. Built-in models are available."
   },
-  "bridgeRequired": { "message": "Run opencode-chromium setup --all once to install the stable update controller." },
-  "runtimeDraining": { "message": "New connections use the updated runtime. Existing sessions will finish on their current version." },
-  "runtimeApprovalRequired": { "message": "A major upgrade is available and needs your approval." },
-  "majorUpgradeConfirm": { "message": "Upgrade to the new major version? Existing sessions will not be interrupted, but removed legacy commands will no longer be available to new connections." }
+  "bridgeRequired": {
+    "message": "Run opencode-chromium setup --all once to install the stable update controller."
+  },
+  "runtimeDraining": {
+    "message": "New connections use the updated runtime. Existing sessions will finish on their current version."
+  },
+  "runtimeApprovalRequired": {
+    "message": "A major upgrade is available and needs your approval."
+  },
+  "majorUpgradeConfirm": {
+    "message": "Upgrade to the new major version? Existing sessions will not be interrupted, but removed legacy commands will no longer be available to new connections."
+  },
+  "pagePanelOpen": {
+    "message": "Open on this page"
+  },
+  "pagePanelUnavailable": {
+    "message": "This page cannot display the on-page panel. Use the extension panel."
+  },
+  "pagePanelClose": {
+    "message": "Close panel"
+  },
+  "pagePanelMinimize": {
+    "message": "Minimize panel"
+  },
+  "pagePanelRestore": {
+    "message": "Restore panel"
+  },
+  "pagePanelMove": {
+    "message": "Move panel (arrow keys)"
+  },
+  "pagePanelProtected": {
+    "message": "Sensitive settings and approvals open in the extension panel, separate from this website."
+  },
+  "pagePanelManageProfiles": {
+    "message": "Manage profiles"
+  },
+  "pagePanelOpaque": {
+    "message": "Reduce transparency"
+  },
+  "pagePanelStatusUnavailable": {
+    "message": "Connection status is unavailable. Open the extension panel for details."
+  },
+  "majorReviewTitle": {
+    "message": "Review major upgrade"
+  },
+  "majorReviewVersions": {
+    "message": "Current: $1 · Available: $2"
+  },
+  "majorReviewUnavailable": {
+    "message": "Version details are unavailable. Return to Settings and check for updates again."
+  },
+  "majorApprove": {
+    "message": "Approve upgrade"
+  },
+  "majorNotNow": {
+    "message": "Not now"
+  },
+  "majorBackSettings": {
+    "message": "Back to Settings"
+  },
+  "readyWhenYouAre": {
+    "message": "Ready when you are"
+  },
+  "uploadPreparationTitle": {
+    "message": "Couldn’t prepare upload"
+  },
+  "uploadPreparationDetails": {
+    "message": "Your files could not be prepared. Nothing was sent. Request a new upload and review its destination and file again."
+  },
+  "uploadApprovalUnavailable": {
+    "message": "Approval is unavailable until the request is complete."
+  },
+  "uploadReviewNew": {
+    "message": "Review new request"
+  },
+  "uploadCancelRequest": {
+    "message": "Cancel request"
+  },
+  "uploadBackPreview": {
+    "message": "Back to consent preview"
+  },
+  "uploadNewUnavailable": {
+    "message": "Ask your agent to request a new upload. Review its destination and file in the new confirmation window."
+  },
+  "uploadRequestUnavailable": {
+    "message": "The request could not be loaded. Close this window and request a new upload."
+  }
 }

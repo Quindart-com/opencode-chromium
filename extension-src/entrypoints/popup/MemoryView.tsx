@@ -50,8 +50,8 @@ function MemoryChart({ daily }: { daily: MemoryStatus["recent_daily"] }): React.
   const barWidth = Math.min(12, (plotWidth / Math.max(1, days.length)) * 0.6);
 
   return (
-    <div className="memory-chart" aria-label={t("chartLabel")}>
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img">
+    <div className="memory-chart">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t("chartLabel")}>
         {days.map((day, index) => {
           const x = pad + (index / Math.max(1, days.length - 1)) * plotWidth;
           const failed = (day.failed / maxValue) * plotHeight;

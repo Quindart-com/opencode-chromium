@@ -80,3 +80,11 @@ test("connection controls reject website callers and refuse reconnects during br
   await connectionPanelMessage({ type: "RECONNECT_NATIVE_HOST" }, { id: "fixture" }, { ...dependencies, idle: () => true });
   expect(reconnected).toBe(true);
 });
+
+
+test("trusted full-panel navigation retains connection controls on a selected view", async () => {
+  const panelUrl = "chrome-extension://fixture/popup.html";
+  const rpc = { request: async (method: string) => method === "control.capabilities" ? { protocolVersion: 2 } : { clients: [] } } as unknown as NativeRpc;
+  const result = await connectionPanelMessage({ type: "GET_HARNESS_CONNECTIONS" }, { id: "fixture", url: panelUrl + "#settings", tab: { url: panelUrl + "#settings" }, frameId: 0 }, { extensionId: "fixture", panelUrl, rpc, idle: () => true });
+  expect(result).toEqual({ clients: [], controllerSupported: true });
+});

@@ -9,6 +9,8 @@ import ProviderSettings from "./ProviderSettings";
 import RuntimeUpdates from "./RuntimeUpdates";
 import UploadSettings from "./UploadSettings";
 import VersionNotice from "./VersionNotice";
+import PanelIcon from "./PanelIcon";
+import RuntimeApproval,{ type MajorReview } from "./RuntimeApproval";
 
 const t = (key: "connected" | "checking" | "reconnecting" | "notConnected" | "localAutomation" | "extensionViews" | "overview" | "profiles" | "settings" | "setupGuide" | "sourceGithub") => browser.i18n.getMessage(key);
 
@@ -118,6 +120,7 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
             type="button"
             onClick={() => onChange(view)}
           >
+            <PanelIcon name={view} />
             {t(view)}
           </button>
         );
@@ -127,31 +130,49 @@ function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: Vie
 }
 
 export default function App(): React.JSX.Element {
-  const [activeView, setActiveView] = useState<ViewName>("overview");
+  const [activeView, setActiveView] = useState<ViewName>(() => {
+    const requested = window.location.hash.slice(1);
+    return requested === "profiles" || requested === "settings" ? requested : "overview";
+  });
+  const [majorReview, setMajorReview] = useState<MajorReview | null>(null);
+  const reviewMajor = (review: MajorReview) => { setActiveView("settings"); setMajorReview(review); };
+  const closeReview = () => { setMajorReview(null); setActiveView("settings"); requestAnimationFrame(() => document.getElementById("tab-settings")?.focus()); };
+  const showMajorReview = (review: MajorReview) => reviewMajor({ ...review, approve: () => { closeReview(); review.approve(); } });
+  const [pagePanelFeedback, setPagePanelFeedback] = useState("");
+  const [openingPagePanel, setOpeningPagePanel] = useState(false);
+  async function openPagePanel() {
+    setOpeningPagePanel(true); setPagePanelFeedback("");
+    try { const response = await sendMessage<{ ok?: boolean }>({ type: "PAGE_PANEL_OPEN" }); if (!response.ok) throw new Error("Unavailable"); }
+    catch { setPagePanelFeedback(browser.i18n.getMessage("pagePanelUnavailable")); }
+    finally { setOpeningPagePanel(false); }
+  }
   const nativeStatus = useNativeStatus();
   const changeView = (view: ViewName) => {
-    setActiveView(view);
+    setMajorReview(null); setActiveView(view);
     document.getElementById(`tab-${view}`)?.focus();
   };
 
   return (
     <main>
       <Header status={nativeStatus} />
-      <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
+      <div className="version-notice-slot" hidden={!!majorReview}><VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} onReviewMajor={showMajorReview} /></div>
       <ViewTabs active={activeView} onChange={changeView} />
-      <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={activeView !== "overview"}>
+      {majorReview && <RuntimeApproval review={majorReview} cancel={closeReview} />}
+      <div className="page-panel-launch" hidden={!!majorReview}><button type="button" disabled={openingPagePanel} onClick={() => void openPagePanel()}><PanelIcon name="external" />{browser.i18n.getMessage("pagePanelOpen")}</button>{pagePanelFeedback && <p role="status">{pagePanelFeedback}</p>}</div>
+      <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={!!majorReview || activeView !== "overview"}>
         {activeView === "overview" && <><ConnectionSummary status={nativeStatus} /><DecisionOverview onConfigure={() => changeView("settings")} /><MemoryView /></>}
       </div>
-      <div className="view-panel" role="tabpanel" id="panel-profiles" aria-labelledby="tab-profiles" hidden={activeView !== "profiles"}>
+      <div className="view-panel" role="tabpanel" id="panel-profiles" aria-labelledby="tab-profiles" hidden={!!majorReview || activeView !== "profiles"}>
         {activeView === "profiles" && <ConnectionView status={nativeStatus} view="profiles" />}
       </div>
-      <div className="view-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden={activeView !== "settings"}>
-        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><RuntimeUpdates /><ConnectionView status={nativeStatus} view="settings" /></>}
+      <div className="view-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden={!!majorReview || activeView !== "settings"}>
+        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><RuntimeUpdates onReviewMajor={showMajorReview} /><ConnectionView status={nativeStatus} view="settings" /></>}
       </div>
       <footer id="app-footer">
-        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">{t("setupGuide")}</a>
+        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener"><PanelIcon name="help" />{t("setupGuide")}</a>
         <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
           {t("sourceGithub")}
+          <PanelIcon name="external" />
         </a>
       </footer>
     </main>

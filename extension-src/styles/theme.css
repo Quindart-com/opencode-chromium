@@ -1,0 +1,95 @@
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url("/fonts/InterVariable.woff2") format("woff2"); }
+/* Trusted extension surfaces use their own backdrop, never webpage pixels. */
+:root {
+  color-scheme: light;
+  --bg: #edf3fc;
+  --canvas-paint: radial-gradient(ellipse at -15% 48%, #a0ddd2 0 46%, transparent 46.3%), radial-gradient(ellipse at 115% 6%, #d2c4ef 0 44%, transparent 44.3%), radial-gradient(ellipse at 94% 115%, #f0cca8 0 44%, transparent 44.3%), #edf3fc;
+  --consent-paint: radial-gradient(ellipse at 0% 12%, #bedbfa 0%, transparent 60%), radial-gradient(ellipse at 100% 42%, #e7cbe5 0%, transparent 62%), radial-gradient(ellipse at 18% 96%, #bde5e8 0%, transparent 60%), #edf3fc;
+  --surface: rgb(255 255 255 / .10);
+  --surface-raised: rgb(255 255 255 / .30);
+  --surface-solid: #f5f7fc;
+  --surface-border: rgb(255 255 255 / .60);
+  --surface-border-strong: #65758e;
+  --text: #172033;
+  --control-ink: #172033;
+  --text-muted: #43516a;
+  --text-faint: #52617b;
+  --section-label: #43516a;
+  --accent: #2356d8;
+  --accent-hover: #1946ba;
+  --accent-soft: rgb(255 255 255 / .30);
+  --accent-border: #65758e;
+  --primary-text: #ffffff;
+  --focus-ring: #2356d830;
+  --ok: #1d6b49;
+  --ok-ink: #ffffff;
+  --ok-soft: rgb(213 240 225 / .45);
+  --ok-border: #81ad97;
+  --warn: #78501b;
+  --warn-soft: rgb(255 237 199 / .40);
+  --warn-border: #b48a49;
+  --bad: #9f2e36;
+  --bad-ink: #ffffff;
+  --bad-soft: rgb(255 222 224 / .40);
+  --bad-border: #c27f85;
+  --input-bg: rgb(255 255 255 / .12);
+  --button-bg: rgb(255 255 255 / .10);
+  --button-hover: rgb(255 255 255 / .22);
+  --button-border: rgb(255 255 255 / .60);
+  --disabled-bg: rgb(255 255 255 / .12);
+  --disabled-text: #52617b;
+  --disabled-primary-bg: rgb(255 255 255 / .12);
+  --disabled-primary-text: #52617b;
+  --material-shadow: inset 2px 2px 3px #ffffff8c, inset -2px -2px 6px #ffffff66, 0 8px 20px -4px #121a2e21;
+  --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111a2c;
+    --canvas-paint: radial-gradient(ellipse at -15% 48%, #003c3b 0 46%, transparent 46.3%), radial-gradient(ellipse at 115% 6%, #45235b 0 44%, transparent 44.3%), radial-gradient(ellipse at 94% 115%, #522a15 0 44%, transparent 44.3%), #111a2c;
+    --consent-paint: radial-gradient(ellipse at 0% 12%, #1c3544 0%, transparent 60%), radial-gradient(ellipse at 100% 42%, #432b3f 0%, transparent 62%), radial-gradient(ellipse at 18% 96%, #332b4d 0%, transparent 60%), #111a2c;
+    --surface: rgb(22 34 56 / .10);
+    --surface-raised: rgb(22 34 56 / .12);
+    --surface-solid: #202838;
+    --surface-border: rgb(255 255 255 / .30);
+    --surface-border-strong: #8594ae;
+    --text: #f2f5fc;
+    --control-ink: #f3f5fc;
+    --text-muted: #bdcae0;
+    --text-faint: #b5c2d9;
+    --section-label: #bdcae0;
+    --accent: #a7c0ff;
+    --accent-hover: #c2d3ff;
+    --accent-soft: rgb(255 255 255 / .12);
+    --accent-border: #8594ae;
+    --primary-text: #10182b;
+    --focus-ring: #a7c0ff40;
+    --ok: #96d6af;
+    --ok-ink: #10251a;
+    --ok-soft: rgb(38 70 57 / .45);
+    --ok-border: #75a68b;
+    --warn: #f0cc93;
+    --warn-soft: rgb(85 64 33 / .40);
+    --warn-border: #b18c52;
+    --bad: #ffb4ae;
+    --bad-ink: #311b18;
+    --bad-soft: rgb(91 44 54 / .40);
+    --bad-border: #c18b94;
+    --input-bg: rgb(22 34 56 / .12);
+    --button-bg: rgb(22 34 56 / .10);
+    --button-hover: rgb(22 34 56 / .24);
+    --button-border: rgb(255 255 255 / .30);
+    --disabled-bg: rgb(22 34 56 / .12);
+    --disabled-text: #b5c2d9;
+    --disabled-primary-bg: rgb(22 34 56 / .12);
+    --disabled-primary-text: #b5c2d9;
+    --material-shadow: inset 2px 2px 3px #ffffff3d, inset -2px -2px 6px #ffffff26, 0 8px 20px -4px #121a2e38;
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root { --canvas-paint: var(--bg); --consent-paint: var(--bg); --surface: var(--surface-solid); --surface-raised: var(--surface-solid); --input-bg: var(--surface-solid); --button-bg: var(--surface-solid); --button-hover: var(--surface-solid); --surface-border: var(--surface-border-strong); --button-border: var(--surface-border-strong); --material-shadow: none; }
+}
+@media (forced-colors: active) {
+  :root { --canvas-paint: Canvas; --consent-paint: Canvas; --bg: Canvas; --surface: Canvas; --surface-raised: Canvas; --surface-solid: Canvas; --text: CanvasText; --control-ink: ButtonText; --text-muted: CanvasText; --text-faint: CanvasText; --surface-border: ButtonText; --surface-border-strong: ButtonText; --button-bg: ButtonFace; --button-hover: ButtonFace; --button-border: ButtonText; --input-bg: Field; --accent: LinkText; --material-shadow: none; }
+}

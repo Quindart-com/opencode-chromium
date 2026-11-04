@@ -16,10 +16,12 @@ export default function UsageTrend({ days }: { days: UsageDay[] }) {
         <line x1="0" x2="300" y1="79" y2="79" className="usage-grid" />
         {bars.map((bar, index) => {
           const input = bar.input / peak * height, output = bar.output / peak * height;
+          const barWidth = Math.max(1, Math.min(16, step - 3));
+          const x = index * step + (step - barWidth) / 2;
           const label = bar.date + (bar.end !== bar.date ? " – " + bar.end : "") + ": " + t("usageInput") + " " + bar.input.toLocaleString() + ", " + t("usageOutput") + " " + bar.output.toLocaleString();
           return <g key={bar.date} tabIndex={0} aria-label={label}><title>{label}</title>
-            <rect className="usage-bar-input" x={index * step + 1} y={79 - input} width={Math.max(1, step - 3)} height={input} rx="2" />
-            <rect className="usage-bar-output" x={index * step + 1} y={79 - input - output} width={Math.max(1, step - 3)} height={output} rx="2" />
+            <rect className="usage-bar-input" x={x} y={79 - input} width={barWidth} height={input} rx="2" />
+            <rect className="usage-bar-output" x={x} y={79 - input - output} width={barWidth} height={output} rx="2" />
           </g>;
         })}
       </svg>

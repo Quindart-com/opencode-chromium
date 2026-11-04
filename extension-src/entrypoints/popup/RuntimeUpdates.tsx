@@ -4,6 +4,7 @@ import { sendMessage } from "./api";
 import useLocalAction from "./useLocalAction";
 import { requiresRuntimeSetup } from "../../runtime-update";
 import RuntimeSetup from "./RuntimeSetup";
+import type { MajorReview } from "./RuntimeApproval";
 
 type Component = { component: string; version: string | null; state: string; label?: string };
 type Updates = { supported: boolean; controllerSupported?: boolean; enabled: boolean; state?: string; targetVersion?: string; installedVersion?: string; stagedVersion?: string; loadedVersions?: string[]; blockerCount?: number; reason?: string;
@@ -20,7 +21,7 @@ const labels: Record<string, string> = {
   approval_required: t("runtimeApprovalRequired"),
   bridge_required: t("bridgeRequired"),
 };
-export default function RuntimeUpdates() {
+export default function RuntimeUpdates({ onReviewMajor }: { onReviewMajor(review: MajorReview): void }) {
   const local = useLocalAction();
   const [updates, setUpdates] = useState<Updates | null>(null);
   const [message, setMessage] = useState("");
@@ -54,9 +55,14 @@ export default function RuntimeUpdates() {
   }
   async function install() {
     const approvalRequired = updates?.state === "approval_required" || local.action?.code === "major_approval_required";
-    const approvedMajor = approvalRequired ? window.confirm(t("majorUpgradeConfirm")) : false;
-    if (approvalRequired && !approvedMajor) return;
-    await local.start("INSTALL_RUNTIME_UPDATE", approvedMajor ? { approvedMajor: true } : {});
+    const target = local.action?.details?.targetVersion ?? updates?.targetVersion;
+    if (approvalRequired && target) {
+      onReviewMajor({ current: updates?.desired?.version ?? updates?.installedVersion ?? null, target,
+        approve: () => { void local.start("INSTALL_RUNTIME_UPDATE", { approvedMajor: true }); } });
+      return;
+    }
+    // An unapproved check discovers the real target on older controllers too.
+    await local.start("INSTALL_RUNTIME_UPDATE");
   }
   const desiredVersion = updates?.desired?.version ?? updates?.installedVersion ?? t("memoryUnknown");
   const activeVersions = updates?.components?.filter(item => item.component === "active-worker").map(item => item.version).filter((value): value is string => !!value) ?? updates?.loadedVersions ?? [];

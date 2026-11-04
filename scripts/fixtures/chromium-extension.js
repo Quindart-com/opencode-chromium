@@ -50,7 +50,7 @@ export async function chromiumExtensionFixture({ headless = true } = {}) {
       const dir = path.join(profile, "NativeMessagingHosts");
       fs.mkdirSync(dir, { recursive: true }); fs.copyFileSync(nativeManifest, path.join(dir, host + ".json"));
     }
-    context = await chromium.launchPersistentContext(profile, { headless, channel: "chromium", env, viewport: { width: 1100, height: 900 },
+    context = await chromium.launchPersistentContext(profile, { headless, executablePath: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE || undefined, channel: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE ? undefined : "chromium", env, viewport: { width: 1100, height: 900 },
       args: [`--disable-extensions-except=${source}`, `--load-extension=${source}`, "--site-per-process"] });
     let registration, startup = null;
     for (let attempt = 0; attempt < 2 && !registration; attempt++) {

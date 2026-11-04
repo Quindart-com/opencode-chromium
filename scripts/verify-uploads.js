@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { chromium } from "playwright";
+import { glassTextContrast } from "./fixtures/glass-contrast.js";
 import { createUploadFiles } from "../native-host/src/uploads.ts";
 import { createUploadConsent } from "../extension-src/entrypoints/background/upload-consent.ts";
 import { guardedCdp, uploadTargetUrl } from "../extension-src/entrypoints/background/upload-gate.ts";
@@ -36,14 +37,14 @@ const server = http.createServer(async (req, res) => {
     const pathname = new URL(req.url, origin).pathname;
     const target = path.resolve("extension", "." + pathname);
     if (!target.startsWith(path.resolve("extension") + path.sep)) { res.writeHead(403).end(); return; }
-    res.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" }[path.extname(target)] ?? "application/octet-stream");
+    res.setHeader("Content-Type", { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".woff2": "font/woff2" }[path.extname(target)] ?? "application/octet-stream");
     res.end(fs.readFileSync(target));
   } catch { res.writeHead(500).end(); }
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 origin = `http://127.0.0.1:${server.address().port}`;
 try {
-  browser = await chromium.launch({ headless: true, channel: process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
+  browser = await chromium.launch({ headless: true, executablePath: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE || undefined, channel: process.env.OPENCODE_TEST_BROWSER_EXECUTABLE ? undefined : process.env.OPENCODE_TEST_BROWSER_CHANNEL || undefined });
   const context = await browser.newContext({ viewport: { width: 500, height: 560 } });
   const website = await context.newPage();
   await website.goto(`${origin}/website`);
@@ -62,6 +63,7 @@ try {
         await page.goto(url);
         return { id: windowId, tabs: [{ id: windowId }] };
       },
+      update: async (windowId, change) => { if(change.focused) await windows.get(windowId)?.page.bringToFront(); return {id:windowId}; },
       remove: async windowId => { await windows.get(windowId)?.page.close(); },
     },
   };
@@ -75,8 +77,7 @@ try {
   const upload = () => guardedCdp({ method: "DOM.setFileInputFiles", commandParams: { objectId: result.objectId, files: [file] }, tabId: 1, consent, getTab: async () => ({ url: website.url() }), inspectTarget: (method, params) => uploadTargetUrl(method, params, (method, params) => session.send(method, params)), send: params => session.send("DOM.setFileInputFiles", params) });
   async function requestPage() {
     for (let attempt = 0; attempt < 100; attempt++) {
-      const page = [...windows.values()][0]?.page;
-      if (page) { await page.getByRole("button", { name: "Allow upload", exact: true }).waitFor(); return page; }
+      for (const {page} of windows.values()) if(!page.isClosed() && await page.getByRole("button",{name:"Allow upload",exact:true}).count() && await page.getByRole("button",{name:"Allow upload",exact:true}).isVisible()) return page;
       await new Promise(resolve => setTimeout(resolve, 20));
     }
     throw new Error("Upload confirmation did not open");
@@ -101,6 +102,76 @@ try {
   await approved;
   assert.equal(await website.locator("#document").evaluate(input => input.files[0].name), "private-document.txt");
   assert.equal(await website.locator("#document").evaluate(input => input.files[0].text()), "approved fixture contents", "files remain readable when the website submits later");
+  // A real immutable-snapshot failure must create an informational, non-consent surface.
+  await website.locator('#document').evaluate(input=>{input.value='';});
+  fs.writeFileSync(file,'before preparation failure');
+  const failedPreparation = upload().then(()=>null,error=>error);
+  confirmation = await requestPage();
+  fs.writeFileSync(file,'changed after consent preview');
+  const failureOpened = context.waitForEvent('page');
+  await confirmation.getByRole('button',{name:'Allow upload',exact:true}).click();
+  const failure = await failureOpened;
+  await failure.getByRole('heading',{name:'Couldn’t prepare upload',exact:true}).waitFor();
+  assert.match((await failedPreparation).message,/changed/i);
+  assert.equal(await website.locator('#document').evaluate(input=>input.files.length),0);
+  assert.equal(await failure.getByRole('button',{name:'Allow upload',exact:true}).count(),0);
+  assert.equal(await failure.getByRole('button',{name:'Back to consent preview',exact:true}).isDisabled(),true);
+  fs.mkdirSync('reports/state-review',{recursive:true});
+  const contrastReview = [];
+  for(const theme of ['light','dark'])for(const width of [360,500]) {
+    await failure.emulateMedia({colorScheme:theme});await failure.setViewportSize({width,height:width===360?427:560});
+    await failure.evaluate(()=>document.fonts.ready);
+    const cancel = failure.getByRole('button',{name:'Cancel request',exact:true});
+    const colors = theme === 'light' ? ['#edf3fc','#bedbfa','#e7cbe5','#bde5e8'] : ['#111a2c','#1c3544','#432b3f','#332b4d'];
+    const backdrops = colors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+    let previousPhase = 0;
+    for (const phaseMs of [0,40,140]) {
+      if (phaseMs > previousPhase) await failure.waitForTimeout(phaseMs-previousPhase);
+      previousPhase = phaseMs;
+      assert.equal(await cancel.isEnabled(),true,'Failure cancellation must stay enabled before a user action');
+      const ratio = await cancel.evaluate(glassTextContrast,backdrops);
+      contrastReview.push({theme,width,phaseMs,ratio,...await cancel.evaluate(element=>({color:getComputedStyle(element).color,disabled:element.disabled,focused:document.activeElement===element}))});
+      assert.ok(ratio >= 4.5, `Enabled Cancel request needs 4.5:1 contrast during theme changes (${theme}, ${phaseMs}ms); got ${ratio}`);
+    }
+
+    assert.equal(await failure.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await failure.screenshot({path:`reports/state-review/upload-preparation-failure-${width}-${theme}.png`,fullPage:true});
+  }
+  fs.writeFileSync('reports/state-review/upload-control-contrast.json',JSON.stringify(contrastReview,null,2));
+  assert.equal(await failure.getByRole('button',{name:'Review new request',exact:true}).isDisabled(),true);
+  fs.writeFileSync(file,'fresh request after failure');
+  const freshUpload = upload();
+  const freshConfirmation = await requestPage();
+  await failure.waitForFunction(()=>[...document.querySelectorAll('button')].some(button=>button.textContent==='Review new request'&&!button.disabled));
+  await failure.getByRole('button',{name:'Review new request',exact:true}).click();
+  assert.equal(await website.locator('#document').evaluate(input=>input.files.length),0,'Reviewing a fresh request cannot approve it');
+  await freshConfirmation.getByRole('button',{name:'Allow upload',exact:true}).click(); await freshUpload;
+  assert.equal(await website.locator('#document').evaluate(input=>input.files[0].text()),'fresh request after failure');
+  // A real failure cancellation must close its own informational surface without attachment.
+  await website.locator('#document').evaluate(input=>{input.value='';});
+  fs.writeFileSync(file,'before cancelled preparation');
+  const cancelledPreparation = upload().then(()=>null,error=>error);
+  confirmation = await requestPage();fs.writeFileSync(file,'changed before preparation');
+  const cancelledFailureOpened = context.waitForEvent('page');
+  await confirmation.getByRole('button',{name:'Allow upload',exact:true}).click();
+  const cancelledFailure = await cancelledFailureOpened;
+  await cancelledFailure.getByRole('heading',{name:'Couldn’t prepare upload',exact:true}).waitFor();
+  assert.match((await cancelledPreparation).message,/changed/i);
+  const closedFailure = cancelledFailure.waitForEvent('close');
+  await cancelledFailure.getByRole('button',{name:'Cancel request',exact:true}).click();await closedFailure;
+  assert.equal(await website.locator('#document').evaluate(input=>input.files.length),0,'Cancelling a failure cannot attach files');
+  const expiredWindow = await chrome.windows.create({url:`${origin}/upload-confirm.html?token=${crypto.randomUUID()}`,type:'popup'});
+  const expired = windows.get(expiredWindow.id).page;
+  await expired.getByRole('alert').waitFor();
+  assert.equal(await expired.getByRole('button',{name:'Allow upload',exact:true}).count(),0,'Expired requests cannot offer approval');
+  assert.equal(await expired.locator('.upload-files').count(),0,'Expired requests reveal no file details');
+  fs.mkdirSync('reports/state-review',{recursive:true});
+  for (const theme of ['light','dark']) for (const width of [500,360]) {
+    await expired.emulateMedia({colorScheme:theme}); await expired.setViewportSize({width,height:560});
+    assert.equal(await expired.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Upload failure fits narrow layouts');
+    await expired.screenshot({path:`reports/state-review/upload-expired-${width}-${theme}.png`,fullPage:true});
+  }
+  await expired.close();
   console.log("Upload browser checks passed: picker interception, cancel, trusted approval, preserved file content.");
 } finally {
   await browser?.close(); await new Promise(resolve => server.close(resolve));

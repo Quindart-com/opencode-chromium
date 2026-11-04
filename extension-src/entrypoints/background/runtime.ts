@@ -24,6 +24,8 @@ import { createCdpRuntime } from "./runtime-cdp.ts";
 import { createCursorRuntime } from "./runtime-cursor.ts";
 import { registerRuntimeMethods } from "./runtime-methods.ts";
 import { createPopupRuntime } from "./runtime-popup.ts";
+import { createPagePanelRuntime } from "./page-panel.ts";
+import { pagePanelSnapshot } from "./page-panel-snapshot.ts";
 import { createProfileRuntime } from "./runtime-profile.ts";
 import { assertClaimableTab,assertTabAccess,isBrowserInternalUrl,isClaimableTab } from "./tab-ownership.ts";
 import type { ExtensionSession,TabOwner,TraceBuffer } from "./types.ts";
@@ -60,8 +62,7 @@ const SESSIONS_STORAGE_KEY = "OPENCODE_BROWSER_SESSIONS";
 const PROFILE_STORAGE_KEY = "OPENCODE_BROWSER_PROFILE";
 const VERSION_REMINDER_KEY = "OPENCODE_VERSION_REMINDER";
 const versionCheck = { generation: 0 };
-let reconciliationToken: string | null = null;
-let restoringSessions = 0;
+let reconciliationToken: string | null = null, restoringSessions = 0;
 const sessions = new Map<string, ExtensionSession>();
 const attachedTabs = new Map<number, string>();
 const commandHealth = new CommandHealth();
@@ -109,6 +110,7 @@ function nowIso() {
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
+const pagePanel = createPagePanelRuntime(chrome, usage => pagePanelSnapshot(rpc, hostStatus, profileMetadata, usage));
 let popupRuntime: ReturnType<typeof createPopupRuntime> | null = null;
 function broadcastNativeStatus() { popupRuntime?.broadcastNativeStatus(); }
 const profileRuntime = createProfileRuntime({ rpc, chrome, IS_FIREFOX, PROFILE_STORAGE_KEY, VERSION_REMINDER_KEY, hostStatus, storageGet, storageSet, broadcastNativeStatus, versionCheck,
@@ -422,6 +424,10 @@ const { executeCdp, executeInputGesture } = createCdpRuntime({ DEFAULT_CDP_TIMEO
 function sendCdpCommand<K extends CdpMethod>(tabId: number, method: K, commandParams: CdpParams<K>, timeoutMs?: number, sessionId?: string): Promise<CdpResult<K>>;
 function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs?: number, sessionId?: string): Promise<unknown>;
 async function sendCdpCommand(tabId: number, method: string, commandParams: object, timeoutMs = DEFAULT_CDP_TIMEOUT_MS, sessionId?: string): Promise<unknown> {
+    const run = () => sendCdpCommandRaw(tabId, method, commandParams, timeoutMs, sessionId);
+    return method === "Page.captureScreenshot" ? pagePanel.capture(tabId, run) : run();
+}
+async function sendCdpCommandRaw(tabId: number, method: string, commandParams: object, timeoutMs: number, sessionId?: string): Promise<unknown> {
     if (IS_FIREFOX)
         return rpc.request("firefox.command", { tabId, method, commandParams, timeoutMs }, { timeoutMs: timeoutMs + 5000 }).catch(error => {
             if (/bridge required|connection closed|remote connection/i.test(errorMessage(error)))
@@ -467,8 +473,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
         cursorInjectedTabs.delete(tabId);
 });
 popupRuntime = createPopupRuntime({ rpc, hostStatus, updateVersionBadge, connectionIdle, errorMessage, storageSet, VERSION_REMINDER_KEY, profileMetadata, publicProfile, setProfileLabel, sanitizeSemanticForPopup, uploadConsent, cursorArrivalWaiters, cursorWaiterKey, currentCursorStates });
-function createAlarms() {
-    chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 });
+function createAlarms() { chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 });
     chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
 }
 chrome.runtime.onInstalled.addListener(details => {

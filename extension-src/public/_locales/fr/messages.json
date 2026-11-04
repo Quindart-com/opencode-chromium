@@ -1376,8 +1376,91 @@
   "catalogInvalid": {
     "message": "Le catalogue personnalisé n’a pas pu être chargé. Les modèles intégrés restent disponibles."
   },
-  "bridgeRequired": { "message": "Exécutez opencode-chromium setup --all une fois pour installer le contrôleur de mise à jour stable." },
-  "runtimeDraining": { "message": "Les nouvelles connexions utilisent le runtime mis à jour. Les sessions existantes se terminent avec leur version actuelle." },
-  "runtimeApprovalRequired": { "message": "Une mise à niveau majeure est disponible et nécessite votre approbation." },
-  "majorUpgradeConfirm": { "message": "Passer à la nouvelle version majeure ? Les sessions existantes ne seront pas interrompues, mais les anciennes commandes supprimées ne seront plus disponibles pour les nouvelles connexions." }
+  "bridgeRequired": {
+    "message": "Exécutez opencode-chromium setup --all une fois pour installer le contrôleur de mise à jour stable."
+  },
+  "runtimeDraining": {
+    "message": "Les nouvelles connexions utilisent le runtime mis à jour. Les sessions existantes se terminent avec leur version actuelle."
+  },
+  "runtimeApprovalRequired": {
+    "message": "Une mise à niveau majeure est disponible et nécessite votre approbation."
+  },
+  "majorUpgradeConfirm": {
+    "message": "Passer à la nouvelle version majeure ? Les sessions existantes ne seront pas interrompues, mais les anciennes commandes supprimées ne seront plus disponibles pour les nouvelles connexions."
+  },
+  "pagePanelOpen": {
+    "message": "Ouvrir sur cette page"
+  },
+  "pagePanelUnavailable": {
+    "message": "Cette page ne peut pas afficher le panneau intégré. Utilisez le panneau de l’extension."
+  },
+  "pagePanelClose": {
+    "message": "Fermer le panneau"
+  },
+  "pagePanelMinimize": {
+    "message": "Réduire le panneau"
+  },
+  "pagePanelRestore": {
+    "message": "Restaurer le panneau"
+  },
+  "pagePanelMove": {
+    "message": "Déplacer le panneau (touches fléchées)"
+  },
+  "pagePanelProtected": {
+    "message": "Les réglages sensibles et les autorisations s’ouvrent dans le panneau de l’extension, séparément de ce site."
+  },
+  "pagePanelManageProfiles": {
+    "message": "Gérer les profils"
+  },
+  "pagePanelOpaque": {
+    "message": "Réduire la transparence"
+  },
+  "pagePanelStatusUnavailable": {
+    "message": "L’état de la connexion est indisponible. Ouvrez le panneau de l’extension pour plus de détails."
+  },
+  "majorReviewTitle": {
+    "message": "Vérifier la mise à niveau majeure"
+  },
+  "majorReviewVersions": {
+    "message": "Actuelle : $1 · Disponible : $2"
+  },
+  "majorReviewUnavailable": {
+    "message": "Les versions sont indisponibles. Revenez aux réglages et recherchez à nouveau les mises à jour."
+  },
+  "majorApprove": {
+    "message": "Approuver la mise à niveau"
+  },
+  "majorNotNow": {
+    "message": "Pas maintenant"
+  },
+  "majorBackSettings": {
+    "message": "Retour aux réglages"
+  },
+  "readyWhenYouAre": {
+    "message": "Prêt quand vous le serez"
+  },
+  "uploadPreparationTitle": {
+    "message": "Impossible de préparer l’envoi"
+  },
+  "uploadPreparationDetails": {
+    "message": "Les fichiers n’ont pas pu être préparés. Rien n’a été envoyé. Demandez un nouvel envoi et vérifiez sa destination et son fichier."
+  },
+  "uploadApprovalUnavailable": {
+    "message": "L’approbation est indisponible tant que la demande est incomplète."
+  },
+  "uploadReviewNew": {
+    "message": "Examiner la nouvelle demande"
+  },
+  "uploadCancelRequest": {
+    "message": "Annuler la demande"
+  },
+  "uploadBackPreview": {
+    "message": "Retour à l’aperçu"
+  },
+  "uploadNewUnavailable": {
+    "message": "Demandez un nouvel envoi à votre agent. Vérifiez la destination et le fichier dans la nouvelle fenêtre de confirmation."
+  },
+  "uploadRequestUnavailable": {
+    "message": "La demande n’a pas pu être chargée. Fermez cette fenêtre et demandez un nouvel envoi."
+  }
 }
