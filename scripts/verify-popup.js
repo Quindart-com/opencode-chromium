@@ -485,12 +485,13 @@ try {
           if (stableDetails < 3) await page.waitForTimeout(50);
         }
         assert.equal(stableDetails, 3, "full-page review includes every asynchronously loaded expandable feature");
-        const backdropColors = theme === 'light' ? ['#edf3fc','#a0ddd2','#d2c4ef','#f0cca8'] : ['#111a2c','#003c3b','#45235b','#522a15'];
+        assert.equal(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundImage), 'none', 'The popup has no design-only backdrop artwork');
+        const backdropColors = ['#ffffff'];
         const backdrops = backdropColors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
         for (const label of await page.locator('main h1,.view-tab,.view-panel:not([hidden]) h2,.view-panel:not([hidden]) p,#app-footer a').all()) {
           if (!(await label.isVisible())) continue;
           const ratio = await label.evaluate(glassTextContrast, backdrops);
-          assert.ok(ratio >= 4.5, `${view} ${theme} text needs 4.5:1 on every owned backdrop form; got ${ratio}`);
+          assert.ok(ratio >= 4.5, `${view} ${theme} text needs 4.5:1 on the white canvas; got ${ratio}`);
         }
 
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} fits ${width}px ${theme}`);
