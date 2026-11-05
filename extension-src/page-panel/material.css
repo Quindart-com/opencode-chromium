@@ -1,5 +1,5 @@
 /* Full-suite material tokens. Native Figma GLASS optics are approximated by
-   live backdrop blur and bevels; unsafe/unknown backdrops default to solid UI. */
+   live backdrop blur and bevels; complex backdrops use a stronger translucent tint. */
 :host {
   all: initial; color-scheme: light;
   --ink: #172033; --control-ink: #172033; --muted: #43516a; --accent: #2356d8;
@@ -21,6 +21,11 @@
 [hidden] { display: none !important; }
 .board { position: relative; display: flex; flex-direction: column; overflow: hidden; max-height: var(--panel-height, calc(100dvh - 36px)); pointer-events: auto; border: 1px solid var(--edge); border-radius: 32px; color: var(--ink); background: var(--solid); box-shadow: inset 2px 2px 3px var(--highlight), inset -2px -2px 6px var(--lowlight), 0 8px 20px -4px var(--depth); }
 @supports (backdrop-filter: blur(1px)) { .board { background: var(--glass); backdrop-filter: blur(16px) saturate(115%); } }
+.board.tinted { background: rgb(255 255 255 / .65); --muted: #2f3b50; --success: #11432d; }
+@media (prefers-color-scheme: dark) {
+  .board.tinted { background: rgb(22 34 56 / .80); --muted: #bdcae0; --success: #96d6af; }
+  .board.tinted .board-tabs [aria-selected="true"] { background: rgb(255 255 255 / .10); }
+}
 .copy { box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .board-header { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px; }
 .brand-logo { width: 32px; height: 32px; flex: none; }

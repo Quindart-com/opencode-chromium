@@ -7,6 +7,7 @@ import { pagePanelUiFixture } from "./fixtures/page-panel-ui.js";
 import { glassTextContrast } from "./fixtures/glass-contrast.js";
 
 const uiFixture = process.argv.includes("--ui-fixture");
+const toolbarUi = process.argv.includes("--toolbar-ui");
 const server = http.createServer((request, response) => {
   if (request.url !== "/") {
     const file = path.resolve("extension", "." + new URL(request.url, "http://localhost").pathname);
@@ -23,7 +24,7 @@ await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 let fixture;
 try {
   const origin = `http://127.0.0.1:${server.address().port}`;
-  fixture = uiFixture ? await pagePanelUiFixture(origin) : await chromiumExtensionFixture();
+  fixture = uiFixture ? await pagePanelUiFixture(origin) : await chromiumExtensionFixture({ headless: !toolbarUi });
   const panelOrigin = uiFixture ? origin : `chrome-extension://${fixture.extensionId}`;
   const page = await fixture.context.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
@@ -32,10 +33,20 @@ try {
   await page.bringToFront();
   const open = () => panel.evaluate(() => chrome.runtime.sendMessage({ type: "PAGE_PANEL_OPEN" }));
   await page.locator('#website-input').focus();
-  const result = await open();
+  let result;
+  if (toolbarUi) {
+    assert.equal(JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8')).action.default_popup, undefined);
+    console.log('Awaiting a real toolbar click in the owned Example workspace window');
+    await page.locator('[id^="opencode-page-panel-"]').waitFor({ timeout: 0 });
+    result = { ok: true };
+  } else result = await open();
   assert.equal(result.ok, true, JSON.stringify(result));
   const host = page.locator('[id^="opencode-page-panel-"]');
   await host.waitFor();
+  if (toolbarUi) {
+    console.log('Toolbar injection observed. Press Enter in the verifier to continue after Cua inspection.');
+    await new Promise(resolve => process.stdin.once('data', resolve));
+  }
   assert.equal(await host.count(), 1);
   assert.equal(await host.evaluate(element => element.shadowRoot), null, "page scripts cannot access the closed component tree");
   assert.equal(await page.evaluate(() => document.body.innerText.includes("Harness connections")), false, "website text extraction excludes board contents");
@@ -76,7 +87,8 @@ try {
   let reviewTheme = 'light';
   async function contrast(selector) {
     const opaque = await inspect('.board', "element.classList.contains('opaque')");
-    const backgrounds = opaque ? [[0,0,0],[1,1,1]] : palette[reviewTheme].map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+    const tinted = await inspect('.board', "element.classList.contains('tinted')");
+    const backgrounds = opaque || tinted ? [[0,0,0],[1,1,1]] : palette[reviewTheme].map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
     const ratio = await inspect(selector, `(${glassTextContrast.toString()})(element,${JSON.stringify(backgrounds)})`);
     assert.ok(ratio >= 4.5, `${selector} needs 4.5:1 text contrast on reviewed backdrops (black/white in solid mode); got ${ratio}`);
   }
@@ -153,7 +165,7 @@ try {
   await page.setViewportSize({ width: 360, height: 640 });
   assert.equal((await open()).ok, true); await host.waitFor();
   await click('#page-tab-settings'); await page.waitForTimeout(100);
-  assert.equal(await inspect('.board', "element.classList.contains('opaque')"), true, "narrow default suppresses competing page text");
+  assert.equal(await inspect('.board', "element.classList.contains('tinted')"), true, "narrow default keeps the webpage visible through a readable tint");
   await contrast('#page-tab-settings .copy');
   const rect = await host.boundingBox();
   assert.ok(rect.x >= 0 && rect.x + rect.width <= 360);
@@ -186,7 +198,8 @@ try {
     await page.addStyleTag({content:`html,body,header,main,article,.stripe{background:${backdrop}!important;background-image:none!important}`});
     assert.equal((await open()).ok, true); await host.waitFor();
     await page.waitForTimeout(100);
-    assert.equal(await inspect('.board', "element.classList.contains('opaque')"), true, 'unsafe backdrop defaults to solid material');
+    assert.equal(await inspect('.board', "element.classList.contains('tinted')"), true, 'complex backdrop uses a readable translucent tint');
+    assert.notEqual(await inspect('.board', 'getComputedStyle(element).backdropFilter'), 'none', 'tinted board still blurs the live webpage');
     await contrast('.brand-copy p .copy');
     await page.screenshot({path:path.join(report,`contrast-fallback-${theme}.png`),fullPage:true});
     await page.reload(); await host.waitFor({state:'detached'});

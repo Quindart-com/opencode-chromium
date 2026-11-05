@@ -1,6 +1,6 @@
 # Liquid Glass page overlay: developer implementation spec
 
-Architecture and security contract for the on-page board. The implementation uses standards-based backdrop blur and glass styling; native optics and SVG displacement are not claimed. The existing popup remains the trusted full-feature surface and fallback.
+Architecture and security contract for the on-page board. The implementation uses standards-based backdrop blur and glass styling; native optics and SVG displacement are not claimed. The existing popup.html remains the trusted full-feature extension page and fallback. Clicking the toolbar icon injects the board directly; unsupported pages open the trusted panel in a tab.
 
 ## 1. Goal and supported interpretation
 
@@ -289,7 +289,7 @@ Native platform material references: https://developer.apple.com/design/human-in
 
 ## Trusted surfaces and implementation details
 
-The popup, setup guide and release archive draw an extension-owned CSS abstract backdrop. They use the same glass rims, pill controls and blue/slate typography as the board, without pretending to blur the webpage behind a toolbar popup. Inter Variable v4.1 is bundled locally under the SIL Open Font License; no remote font service is contacted. The on-page renderer requests only its packaged font, with a system-font fallback where page policy prevents loading.
+The trusted panel, setup guide and release archive use a plain white canvas. They use the same glass rims, pill controls and blue/slate typography as the board, without pretending to blur the webpage behind a toolbar popup. Inter Variable v4.1 is bundled locally under the SIL Open Font License; no remote font service is contacted. The on-page renderer requests only its packaged font, with a system-font fallback where page policy prevents loading.
 
 Major-version updates open a dedicated trusted review with backend-provided current and target versions. Approve invokes the existing updater with explicit major-upgrade approval; missing version information disables approval. Not now, Back to Settings and Escape leave the selection unchanged. This retains existing updater semantics: the displayed target is informational, rather than an added atomic version-pinning guarantee. Native input trust is checked before approval. Prototype simulation annotations and simulated success transitions are excluded.
 
@@ -301,7 +301,7 @@ The hosted archive preserves authoritative release text, anchors and existing li
 
 The default contextual overview preserves all harness connection rows, assistance status, input/output token totals with their current service/period scope, and memory status. Filters, call counts, cost and trend remain in a native Usage and performance disclosure. Its footer sits outside the scroll region so its material preference and trusted-panel handoff remain reachable when details expand or the viewport narrows. These controls intentionally retain functional information and accessibility capabilities absent from the compact prototype study. Populated connection screenshots use synthetic renderer data; separate real-addon fixtures establish injection and authorization.
 
-Standalone trusted pages use a plain white canvas, including when the system prefers dark mode. Design-only gradients and colored artwork are omitted from the shipped UI. The injected page board remains separate: it samples the real webpage behind it and keeps its contrast-driven opaque fallback.
+Standalone trusted pages use a plain white canvas, including when the system prefers dark mode. Design-only gradients and colored artwork are omitted from the shipped UI. The injected page board remains separate: it samples the real webpage behind it and uses a stronger translucent tint on complex backgrounds. Solid material is reserved for an explicit Reduce transparency choice or a system accessibility preference.
 
 Brand rows and headings are plain text/logo content without glass capsules. The archive's Get started link has its own glass action treatment. Informational cards retain the suite's grouping and spacing; text itself receives no pill surface.
 

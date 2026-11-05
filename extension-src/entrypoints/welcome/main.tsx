@@ -31,7 +31,7 @@ function Welcome() {
     finally { setSaving(false); }
   }
   async function openPanel() {
-    try { await browser.action.openPopup(); }
+    try { await browser.tabs.create({ url: browser.runtime.getURL("/popup.html") }); }
     catch { setFeedback(t("welcomeOpenFailure")); }
   }
   return <main>

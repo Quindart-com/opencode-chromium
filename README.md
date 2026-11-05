@@ -190,7 +190,7 @@ Keep remote debugging bound to loopback; do not expose its port to your network.
 
 Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenAI Platform or OpenRouter. Separately opt in to bounded screenshots for visual decisions. Experimental image fallback runs only after an unsure text answer, with persistent request caps. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance, costs and limits](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
 
-The extension panel’s **Open on this page** action opens a movable, keyboard-accessible glass board on supported webpages. It shows connection health and local usage without moving sensitive settings or approvals into the website. Profile editing, keys, upload consent, and maintenance open in the trusted extension panel. The board starts with solid surfaces on narrow or unsuitable backdrops. **Reduce transparency** lets you choose clear or solid surfaces; system contrast preferences take precedence. Restricted pages retain the normal popup.
+Clicking the extension toolbar icon opens a movable, keyboard-accessible glass board directly on supported webpages. It shows connection health and local usage without moving sensitive settings or approvals into the website. Profile editing, keys, upload consent, and maintenance open in the trusted extension panel. The board uses a stronger translucent tint on narrow or complex backdrops, keeping the webpage visible. **Reduce transparency** selects solid surfaces; system contrast preferences take precedence. Restricted pages open the trusted extension panel in a tab.
 
 ## Updates
 

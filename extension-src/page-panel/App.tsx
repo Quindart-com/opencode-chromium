@@ -19,7 +19,10 @@ export default function PagePanelApp(props: Props) {
   const scroll = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<PagePanelView>("overview");
   const [opaqueOverride, setOpaque] = useState<boolean | null>(null);
-  const opaque = props.forcedSolid || (opaqueOverride ?? props.solid);
+  const opaque = props.forcedSolid || opaqueOverride === true;
+  // Unknown/complex backdrops need a stronger translucent tint, not an
+  // automatic opaque window that hides the webpage the user opened this on.
+  const tinted = !opaque && opaqueOverride !== false && props.solid;
   const [usage, setUsage] = useState<PagePanelUsage>({ period: "7d", provider: "current" });
   const changeUsage = (next: PagePanelUsage) => { setUsage(next); props.setUsage(next); };
   const { snapshot, unavailable, open } = props;
@@ -33,7 +36,7 @@ export default function PagePanelApp(props: Props) {
     event.preventDefault(); changeView(views[index]!);
     (event.currentTarget.parentElement?.children[index] as HTMLButtonElement | undefined)?.focus();
   };
-  return <div className={`board${opaque ? " opaque" : ""}`} role="region" aria-label="OpenCode Browser">
+  return <div className={`board${opaque ? " opaque" : tinted ? " tinted" : ""}`} role="region" aria-label="OpenCode Browser">
     <header className="board-header">
       <img className="brand-logo" src={browser.runtime.getURL("/images/icon48.png")} alt="" width="32" height="32" />
       <div className="brand-copy"><h1><span className="copy">OpenCode Browser</span></h1><p><span className="copy">v{browser.runtime.getManifest().version} · {t("localAutomation")}</span></p></div>

@@ -6,12 +6,12 @@ import { isPagePanelUrl,pagePanelRequest,projectPagePanel } from "../../extensio
 
 function event<T extends (...args: any[]) => unknown>() {
   const listeners: T[] = [];
-  return { addListener: (fn: T) => listeners.push(fn), emit: (...args: Parameters<T>) => listeners.forEach(fn => fn(...args)) };
+  return { addListener: (fn: T) => listeners.push(fn), emit: (...args: Parameters<T>) => listeners.map(fn => fn(...args)) };
 }
 const empty = projectPagePanel(false, null, null, null);
 const panelUrl = "chrome-extension://fixture/popup.html";
 function fixture(options: { senderDocument?: string; senderFrame?: number; injectError?: boolean; gate?: Promise<void> } = {}) {
-  const connect = event(), messages = event(), updated = event(), removed = event();
+  const connect = event(), messages = event(), updated = event(), removed = event(), clicked = event();
   const incoming = event(), disconnected = event();
   const sent: any[] = [], opened: any[] = [];
   let instance = "", reads = 0, queried = 0;
@@ -24,6 +24,7 @@ function fixture(options: { senderDocument?: string; senderFrame?: number; injec
     disconnect() { disconnected.emit(); },
   };
   const chrome = {
+    action: { onClicked: clicked },
     runtime: { id: "fixture", getURL: () => panelUrl, onConnect: connect, onMessage: messages },
     tabs: {
       query: async () => { queried++; return [{ id: 4, url: "https://example.test/" }]; },
@@ -36,8 +37,24 @@ function fixture(options: { senderDocument?: string; senderFrame?: number; injec
   };
   const runtime = createPagePanelRuntime(chrome as unknown as WxtBrowser, async usage => { reads++; queries.push(usage); if (reads === 1) await options.gate; return empty; });
   const open = (sender = { id: "fixture", url: panelUrl }) => new Promise<any>(resolve => messages.emit({ type: "PAGE_PANEL_OPEN" }, sender, resolve));
-  return { open, sent, incoming, updated, port, opened, runtime, queries, reads: () => reads, queried: () => queried };
+  const toolbar = (url = "https://example.test/") => Promise.all(clicked.emit({ id: 4, url }));
+  return { open, toolbar, sent, incoming, updated, port, opened, runtime, queries, reads: () => reads, queried: () => queried };
 }
+
+test("toolbar launches the board directly and restricted pages open trusted controls", async () => {
+  const site = fixture();
+  await site.toolbar();
+  expect(site.reads()).toBe(1);
+  expect(site.opened).toEqual([]);
+  expect(site.queried()).toBe(0);
+  const restricted = fixture();
+  await restricted.toolbar("chrome://extensions/");
+  expect(restricted.reads()).toBe(0);
+  expect(restricted.opened).toEqual([{ url: panelUrl }]);
+  const blocked = fixture({ injectError: true });
+  await blocked.toolbar();
+  expect(blocked.opened).toEqual([{ url: panelUrl }]);
+});
 
 test("page projection strips identifiers, credentials, raw native errors and invalid counters", () => {
   // Fresh non-credential data exercises projection without a hardcoded key literal.

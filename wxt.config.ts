@@ -8,6 +8,13 @@ export default defineConfig({
   manifestVersion: 3,
   outDirTemplate: "{{modeSuffix}}",
   modules: ["@wxt-dev/module-react"],
+  hooks: {
+    "build:manifestGenerated"(_wxt, manifest) {
+      // The toolbar opens the same-document board. Keep popup.html as the
+      // trusted settings/approval page, without a separate toolbar window.
+      if (manifest.action) delete manifest.action.default_popup;
+    },
+  },
   manifest: {
     name: "__MSG_extensionName__",
     description: "__MSG_extensionDescription__",

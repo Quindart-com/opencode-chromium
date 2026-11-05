@@ -64,32 +64,37 @@ export function createPagePanelRuntime(chrome: WxtBrowser, snapshot: (usage: Pag
     });
     void refresh(tabId, lease);
   });
+  const showOnTab = async (tab: Browser.tabs.Tab | undefined) => {
+    if (tab?.id === undefined || !isPagePanelUrl(tab.url)) throw new Error("Unavailable");
+    const tabId = tab.id;
+    forget(tabId);
+    const lease: Lease = { instance: crypto.randomUUID(), url: tab.url!, expires: Date.now() + 10000, loading: false, lastRead: 0, lastOpen: 0, captures: 0, usage: { period: "7d", provider: "current" } };
+    leases.set(tabId, lease);
+    try {
+      const result = await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ["/page-panel.js"] });
+      const documentId = record(result[0]).documentId;
+      if (typeof documentId === "string") lease.document = documentId;
+      const current = await chrome.tabs.get(tabId);
+      if (current.url !== lease.url || leases.get(tabId) !== lease) throw new Error("Navigation changed");
+      let registrationTimer: ReturnType<typeof setTimeout> | undefined;
+      const registered = new Promise<boolean>(resolve => { lease.ready = () => resolve(true); registrationTimer = setTimeout(() => resolve(false), 2000); });
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: "PAGE_PANEL_SHOW", instance: lease.instance }, { frameId: 0 });
+        if (!await registered) throw new Error("Panel did not register");
+      } finally { clearTimeout(registrationTimer); lease.ready = undefined; }
+    } catch { if (leases.get(tabId) === lease) forget(tabId); throw new Error("Unavailable"); }
+  };
+  chrome.action.onClicked.addListener(async tab => {
+    try { await showOnTab(tab); }
+    catch { await chrome.tabs.create({ url: panelUrl }); }
+  });
   chrome.runtime.onMessage.addListener((value: unknown, sender, respond) => {
     const message = record(value);
     if (message.type !== "PAGE_PANEL_OPEN") return false;
     if (!trustedPanelSender(sender, chrome.runtime.id, panelUrl)) { respond({ error: "pagePanelUnavailable" }); return false; }
-    void (async () => {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab?.id === undefined || !isPagePanelUrl(tab.url)) throw new Error("Unavailable");
-      const tabId = tab.id;
-      forget(tabId);
-      const lease: Lease = { instance: crypto.randomUUID(), url: tab.url!, expires: Date.now() + 10000, loading: false, lastRead: 0, lastOpen: 0, captures: 0, usage: { period: "7d", provider: "current" } };
-      leases.set(tabId, lease);
-      try {
-        const result = await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ["/page-panel.js"] });
-        const documentId = record(result[0]).documentId;
-        if (typeof documentId === "string") lease.document = documentId;
-        const current = await chrome.tabs.get(tabId);
-        if (current.url !== lease.url || leases.get(tabId) !== lease) throw new Error("Navigation changed");
-        let registrationTimer: ReturnType<typeof setTimeout> | undefined;
-        const registered = new Promise<boolean>(resolve => { lease.ready = () => resolve(true); registrationTimer = setTimeout(() => resolve(false), 2000); });
-        try {
-          await chrome.tabs.sendMessage(tabId, { type: "PAGE_PANEL_SHOW", instance: lease.instance }, { frameId: 0 });
-          if (!await registered) throw new Error("Panel did not register");
-        } finally { clearTimeout(registrationTimer); lease.ready = undefined; }
-        respond({ ok: true });
-      } catch { if (leases.get(tabId) === lease) forget(tabId); throw new Error("Unavailable"); }
-    })().catch(() => respond({ error: "pagePanelUnavailable" }));
+    void chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
+      await showOnTab(tab); respond({ ok: true });
+    }).catch(() => respond({ error: "pagePanelUnavailable" }));
     return true;
   });
   chrome.tabs.onRemoved.addListener(forget);
