@@ -81,7 +81,10 @@ export async function verifyFirefoxPagePanel({ endpoint, debuggerPort, origin, r
     await visual.send('browsingContext.setViewport',{context:page.context,viewport:{width:360,height:800}});
     await new Promise(r=>setTimeout(r,200));
     assert.equal(await inPanel(`(()=>{const r=globalThis.__ownedPanelRoot.host.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.width<=innerWidth;})()`),true);
-    assert.equal(await inPanel(`globalThis.__ownedPanelRoot.querySelector('.board').classList.contains('opaque')`),true,'Narrow layouts default to solid material for readability');
+    assert.equal(await inPanel(`globalThis.__ownedPanelRoot.querySelector('.board').classList.contains('tinted')`),true,'Narrow layouts retain a readable translucent tint');
+    assert.equal(await inPanel(`getComputedStyle(globalThis.__ownedPanelRoot.querySelector('.board')).backdropFilter.includes('blur')`),true,'Narrow material still blurs the live webpage');
+    const narrowContrast = await inPanel(`(${glassTextContrast.toString()})(globalThis.__ownedPanelRoot.querySelector('.brand-copy p .copy'),[[0,0,0],[1,1,1]])`);
+    assert.ok(narrowContrast >= 4.5, 'Narrow tinted text retains 4.5:1 contrast on black and white backdrops');
     await takeShot('overview-narrow-real-addon');
     report.checks.push('idempotent reopening and narrow viewport containment');
     await click('.board-tools button:last-child');
