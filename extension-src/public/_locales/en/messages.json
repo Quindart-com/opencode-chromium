@@ -1376,8 +1376,226 @@
   "catalogInvalid": {
     "message": "The custom model catalog could not be loaded. Built-in models are available."
   },
-  "bridgeRequired": { "message": "Run opencode-chromium setup --all once to install the stable update controller." },
-  "runtimeDraining": { "message": "New connections use the updated runtime. Existing sessions will finish on their current version." },
-  "runtimeApprovalRequired": { "message": "A major upgrade is available and needs your approval." },
-  "majorUpgradeConfirm": { "message": "Upgrade to the new major version? Existing sessions will not be interrupted, but removed legacy commands will no longer be available to new connections." }
+  "bridgeRequired": {
+    "message": "Run opencode-chromium setup --all once to install the stable update controller."
+  },
+  "runtimeDraining": {
+    "message": "New connections use the updated runtime. Existing sessions will finish on their current version."
+  },
+  "runtimeApprovalRequired": {
+    "message": "A major upgrade is available and needs your approval."
+  },
+  "majorUpgradeConfirm": {
+    "message": "Upgrade to the new major version? Existing sessions will not be interrupted, but removed legacy commands will no longer be available to new connections."
+  },
+  "activityMemory": {
+    "message": "Activity & memory"
+  },
+  "agentSelector": {
+    "message": "Agent selector"
+  },
+  "assistanceBridgeUnavailable": {
+    "message": "Unavailable until the bridge connects"
+  },
+  "availableToAgent": {
+    "message": "Available to your agent"
+  },
+  "bridgeVersion": {
+    "message": "Bridge version"
+  },
+  "browserAgent": {
+    "message": "Browser agent"
+  },
+  "connectingAgent": {
+    "message": "Connecting…"
+  },
+  "connectionHelp": {
+    "message": "Connection help"
+  },
+  "connectionHelpDetail": {
+    "message": "Checks and bridge diagnostics"
+  },
+  "controlAgentContext": {
+    "message": "Control the context returned to your agent."
+  },
+  "deepSearchModels": {
+    "message": "Deep search models"
+  },
+  "harnessConnectionCount": {
+    "message": "$1 of $2 connected"
+  },
+  "historyLocal": {
+    "message": "History stays on this device."
+  },
+  "historyUnavailable": {
+    "message": "History unavailable while disconnected"
+  },
+  "labelsStoredLocally": {
+    "message": "Labels are stored on this device."
+  },
+  "localSearchHelp": {
+    "message": "Find relevant page content on this device."
+  },
+  "localSearchOnly": {
+    "message": "Local search only"
+  },
+  "modelOptions": {
+    "message": "Options for $1"
+  },
+  "modelsRunLocally": {
+    "message": "Models run locally. Downloads use disk space."
+  },
+  "moreStatistics": {
+    "message": "More statistics"
+  },
+  "noSavedActions": {
+    "message": "No actions saved yet"
+  },
+  "onDevice": {
+    "message": "On device"
+  },
+  "openSetupGuide": {
+    "message": "Open setup guide"
+  },
+  "profileIdentifier": {
+    "message": "Profile identifier"
+  },
+  "profileLabelLocal": {
+    "message": "Labels stay on this device and help identify this browser."
+  },
+  "profileMenuHelp": {
+    "message": "Choose a profile, then copy its selector for your agent."
+  },
+  "profilesUnavailable": {
+    "message": "Connect the local bridge to list profiles."
+  },
+  "renameThisProfile": {
+    "message": "Rename this profile"
+  },
+  "saveActionsLocally": {
+    "message": "Save successful browser actions locally."
+  },
+  "saveLabel": {
+    "message": "Save label"
+  },
+  "savedActions": {
+    "message": "Saved actions"
+  },
+  "searchModel": {
+    "message": "Search model"
+  },
+  "serviceStatistics": {
+    "message": "Service statistics"
+  },
+  "storageCleanup": {
+    "message": "Storage & cleanup"
+  },
+  "storageSummary": {
+    "message": "$1 limit · Remove after $2 days"
+  },
+  "usageHeading": {
+    "message": "Usage"
+  },
+  "viewActivity": {
+    "message": "View"
+  },
+  "backToSettings": {
+    "message": "Back to settings"
+  },
+  "backToHome": {
+    "message": "Back to Home"
+  },
+  "browserProfile": {
+    "message": "Browser profile"
+  },
+  "connectedBrowser": {
+    "message": "Connected browser"
+  },
+  "localSearchOn": {
+    "message": "Local search on"
+  },
+  "localSearchOff": {
+    "message": "Local search off"
+  },
+  "cloudOn": {
+    "message": "Cloud on"
+  },
+  "cloudOff": {
+    "message": "Cloud off"
+  },
+  "onLabel": {
+    "message": "On"
+  },
+  "offLabel": {
+    "message": "Off"
+  },
+  "automaticUpdatesOn": {
+    "message": "Automatic updates on"
+  },
+  "alwaysAskUploads": {
+    "message": "Always ask before uploading"
+  },
+  "uploadsWithoutAsking": {
+    "message": "Upload without confirmation"
+  },
+  "checkingBridge": {
+    "message": "Checking local bridge"
+  },
+  "bridgeNotConnected": {
+    "message": "Local bridge not connected"
+  },
+  "bridgeConnectHelp": {
+    "message": "Connect the local bridge before your agent can use this browser."
+  },
+  "retry": {
+    "message": "Retry"
+  },
+  "currentSearchModel": {
+    "message": "Current search model"
+  },
+  "downloading": {
+    "message": "Downloading…"
+  },
+  "updatedJustNow": {
+    "message": "Updated just now"
+  },
+  "nothingRecorded": {
+    "message": "Nothing recorded for this period."
+  },
+  "findPages": {
+    "message": "Find pages"
+  },
+  "fillForms": {
+    "message": "Fill forms"
+  },
+  "captureScreens": {
+    "message": "Capture"
+  },
+  "thisBrowserShort": {
+    "message": "This browser"
+  },
+  "allowScreenshots": {
+    "message": "Allow screenshots"
+  },
+  "pageTextOnly": {
+    "message": "Off · Page text only"
+  },
+  "copySelectorAction": {
+    "message": "Copy selector"
+  },
+  "usageBridgeConnect": {
+    "message": "Connect the local bridge to load usage."
+  },
+  "memoryUnavailableShort": {
+    "message": "Unavailable"
+  },
+  "retryConnection": {
+    "message": "Retry connection"
+  },
+  "assistanceStatusUnavailable": {
+    "message": "Status unavailable. Try again."
+  },
+  "settingsStatusUnavailable": {
+    "message": "Some settings could not be loaded."
+  }
 }

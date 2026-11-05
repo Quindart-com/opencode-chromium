@@ -1376,8 +1376,226 @@
   "catalogInvalid": {
     "message": "无法加载自定义模型目录。内置模型仍然可用。"
   },
-  "bridgeRequired": { "message": "请运行一次 opencode-chromium setup --all，以安装稳定更新控制器。" },
-  "runtimeDraining": { "message": "新连接使用更新后的运行时。现有会话会继续使用当前版本直至结束。" },
-  "runtimeApprovalRequired": { "message": "有新的主要版本可用，需要你的确认。" },
-  "majorUpgradeConfirm": { "message": "升级到新的主要版本吗？现有会话不会中断，但新连接将无法使用已移除的旧命令。" }
+  "bridgeRequired": {
+    "message": "请运行一次 opencode-chromium setup --all，以安装稳定更新控制器。"
+  },
+  "runtimeDraining": {
+    "message": "新连接使用更新后的运行时。现有会话会继续使用当前版本直至结束。"
+  },
+  "runtimeApprovalRequired": {
+    "message": "有新的主要版本可用，需要你的确认。"
+  },
+  "majorUpgradeConfirm": {
+    "message": "升级到新的主要版本吗？现有会话不会中断，但新连接将无法使用已移除的旧命令。"
+  },
+  "activityMemory": {
+    "message": "活动与记忆"
+  },
+  "agentSelector": {
+    "message": "代理选择器"
+  },
+  "assistanceBridgeUnavailable": {
+    "message": "本地桥接连接后可用"
+  },
+  "availableToAgent": {
+    "message": "代理可用功能"
+  },
+  "bridgeVersion": {
+    "message": "桥接版本"
+  },
+  "browserAgent": {
+    "message": "浏览器代理"
+  },
+  "connectingAgent": {
+    "message": "正在连接…"
+  },
+  "connectionHelp": {
+    "message": "连接帮助"
+  },
+  "connectionHelpDetail": {
+    "message": "检查与桥接诊断"
+  },
+  "controlAgentContext": {
+    "message": "控制返回给代理的上下文。"
+  },
+  "deepSearchModels": {
+    "message": "深度搜索模型"
+  },
+  "harnessConnectionCount": {
+    "message": "已连接 $1 / $2"
+  },
+  "historyLocal": {
+    "message": "历史记录保留在此设备上。"
+  },
+  "historyUnavailable": {
+    "message": "断开连接时历史记录不可用"
+  },
+  "labelsStoredLocally": {
+    "message": "标签存储在此设备上。"
+  },
+  "localSearchHelp": {
+    "message": "在此设备上查找相关页面内容。"
+  },
+  "localSearchOnly": {
+    "message": "仅本地搜索"
+  },
+  "modelOptions": {
+    "message": "$1 选项"
+  },
+  "modelsRunLocally": {
+    "message": "模型在本地运行，下载会占用磁盘空间。"
+  },
+  "moreStatistics": {
+    "message": "更多统计信息"
+  },
+  "noSavedActions": {
+    "message": "尚未保存操作"
+  },
+  "onDevice": {
+    "message": "本地设备"
+  },
+  "openSetupGuide": {
+    "message": "打开设置指南"
+  },
+  "profileIdentifier": {
+    "message": "配置文件标识符"
+  },
+  "profileLabelLocal": {
+    "message": "标签保留在此设备上，便于识别此浏览器。"
+  },
+  "profileMenuHelp": {
+    "message": "选择配置文件，然后为代理复制其选择器。"
+  },
+  "profilesUnavailable": {
+    "message": "连接本地桥接以查看配置文件。"
+  },
+  "renameThisProfile": {
+    "message": "重命名此配置文件"
+  },
+  "saveActionsLocally": {
+    "message": "在本地保存成功的浏览器操作。"
+  },
+  "saveLabel": {
+    "message": "保存标签"
+  },
+  "savedActions": {
+    "message": "已保存操作"
+  },
+  "searchModel": {
+    "message": "搜索模型"
+  },
+  "serviceStatistics": {
+    "message": "服务统计信息"
+  },
+  "storageCleanup": {
+    "message": "存储与清理"
+  },
+  "storageSummary": {
+    "message": "$1 上限 · $2 天后移除"
+  },
+  "usageHeading": {
+    "message": "使用情况"
+  },
+  "viewActivity": {
+    "message": "查看"
+  },
+  "backToSettings": {
+    "message": "返回设置"
+  },
+  "backToHome": {
+    "message": "返回主页"
+  },
+  "browserProfile": {
+    "message": "浏览器配置文件"
+  },
+  "connectedBrowser": {
+    "message": "已连接的浏览器"
+  },
+  "localSearchOn": {
+    "message": "本地搜索已开启"
+  },
+  "localSearchOff": {
+    "message": "本地搜索已关闭"
+  },
+  "cloudOn": {
+    "message": "云端已开启"
+  },
+  "cloudOff": {
+    "message": "云端已关闭"
+  },
+  "onLabel": {
+    "message": "开启"
+  },
+  "offLabel": {
+    "message": "关闭"
+  },
+  "automaticUpdatesOn": {
+    "message": "自动更新已开启"
+  },
+  "alwaysAskUploads": {
+    "message": "上传前始终询问"
+  },
+  "uploadsWithoutAsking": {
+    "message": "无需确认即可上传"
+  },
+  "checkingBridge": {
+    "message": "正在检查本地桥接"
+  },
+  "bridgeNotConnected": {
+    "message": "本地桥接未连接"
+  },
+  "bridgeConnectHelp": {
+    "message": "连接本地桥接后，代理才能使用此浏览器。"
+  },
+  "retry": {
+    "message": "重试"
+  },
+  "currentSearchModel": {
+    "message": "当前搜索模型"
+  },
+  "downloading": {
+    "message": "正在下载…"
+  },
+  "updatedJustNow": {
+    "message": "刚刚更新"
+  },
+  "nothingRecorded": {
+    "message": "此期间没有记录。"
+  },
+  "findPages": {
+    "message": "查找页面"
+  },
+  "fillForms": {
+    "message": "填写表单"
+  },
+  "captureScreens": {
+    "message": "截图"
+  },
+  "thisBrowserShort": {
+    "message": "此浏览器"
+  },
+  "allowScreenshots": {
+    "message": "允许截图"
+  },
+  "pageTextOnly": {
+    "message": "关闭 · 仅页面文本"
+  },
+  "copySelectorAction": {
+    "message": "复制选择器"
+  },
+  "usageBridgeConnect": {
+    "message": "连接本地桥接以加载使用情况。"
+  },
+  "memoryUnavailableShort": {
+    "message": "不可用"
+  },
+  "retryConnection": {
+    "message": "重试连接"
+  },
+  "assistanceStatusUnavailable": {
+    "message": "状态不可用，请重试。"
+  },
+  "settingsStatusUnavailable": {
+    "message": "部分设置无法加载。"
+  }
 }
