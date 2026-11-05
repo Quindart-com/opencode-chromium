@@ -422,8 +422,12 @@ try {
   const stateReview = path.join(root, 'reports', 'state-review'); fs.mkdirSync(stateReview, {recursive:true});
   for (const theme of ['light','dark']) for (const width of [420,360]) {
     await page.emulateMedia({colorScheme:theme}); await page.setViewportSize({width,height:600});
-    const colors = ['#ffffff']; // Standalone review pages use the same white canvas in either system theme.
-    const backdrops = colors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+    await page.evaluate(palette => {
+      document.documentElement.style.setProperty('--page-canvas', palette.background);
+      document.documentElement.style.setProperty('--page-solid', palette.solid);
+      document.documentElement.dataset.popupTheme = palette.dark ? 'dark' : 'light';
+    }, popupPalette([theme === 'dark' ? 'rgb(24, 24, 32)' : 'rgb(110, 210, 180)']));
+    const backdrops = [await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => c / 255))];
     for (const control of await review.locator('button').all()) {
       assert.ok(await control.evaluate(glassTextContrast,backdrops) >= 4.5,'Guarded upgrade controls retain contrast immediately after theme changes');
     }
@@ -492,8 +496,7 @@ try {
         }
         assert.equal(stableDetails, 3, "full-page review includes every asynchronously loaded expandable feature");
         assert.equal(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundImage), 'none', 'The popup has no design-only backdrop artwork');
-        const backdropColors = ['#ffffff'];
-        const backdrops = backdropColors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
+        const backdrops = [await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => c / 255))];
         for (const label of await page.locator('main h1,.view-tab,.view-panel:not([hidden]) h2,.view-panel:not([hidden]) p,#app-footer a,button:not(:disabled),label,select,summary').all()) {
           if (!(await label.isVisible()) || !(await label.textContent()).trim()) continue;
           const ratio = await label.evaluate(glassTextContrast, backdrops);

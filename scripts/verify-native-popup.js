@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import { popupPalette } from "../extension-src/entrypoints/popup/page-palette.ts";
 import { chromium } from "playwright";
 
 // A separate browser profile: never attaches to an installed/user browser.
@@ -13,7 +14,7 @@ assert.equal(manifest.action.default_popup, "popup.html");
 assert.equal(fs.existsSync(path.join(source, "page-panel.js")), false);
 const server = http.createServer((request, response) => {
   response.setHeader("Content-Type", "text/html");
-  response.end(`<!doctype html><title>Popup color fixture</title><style>body{background:${request.url === "/dark" ? "rgb(20, 30, 40)" : "rgb(120, 220, 180)"}}</style><h1>Unmodified webpage</h1>`);
+  response.end(`<!doctype html><title>Popup color fixture</title><style>body{background:${request.url === "/dark" ? "rgb(15, 15, 15)" : request.url === "/green" ? "rgb(10, 60, 10)" : "rgb(120, 220, 180)"}}</style><h1>Unmodified webpage</h1>`);
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 let context;
@@ -35,7 +36,7 @@ try {
   }));
   const cdp = await context.browser().newBrowserCDPSession();
   const page = await context.newPage();
-  for (const theme of ["light", "dark", "fallback"]) {
+  for (const theme of ["light", "dark", "green", "fallback"]) {
     await page.goto(theme === "fallback" ? "chrome://version/" : `http://127.0.0.1:${server.address().port}/${theme}`);
     await page.bringToFront();
     const before = await page.content();
@@ -54,8 +55,12 @@ try {
       void check();
     }));
     assert.equal(contexts.length, 1, "Exactly one native extension popup");
-    const { targetInfos } = await cdp.send('Target.getTargets');
-    const target = targetInfos.find(target => target.url === contexts[0].documentUrl);
+    let target;
+    for (let attempt = 0; attempt < 100 && !target; attempt++) {
+      const { targetInfos } = await cdp.send('Target.getTargets');
+      target = targetInfos.find(target => target.url === contexts[0].documentUrl);
+      if (!target) await new Promise(resolve => setTimeout(resolve, 50));
+    }
     assert.ok(target, "Native popup has a browser target");
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: false });
     let sequence = 0;
@@ -74,7 +79,15 @@ try {
       cdp.send('Target.sendMessageToTarget', { sessionId, message: JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }) }).catch(reject);
     });
     const rendered = await evaluate(`new Promise((resolve,reject)=>{let tries=0;const check=()=>{if(document.documentElement.dataset.popupTheme || (${JSON.stringify(theme)} === 'fallback' && document.querySelector('main')))resolve(document.documentElement.dataset.popupTheme || 'fallback');else if(++tries>100)reject('Tint not applied');else setTimeout(check,50)};check()})`);
-    assert.equal(rendered, theme);
+    assert.equal(rendered, theme === 'green' ? 'dark' : theme);
+    if (theme !== 'fallback') {
+      const colors = await page.evaluate(() => [getComputedStyle(document.body).backgroundColor]);
+      const expected = popupPalette(colors).background.match(/\d+/g).map(Number);
+      const actual = await evaluate(`getComputedStyle(document.body).backgroundColor.match(/\\d+/g).slice(0,3).map(Number)`);
+      assert.deepEqual(actual, expected, 'The actual page colors must reach the rendered popup canvas');
+      const card = await evaluate(`getComputedStyle(document.querySelector('.decision-overview')).backgroundColor`);
+      assert.equal(card, theme === 'light' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.035)', 'Glass cards must not cover the page colors with a fixed blue fill');
+    }
     assert.equal(await evaluate(`document.querySelectorAll('.page-panel-launch').length`), 0);
     await evaluate(`document.getElementById('tab-settings').click(); true`);
     await evaluate(`document.getElementById('tab-overview').click(); true`);

@@ -11,7 +11,6 @@ test("bright and dark page colors remain inside safe canvas ranges", () => {
   for (let r = 0; r <= 255; r += 51) for (let g = 0; g <= 255; g += 51) for (let b = 0; b <= 255; b += 51) {
     const palette = popupPalette([`rgb(${r} ${g} ${b})`])!;
     const channels = palette.background.match(/\d+/g)!.map(Number);
-    for (const channel of channels) expect(palette.dark ? channel <= 72 : channel >= 229).toBe(true);
     const linear = (v: number) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
     const luminance = (c: number[]) => c.reduce((sum, v, i) => sum + linear(v) * [ .2126, .7152, .0722 ][i]!, 0);
     const background = luminance(channels), foreground = luminance(palette.dark ? [180, 195, 219] : [82, 97, 123]);
@@ -38,4 +37,13 @@ test("page probe reads only bounded computed background colors", () => {
       else Reflect.deleteProperty(globalThis, key);
     }
   }
+});
+
+test("page backgrounds retain neutral colors and distinct hues instead of a blue wash", () => {
+  expect(popupPalette(["rgb(15, 15, 15)"])?.background).toBe("rgb(15 15 15)");
+  expect(popupPalette(["rgb(255, 255, 255)"])?.background).toBe("rgb(255 255 255)");
+  const red = popupPalette(["rgb(60, 10, 10)"])!.background.match(/\d+/g)!.map(Number);
+  const green = popupPalette(["rgb(10, 60, 10)"])!.background.match(/\d+/g)!.map(Number);
+  expect(red[0]!).toBeGreaterThan(red[2]! * 3);
+  expect(green[1]!).toBeGreaterThan(green[2]! * 3);
 });

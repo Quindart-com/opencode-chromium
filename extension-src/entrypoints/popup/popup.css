@@ -320,19 +320,19 @@ body.upload-confirm-page { width: auto; min-width: 300px; }
 body.upload-confirm-page, body:has(.major-review) { background: var(--consent-paint); background-attachment: fixed; }
 
 /* Native popup only: a safe color tint, with no page pixels or injected UI. */
-:root[data-popup-theme] { --canvas-paint: var(--page-canvas); }
+:root[data-popup-theme] { --bg: var(--page-canvas); --canvas-paint: var(--bg); --surface-solid: var(--page-solid); }
 :root[data-popup-theme="dark"] {
   color-scheme: dark;
-  --bg: #172033; --consent-paint: var(--bg); --surface: rgb(23 32 51 / .86); --surface-raised: rgb(255 255 255 / .08);
-  --surface-solid: #202b3d; --surface-border: rgb(255 255 255 / .28); --surface-border-strong: #7c8da5;
+  --consent-paint: var(--bg); --surface: rgb(255 255 255 / .035); --surface-raised: rgb(255 255 255 / .08);
+  --surface-border: rgb(255 255 255 / .28); --surface-border-strong: #7c8da5;
   --text: #f1f4ff; --control-ink: #f1f4ff; --text-muted: #c2cee3; --text-faint: #b4c3db; --section-label: #c2cee3;
   --primary-text: #172033; --ok-ink: #172033; --bad-ink: #172033;
-  --accent: #acc7ff; --accent-hover: #d2e1ff; --accent-soft: #263a57; --accent-border: #7c8da5;
+  --accent: #acc7ff; --accent-hover: #d2e1ff; --accent-soft: var(--surface-solid); --accent-border: #7c8da5;
   --ok: #a2edc3; --ok-soft: #183c30; --ok-border: #59957c;
   --warn: #ffdfa3; --warn-soft: #42351f; --warn-border: #aa8953;
   --bad: #ffb8c0; --bad-soft: #482a33; --bad-border: #b97b87;
-  --input-bg: #202b3d; --button-bg: rgb(255 255 255 / .06); --button-hover: rgb(255 255 255 / .12); --button-border: rgb(255 255 255 / .28);
-  --disabled-bg: #273245; --disabled-text: #b4c3db; --disabled-primary-bg: #273245; --disabled-primary-text: #b4c3db;
+  --input-bg: var(--surface-solid); --button-bg: rgb(255 255 255 / .06); --button-hover: rgb(255 255 255 / .12); --button-border: rgb(255 255 255 / .28);
+  --disabled-bg: var(--surface-solid); --disabled-text: #b4c3db; --disabled-primary-bg: var(--surface-solid); --disabled-primary-text: #b4c3db;
   --material-shadow: inset 1px 2px 3px #ffffff45, inset -1px -2px 5px #ffffff18, 0 8px 20px -4px #080e1c40;
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {

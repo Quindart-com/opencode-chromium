@@ -16,7 +16,7 @@ export function readPageColors(): string[] {
   return colors;
 }
 
-export function popupPalette(input: unknown): { background: string; dark: boolean } | null {
+export function popupPalette(input: unknown): { background: string; solid: string; dark: boolean } | null {
   if (!Array.isArray(input)) return null;
   const colors: Color[] = [];
   for (const value of input.slice(0, 8)) {
@@ -30,12 +30,17 @@ export function popupPalette(input: unknown): { background: string; dark: boolea
   }
   const base = colors[0];
   if (!base) return null;
-  const luminance = base.map(c => { const v = c / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }) as Color;
-  const dark = luminance[0] * .2126 + luminance[1] * .7152 + luminance[2] * .0722 < .25;
-  // Keep the canvas inside a narrow luminance range, regardless of site colors.
-  // The text palette and opaque accessibility surfaces change together.
-  const anchor: Color = dark ? [23, 32, 51] : [255, 255, 255];
-  const indices = [0, 1, 2] as const;
-  const tint = indices.map(i => Math.round(anchor[i] * .9 + colors.reduce((sum, c) => sum + c[i], 0) / colors.length * .1));
-  return { background: `rgb(${tint.join(" ")})`, dark };
+  const luminance = (color: Color) => color.reduce((sum, c, i) => {
+    const v = c / 255;
+    return sum + (v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4) * ([.2126, .7152, .0722] as const)[i]!;
+  }, 0);
+  const dark = luminance(base) < .25;
+  // Preserve the page's hue, including neutral black/gray. Adjust brightness
+  // only when contrast requires it; never mix in a fixed brand-colored canvas.
+  let canvas: Color = [...base];
+  for (let attempt = 0; attempt < 100 && (dark ? luminance(canvas) > .025 : luminance(canvas) < .82); attempt++) {
+    canvas = canvas.map(c => Math.round(dark ? c * .95 : c + (255 - c) * .05)) as Color;
+  }
+  const solid = canvas.map(c => Math.round(c + (255 - c) * (dark ? .06 : .2)));
+  return { background: `rgb(${canvas.join(" ")})`, solid: `rgb(${solid.join(" ")})`, dark };
 }
