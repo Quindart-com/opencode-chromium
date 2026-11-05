@@ -1376,8 +1376,226 @@
   "catalogInvalid": {
     "message": "Не удалось загрузить пользовательский каталог. Встроенные модели доступны."
   },
-  "bridgeRequired": { "message": "Один раз выполните opencode-chromium setup --all, чтобы установить стабильный контроллер обновлений." },
-  "runtimeDraining": { "message": "Новые подключения используют обновлённую среду. Текущие сеансы завершатся на своей версии." },
-  "runtimeApprovalRequired": { "message": "Доступно крупное обновление, для которого требуется ваше подтверждение." },
-  "majorUpgradeConfirm": { "message": "Перейти на новую основную версию? Текущие сеансы не будут прерваны, но удалённые устаревшие команды станут недоступны новым подключениям." }
+  "bridgeRequired": {
+    "message": "Один раз выполните opencode-chromium setup --all, чтобы установить стабильный контроллер обновлений."
+  },
+  "runtimeDraining": {
+    "message": "Новые подключения используют обновлённую среду. Текущие сеансы завершатся на своей версии."
+  },
+  "runtimeApprovalRequired": {
+    "message": "Доступно крупное обновление, для которого требуется ваше подтверждение."
+  },
+  "majorUpgradeConfirm": {
+    "message": "Перейти на новую основную версию? Текущие сеансы не будут прерваны, но удалённые устаревшие команды станут недоступны новым подключениям."
+  },
+  "activityMemory": {
+    "message": "Активность и память"
+  },
+  "agentSelector": {
+    "message": "Селектор для агента"
+  },
+  "assistanceBridgeUnavailable": {
+    "message": "Недоступно без локального соединения"
+  },
+  "availableToAgent": {
+    "message": "Доступно вашему агенту"
+  },
+  "bridgeVersion": {
+    "message": "Версия моста"
+  },
+  "browserAgent": {
+    "message": "Браузерный агент"
+  },
+  "connectingAgent": {
+    "message": "Подключение…"
+  },
+  "connectionHelp": {
+    "message": "Помощь с подключением"
+  },
+  "connectionHelpDetail": {
+    "message": "Проверка и диагностика моста"
+  },
+  "controlAgentContext": {
+    "message": "Управляйте контекстом для агента."
+  },
+  "deepSearchModels": {
+    "message": "Модели глубокого поиска"
+  },
+  "harnessConnectionCount": {
+    "message": "Подключено: $1 из $2"
+  },
+  "historyLocal": {
+    "message": "История хранится на этом устройстве."
+  },
+  "historyUnavailable": {
+    "message": "История недоступна без подключения"
+  },
+  "labelsStoredLocally": {
+    "message": "Названия хранятся на этом устройстве."
+  },
+  "localSearchHelp": {
+    "message": "Находите нужный контент страниц на устройстве."
+  },
+  "localSearchOnly": {
+    "message": "Только локальный поиск"
+  },
+  "modelOptions": {
+    "message": "Параметры $1"
+  },
+  "modelsRunLocally": {
+    "message": "Модели работают локально и занимают место на диске."
+  },
+  "moreStatistics": {
+    "message": "Дополнительная статистика"
+  },
+  "noSavedActions": {
+    "message": "Пока нет сохранённых действий"
+  },
+  "onDevice": {
+    "message": "На устройстве"
+  },
+  "openSetupGuide": {
+    "message": "Открыть руководство"
+  },
+  "profileIdentifier": {
+    "message": "Идентификатор профиля"
+  },
+  "profileLabelLocal": {
+    "message": "Названия остаются на устройстве и помогают узнать браузер."
+  },
+  "profileMenuHelp": {
+    "message": "Выберите профиль и скопируйте селектор для агента."
+  },
+  "profilesUnavailable": {
+    "message": "Подключите локальный мост для списка профилей."
+  },
+  "renameThisProfile": {
+    "message": "Переименовать профиль"
+  },
+  "saveActionsLocally": {
+    "message": "Сохранять успешные действия браузера локально."
+  },
+  "saveLabel": {
+    "message": "Сохранить название"
+  },
+  "savedActions": {
+    "message": "Сохранённые действия"
+  },
+  "searchModel": {
+    "message": "Модель поиска"
+  },
+  "serviceStatistics": {
+    "message": "Статистика сервиса"
+  },
+  "storageCleanup": {
+    "message": "Хранилище и очистка"
+  },
+  "storageSummary": {
+    "message": "Лимит $1 · Удалять через $2 дн."
+  },
+  "usageHeading": {
+    "message": "Использование"
+  },
+  "viewActivity": {
+    "message": "Смотреть"
+  },
+  "backToSettings": {
+    "message": "Назад к настройкам"
+  },
+  "backToHome": {
+    "message": "На главную"
+  },
+  "browserProfile": {
+    "message": "Профиль браузера"
+  },
+  "connectedBrowser": {
+    "message": "Подключённый браузер"
+  },
+  "localSearchOn": {
+    "message": "Локальный поиск включён"
+  },
+  "localSearchOff": {
+    "message": "Локальный поиск выключен"
+  },
+  "cloudOn": {
+    "message": "Облако включено"
+  },
+  "cloudOff": {
+    "message": "Облако выключено"
+  },
+  "onLabel": {
+    "message": "Вкл."
+  },
+  "offLabel": {
+    "message": "Выкл."
+  },
+  "automaticUpdatesOn": {
+    "message": "Автообновления включены"
+  },
+  "alwaysAskUploads": {
+    "message": "Всегда спрашивать перед загрузкой"
+  },
+  "uploadsWithoutAsking": {
+    "message": "Загружать без подтверждения"
+  },
+  "checkingBridge": {
+    "message": "Проверка локального моста"
+  },
+  "bridgeNotConnected": {
+    "message": "Локальный мост не подключён"
+  },
+  "bridgeConnectHelp": {
+    "message": "Подключите локальный мост, чтобы агент мог работать с браузером."
+  },
+  "retry": {
+    "message": "Повторить"
+  },
+  "currentSearchModel": {
+    "message": "Текущая модель поиска"
+  },
+  "downloading": {
+    "message": "Загрузка…"
+  },
+  "updatedJustNow": {
+    "message": "Только что обновлено"
+  },
+  "nothingRecorded": {
+    "message": "За этот период нет записей."
+  },
+  "findPages": {
+    "message": "Поиск страниц"
+  },
+  "fillForms": {
+    "message": "Заполнение форм"
+  },
+  "captureScreens": {
+    "message": "Снимок"
+  },
+  "thisBrowserShort": {
+    "message": "Этот браузер"
+  },
+  "allowScreenshots": {
+    "message": "Разрешить снимки"
+  },
+  "pageTextOnly": {
+    "message": "Выкл. · Только текст"
+  },
+  "copySelectorAction": {
+    "message": "Копировать селектор"
+  },
+  "usageBridgeConnect": {
+    "message": "Подключите локальный мост для загрузки статистики."
+  },
+  "memoryUnavailableShort": {
+    "message": "Недоступно"
+  },
+  "retryConnection": {
+    "message": "Повторить подключение"
+  },
+  "assistanceStatusUnavailable": {
+    "message": "Статус недоступен. Повторите попытку."
+  },
+  "settingsStatusUnavailable": {
+    "message": "Не удалось загрузить некоторые настройки."
+  }
 }

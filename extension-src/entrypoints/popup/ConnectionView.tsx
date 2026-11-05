@@ -2,10 +2,8 @@ import { useCallback,useEffect,useMemo,useState,type FormEvent } from "react";
 import { t } from "../../i18n";
 import {
   errorMessage,
-  memoryCall,
   responseError,
   sendMessage,
-  type MemoryProfiles,
   type NativeStatus,
   type Profile,
   type SemanticModel,
@@ -22,7 +20,7 @@ const knownModelDescriptions = new Map<string, string>([
 const strategyKeys: Record<string, string> = { auto: "strategyAuto", semantic: "strategySemantic", lexical: "strategyLexical", deep: "strategyDeep", lean: "detailLean", compact: "detailCompact", debug: "detailDebug" };
 const translateStrategy = (value: string) => strategyKeys[value] ? t(strategyKeys[value]!) : value;
 
-type ConnectionViewProps = { status: NativeStatus; view?: "profiles" | "settings" };
+type ConnectionViewProps = { status: NativeStatus; view?: "profiles" | "settings"; onProfileSaved?: (profile: Profile) => void };
 
 function statusText(status: NativeStatus): string {
   const state = status.state ?? "unknown";
@@ -42,9 +40,7 @@ function semanticStatusText(semantic: SemanticState): string {
   return t("searchLocalDetail");
 }
 
-export default function ConnectionView({ status, view = "profiles" }: ConnectionViewProps): React.JSX.Element {
-  const [connectedProfiles, setConnectedProfiles] = useState<MemoryProfiles | null>(null);
-  const [selectedProfile, setSelectedProfile] = useState("");
+export default function ConnectionView({ status, view = "profiles", onProfileSaved }: ConnectionViewProps): React.JSX.Element {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLabel, setProfileLabel] = useState("");
   const [profileHelp, setProfileHelp] = useState(t("profileLabelHelp"));
@@ -123,7 +119,6 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
       .catch((error) => {
         if (active) setProfileHelp(errorMessage(error));
       });
-    void memoryCall<MemoryProfiles>("memory.profiles").then((result) => { if (active) { setConnectedProfiles(result); setSelectedProfile(result.currentProfileId ?? ""); } }).catch(() => {});
     if (view === "settings") void loadSemantic();
     return () => {
       active = false;
@@ -156,6 +151,7 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
       if (response.profile) {
         setProfile(response.profile);
         setProfileLabel(response.profile.profileLabel ?? "");
+        onProfileSaved?.(response.profile);
       }
       setProfileHelp(t("profileSaved"));
     } catch (error) {
@@ -234,246 +230,53 @@ export default function ConnectionView({ status, view = "profiles" }: Connection
     }
   }
 
-  function renderModelCard(model: SemanticModel) {
-    const isAdaptive = model.role !== "deep";
-    const isActive = model.id === (isAdaptive ? activeModelId : settings.deepModelId);
-    const cached = model.cache?.cached === true;
-    const busyForModel = semanticBusy || (loading && load?.modelId === model.id);
-    const dims = model.supportedDimensions ?? [];
-    return (
-      <div key={model.id} className={`model-card${isActive ? " active" : ""}`} data-model-id={model.id}>
-        <div className="model-head">
-          <span className="model-name">{model.label}</span>
-          {model.default === true ? <span className="badge badge-default">{t("defaultLabel")}</span> : null}
-          <span className={`badge ${cached ? "badge-ok" : "badge-neutral"}`}>{cached ? t("ready") : t("notDownloaded")}</span>
-        </div>
-        <div className="model-meta">
-          {model.parameters ?? "n/a"} · {model.dimensions ?? "n/a"}-dim · ctx {model.contextLength ?? "512"}
-          {isAdaptive ? "" : ` · ${t("deepSearchOnly")}`}
-        </div>
-        <div className="model-desc">{model.description ? (knownModelDescriptions.has(model.description) ? t(knownModelDescriptions.get(model.description)!) : model.description) : t("localRetrievalModel")}</div>
-        {model.benchmark?.value ? <div className="model-bench">{model.benchmark.label}: {model.benchmark.value}</div> : null}
-        {isAdaptive && dims.length > 0 ? (
-          <div className="dim-selector" role="radiogroup" aria-label={t("embeddingLabel", model.label)}>
-            {dims.map((dim) => (
-              <button
-                key={dim}
-                type="button"
-                role="radio"
-                aria-checked={model.dimensions === dim}
-                className={`dim-option${model.dimensions === dim ? " selected" : ""}`}
-                disabled={busyForModel}
-                onClick={() => setEmbeddingDims(model, dim)}
-              >
-                {dim}
-              </button>
-            ))}
-            <span className="dim-note">{t("recommendedDim", String(model.defaultDimensions))}</span>
-          </div>
-        ) : null}
-        <div className="model-actions">
-          {isActive ? (
-            <span className="model-active-note" aria-label={t("activeModel")}>{t("active")}</span>
-          ) : null}
-          {!isActive ? (
-            <button
-              type="button"
-              className="button-use"
-              disabled={busyForModel}
-              onClick={() => useModel(model)}
-            >
-              {t("useModel")}{" "}</button>
-          ) : null}
-          {!isAdaptive ? (
-            <span className="model-active-note">{t("onDemand")}</span>
-          ) : null}
-          <button
-            type="button"
-            className="button-prepare"
-            disabled={busyForModel}
-            onClick={() => prepareModel(model)}
-          >
-            {cached ? t("redownload") : t("download")}
-          </button>
-          <button
-            type="button"
-            className="button-delete"
-            disabled={busyForModel || !cached}
-            onClick={() => deleteModel(model)}
-          >
-            {t("delete")}{" "}</button>
-        </div>
-        {loading && load?.modelId === model.id ? (
-          <div className="model-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number.isFinite(load?.progress) ? load?.progress : undefined}>
-            <div className="model-progress-fill" style={{ width: `${Math.max(4, Math.min(100, load?.progress ?? 4))}%` }} />
-          </div>
-        ) : null}
-      </div>
-    );
+  function renderModelCard(model: SemanticModel, advanced = false) {
+    const isAdaptive = model.role !== "deep", isActive = model.id === (isAdaptive ? activeModelId : settings.deepModelId);
+    const cached = model.cache?.cached === true, busyForModel = semanticBusy || loading;
+    return <div className="model-card" key={model.id} data-model-id={model.id}>
+      {!advanced && <div className="model-compact-row"><div><span className="model-name">{model.label}</span><small>{t(isActive ? "currentSearchModel" : cached ? "ready" : "notDownloaded")}</small></div>
+        {isActive && cached ? <span className="online-text">{t("ready")}</span> : <button type="button" className="button" disabled={busyForModel} onClick={() => prepareModel(model)}>{t(loading && load?.modelId === model.id ? "downloading" : "download")}</button>}
+      </div>}
+      {loading && load?.modelId === model.id && <div className="model-progress" role="progressbar" aria-label={t("downloadingModel", model.label)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={load.progress}><div className="model-progress-fill" style={{ width: `${Math.max(4, Math.min(100, load.progress ?? 4))}%` }} /></div>}
+      {advanced && <details className="model-options"><summary>{t("modelOptions", model.label)}</summary>
+        <p className="model-desc">{model.description ? knownModelDescriptions.has(model.description) ? t(knownModelDescriptions.get(model.description)!) : model.description : t("localRetrievalModel")}</p>
+        <p className="model-meta">{model.parameters} · {model.dimensions}-dim</p>
+        {(model.supportedDimensions?.length ?? 0) > 0 && <label>{t("embeddingLabel", model.label)}<select disabled={busyForModel} value={settings.embeddingDims ?? model.dimensions} onChange={event => setEmbeddingDims(model, Number(event.target.value))}>{model.supportedDimensions?.map(dim => <option key={dim} value={dim}>{dim}</option>)}</select></label>}
+        <div className="model-actions">{!isActive && <button type="button" className="button" disabled={busyForModel} onClick={() => useModel(model)}>{t("useModel")}</button>}<button type="button" className="button" disabled={busyForModel} onClick={() => prepareModel(model)}>{t(cached ? "redownload" : "download")}</button><button type="button" className="button" disabled={busyForModel || !cached} onClick={() => deleteModel(model)}>{t("delete")}</button></div>
+      </details>}
+    </div>;
   }
 
-  return (
-    <section id="view-connection" className="view">
-      {view === "profiles" ? <>
-      <details className="card connection-details" aria-labelledby="connection-title">
-        <summary><h2 id="connection-title">{t("connectionDetails")}</h2></summary>
-        <dl id="connection-list">
-          <div>
-            <dt>{t("status")}</dt>
-            <dd id="status-detail">{statusText(status)}</dd>
-          </div>
-          <div>
-            <dt>{t("host")}</dt>
-            <dd id="host">{status.hostName ?? "com.opencode.browser.plugin"}</dd>
-          </div>
-          <div>
-            <dt>{t("lastCheck")}</dt>
-            <dd id="last-checked">{status.lastChecked ? new Date(status.lastChecked).toLocaleString() : "-"}</dd>
-          </div>
-          <div>
-            <dt>{t("profileId")}</dt>
-            <dd id="profile-id" className="mono profile-id-row">
-              <span className="mono-value">{displayedProfileId || t("profileChecking")}</span>
-              <button
-                type="button"
-                className="button-mini"
-                onClick={() => {
-                  if (profileIdRevealed) setProfileIdRevealed(null);
-                  else void revealProfileId();
-                }}
-              >
-                {profileIdRevealed ? t("hide") : t("reveal")}
-              </button>
-              <button type="button" className="button-mini" onClick={() => void copyProfileId()}>{t("copy")}</button>
-            </dd>
-          </div>
-        </dl>
+  return <section id="view-connection" className="view">
+    {view === "profiles" ? <>
+      <form id="profile-form" className="profile-form" onSubmit={saveProfile}>
+        <label htmlFor="profile-label">{t("profileLabel")}</label>
+        <input id="profile-label" name="profile-label" maxLength={80} value={profileLabel} disabled={profileBusy} onChange={event => setProfileLabel(event.target.value)} />
+        <p className="help-note">{t("profileLabelLocal")}</p>
+        <div className="split-actions"><p id="profile-help" className="help-note" role="status">{profileHelp}</p><button type="submit" className="button" disabled={profileBusy}>{t("saveLabel")}</button></div>
+      </form><hr />
+      <h2>{t("agentSelector")}</h2><p className="help-note">{t("selectorHelp")}</p>
+      <button className="button" type="button" disabled={!profile} onClick={() => { void (async () => { const id = profile?.profileId ?? (await sendMessage<{ profile?: Profile }>({ type: "GET_PROFILE_DETAILS" })).profile?.profileId; if (!id) throw new Error("unavailable"); await navigator.clipboard.writeText(JSON.stringify({ profile: id })); })().then(() => setProfileHelp(t("copySelectorReady")), () => setProfileHelp(t("clipboardUnavailable"))); }}>{t("copySelectorAction")}</button><hr />
+      <details className="advanced-details"><summary>{t("profileIdentifier")}</summary>
+        <p className="identifier-value">{displayedProfileId}</p><div className="split-actions"><button type="button" className="button" onClick={() => { if (profileIdRevealed) setProfileIdRevealed(null); else void revealProfileId(); }}>{t(profileIdRevealed ? "hide" : "reveal")}</button><button type="button" className="button" onClick={() => void copyProfileId()}>{t("copy")}</button></div>
       </details>
-
-      <div className="card" aria-labelledby="profile-title">
-        <h2 id="profile-title">{t("chooseProfile")}</h2>
-        <label htmlFor="connected-profile">{t("connectedProfiles")}</label>
-        <select id="connected-profile" value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)}>
-          {connectedProfiles?.profiles.filter((item) => item.connected).map((item, index) => <option key={item.profileId} value={item.profileId}>{item.profileLabel || item.browserName || t("profileNumber", String(index + 1))}{item.profileId === connectedProfiles.currentProfileId ? t("thisProfileSuffix") : ""}</option>)}
-        </select>
-        <p className="help-note">{t("selectorHelp")}</p>
-        <button className="button" type="button" disabled={!selectedProfile} onClick={() => { void navigator.clipboard.writeText(JSON.stringify({ profile: selectedProfile })).then(() => setProfileHelp(t("copySelectorReady")), () => setProfileHelp(t("clipboardUnavailable"))); }}>{t("copySelector")}</button>
-        <details className="advanced-details"><summary>{t("renameProfile")}</summary>
-        <form id="profile-form" onSubmit={saveProfile}>
-          <label htmlFor="profile-label">{t("profileLabel")}</label>
-          <div className="input-row">
-            <input
-              id="profile-label"
-              name="profile-label"
-              type="text"
-              maxLength={80}
-              placeholder={t("exampleLabels")}
-              value={profileLabel}
-              onChange={(event) => setProfileLabel(event.target.value)}
-            />
-            <button type="submit" className="button button-primary" disabled={profileBusy}>{t("save")}</button>
-          </div>
-        </form>
-        </details>
-        <p id="profile-help" className="help-note" role="status">{profileHelp}</p>
-      </div>
-      </> : <>
-
-      <details className="card search-settings" aria-labelledby="semantic-title">
-        <summary><h2 id="semantic-title">{t("localSearchModels")}</h2></summary>
-        <div className="semantic-toggle-row">
-          <div className="semantic-toggle-copy">
-            <span className="semantic-toggle-title">{t("searchMeaning")}</span>
-            <span className="semantic-toggle-sub">{t("searchHelp")}</span>
-          </div>
-          <button
-            id="semantic-enabled"
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label={t("enableSemantic")}
-            className={`switch${enabled ? " on" : ""}`}
-            disabled={semanticBusy}
-            onClick={() => toggleSemantic(!enabled)}
-          >
-            <span className="switch-knob" />
-          </button>
-        </div>
-        <p className="help-note">{t("autoSearchHelp")}</p>
-        <details className="advanced-details"><summary>{t("advancedSearch")}</summary>
-        <div className="strategy-row" role="radiogroup" aria-label={t("searchMode")}>
-          <span className="strategy-label">{t("searchMode")}</span>
-          {["auto", "semantic", "lexical", "deep"].map((strategy) => (
-            <button
-              key={translateStrategy(strategy)}
-              type="button"
-              role="radio"
-              aria-checked={(settings.strategyPreference ?? "auto") === strategy}
-              className={`strategy-option${(settings.strategyPreference ?? "auto") === strategy ? " selected" : ""}`}
-              disabled={semanticBusy || !enabled}
-              onClick={() => setStrategyPreference(strategy)}
-            >
-              {strategy}
-            </button>
-          ))}
-        </div>
-        <div>
-          <div className="advanced-row">
-            <span className="advanced-label">{t("agentCount")}</span>
-            <div role="radiogroup" aria-label={t("agentCount")}>
-              {[3, 5, 8, 12, 20].map((count) => (
-                <button
-                  key={count}
-                  type="button"
-                  role="radio"
-                  aria-checked={(settings.agentResultCount ?? 5) === count}
-                  className={`strategy-option${(settings.agentResultCount ?? 5) === count ? " selected" : ""}`}
-                  disabled={semanticBusy}
-                  onClick={() => setAgentResultCount(count)}
-                >
-                  {count}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="advanced-row">
-            <span className="advanced-label">{t("resultDetail")}</span>
-            <div role="radiogroup" aria-label={t("resultDetail")}>
-              {["lean", "compact", "debug"].map((detail) => (
-                <button
-                  key={translateStrategy(detail)}
-                  type="button"
-                  role="radio"
-                  aria-checked={(settings.agentResultDetail ?? "lean") === detail}
-                  className={`strategy-option${(settings.agentResultDetail ?? "lean") === detail ? " selected" : ""}`}
-                  disabled={semanticBusy}
-                  onClick={() => setAgentResultDetail(detail)}
-                >
-                  {detail}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div id="semantic-model-list" className="model-list" aria-label={t("retrievalModels")}>
-          {semantic?.catalogStatus === "invalid_custom_catalog" && <p role="alert" className="help-note">{t("catalogInvalid")}</p>}
-          {adaptiveModels.map(renderModelCard)}
-          {deepModels.map(renderModelCard)}
-        </div>
-        </details>
-        <p id="semantic-help">{semanticHelp}</p>
-        <details id="semantic-dev-details" className="dev-details">
-          <summary>{t("developerDetails")}</summary>
-          <div className="dev-details-row">
-            <span className="dev-details-label">{t("cacheLocation")}</span>
-            <span className="dev-details-value">{t("localModelCache")}</span>
-            <button type="button" className="button-mini" onClick={() => void copyCachePath()}>
-              {cacheCopyState === "copied" ? t("copied") : cacheCopyState === "error" ? t("failed") : t("copyPath")}
-            </button>
-          </div>
-        </details>
+      <details className="connection-details"><summary>{t("connectionDetails")}</summary><dl className="bridge-details"><div><dt>{t("status")}</dt><dd>{statusText(status)}</dd></div><div><dt>{t("host")}</dt><dd>{status.hostName ?? "com.opencode.browser.plugin"}</dd></div><div><dt>{t("lastCheck")}</dt><dd>{status.lastChecked ? new Date(status.lastChecked).toLocaleString() : "—"}</dd></div></dl></details>
+      <p className="help-note">{t("labelsStoredLocally")}</p>
+    </> : <div className="search-settings" aria-label={t("localSearchModels")}>
+      <div className="semantic-toggle-row"><div><span className="semantic-toggle-title">{t("localSearch")}</span><span className="semantic-toggle-sub">{t("localSearchHelp")}</span></div><button id="semantic-enabled" type="button" role="switch" aria-checked={enabled} aria-label={t("enableSemantic")} className={`switch${enabled ? " on" : ""}`} disabled={!semantic || semanticBusy} onClick={() => toggleSemantic(!enabled)}><span /></button></div>
+      <p className="help-note">{t("modelsRunLocally")}</p>
+      <label className="field-label" htmlFor="search-model">{t("searchModel")}</label><select id="search-model" value={activeModelId ?? ""} disabled={!semantic || semanticBusy || loading} onChange={event => { const model = adaptiveModels.find(model => model.id === event.target.value); if (model) useModel(model); }}>{!activeModelId && <option value="">{t("loadingModels")}</option>}{adaptiveModels.map(model => <option key={model.id} value={model.id}>{model.label}{model.cache?.cached ? ` · ${t("ready")}` : ""}</option>)}</select>
+      <div id="semantic-model-list" className="model-list">{semantic?.catalogStatus === "invalid_custom_catalog" && <p role="alert">{t("catalogInvalid")}</p>}{adaptiveModels.map(model => renderModelCard(model))}</div>
+      <details className="advanced-details"><summary>{t("advancedSearch")}</summary>
+        <p className="help-note">{t("controlAgentContext")}</p>
+        <label className="field-label" htmlFor="search-mode">{t("searchMode")}</label><select id="search-mode" disabled={semanticBusy || !enabled} value={settings.strategyPreference ?? "auto"} onChange={event => setStrategyPreference(event.target.value)}>{["auto", "semantic", "lexical", "deep"].map(strategy => <option value={strategy} key={strategy}>{translateStrategy(strategy)}</option>)}</select>
+        <label className="field-label" htmlFor="result-count">{t("agentCount")}</label><select id="result-count" value={settings.agentResultCount ?? 5} disabled={semanticBusy} onChange={event => setAgentResultCount(Number(event.target.value))}>{[3, 5, 8, 12, 20].map(count => <option key={count} value={count}>{count}</option>)}</select>
+        <label className="field-label" htmlFor="result-detail">{t("resultDetail")}</label><select id="result-detail" value={settings.agentResultDetail ?? "lean"} disabled={semanticBusy} onChange={event => setAgentResultDetail(event.target.value)}>{["lean", "compact", "debug"].map(detail => <option key={detail} value={detail}>{translateStrategy(detail)}</option>)}</select>
+        {adaptiveModels.map(model => renderModelCard(model, true))}
+        <details className="advanced-details"><summary>{t("deepSearchModels")}</summary>{deepModels.map(model => renderModelCard(model, true))}</details>
       </details>
-      </>}
-    </section>
-  );
+      <p id="semantic-help" className="help-note" role="status">{semanticHelp}</p>
+      <details id="semantic-dev-details" className="dev-details"><summary>{t("developerDetails")}</summary><p className="help-note">{t("localModelCache")}</p><button type="button" className="button" onClick={() => void copyCachePath()}>{t(cacheCopyState === "copied" ? "copied" : cacheCopyState === "error" ? "failed" : "copyPath")}</button></details>
+    </div>}
+  </section>;
 }

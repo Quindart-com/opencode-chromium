@@ -1376,8 +1376,226 @@
   "catalogInvalid": {
     "message": "Le catalogue personnalisé n’a pas pu être chargé. Les modèles intégrés restent disponibles."
   },
-  "bridgeRequired": { "message": "Exécutez opencode-chromium setup --all une fois pour installer le contrôleur de mise à jour stable." },
-  "runtimeDraining": { "message": "Les nouvelles connexions utilisent le runtime mis à jour. Les sessions existantes se terminent avec leur version actuelle." },
-  "runtimeApprovalRequired": { "message": "Une mise à niveau majeure est disponible et nécessite votre approbation." },
-  "majorUpgradeConfirm": { "message": "Passer à la nouvelle version majeure ? Les sessions existantes ne seront pas interrompues, mais les anciennes commandes supprimées ne seront plus disponibles pour les nouvelles connexions." }
+  "bridgeRequired": {
+    "message": "Exécutez opencode-chromium setup --all une fois pour installer le contrôleur de mise à jour stable."
+  },
+  "runtimeDraining": {
+    "message": "Les nouvelles connexions utilisent le runtime mis à jour. Les sessions existantes se terminent avec leur version actuelle."
+  },
+  "runtimeApprovalRequired": {
+    "message": "Une mise à niveau majeure est disponible et nécessite votre approbation."
+  },
+  "majorUpgradeConfirm": {
+    "message": "Passer à la nouvelle version majeure ? Les sessions existantes ne seront pas interrompues, mais les anciennes commandes supprimées ne seront plus disponibles pour les nouvelles connexions."
+  },
+  "activityMemory": {
+    "message": "Activité et mémoire"
+  },
+  "agentSelector": {
+    "message": "Sélecteur pour l’agent"
+  },
+  "assistanceBridgeUnavailable": {
+    "message": "Indisponible sans connexion locale"
+  },
+  "availableToAgent": {
+    "message": "À disposition de votre agent"
+  },
+  "bridgeVersion": {
+    "message": "Version du relais"
+  },
+  "browserAgent": {
+    "message": "Agent de navigateur"
+  },
+  "connectingAgent": {
+    "message": "Connexion…"
+  },
+  "connectionHelp": {
+    "message": "Aide à la connexion"
+  },
+  "connectionHelpDetail": {
+    "message": "Vérifications et diagnostic du relais"
+  },
+  "controlAgentContext": {
+    "message": "Contrôlez le contexte envoyé à votre agent."
+  },
+  "deepSearchModels": {
+    "message": "Modèles de recherche approfondie"
+  },
+  "harnessConnectionCount": {
+    "message": "$1 sur $2 connectés"
+  },
+  "historyLocal": {
+    "message": "L’historique reste sur cet appareil."
+  },
+  "historyUnavailable": {
+    "message": "Historique indisponible hors connexion"
+  },
+  "labelsStoredLocally": {
+    "message": "Les noms sont stockés sur cet appareil."
+  },
+  "localSearchHelp": {
+    "message": "Recherchez le contenu pertinent sur cet appareil."
+  },
+  "localSearchOnly": {
+    "message": "Recherche locale uniquement"
+  },
+  "modelOptions": {
+    "message": "Options de $1"
+  },
+  "modelsRunLocally": {
+    "message": "Les modèles fonctionnent localement et occupent de l’espace disque."
+  },
+  "moreStatistics": {
+    "message": "Plus de statistiques"
+  },
+  "noSavedActions": {
+    "message": "Aucune action enregistrée"
+  },
+  "onDevice": {
+    "message": "Sur cet appareil"
+  },
+  "openSetupGuide": {
+    "message": "Ouvrir le guide"
+  },
+  "profileIdentifier": {
+    "message": "Identifiant du profil"
+  },
+  "profileLabelLocal": {
+    "message": "Les noms restent sur cet appareil et identifient ce navigateur."
+  },
+  "profileMenuHelp": {
+    "message": "Choisissez un profil, puis copiez son sélecteur pour l’agent."
+  },
+  "profilesUnavailable": {
+    "message": "Connectez le relais local pour voir les profils."
+  },
+  "renameThisProfile": {
+    "message": "Renommer ce profil"
+  },
+  "saveActionsLocally": {
+    "message": "Enregistrez les actions réussies localement."
+  },
+  "saveLabel": {
+    "message": "Enregistrer le nom"
+  },
+  "savedActions": {
+    "message": "Actions enregistrées"
+  },
+  "searchModel": {
+    "message": "Modèle de recherche"
+  },
+  "serviceStatistics": {
+    "message": "Statistiques des services"
+  },
+  "storageCleanup": {
+    "message": "Stockage et nettoyage"
+  },
+  "storageSummary": {
+    "message": "Limite : $1 · Suppression après $2 jours"
+  },
+  "usageHeading": {
+    "message": "Utilisation"
+  },
+  "viewActivity": {
+    "message": "Voir"
+  },
+  "backToSettings": {
+    "message": "Retour aux réglages"
+  },
+  "backToHome": {
+    "message": "Retour à l’accueil"
+  },
+  "browserProfile": {
+    "message": "Profil du navigateur"
+  },
+  "connectedBrowser": {
+    "message": "Navigateur connecté"
+  },
+  "localSearchOn": {
+    "message": "Recherche locale activée"
+  },
+  "localSearchOff": {
+    "message": "Recherche locale désactivée"
+  },
+  "cloudOn": {
+    "message": "Cloud activé"
+  },
+  "cloudOff": {
+    "message": "Cloud désactivé"
+  },
+  "onLabel": {
+    "message": "Activé"
+  },
+  "offLabel": {
+    "message": "Désactivé"
+  },
+  "automaticUpdatesOn": {
+    "message": "Mises à jour automatiques activées"
+  },
+  "alwaysAskUploads": {
+    "message": "Toujours demander avant l’envoi"
+  },
+  "uploadsWithoutAsking": {
+    "message": "Envoi sans confirmation"
+  },
+  "checkingBridge": {
+    "message": "Vérification du relais local"
+  },
+  "bridgeNotConnected": {
+    "message": "Relais local non connecté"
+  },
+  "bridgeConnectHelp": {
+    "message": "Connectez le relais local pour que votre agent utilise ce navigateur."
+  },
+  "retry": {
+    "message": "Réessayer"
+  },
+  "currentSearchModel": {
+    "message": "Modèle de recherche actuel"
+  },
+  "downloading": {
+    "message": "Téléchargement…"
+  },
+  "updatedJustNow": {
+    "message": "Actualisé à l’instant"
+  },
+  "nothingRecorded": {
+    "message": "Aucune donnée pour cette période."
+  },
+  "findPages": {
+    "message": "Rechercher"
+  },
+  "fillForms": {
+    "message": "Formulaires"
+  },
+  "captureScreens": {
+    "message": "Capturer"
+  },
+  "thisBrowserShort": {
+    "message": "Ce navigateur"
+  },
+  "allowScreenshots": {
+    "message": "Autoriser les captures"
+  },
+  "pageTextOnly": {
+    "message": "Désactivé · Texte seulement"
+  },
+  "copySelectorAction": {
+    "message": "Copier le sélecteur"
+  },
+  "usageBridgeConnect": {
+    "message": "Connectez le relais local pour charger les données."
+  },
+  "memoryUnavailableShort": {
+    "message": "Indisponible"
+  },
+  "retryConnection": {
+    "message": "Réessayer la connexion"
+  },
+  "assistanceStatusUnavailable": {
+    "message": "État indisponible. Réessayez."
+  },
+  "settingsStatusUnavailable": {
+    "message": "Certains réglages n’ont pas pu être chargés."
+  }
 }

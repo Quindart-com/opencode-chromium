@@ -2,7 +2,7 @@ import { useEffect,useState } from "react";
 import { t } from "../../i18n";
 import { sendMessage } from "./api";
 
-export default function UploadSettings() {
+export default function UploadSettings({ compact = false }: { compact?: boolean }) {
   const [allowed, setAllowed] = useState(false);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -24,6 +24,7 @@ export default function UploadSettings() {
     } catch (reason) { setAllowed(previous); setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
   }
+  if (compact) return <section className="setting-row upload-settings compact-upload" aria-labelledby="upload-settings-title"><div><h2 id="upload-settings-title">{t("fileUploads")}</h2><small id="upload-permission-copy">{t(allowed ? "uploadsWithoutAsking" : "alwaysAskUploads")}</small></div><button type="button" role="switch" aria-label={t("allowUnconfirmed")} aria-describedby="upload-permission-copy" aria-checked={allowed} className={`switch${allowed ? " on" : ""}`} disabled={busy} onClick={event => { if (event.nativeEvent.isTrusted) void change(!allowed); }}><span /></button>{error && <p role="alert" className="upload-error">{error}</p>}</section>;
   return <section className="card upload-settings" aria-labelledby="upload-settings-title">
     <h2 id="upload-settings-title">{t("fileUploads")}</h2>
     <label className="upload-preference"><input type="checkbox" checked={allowed} disabled={busy} aria-describedby="upload-permission-copy" onChange={event => { if (event.nativeEvent.isTrusted) void change(event.target.checked); }} /> {t("allowUnconfirmed")}</label>

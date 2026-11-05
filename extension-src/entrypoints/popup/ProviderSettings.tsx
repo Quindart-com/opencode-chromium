@@ -1,4 +1,5 @@
 import { useEffect,useState } from "react";
+import { createPortal } from "react-dom";
 import { decisionChoice,decisionChoices,decisionFamilies,decisionServices } from "../../../src/shared/decision-catalog.ts";
 import { t } from "../../i18n";
 import { sendMessage } from "./api";
@@ -29,6 +30,7 @@ type TestResult = { ok: boolean; settings?: DecisionSettings; message?: string; 
   usage?: { input_tokens: number; output_tokens: number; cost?: number } };
 
 export default function ProviderSettings() {
+  const [footer, setFooter] = useState<HTMLElement | null>(null);
   const [settings, setSettings] = useState(defaults);
   const [apiKey, setApiKey] = useState("");
   const [message, setMessage] = useState("");
@@ -39,6 +41,7 @@ export default function ProviderSettings() {
   const [dismissed, setDismissed] = useState(false);
   const enabled = settings.provider !== "off";
   const jev = settings.provider === "jev";
+  useEffect(() => { setFooter(document.getElementById("popup-feedback")); }, []);
   useEffect(() => {
     let disposed = false;
     void sendMessage<{ result?: DecisionSettings; error?: string }>({ type: "GET_DECISION_SETTINGS" }).then(response => {
@@ -100,7 +103,7 @@ export default function ProviderSettings() {
   return <section className="provider-settings" aria-labelledby="decision-heading">
     <h2 id="decision-heading">{t("decisionAssistance")}</h2>
     <p className="provider-intro">{t("decisionHelp")}</p>
-    <form onSubmit={event => { event.preventDefault(); void save(); }}>
+    <form id="provider-form" onSubmit={event => { event.preventDefault(); void save(); }}>
       <div className="provider-field">
         <label htmlFor="decision-provider">{t("service")}</label>
         <select id="decision-provider" value={selection(settings)} disabled={!loaded || busy} onChange={event => choose(event.target.value)}>
@@ -117,7 +120,7 @@ export default function ProviderSettings() {
           <p id="decision-key-help">{t("keyPrivacy")}</p>
         </div>
         <p className="provider-consent">{t("providerConsent", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe")}</p>
-        <label className="checkbox-row"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => editSettings({ shareImages: event.target.checked })} /><span>{t(jev ? "imageFallback" : "imageScreenshots")}<small className="help-note">{t(jev ? "imageJevNotice" : "imageNotice", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe")}</small></span></label>
+        <label className="checkbox-row screenshot-preference"><input type="checkbox" checked={settings.shareImages} disabled={busy} onChange={event => editSettings({ shareImages: event.target.checked })} /><span>{t("allowScreenshots")}<small className="help-note">{settings.shareImages ? t(jev ? "imageJevNotice" : "imageNotice", settings.route === "openrouter" ? "OpenRouter" : settings.route === "openai" ? "OpenAI Platform" : "TypeSafe") : t("pageTextOnly")}</small></span></label>
         <details className="provider-advanced">
           <summary>{t("decisionAdvanced")}</summary>
           <div className="provider-field">
@@ -131,16 +134,15 @@ export default function ProviderSettings() {
           {settings.credentialConfigured && <button type="button" className="provider-dismiss" disabled={busy} onClick={() => void removeKey()}>{t("removeKey")}</button>}
         </details>
       </>}
-      <div className="provider-save-row">
-        <button className="provider-save" type="submit" disabled={!loaded || busy}>{t(busy ? "testing" : enabled ? "saveTest" : "saveSettings")}</button>
-      </div>
-      {enabled && <p className="provider-test-help">{t("testKeyHelp")}</p>}
+    </form>
+    {footer && createPortal(<div className="provider-save-row">
       <p className={`provider-feedback${error ? " provider-feedback-error" : test?.ok ? " provider-feedback-ok" : ""}`} role="status" aria-live="polite">
         {message || (!loaded ? t("loadingSettings") : settings.ready ? t("decisionEnabled") : enabled ? t("saveTestEnable") : t("localSearchActive"))}
         {test?.elapsedMs !== undefined && <span className="provider-timing">{test.authMs !== undefined ? `${t("keyCheck", String(Math.round(test.authMs)))} ` : ""}{t("decision")} {Math.round(test.elapsedMs)} ms
           {test.usage ? ` · ${t("inputTokens", String(test.usage.input_tokens))}${test.usage.cost !== undefined ? ` · $${test.usage.cost.toFixed(6)}` : ""}` : ""}</span>}
       </p>
-    </form>
+      <button className="provider-save" type="submit" form="provider-form" disabled={!loaded || busy}>{t(busy ? "testing" : enabled ? "saveTest" : "saveSettings")}</button>
+    </div>, footer)}
     {!dismissed && <details className="provider-migration">
       <summary>{t("modelMigration")}</summary>
       <p>{t("migrationText")}</p>

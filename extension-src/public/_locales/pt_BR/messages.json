@@ -1376,8 +1376,226 @@
   "catalogInvalid": {
     "message": "Não foi possível carregar o catálogo personalizado. Os modelos integrados estão disponíveis."
   },
-  "bridgeRequired": { "message": "Execute opencode-chromium setup --all uma vez para instalar o controlador de atualização estável." },
-  "runtimeDraining": { "message": "Novas conexões usam o runtime atualizado. As sessões existentes terminarão na versão atual." },
-  "runtimeApprovalRequired": { "message": "Uma atualização principal está disponível e precisa da sua aprovação." },
-  "majorUpgradeConfirm": { "message": "Atualizar para a nova versão principal? As sessões existentes não serão interrompidas, mas comandos legados removidos não estarão disponíveis para novas conexões." }
+  "bridgeRequired": {
+    "message": "Execute opencode-chromium setup --all uma vez para instalar o controlador de atualização estável."
+  },
+  "runtimeDraining": {
+    "message": "Novas conexões usam o runtime atualizado. As sessões existentes terminarão na versão atual."
+  },
+  "runtimeApprovalRequired": {
+    "message": "Uma atualização principal está disponível e precisa da sua aprovação."
+  },
+  "majorUpgradeConfirm": {
+    "message": "Atualizar para a nova versão principal? As sessões existentes não serão interrompidas, mas comandos legados removidos não estarão disponíveis para novas conexões."
+  },
+  "activityMemory": {
+    "message": "Atividade e memória"
+  },
+  "agentSelector": {
+    "message": "Seletor do agente"
+  },
+  "assistanceBridgeUnavailable": {
+    "message": "Indisponível sem conexão local"
+  },
+  "availableToAgent": {
+    "message": "Disponível para seu agente"
+  },
+  "bridgeVersion": {
+    "message": "Versão da ponte"
+  },
+  "browserAgent": {
+    "message": "Agente do navegador"
+  },
+  "connectingAgent": {
+    "message": "Conectando…"
+  },
+  "connectionHelp": {
+    "message": "Ajuda de conexão"
+  },
+  "connectionHelpDetail": {
+    "message": "Verificações e diagnóstico local"
+  },
+  "controlAgentContext": {
+    "message": "Controle o contexto devolvido ao agente."
+  },
+  "deepSearchModels": {
+    "message": "Modelos de busca profunda"
+  },
+  "harnessConnectionCount": {
+    "message": "$1 de $2 conectados"
+  },
+  "historyLocal": {
+    "message": "O histórico fica neste dispositivo."
+  },
+  "historyUnavailable": {
+    "message": "Histórico indisponível sem conexão"
+  },
+  "labelsStoredLocally": {
+    "message": "Os nomes são salvos neste dispositivo."
+  },
+  "localSearchHelp": {
+    "message": "Encontre conteúdo relevante neste dispositivo."
+  },
+  "localSearchOnly": {
+    "message": "Somente busca local"
+  },
+  "modelOptions": {
+    "message": "Opções de $1"
+  },
+  "modelsRunLocally": {
+    "message": "Os modelos rodam localmente e usam espaço em disco."
+  },
+  "moreStatistics": {
+    "message": "Mais estatísticas"
+  },
+  "noSavedActions": {
+    "message": "Nenhuma ação salva ainda"
+  },
+  "onDevice": {
+    "message": "No dispositivo"
+  },
+  "openSetupGuide": {
+    "message": "Abrir guia de configuração"
+  },
+  "profileIdentifier": {
+    "message": "Identificador do perfil"
+  },
+  "profileLabelLocal": {
+    "message": "Os nomes ficam neste dispositivo e identificam este navegador."
+  },
+  "profileMenuHelp": {
+    "message": "Escolha um perfil e copie seu seletor para o agente."
+  },
+  "profilesUnavailable": {
+    "message": "Conecte a ponte local para listar os perfis."
+  },
+  "renameThisProfile": {
+    "message": "Renomear este perfil"
+  },
+  "saveActionsLocally": {
+    "message": "Salve as ações bem-sucedidas localmente."
+  },
+  "saveLabel": {
+    "message": "Salvar nome"
+  },
+  "savedActions": {
+    "message": "Ações salvas"
+  },
+  "searchModel": {
+    "message": "Modelo de busca"
+  },
+  "serviceStatistics": {
+    "message": "Estatísticas do serviço"
+  },
+  "storageCleanup": {
+    "message": "Armazenamento e limpeza"
+  },
+  "storageSummary": {
+    "message": "Limite de $1 · Remover após $2 dias"
+  },
+  "usageHeading": {
+    "message": "Uso"
+  },
+  "viewActivity": {
+    "message": "Ver"
+  },
+  "backToSettings": {
+    "message": "Voltar às configurações"
+  },
+  "backToHome": {
+    "message": "Voltar ao início"
+  },
+  "browserProfile": {
+    "message": "Perfil do navegador"
+  },
+  "connectedBrowser": {
+    "message": "Navegador conectado"
+  },
+  "localSearchOn": {
+    "message": "Busca local ativada"
+  },
+  "localSearchOff": {
+    "message": "Busca local desativada"
+  },
+  "cloudOn": {
+    "message": "Nuvem ativada"
+  },
+  "cloudOff": {
+    "message": "Nuvem desativada"
+  },
+  "onLabel": {
+    "message": "Ativado"
+  },
+  "offLabel": {
+    "message": "Desativado"
+  },
+  "automaticUpdatesOn": {
+    "message": "Atualizações automáticas ativadas"
+  },
+  "alwaysAskUploads": {
+    "message": "Sempre perguntar antes de enviar"
+  },
+  "uploadsWithoutAsking": {
+    "message": "Enviar sem confirmação"
+  },
+  "checkingBridge": {
+    "message": "Verificando a ponte local"
+  },
+  "bridgeNotConnected": {
+    "message": "Ponte local desconectada"
+  },
+  "bridgeConnectHelp": {
+    "message": "Conecte a ponte local para o agente usar este navegador."
+  },
+  "retry": {
+    "message": "Tentar novamente"
+  },
+  "currentSearchModel": {
+    "message": "Modelo de busca atual"
+  },
+  "downloading": {
+    "message": "Baixando…"
+  },
+  "updatedJustNow": {
+    "message": "Atualizado agora"
+  },
+  "nothingRecorded": {
+    "message": "Nenhum registro neste período."
+  },
+  "findPages": {
+    "message": "Buscar páginas"
+  },
+  "fillForms": {
+    "message": "Preencher formulários"
+  },
+  "captureScreens": {
+    "message": "Capturar"
+  },
+  "thisBrowserShort": {
+    "message": "Este navegador"
+  },
+  "allowScreenshots": {
+    "message": "Permitir capturas"
+  },
+  "pageTextOnly": {
+    "message": "Desativado · Apenas texto"
+  },
+  "copySelectorAction": {
+    "message": "Copiar seletor"
+  },
+  "usageBridgeConnect": {
+    "message": "Conecte a ponte local para carregar o uso."
+  },
+  "memoryUnavailableShort": {
+    "message": "Indisponível"
+  },
+  "retryConnection": {
+    "message": "Tentar conexão novamente"
+  },
+  "assistanceStatusUnavailable": {
+    "message": "Estado indisponível. Tente novamente."
+  },
+  "settingsStatusUnavailable": {
+    "message": "Não foi possível carregar algumas configurações."
+  }
 }

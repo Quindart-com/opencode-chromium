@@ -1,6 +1,7 @@
-import { useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { useCallback,useEffect,useMemo,useRef,useState,type RefObject } from "react";
 import { t } from "../../i18n";
 import { errorMessage,formatBytes,MB,memoryCall,type MemoryProfiles,type MemoryStatus } from "./api";
+import Icon from "./Icon";
 
 const EMPTY_COUNTS: MemoryStatus["counts"] = {
   signatures: 0,
@@ -72,7 +73,7 @@ function MemoryChart({ daily }: { daily: MemoryStatus["recent_daily"] }): React.
   );
 }
 
-export default function MemoryView({ view = "overview" }: { view?: "overview" | "settings" }): React.JSX.Element {
+export default function MemoryView({ view = "overview", onView, viewButtonRef, onDetails, available = true, onRetry }: { view?: "overview" | "settings" | "toggle" | "summary" | "storage-summary"; onView?: () => void; viewButtonRef?: RefObject<HTMLButtonElement | null>; onDetails?: (open: boolean) => void; available?: boolean; onRetry?: () => void }): React.JSX.Element {
   const [status, setStatus] = useState<MemoryStatus | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryFeedback, setMemoryFeedback] = useState("");
@@ -87,6 +88,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
   const quotaTimer = useRef<number | null>(null);
 
   const refreshMemory = useCallback(async () => {
+    if (!available) return;
     const id = ++requestId.current;
     try {
       const known = await memoryCall<MemoryProfiles>("memory.profiles").catch(() => null);
@@ -103,9 +105,10 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
     } catch (error) {
       if (id === requestId.current) setLoadError(errorMessage(error));
     }
-  }, [scope, selectedProfiles]);
+  }, [scope, selectedProfiles, available]);
 
   useEffect(() => {
+    if (!available) { setStatus(null); return; }
     let disposed = false;
     let timer: number;
     const poll = async () => {
@@ -217,6 +220,11 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
     return "";
   }, [status, enabled, usage?.replay_fallbacks, usage?.replay_rejections, usage?.replay_rejections_by_reason, replayAttempts, v2Chains]);
 
+  if (view === "summary") return <section className="home-memory"><div className="section-heading"><h2>{t("activityMemory")}</h2><button ref={viewButtonRef} className="text-button" type="button" onClick={onView}>{t("viewActivity")}</button></div><p>{!available || loadError ? t("historyUnavailable") : !status ? t("memoryChecking") : v2Actions ? t("memoryCounts", [String(v2Actions), String(v2Chains)]) : t("noSavedActions")}</p></section>;
+  if (view === "toggle") return <section className="setting-row memory-toggle-row"><div><h2>{t("actionMemory")}</h2><small>{t("saveActionsLocally")}</small></div><button id="memory-enabled" type="button" role="switch" aria-checked={enabled} aria-label={t("actionMemory")} className={`switch${enabled ? " on" : ""}`} disabled={!status || memoryBusy} onClick={() => void runMemoryAction(enabled ? "memory.disable" : "memory.enable", t(enabled ? "memoryDisabled" : "memoryEnabled"))}><span /></button>{(loadError || memoryFeedback) && <p role="status">{loadError ? t("memoryUnavailable") : memoryFeedback}</p>}</section>;
+
+  if (view === "storage-summary") return <button className="setting-row" type="button" onClick={onView}><span><strong>{t("storageCleanup")}</strong><small>{loadError ? t("memoryUnavailable") : status ? t("storageSummary", [formatBytes(quotaBytes), String(status.purge_days)]) : t("memoryChecking")}</small></span><Icon name="chevron-right" /></button>;
+
   return (
     <section id="view-memory" className="view">
       {view === "settings" ? <>
@@ -231,7 +239,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         <span id="memory-state-line" className="visually-hidden" aria-live="polite">{stateLine}</span>
       </div>
 
-      <details className="card memory-card memory-settings-details">
+      <details open className="card memory-card memory-settings-details">
         <summary id="quota-heading">{t("storageLimit")}</summary>
         <div className="memory-head">
           <div>
@@ -264,7 +272,7 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         <p id="quota-usage" className="help-note">{t("quotaUsage", [formatBytes(bytesUsed), formatBytes(quotaBytes)])}</p>
       </details>
 
-      <details className="card memory-card memory-settings-details">
+      <details open className="card memory-card memory-settings-details">
         <summary>{t("cleanup")}</summary>
         <div className="memory-head">
           <div>
@@ -283,14 +291,11 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
       </details>
 
       </> : <div className="card memory-card">
-        <div className="memory-head">
-          <div>
-            <h2>{t("replayMemory")}</h2>
-            <span className="memory-state-line">{t("memoryStatsHelp")}</span>
-          </div>
-        </div>
-        <p className="help-note">{loadError ? t("memoryUnavailable") : !status ? t("memoryChecking") : enabled ? t("memoryOn") : t("memoryOff")}</p>
-        <details className="usage-details"><summary>{t("activityStats")}</summary>
+        <div className="section-heading"><h2>{t("actionMemory")}</h2><span className="memory-location">{t(available && !loadError ? "onDevice" : "memoryUnavailableShort")}</span></div>
+        <dl className="memory-primary-metrics">
+          {[["memory-actions", v2Actions, t("savedActions")], ["memory-chains", v2Chains, t("recipes")], ["memory-replays", replayAttempts, t("replays")], ["memory-success", replayRate === null ? "—" : `${replayRate}%`, t("replaySuccess")]].map(([id, value, label]) => <div key={id}><dt>{label}</dt><dd id={String(id)}>{status ? value : "—"}</dd></div>)}
+        </dl>
+        {available ? <details className="usage-details" onToggle={event => onDetails?.(event.currentTarget.open)}><summary>{t("moreStatistics")}</summary>
         <label className="field-label" htmlFor="statistics-scope">{t("showActivity")}</label>
         <select id="statistics-scope" value={scope} disabled={!profiles || !status?.capabilities?.profileStatistics} onChange={(event) => { ++requestId.current; setStatus(null); setScope(event.target.value); }}>
           <option value="current">{t("thisProfile")}</option>
@@ -301,16 +306,16 @@ export default function MemoryView({ view = "overview" }: { view?: "overview" | 
         {scope === "selected" ? <fieldset className="profile-options"><legend>{t("profilesInclude")}</legend>{profiles?.profiles.map((profile, index) => <label className="checkbox-row" key={profile.profileId}><input type="checkbox" checked={selectedProfiles.includes(profile.profileId)} onChange={(event) => { ++requestId.current; setStatus(null); setSelectedProfiles((previous) => event.target.checked ? [...previous, profile.profileId] : previous.filter((id) => id !== profile.profileId)); }} />{profile.profileLabel || profile.browserName || t("profileNumber", String(index + 1))}{profile.profileId === profiles.currentProfileId ? t("thisProfileSuffix") : ""}</label>)}</fieldset> : null}
         <p className="help-note">{!status ? t("loadingStats") : !status.capabilities?.profileStatistics || !profiles ? t("hostTotals") : scope === "current" ? t("currentProfileValue", profiles.profiles.find((item) => item.profileId === profiles.currentProfileId)?.profileLabel || t("currentBrowserProfile")) : scope === "selected" ? t("selectedCount", String(selectedProfiles.length)) : scope === "unknown" ? t("oldHistory") : t("allHistory")}</p>
         <dl className="decision-usage memory-usage">
-          {[...stats, ...secondaryStats].map(([id, value, label]) => <div key={id}><dt>{label}</dt><dd id={id}>{status ? value : "—"}</dd></div>)}
+          {[stats[4]!, ...secondaryStats].map(([id, value, label]) => <div key={id}><dt>{label}</dt><dd id={id}>{status ? value : "—"}</dd></div>)}
         </dl>
         <p id="memory-health" className="help-note">{healthLine}</p>
         {replayLine ? <p id="memory-replay-note" className="help-note">{replayLine}</p> : null}
-        <div className="memory-actions">
-          <button id="memory-reindex" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.reindex", t("indexRebuilt"))}>{t("rebuildIndex")}</button>
-        </div>
         <MemoryChart daily={status?.recent_daily} />
         <p className="help-note">{status?.observedAt ? t("statsUpdated", new Date(status.observedAt).toLocaleTimeString()) : t("waitingStats")}</p>
-        </details>
+        </details> : <button className="setting-row" type="button" onClick={onRetry}><span>{t("retryConnection")}</span><Icon name="chevron-right" /></button>}
+        <div className="activity-footer"><p>{t("historyLocal")}</p><div className="memory-actions">
+          <button id="memory-reindex" className="button" type="button" disabled={!status || memoryBusy || !enabled} onClick={() => void runMemoryAction("memory.reindex", t("indexRebuilt"))}>{t("rebuildIndex")}</button>
+        </div></div>
       </div>}
       <p id="memory-feedback" className="feedback" role="status">{memoryFeedback}</p>
       {loadError ? <p className="feedback" role="alert">{t("statsUnavailable")}{" "}{loadError}{status ? t("lastSuccessful") : ""}</p> : null}

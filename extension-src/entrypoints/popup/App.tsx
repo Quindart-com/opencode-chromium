@@ -1,24 +1,16 @@
-import { useEffect,useRef,useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
-import { sendMessage,type NativeStatus } from "./api";
-import ConnectionSummary from "./ConnectionSummary";
+import { t } from "../../i18n";
+import { sendMessage, type NativeStatus, type Profile } from "./api";
 import ConnectionView from "./ConnectionView";
 import DecisionOverview from "./DecisionOverview";
+import HarnessConnections from "./HarnessConnections";
+import HomeStatus from "./HomeStatus";
+import Icon from "./Icon";
 import MemoryView from "./MemoryView";
-import ProviderSettings from "./ProviderSettings";
-import RuntimeUpdates from "./RuntimeUpdates";
-import UploadSettings from "./UploadSettings";
+import ProfileMenu from "./ProfileMenu";
+import SettingsView, { type SettingsSection } from "./SettingsView";
 import VersionNotice from "./VersionNotice";
-
-const t = (key: "connected" | "checking" | "reconnecting" | "notConnected" | "localAutomation" | "extensionViews" | "overview" | "profiles" | "settings" | "setupGuide" | "sourceGithub") => browser.i18n.getMessage(key);
-
-type ViewName = "overview" | "profiles" | "settings";
-
-function statusClass(state: string): string {
-  if (state === "connected") return "pill-ok";
-  if (state === "connecting" || state === "reconnecting" || state === "unknown") return "pill-warn";
-  return "pill-bad";
-}
 
 function useNativeStatus(): NativeStatus {
   const [status, setStatus] = useState<NativeStatus>({ state: "unknown" });
@@ -72,88 +64,46 @@ function useNativeStatus(): NativeStatus {
   return status;
 }
 
-function Header({ status }: { status: NativeStatus }): React.JSX.Element {
-  const state = status.state ?? "unknown";
-  const statusText = state === "connected" ? t("connected") : state === "unknown" || state === "connecting" ? t("checking") : state === "reconnecting" ? t("reconnecting") : t("notConnected");
-
-  return (
-    <header id="app-header">
-      <img id="app-logo" src="/images/icon48.png" width="48" height="48" alt="opencode-chromium logo" />
-      <div id="app-identity">
-        <h1>OpenCode Browser</h1>
-        <p id="app-subtitle">
-          <span id="app-version">v{browser.runtime.getManifest().version_name ?? browser.runtime.getManifest().version}</span> · {t("localAutomation")}
-        </p>
-      </div>
-      <div id="status-pill" className={`pill ${statusClass(state)}`} role="status" hidden={state === "connected"}>
-        <span id="status-dot" aria-hidden="true" />
-        <span id="status">{statusText}</span>
-      </div>
-    </header>
-  );
-}
-
-function ViewTabs({ active, onChange }: { active: ViewName; onChange: (view: ViewName) => void }): React.JSX.Element {
-  return (
-    <nav className="view-tabs" role="tablist" aria-label={t("extensionViews")}>
-      {(["overview", "profiles", "settings"] as const).map((view) => {
-        const isActive = view === active;
-        return (
-          <button
-            key={view}
-            id={`tab-${view}`}
-            className={`view-tab${isActive ? " active" : ""}`}
-            role="tab"
-            aria-selected={isActive}
-            aria-controls={`panel-${view}`}
-            tabIndex={isActive ? 0 : -1}
-            onKeyDown={event => {
-              const views = ["overview", "profiles", "settings"] as const;
-              const index = views.indexOf(view);
-              const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : event.key === "ArrowRight" ? (index + 1) % 3 : event.key === "ArrowLeft" ? (index + 2) % 3 : null;
-              if (next === null) return;
-              event.preventDefault(); onChange(views[next]!);
-              document.getElementById(`tab-${views[next]}`)?.focus();
-            }}
-            type="button"
-            onClick={() => onChange(view)}
-          >
-            {t(view)}
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
-
 export default function App(): React.JSX.Element {
-  const [activeView, setActiveView] = useState<ViewName>("overview");
-  const nativeStatus = useNativeStatus();
-  const changeView = (view: ViewName) => {
-    setActiveView(view);
-    document.getElementById(`tab-${view}`)?.focus();
-  };
-
-  return (
-    <main>
-      <Header status={nativeStatus} />
-      <VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} />
-      <ViewTabs active={activeView} onChange={changeView} />
-      <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={activeView !== "overview"}>
-        {activeView === "overview" && <><ConnectionSummary status={nativeStatus} /><DecisionOverview onConfigure={() => changeView("settings")} /><MemoryView /></>}
-      </div>
-      <div className="view-panel" role="tabpanel" id="panel-profiles" aria-labelledby="tab-profiles" hidden={activeView !== "profiles"}>
-        {activeView === "profiles" && <ConnectionView status={nativeStatus} view="profiles" />}
-      </div>
-      <div className="view-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden={activeView !== "settings"}>
-        {activeView === "settings" && <><ProviderSettings /><UploadSettings /><MemoryView view="settings" /><RuntimeUpdates /><ConnectionView status={nativeStatus} view="settings" /></>}
-      </div>
-      <footer id="app-footer">
-        <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">{t("setupGuide")}</a>
-        <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">
-          {t("sourceGithub")}
-        </a>
-      </footer>
-    </main>
-  );
+  const [view, setView] = useState<"home" | "settings" | "activity" | "profile">("home");
+  const [section, setSection] = useState<SettingsSection | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [statisticsExpanded, setStatisticsExpanded] = useState(false);
+  const status = useNativeStatus();
+  const heading = useRef<HTMLHeadingElement>(null), settingsButton = useRef<HTMLButtonElement>(null), activityButton = useRef<HTMLButtonElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let active = true;
+    void sendMessage<{ profile?: Profile }>({ type: "GET_PROFILE" }).then(r => { if (active && r.profile) setProfile(r.profile); }).catch(() => {});
+    return () => { active = false; };
+  }, [status.state, view]);
+  useEffect(() => { scroller.current?.scrollTo(0, 0); if (view !== "home") heading.current?.focus({ preventScroll: true }); else setStatisticsExpanded(false); }, [view, section]);
+  function back() {
+    if (section) { setSection(null); return; }
+    const previous = view; setView("home");
+    requestAnimationFrame(() => (previous === "settings" ? settingsButton.current : previous === "activity" ? activityButton.current : document.querySelector<HTMLButtonElement>(".profile-trigger"))?.focus());
+  }
+  return <main className={`compact-popup popup-${view}`}>
+    {view === "home" ? <header id="app-header">
+      <img id="app-logo" src="/images/popup/logo.png" width="30" height="30" alt="" />
+      <div id="app-identity"><h1>OpenCode Browser</h1><p id="app-subtitle">{t("browserAgent")}</p></div>
+      <button ref={settingsButton} id="open-settings" className="icon-button" type="button" aria-label={t("settings")} onClick={() => setView("settings")}><Icon name="settings" size={16} /></button>
+    </header> : <header className="subpage-header"><button className="back-button" type="button" aria-label={t(section ? "backToSettings" : "backToHome")} onClick={back}><Icon name="arrow-left" size={16} /></button><div><h1 ref={heading} tabIndex={-1}>{t(view === "settings" ? "settings" : view === "activity" ? "activityMemory" : "browserProfile")}</h1><p>{profile?.profileLabel ? `${profile.profileLabel} · ` : ""}{t("thisBrowserShort")}</p></div></header>}
+    <div className="popup-scroll" ref={scroller}>
+      {view === "home" && <div className="home-stack">
+        <ProfileMenu profile={profile} connected={status.state === "connected"} onRename={() => setView("profile")} />
+        <HarnessConnections status={status} />
+        <HomeStatus status={status} />
+        <MemoryView view="summary" available={status.state === "connected"} onView={() => setView("activity")} viewButtonRef={activityButton} />
+      </div>}
+      {view === "settings" && <><SettingsView status={status} section={section} onSection={setSection} />{(!section || section === "updates") && <VersionNotice status={status} showSnoozed />}</>}
+      {view === "activity" && <><DecisionOverview expanded={statisticsExpanded} available={status.state === "connected"} /><MemoryView available={status.state === "connected"} onDetails={setStatisticsExpanded} onRetry={() => { setView("settings"); setSection("connection"); }} /></>}
+      {view === "profile" && <ConnectionView status={status} view="profiles" onProfileSaved={setProfile} />}
+    </div>
+    <div id="popup-feedback" />
+    {(view === "home" || view === "settings" && !section) && <footer id="app-footer">
+      {view === "home" ? <a href={browser.runtime.getURL("/welcome.html")} target="_blank" rel="noopener">{t("setupGuide")}</a> : <span>v{browser.runtime.getManifest().version}</span>}
+      {view === "home" ? <span id="app-version">v{browser.runtime.getManifest().version_name ?? browser.runtime.getManifest().version}</span> : <a id="repo-link" href="https://github.com/Quindart-com/opencode-chromium" target="_blank" rel="noopener">{t("sourceGithub")}</a>}
+    </footer>}
+  </main>;
 }
