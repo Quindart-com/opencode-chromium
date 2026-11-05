@@ -187,6 +187,8 @@ try {
   await connections.getByText("Codex", { exact: true }).waitFor();
   assert.equal(await page.getByRole("tablist").count(), 0, "compact navigation has no tab bar");
   assert.equal(await connections.locator(".agent-row").count(), 3, "only installed or responding harnesses are shown");
+  const gearAlignment = await page.locator("#open-settings").evaluate(button => { const outer = button.getBoundingClientRect(), icon = button.querySelector("img").getBoundingClientRect(); return Math.abs((outer.left + outer.right - icon.left - icon.right) / 2); });
+  assert.ok(gearAlignment < 1, "settings icon is centered in its button");
   assert.equal(await connections.locator(".badge-online").count(), 1);
   assert.equal(await connections.getByRole("button", { name: "Reconnect Codex", exact: true }).count(), 0, "healthy connections use plain status text");
   assert.equal(await page.locator(".popup-scroll").evaluate(el => el.scrollHeight <= el.clientHeight), true, "the normal home fits without a scrollbar");

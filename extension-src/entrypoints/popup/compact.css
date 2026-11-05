@@ -36,7 +36,7 @@ body:has(.compact-popup) { width: 380px; overflow: clip; background: #0f1216; co
 .compact-popup .button:hover:not(:disabled), .compact-popup .button-mini:hover:not(:disabled), .compact-popup .provider-save:hover:not(:disabled) { background: var(--button-hover); }
 .compact-popup .text-button { padding: 4px 0; min-height: 28px; border: 0; background: transparent; color: var(--accent); font-size: 11px; }
 .compact-popup .text-button:hover { text-decoration: underline; }
-.compact-popup .icon-button { display: grid; place-items: center; width: 34px; height: 34px; min-height: 34px; flex: none; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--surface); }
+.compact-popup .icon-button { display: grid; place-items: center; width: 34px; height: 34px; min-height: 34px; padding: 0; flex: none; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--surface); }
 .compact-popup .icon-button:hover { background: var(--surface-raised); }
 .compact-popup .popup-scroll { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--surface-border-strong) var(--bg); flex: 1; }
 .compact-popup .card, .compact-popup .provider-settings, .compact-popup .decision-overview { border: 0; border-radius: 0; box-shadow: none; padding: 0; margin: 0; background: transparent; }

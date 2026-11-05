@@ -68,13 +68,15 @@ export default function App(): React.JSX.Element {
   const [view, setView] = useState<"home" | "settings" | "activity" | "profile">("home");
   const [section, setSection] = useState<SettingsSection | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const profileRevision = useRef(0);
   const [statisticsExpanded, setStatisticsExpanded] = useState(false);
   const status = useNativeStatus();
   const heading = useRef<HTMLHeadingElement>(null), settingsButton = useRef<HTMLButtonElement>(null), activityButton = useRef<HTMLButtonElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let active = true;
-    void sendMessage<{ profile?: Profile }>({ type: "GET_PROFILE" }).then(r => { if (active && r.profile) setProfile(r.profile); }).catch(() => {});
+    const revision = ++profileRevision.current;
+    void sendMessage<{ profile?: Profile }>({ type: "GET_PROFILE" }).then(r => { if (active && revision === profileRevision.current && r.profile) setProfile(r.profile); }).catch(() => {});
     return () => { active = false; };
   }, [status.state, view]);
   useEffect(() => { scroller.current?.scrollTo(0, 0); if (view !== "home") heading.current?.focus({ preventScroll: true }); else setStatisticsExpanded(false); }, [view, section]);
@@ -98,7 +100,7 @@ export default function App(): React.JSX.Element {
       </div>}
       {view === "settings" && <><SettingsView status={status} section={section} onSection={setSection} />{(!section || section === "updates") && <VersionNotice status={status} showSnoozed />}</>}
       {view === "activity" && <><DecisionOverview expanded={statisticsExpanded} available={status.state === "connected"} /><MemoryView available={status.state === "connected"} onDetails={setStatisticsExpanded} onRetry={() => { setView("settings"); setSection("connection"); }} /></>}
-      {view === "profile" && <ConnectionView status={status} view="profiles" onProfileSaved={setProfile} />}
+      {view === "profile" && <ConnectionView status={status} view="profiles" onProfileSaved={value => { profileRevision.current++; setProfile(value); }} />}
     </div>
     <div id="popup-feedback" />
     {(view === "home" || view === "settings" && !section) && <footer id="app-footer">
