@@ -35,6 +35,7 @@ try {
     void check();
   }));
   const cdp = await context.browser().newBrowserCDPSession();
+  const popupUrl = new URL("/popup.html", worker.url()).href;
   const page = await context.newPage();
   for (const theme of ["light", "dark", "green", "fallback"]) {
     await page.goto(theme === "fallback" ? "chrome://version/" : `http://127.0.0.1:${server.address().port}/${theme}`);
@@ -44,21 +45,21 @@ try {
     const { targetInfos: beforeTargets } = await cdp.send('Target.getTargets', { filter: [{}] });
     const pageTarget = beforeTargets.find(target => target.type === 'tab' && target.url === page.url());
     await cdp.send('Extensions.triggerAction', { id: new URL(worker.url()).host, targetId: pageTarget.targetId });
-    const contexts = await worker.evaluate(() => new Promise((resolve, reject) => {
+    const contexts = await worker.evaluate(popupUrl => new Promise((resolve, reject) => {
       let attempts = 0;
       const check = async () => {
-        const contexts = await chrome.runtime.getContexts({ contextTypes: ["POPUP"] });
+        const contexts = (await chrome.runtime.getContexts({ contextTypes: ["POPUP"] })).filter(context => context.documentUrl === popupUrl);
         if (contexts.length) resolve(contexts);
         else if (++attempts > 100) reject(Error('Native popup did not open'));
         else setTimeout(check, 50);
       };
       void check();
-    }));
+    }), popupUrl);
     assert.equal(contexts.length, 1, "Exactly one native extension popup");
     let target;
     for (let attempt = 0; attempt < 100 && !target; attempt++) {
-      const { targetInfos } = await cdp.send('Target.getTargets');
-      target = targetInfos.find(target => target.url === contexts[0].documentUrl);
+      const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{}] });
+      target = targetInfos.find(target => target.url === popupUrl && target.type !== 'tab');
       if (!target) await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert.ok(target, "Native popup has a browser target");
