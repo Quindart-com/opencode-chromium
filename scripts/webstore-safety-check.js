@@ -73,7 +73,7 @@ if (JSON.stringify(manifest.host_permissions ?? []) !== JSON.stringify(["<all_ur
 }
 if (manifest.key) errors.push("Extension must not ship a hardcoded key");
 if (typeof manifest.background?.service_worker !== "string") errors.push("Background service worker missing");
-if (manifest.action?.default_popup) errors.push("Toolbar must open the on-page board rather than a popup window");
+if (manifest.action?.default_popup !== "popup.html") errors.push("Toolbar must open the native extension popup");
 if (!entryNames.has("popup.html")) errors.push("Trusted settings page missing");
 for (const size of ["16", "32", "48", "128"]) {
   const icon = manifest.icons?.[size];

@@ -49,7 +49,6 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
     const parsed = popupMessageSchema.safeParse(value);
     if (!parsed.success) return false;
     const message = parsed.data;
-    if (message.type.startsWith("PAGE_PANEL_")) return false;
     const cursorMessage = ["OPENCODE_CURSOR_ARRIVED", "OPENCODE_GET_CURSOR_STATE"].includes(message.type);
     const trusted = cursorMessage ? sender.id === chrome.runtime.id && sender.tab?.id !== undefined && sender.frameId === 0 : trustedPanelSender(sender, chrome.runtime.id, chrome.runtime.getURL("/popup.html")) || ["GET_UPLOAD_REQUEST", "RESOLVE_UPLOAD_REQUEST", "REVIEW_UPLOAD_REQUEST"].includes(message.type);
     if (!trusted) { sendResponse({ error: "Open controls from the extension panel" }); return false; }

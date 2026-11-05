@@ -1388,36 +1388,6 @@
   "majorUpgradeConfirm": {
     "message": "¿Actualizar a la nueva versión principal? Las sesiones existentes no se interrumpirán, pero los comandos heredados eliminados ya no estarán disponibles para conexiones nuevas."
   },
-  "pagePanelOpen": {
-    "message": "Abrir en esta página"
-  },
-  "pagePanelUnavailable": {
-    "message": "Esta página no puede mostrar el panel integrado. Usa el panel de la extensión."
-  },
-  "pagePanelClose": {
-    "message": "Cerrar panel"
-  },
-  "pagePanelMinimize": {
-    "message": "Minimizar panel"
-  },
-  "pagePanelRestore": {
-    "message": "Restaurar panel"
-  },
-  "pagePanelMove": {
-    "message": "Mover panel (teclas de flecha)"
-  },
-  "pagePanelProtected": {
-    "message": "Los ajustes sensibles y las aprobaciones se abren en el panel de la extensión, separado de este sitio."
-  },
-  "pagePanelManageProfiles": {
-    "message": "Gestionar perfiles"
-  },
-  "pagePanelOpaque": {
-    "message": "Reducir transparencia"
-  },
-  "pagePanelStatusUnavailable": {
-    "message": "El estado de conexión no está disponible. Abre el panel de la extensión para ver los detalles."
-  },
   "majorReviewTitle": {
     "message": "Revisar actualización principal"
   },

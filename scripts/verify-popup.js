@@ -6,6 +6,7 @@ import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { popupPalette } from "../extension-src/entrypoints/popup/page-palette.ts";
 import { glassTextContrast } from "./fixtures/glass-contrast.js";
 import { versionNotice } from "../extension-src/version-status.ts";
 import { MemoryStore } from "../native-host/dist/memory/index.js";
@@ -152,7 +153,7 @@ try {
   page.on("pageerror", (error) => { errors.push(error.message); console.error(error.message); });
   await page.addInitScript((messages) => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { globalThis.fixtureCopiedText = text; } } });
-    globalThis.chrome = { i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = messages[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
+    globalThis.chrome = { tabs: { query: async () => [{ id: 1, url: "https://example.test/" }] }, scripting: { executeScript: async () => [{ result: JSON.parse(sessionStorage.getItem("fixturePageColors") || "null") }] }, i18n: { getUILanguage: () => "en", getMessage: (key, values) => { let result = messages[key] || key; for (const [index, value] of (Array.isArray(values) ? values : values === undefined ? [] : [values]).entries()) result = result.replaceAll("$" + (index + 1), value); return result; } }, storage: { local: { get: async () => ({}), set: async () => {} } }, runtime: {
       id: "fixture",
         getURL: value => value,
       getManifest: () => ({ version: globalThis.fixtureCurrentVersion ?? "1.9.1", ...(globalThis.fixtureCurrentVersion ? { version_name: globalThis.fixtureCurrentVersion + " dev preview" } : {}) }),
@@ -468,6 +469,11 @@ try {
     await page.setViewportSize({ width, height: 600 });
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme });
+      await page.evaluate(theme => sessionStorage.setItem("fixturePageColors", JSON.stringify([theme === "dark" ? "rgb(24, 24, 32)" : "rgb(110, 210, 180)"])), theme);
+      await page.reload();
+      await page.waitForFunction(theme => document.documentElement.dataset.popupTheme === theme, theme);
+      await page.waitForFunction(() => document.querySelector("#status")?.textContent === "Bridge connected");
+      assert.equal(await page.getByRole("button", { name: "Open on this page", exact: true }).count(), 0);
       const measuredWidths = [];
       for (const view of ["Overview", "Profiles", "Settings"]) {
         await page.getByRole("tab", { name: view, exact: true }).click();
@@ -488,10 +494,10 @@ try {
         assert.equal(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundImage), 'none', 'The popup has no design-only backdrop artwork');
         const backdropColors = ['#ffffff'];
         const backdrops = backdropColors.map(hex => [1,3,5].map(index => parseInt(hex.slice(index,index+2),16)/255));
-        for (const label of await page.locator('main h1,.view-tab,.view-panel:not([hidden]) h2,.view-panel:not([hidden]) p,#app-footer a').all()) {
-          if (!(await label.isVisible())) continue;
+        for (const label of await page.locator('main h1,.view-tab,.view-panel:not([hidden]) h2,.view-panel:not([hidden]) p,#app-footer a,button:not(:disabled),label,select,summary').all()) {
+          if (!(await label.isVisible()) || !(await label.textContent()).trim()) continue;
           const ratio = await label.evaluate(glassTextContrast, backdrops);
-          assert.ok(ratio >= 4.5, `${view} ${theme} text needs 4.5:1 on the white canvas; got ${ratio}`);
+          assert.ok(ratio >= 4.5, `${view} ${theme} ${(await label.textContent()).trim().slice(0, 100)} text needs 4.5:1 on the page-color canvas; got ${ratio}`);
         }
 
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} fits ${width}px ${theme}`);
@@ -502,6 +508,21 @@ try {
       assert.ok(Math.max(...measuredWidths) - Math.min(...measuredWidths) < 1, `all views share a stable width at ${width}px ${theme}`);
     }
   }
+  const cdp = await page.context().newCDPSession(page);
+  for (const color of ["rgb(255, 255, 0)", "rgb(0, 0, 0)", "rgb(255, 255, 255)"]) {
+    await page.evaluate(color => sessionStorage.setItem("fixturePageColors", JSON.stringify([color])), color);
+    await page.reload();
+    await page.waitForFunction(() => !!document.documentElement.dataset.popupTheme);
+    await page.getByRole("tab", { name: "Overview", exact: true }).click();
+    for (const reduce of [false, true]) {
+      await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: reduce ? 'reduce' : 'no-preference' }] });
+      const backdrops = [await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => c / 255))];
+      for (const label of await page.locator('h1,.view-tab,.view-panel:not([hidden]) h2,.view-panel:not([hidden]) p,#app-footer a').all()) {
+        if (await label.isVisible() && (await label.textContent()).trim()) assert.ok(await label.evaluate(glassTextContrast, backdrops) >= 4.5, 'Page tint and reduced transparency preserve readable text');
+      }
+    }
+  }
+  await cdp.detach();
   decisionSettings = { ...decisionSettings, provider: "openai-decisions", route: "openai", shareText: true, ready: false };
   await page.reload();
   await page.locator(".decision-provider-line").getByText("OpenAI Platform · Luna", { exact: true }).waitFor();

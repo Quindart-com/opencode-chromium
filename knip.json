@@ -9,7 +9,6 @@
     "extension-src/entrypoints/upload-confirm/main.tsx",
     "extension-src/entrypoints/welcome/main.tsx",
     "extension-src/entrypoints/cursor.ts",
-    "extension-src/entrypoints/page-panel.ts",
     "extension-src/entrypoints/cursor-theme.ts"
   ],
   "project": [

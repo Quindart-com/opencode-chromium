@@ -138,14 +138,6 @@ export default function App(): React.JSX.Element {
   const reviewMajor = (review: MajorReview) => { setActiveView("settings"); setMajorReview(review); };
   const closeReview = () => { setMajorReview(null); setActiveView("settings"); requestAnimationFrame(() => document.getElementById("tab-settings")?.focus()); };
   const showMajorReview = (review: MajorReview) => reviewMajor({ ...review, approve: () => { closeReview(); review.approve(); } });
-  const [pagePanelFeedback, setPagePanelFeedback] = useState("");
-  const [openingPagePanel, setOpeningPagePanel] = useState(false);
-  async function openPagePanel() {
-    setOpeningPagePanel(true); setPagePanelFeedback("");
-    try { const response = await sendMessage<{ ok?: boolean }>({ type: "PAGE_PANEL_OPEN" }); if (!response.ok) throw new Error("Unavailable"); }
-    catch { setPagePanelFeedback(browser.i18n.getMessage("pagePanelUnavailable")); }
-    finally { setOpeningPagePanel(false); }
-  }
   const nativeStatus = useNativeStatus();
   const changeView = (view: ViewName) => {
     setMajorReview(null); setActiveView(view);
@@ -158,7 +150,6 @@ export default function App(): React.JSX.Element {
       <div className="version-notice-slot" hidden={!!majorReview}><VersionNotice status={nativeStatus} showSnoozed={activeView === "settings"} onReviewMajor={showMajorReview} /></div>
       <ViewTabs active={activeView} onChange={changeView} />
       {majorReview && <RuntimeApproval review={majorReview} cancel={closeReview} />}
-      <div className="page-panel-launch" hidden={!!majorReview}><button type="button" disabled={openingPagePanel} onClick={() => void openPagePanel()}><PanelIcon name="external" />{browser.i18n.getMessage("pagePanelOpen")}</button>{pagePanelFeedback && <p role="status">{pagePanelFeedback}</p>}</div>
       <div className="view-panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={!!majorReview || activeView !== "overview"}>
         {activeView === "overview" && <><ConnectionSummary status={nativeStatus} /><DecisionOverview onConfigure={() => changeView("settings")} /><MemoryView /></>}
       </div>

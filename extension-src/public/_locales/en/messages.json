@@ -1388,36 +1388,6 @@
   "majorUpgradeConfirm": {
     "message": "Upgrade to the new major version? Existing sessions will not be interrupted, but removed legacy commands will no longer be available to new connections."
   },
-  "pagePanelOpen": {
-    "message": "Open on this page"
-  },
-  "pagePanelUnavailable": {
-    "message": "This page cannot display the on-page panel. Use the extension panel."
-  },
-  "pagePanelClose": {
-    "message": "Close panel"
-  },
-  "pagePanelMinimize": {
-    "message": "Minimize panel"
-  },
-  "pagePanelRestore": {
-    "message": "Restore panel"
-  },
-  "pagePanelMove": {
-    "message": "Move panel (arrow keys)"
-  },
-  "pagePanelProtected": {
-    "message": "Sensitive settings and approvals open in the extension panel, separate from this website."
-  },
-  "pagePanelManageProfiles": {
-    "message": "Manage profiles"
-  },
-  "pagePanelOpaque": {
-    "message": "Reduce transparency"
-  },
-  "pagePanelStatusUnavailable": {
-    "message": "Connection status is unavailable. Open the extension panel for details."
-  },
   "majorReviewTitle": {
     "message": "Review major upgrade"
   },

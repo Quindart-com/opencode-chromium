@@ -26,14 +26,6 @@ const desktopOnlyAndroidWarning = w => !manifest.browser_specific_settings.gecko
 const unreviewed = result.warnings.filter(w => {
   if (desktopOnlyAndroidWarning(w)) return false;
   if (w.code !== "UNSAFE_VAR_ASSIGNMENT" || w.line !== 9 || ![1811, 4726].includes(w.column)) return true;
-  if (w.file === "page-panel.js") {
-    // The isolated entrypoint inlines the same pinned React DOM code. Reviewed
-    // handlers differ only in minifier-local names; pin each complete case's
-    // exact bytes and locations, not the entire application or warning category.
-    const line = fs.readFileSync(path.join(root, "extension-firefox", w.file), "utf8").split(/\r?\n/)[8];
-    const start = w.column - 179, probe = line.slice(start, start + 200);
-    return !probe.startsWith("case`dangerouslySetInnerHTML`:") || createHash("sha256").update(probe).digest("hex") !== "29b697e67504ab501d6e609e79f0d300a79dda1fd3ebae0fedda315f062f57d7";
-  }
   if (!/^chunks\/jsx-runtime-[A-Za-z0-9_-]+\.js$/.test(w.file)) return true;
   return createHash("sha256").update(fs.readFileSync(path.join(root, "extension-firefox", w.file))).digest("hex") !== reviewedVendorHash;
 });

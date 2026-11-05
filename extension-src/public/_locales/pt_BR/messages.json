@@ -1388,36 +1388,6 @@
   "majorUpgradeConfirm": {
     "message": "Atualizar para a nova versão principal? As sessões existentes não serão interrompidas, mas comandos legados removidos não estarão disponíveis para novas conexões."
   },
-  "pagePanelOpen": {
-    "message": "Abrir nesta página"
-  },
-  "pagePanelUnavailable": {
-    "message": "Esta página não pode exibir o painel integrado. Use o painel da extensão."
-  },
-  "pagePanelClose": {
-    "message": "Fechar painel"
-  },
-  "pagePanelMinimize": {
-    "message": "Minimizar painel"
-  },
-  "pagePanelRestore": {
-    "message": "Restaurar painel"
-  },
-  "pagePanelMove": {
-    "message": "Mover painel (teclas de seta)"
-  },
-  "pagePanelProtected": {
-    "message": "As configurações sensíveis e aprovações abrem no painel da extensão, separado deste site."
-  },
-  "pagePanelManageProfiles": {
-    "message": "Gerenciar perfis"
-  },
-  "pagePanelOpaque": {
-    "message": "Reduzir transparência"
-  },
-  "pagePanelStatusUnavailable": {
-    "message": "O status da conexão não está disponível. Abra o painel da extensão para ver os detalhes."
-  },
   "majorReviewTitle": {
     "message": "Revisar atualização principal"
   },

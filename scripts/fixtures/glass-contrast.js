@@ -15,7 +15,6 @@ export function glassTextContrast(element, backdrops = [[0, 0, 0], [1, 1, 1]]) {
     // fallback backgroundColor; stop before that color can conceal those samples.
     if (node === document.body || node === document.documentElement) break;
     layers.push(rgba(getComputedStyle(node).backgroundColor));
-    if (node.id.startsWith('opencode-page-panel-')) break;
   }
   const foreground = rgba(getComputedStyle(element).color);
   return Math.min(...backdrops.map(base => {
