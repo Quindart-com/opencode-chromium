@@ -1,5 +1,5 @@
 @font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url("./InterVariable.woff2") format("woff2"); }
-/* Standalone pages use a plain white canvas; the injected board samples the webpage separately. */
+/* Standalone pages use a plain white canvas; the native popup can apply a bounded page-color tint. */
 :root {
   color-scheme: light;
   --bg: #ffffff;
