@@ -89,7 +89,8 @@ test("a query narrows the view, and the character budget is reported", () => {
   const snap = snapshot(["body", {}, [0, 0, 1000, 2000], [...rows, ["div", {}, [0, 740, 800, 20], ["Salary range 15-16k"]]]]);
   const narrowed = projectSnapshot(snap, viewport, { query: "salary" });
   assert.equal(narrowed.items.length, 1);
-  assert.match(renderView(narrowed), /Salary range 15-16k/);
+  assert.match(renderView(narrowed), /^Salary range 15-16k @40,750$/m, "a targeted read gives text a click point");
+  assert.doesNotMatch(renderView(projectSnapshot(snap, viewport)), /Salary range 15-16k @/, "plain reads stay short");
   const budget = projectSnapshot(snap, viewport, { maxChars: 400 });
   assert.ok(budget.omitted > 0);
   assert.match(renderView(budget), /… \d+ more \(scroll, narrow with query, or scope "page"\)/);

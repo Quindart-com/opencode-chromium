@@ -211,6 +211,7 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
   }
 
   const scrollX = (doc.scrollOffsetX ?? viewport.x * scale) / scale, scrollY = (doc.scrollOffsetY ?? viewport.y * scale) / scale;
+  const terms = clean(options.query ?? "").toLowerCase().split(" ").filter(Boolean);
   const inView = (box: Draft["box"]) => !!box && box.w > 0 && box.h > 0 && box.y < scrollY + viewport.height && box.y + box.h > scrollY && box.x < scrollX + viewport.width && box.x + box.w > scrollX;
   const items: ViewItem[] = [];
   for (const draft of order) {
@@ -233,12 +234,14 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
       const line = `[${ref}] ${kind} ${JSON.stringify(label)}${extra} @${x},${y}`;
       items.push({ key: `#${ref}`, line, ...(ref !== undefined ? { ref } : {}), y: draft.box.y });
     } else if (text) {
-      items.push({ key: `t:${text.slice(0, 120)}`, line: clip(text, TEXT_LABEL), y: draft.box.y });
+      // A targeted (query) read also gives text its point, so a clickable block without a
+      // detectable listener can still be clicked; plain reads stay as short as possible.
+      const at = terms.length ? ` @${Math.round(Math.min(draft.box.x + draft.box.w / 2, draft.box.x + 40) - scrollX)},${Math.round(draft.box.y + Math.min(draft.box.h, 40) / 2 - scrollY)}` : "";
+      items.push({ key: `t:${text.slice(0, 120)}`, line: clip(text, TEXT_LABEL) + at, y: draft.box.y });
     }
   }
 
   let selectedItems = items, matched: number | undefined;
-  const terms = clean(options.query ?? "").toLowerCase().split(" ").filter(Boolean);
   if (terms.length) {
     const hits = items.filter(item => terms.some(term => item.line.toLowerCase().includes(term)));
     matched = hits.length;
