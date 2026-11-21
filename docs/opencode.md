@@ -22,4 +22,6 @@ Pin a version with the npm spec (`"opencode-chromium@1.6.3"`) if you prefer lock
 
 The native adapter accepts a V2 context with `tools.add`, `tool.add`, `addTool`, or `tool.transform`. It also exposes the same tool definitions to test harnesses through the cleanup function returned by `setup`.
 
+The default export is dual-shaped, `{ id, server, setup }`: OpenCode 1.18/1.19 loads `server`, while OpenCode 2.x loads `setup` and registers all tools through a single `tool.transform` (disposed on cleanup). Both `opencode-chromium setup` and `opencode-chromium link` detect the installed OpenCode version; for 2.x they write the `plugins` key pointing at the launcher's `v2` directory, whose `index.ts` re-exports the launcher default.
+
 Use MCP separately for compatibility mode; enabling both surfaces simultaneously creates duplicate tools and is reported by `doctor`.

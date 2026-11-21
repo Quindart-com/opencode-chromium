@@ -65,3 +65,20 @@ test("MCP options and instructions are provider-neutral", () => {
   assert.match(SERVER_INSTRUCTIONS, /browser_run/);
   assert.deepEqual(parseArgs(["--transport=http", "--port=4321"]), { transport: "http", host: "127.0.0.1", port: 4321, authTokenEnv: "AGENT_BROWSER_AUTH_TOKEN", allowedOrigins: [], blockedOrigins: [] });
 });
+
+test("default export is dual-shaped for OpenCode 1.x server and 2.x setup loaders", () => {
+  assert.equal(plugin.id, "opencode-browser-plugin");
+  assert.equal(typeof plugin.server, "function");
+  assert.equal(typeof plugin.setup, "function");
+});
+
+test("OpenCode 2.x transform context gets one transform with all tools and disposes it on cleanup", async () => {
+  const registered = [];
+  let transforms = 0, disposed = 0;
+  const ctx = { tool: { transform: async callback => { transforms += 1; callback({ add: tool => registered.push(tool) }); return { dispose: async () => { disposed += 1; } }; } }, logger: { info() {} } };
+  const cleanup = await plugin.setup(ctx, { memory: false });
+  assert.equal(transforms, 1);
+  assert.deepEqual(registered.map(tool => tool.name), ["browser_run", "browser_observe", "browser_session", "browser_finalize"]);
+  await cleanup();
+  assert.equal(disposed, 1);
+});
