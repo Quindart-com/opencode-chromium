@@ -1,5 +1,11 @@
 # Codex
 
+## T3 Code
+
+T3 Code uses the Codex app-server and its effective Codex home to load this plugin. Connections appear as Codex in the extension; no additional automation adapter is required. If T3 uses a custom home, configure that home instead of assuming `~/.codex`.
+
+T3 can retain a failed MCP connection across a window reload. See [T3 recovery](../skills/opencode-browser-plugin/references/recovery.md#t3-code) for diagnostics and the host-owned MCP reload boundary. A fresh standalone CLI probe does not prove that the affected T3 conversation has tools.
+
 ## Native plugin
 
 Install the plugin from this repository's marketplace:

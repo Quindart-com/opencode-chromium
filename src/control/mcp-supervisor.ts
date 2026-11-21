@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PRODUCT } from "../shared/product.ts";
+import { identifyHarness } from "../shared/connections.ts";
 import { desiredRuntime } from "../shared/runtime-config.ts";
 import { createParticipant } from "./leases.ts";
 import { McpWorker,lines,type Message } from "./mcp-worker.ts";
@@ -18,13 +19,16 @@ export async function superviseMcp(dir: string, args = process.argv.slice(2)) {
   const participant = createParticipant(dir, "supervisor", release.version, release.root, { contractVersion: release.contractVersion, harness: "mcp" });
   const env = { ...process.env, [PRODUCT.runtimeEnvironment]: dir, AGENT_BROWSER_SESSION_ID: process.env.AGENT_BROWSER_SESSION_ID ?? process.env.CODEX_SESSION_ID ?? `mcp-${randomUUID()}` };
   let worker: McpWorker | null = null;
+  let starting: Promise<McpWorker> | null = null;
   let init: Record<string, unknown> | null = null;
+  let clientInitialized = false;
   let closed = false;
   const serverRequests = new Map<string, { original: string | number }>();
   const write = (message: Message) => process.stdout.write(JSON.stringify(message) + "\n");
 
-  async function start() {
-    if (worker?.alive) return worker;
+  function start(): Promise<McpWorker> {
+    if (starting) return starting;
+    if (worker?.alive) return Promise.resolve(worker);
     const child = new McpWorker(release.root, args, env, message => {
       if (message.method && message.id !== undefined) {
         const id = `${child.identity}:${message.id}`;
@@ -33,12 +37,16 @@ export async function superviseMcp(dir: string, args = process.argv.slice(2)) {
         write({ ...message, id });
       } else write(message);
     });
-    try {
-      if (init) await child.initialize(init);
-      if (closed) throw new Error("MCP connection closed during worker startup");
-      worker = child;
-      return child;
-    } catch (error) { child.close(); throw error; }
+    worker = child;
+    starting = (async () => {
+      try {
+        if (init) await child.initialize(init);
+        if (closed) throw new Error("MCP connection closed during worker startup");
+        if (clientInitialized) child.notification({ jsonrpc: "2.0", method: "notifications/initialized" });
+        return child;
+      } catch (error) { child.close(); if (worker === child) worker = null; throw error; }
+    })().finally(() => { starting = null; });
+    return starting;
   }
 
   async function dispatch(message: Message) {
@@ -47,7 +55,12 @@ export async function superviseMcp(dir: string, args = process.argv.slice(2)) {
       if (routed && worker) { serverRequests.delete(String(message.id)); worker.send({ ...message, id: routed.original }); participant.leave(); }
       return;
     }
-    if (message.method === "notifications/initialized") { worker?.notification(message); return; }
+    if (message.method === "notifications/initialized") {
+      if (clientInitialized) return;
+      clientInitialized = true;
+      if (!starting && worker?.alive) worker.notification(message);
+      return;
+    }
     if (message.id === undefined) { worker?.notification(message); return; }
     let admitted = false;
     try {
@@ -57,8 +70,9 @@ export async function superviseMcp(dir: string, args = process.argv.slice(2)) {
       if (message.method === "initialize") {
         if (init) throw new Error("MCP connection already initialized");
         init = message.params ?? {};
+        const client = init.clientInfo as { name?: unknown } | undefined;
+        participant.publish({ harness: identifyHarness(typeof client?.name === "string" ? client.name : "") });
         const current = await start();
-        participant.publish({ contractVersion: Number(current.contract || release.contractVersion) || release.contractVersion });
         write({ ...current.initialized!, id: message.id });
       } else {
         if (!init) throw new Error("Initialize the MCP connection first");

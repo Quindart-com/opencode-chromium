@@ -5,6 +5,8 @@ description: Use the provider-neutral browser runtime through its four MCP or Op
 
 # opencode-browser-plugin
 
+For Codex running inside T3 Code (`T3CODE_THREAD_ID` is set), use the [T3 recovery guidance](references/recovery.md#t3-code) when tools are missing. T3 owns a retained Codex app-server connection; Ctrl+R reloads only its window. Do not give Codex Desktop's Plugins menu steps to a T3 user. A fresh diagnostic or standalone CLI reconnect does not refresh the affected conversation.
+
 When authorization is missing or automatic approval review rejects an action, use the harness's available human-question or approval tool with exactly **Approve** and **Disapprove**. Explain the requested action, files/destination when relevant, and the rejection reason. Keep the task open while waiting. After approval, resume through the original tool and authorization mechanism; preserve prepared work after disapproval. An automatic rejection is not a human refusal. An explicit human refusal requires a new user instruction before trying again. Do not switch tools, profiles or harnesses to bypass an outstanding denial.
 
 Upload confirmations distinguish explicit refusal from a closed, unavailable or timed-out prompt. For **UPLOAD_CONFIRMATION_REQUIRED**, ask the user the two-option question and resume the original upload flow after approval. For **UPLOAD_USER_DECLINED**, preserve the files and wait for a new instruction. Core approval tokens remain bound to their original immutable request: after approval, call **browser_run** with only **approvalToken**.

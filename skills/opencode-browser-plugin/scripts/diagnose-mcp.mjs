@@ -118,12 +118,20 @@ export const codexReloadSteps = [
   "Return to the same chat, invoke the skill again, then retry browser_session once with the intended profile.",
 ];
 
-export function diagnosticReport(result, { version, repaired = false, toolsUnavailable = false }) {
+export function diagnosticReport(result, { version, repaired = false, toolsUnavailable = false, host = "codex" }) {
   const { stderr: _stderr, ...startup } = result;
   const reload = result.ok && toolsUnavailable;
+  const t3 = host === "t3-code";
+  const reloadSteps = t3 ? [
+    "T3 Code owns the Codex app-server connection. Its host must send config/mcpServer/reload on that existing connection, then verify tools in the affected chat.",
+    "Ctrl+R reloads the T3 window, not the retained Codex provider connection. A separate Codex CLI process cannot refresh T3's stdio connection.",
+    "If T3 has no scoped MCP reload, report that provider reconnection is required. Coordinate a safe reconnect without interrupting other running conversations.",
+  ] : codexReloadSteps;
   return { ...startup, ...(reload ? { ok: false, code: "MCP_CHAT_RELOAD_REQUIRED", startupCode: result.code } : {}), version: result.serverVersion ?? version, requestedVersion: version, repaired,
-    ...(result.ok ? { reloadSteps: codexReloadSteps } : {}),
-    next: result.ok ?
+    ...(t3 ? { host: "t3-code", provider: "codex" } : {}),
+    ...(result.ok ? { reloadSteps } : {}),
+    next: result.ok && t3 ?
+      "The fresh process advertises browser tools, but only T3's existing Codex app-server can refresh a failed chat connection with config/mcpServer/reload. Ctrl+R and a standalone CLI reconnect do not establish recovery. Verify the affected chat's tools and one harmless action. Do not restart a shared provider while other conversations are running." : result.ok ?
       "The fresh process advertises the browser tools. If this chat lacks them, reload the plugin: Plugins → OpenCode Browser Plugin → Manage → disable → enable. Invoke the skill again in the same chat and verify its tools, then one harmless browser action. Reloading only the skill does not reconnect MCP. Keep Codex and other agents running. This probe does not establish chat registration or browser connectivity." :
       result.code === "MCP_ACCESS_DENIED" ? "The harness sandbox cannot access the installed runtime. Ask the user to Approve or Disapprove a permitted local CLI diagnostic outside that sandbox; do not change ACLs, reinstall, or restart Codex." :
       result.code === "MCP_RUNTIME_SETUP_REQUIRED" ? "Install or repair the local runtime with opencode-chromium setup --all, then reload this plugin in Manage (disable, then enable). Keep Codex and other agents running." :
@@ -141,7 +149,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (!result.ok && result.code === "MCP_DEPENDENCY_MISSING" && argv.includes("--repair-cache")) {
     quarantineBrokenCache(result.stderr, cacheDirectory()); repaired = true; result = await probeMcp(launch);
   }
-  const report = diagnosticReport(result, { version, repaired, toolsUnavailable: argv.includes("--tools-unavailable") });
+  const report = diagnosticReport(result, { version, repaired, toolsUnavailable: argv.includes("--tools-unavailable"), host: process.env.T3CODE_THREAD_ID ? "t3-code" : "codex" });
   console.log(JSON.stringify({ ...report, launchSource: launch.source }, null, 2));
   if (!report.ok) process.exitCode = 1;
 }

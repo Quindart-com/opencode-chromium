@@ -33,6 +33,16 @@ Reloading only the skill does not reconnect its MCP server. A green extension ba
 4. For `MCP_CHAT_RELOAD_REQUIRED`, the fresh process passed while the caller reported missing chat tools. Follow the targeted plugin reload above if it has not already been attempted. `MCP_READY` proves only fresh-process startup. Neither result proves a working connection in the affected chat.
 5. For `MCP_ACCESS_DENIED`, the diagnostic itself could not access the local runtime from its sandbox. Use the harness's available human-question tool with **Approve** / **Disapprove** for a permitted local CLI diagnostic. Do not change ACLs, reinstall the extension or infer that Codex's own MCP process failed in the same way.
 
+## T3 Code
+
+T3 launches Codex's app-server, which loads the enabled browser plugin or direct MCP registration from its effective Codex home. Browser connections are recorded as Codex; a separate T3 browser adapter is unnecessary. Custom provider homes must contain the intended configuration.
+
+When `T3CODE_THREAD_ID` is set, the diagnostic returns T3-specific recovery steps. A successful fresh handshake does not repair a failed connection retained by T3. Ctrl+R reloads the window, while the provider can keep running with its old failed MCP state. Codex Desktop's Plugins menu is not a T3 recovery control.
+
+The host integration must send [`config/mcpServer/reload`](https://learn.chatgpt.com/docs/app-server) on T3's existing Codex app-server connection, then verify the affected conversation's tools. A separate CLI process cannot inject that request into T3's stdio connection. If the installed T3 version exposes no scoped reload, report that a safe provider reconnect is required; coordinate it around other running conversations. Do not claim that the plugin's `harness reconnect codex` command refreshes T3's tool catalog or repeatedly ask for Ctrl+R.
+
+The managed supervisor forwards initialization without prefetching tools/resources and relays the client's initialized notification once. This keeps catalog inspection out of the handshake budget and prevents duplicate connection records. An enabled skill plugin with its bundled browser MCP explicitly disabled may use a direct MCP entry instead; setup preserves that registration and its configured timeout.
+
 ## Tools exist, browser discovery fails
 
 For transport timeouts, read the automatic CLI doctor's `recovery` result before another browser action. The connection-only check probes the live extension, rather than trusting the host's cached connected flag. A healthy result does not prove that the original mutation failed or succeeded. Inspect that same session's tabs, health and current page before continuing. The runtime does not replay uncertain mutations. If automatic diagnostics cannot complete, run `opencode-chromium doctor --repair-runtime --json` from a permitted local terminal and apply one targeted repair from its checks.

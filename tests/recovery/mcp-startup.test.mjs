@@ -34,6 +34,18 @@ test("the standalone probe verifies a real MCP handshake and required tool list"
   assert.equal(result.serverVersion, "1.10.2");
 });
 
+test("T3 recovery identifies the retained provider connection instead of suggesting a desktop menu or window reload", () => {
+  const report = diagnosticReport({ ok: true, code: "MCP_READY", tools: ["browser_session"], stderr: "private" }, {
+    version: "2.0.4", toolsUnavailable: true, host: "t3-code",
+  });
+  assert.equal(report.code, "MCP_CHAT_RELOAD_REQUIRED");
+  assert.equal(report.host, "t3-code"); assert.equal(report.provider, "codex");
+  assert.match(report.reloadSteps[0], /existing connection/);
+  assert.match(report.next, /config\/mcpServer\/reload/);
+  assert.match(report.next, /Do not restart a shared provider/);
+  assert.doesNotMatch(JSON.stringify(report), /Plugins →|private/);
+});
+
 test("the probe distinguishes a missing dependency, invalid protocol output, and timeout", async () => {
   const dependency = await probeMcp({ command: "node", args: ["-e", "console.error('ERR_MODULE_NOT_FOUND');process.exit(1)"], timeoutMs: 5000 });
   assert.equal(dependency.code, "MCP_DEPENDENCY_MISSING");
