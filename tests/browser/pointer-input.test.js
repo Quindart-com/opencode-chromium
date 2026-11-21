@@ -113,3 +113,26 @@ test("a hidden tab is revealed before pointer input, and fails fast when it stay
     assert.equal(revealed, 1);
   }
 });
+
+test("a background tab keeps rendering in place, so it is only brought forward when that fails", async () => {
+  for (const emulationWorks of [true, false]) {
+    let hidden = true, revealed = 0, emulated = 0;
+    const gestures = [];
+    const input = createPointerInput({
+      runtimeEvaluate: async (_context, _tab, expression) => expression === "document.visibilityState" ? (hidden ? "hidden" : "visible") : { x: 10, y: 10 },
+      inputGesture: async (_context, _tab, steps) => { gestures.push(steps); return {}; },
+      mouseStep: (commandParams, cursor, delayMs = 0) => ({ method: "Input.dispatchMouseEvent", commandParams, cursor, delayMs }),
+      tabFacts: async () => ({ active: false, hostname: "site.test" }),
+      cursorEnabled: async () => false,
+      key: () => "k",
+      keepRendering: async () => { emulated += 1; if (!emulationWorks) throw new Error("unsupported"); hidden = false; },
+      revealTab: async () => { revealed += 1; hidden = false; },
+      sleep: async () => {},
+      random: fixedRandom(),
+    });
+    await input.click({ sessionId: "s" }, 1, () => "point");
+    assert.equal(gestures.length, 1);
+    assert.equal(emulated, 1);
+    assert.equal(revealed, emulationWorks ? 0 : 1, emulationWorks ? "the user's tab stays in front" : "reveal is the fallback");
+  }
+});

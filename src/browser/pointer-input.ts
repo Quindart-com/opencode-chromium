@@ -25,7 +25,12 @@ export interface PointerDependencies {
   cursorEnabled(context: BrowserContext, tabId: number): Promise<boolean>;
   key(context: BrowserContext, tabId: number): string;
   engine?(context: BrowserContext): Promise<"gecko" | "chromium" | string | undefined>;
-  /** Makes the tab the active tab of its window without focusing the window. */
+  /**
+   * Keeps a background tab rendering while it stays behind the user's tab (Chromium focus
+   * emulation, released when the debugger detaches at turn end). Preferred over revealTab.
+   */
+  keepRendering?(context: BrowserContext, tabId: number): Promise<unknown>;
+  /** Last resort: makes the tab the active tab of its window without focusing the window. */
   revealTab?(context: BrowserContext, tabId: number): Promise<unknown>;
   sleep?(ms: number): Promise<void>;
   random?(): number;
@@ -93,18 +98,26 @@ export function createPointerInput(dependencies: PointerDependencies) {
   };
 
   // Chromium does not acknowledge debugger mouse events for a hidden page, so a
-  // pointer gesture sent to a background tab hangs until its deadline. Reveal the
-  // tab first and fail fast, before anything is dispatched, if it stays hidden.
+  // pointer gesture sent to a background tab hangs until its deadline. Focus
+  // emulation keeps the tab rendering where it is, so the user's current tab stays
+  // in front and several agents can work in background tabs at once. Only if that
+  // fails is the tab brought forward; if it is still hidden, fail fast before
+  // anything is dispatched.
   const visible = async (context: BrowserContext, tabId: number) => await runtimeEvaluate(context, tabId, "document.visibilityState", { userGesture: false }).catch(() => "visible") !== "hidden";
+  const wait = (ms: number) => (dependencies.sleep ?? ((delay: number) => new Promise<void>(resolve => setTimeout(resolve, delay))))(ms);
+  async function becomesVisible(context: BrowserContext, tabId: number, attempts: number) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (await visible(context, tabId)) return true;
+      await wait(attempt < 3 ? 25 : 100);
+    }
+    return false;
+  }
   async function ensureVisible(context: BrowserContext, tabId: number) {
     if (await visible(context, tabId)) return;
+    if (dependencies.keepRendering && await dependencies.keepRendering(context, tabId).then(() => true, () => false) && await becomesVisible(context, tabId, 5)) return;
     await dependencies.revealTab?.(context, tabId).catch(() => null);
-    const wait = dependencies.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      if (await visible(context, tabId)) return;
-      await wait(100);
-    }
-    throw new BrowserRuntimeError("Pointer input needs a visible tab. Bring the agent's browser window to the front, or use inputMode \"dom\".", {
+    if (await becomesVisible(context, tabId, 10)) return;
+    throw new BrowserRuntimeError("Pointer input needs a rendering tab. Bring the agent's browser window to the front, or use inputMode \"dom\".", {
       code: "TAB_NOT_VISIBLE", retryable: true, uncertain: false,
     });
   }
