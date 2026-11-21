@@ -11,17 +11,17 @@ import { classifyTabTransition, originOf, snapshotTabs } from "../../src/core/ta
 const tab = (id, url) => ({ id, url });
 
 test("transitions are classified by origin only", () => {
-  const before = [tab(1, "https://www.liepin.com/job?secret=1")];
-  assert.deepEqual(classifyTabTransition("click", 1, before, [tab(1, "https://www.liepin.com/job?secret=1#x")]).transition, { kind: "none" });
+  const before = [tab(1, "https://jobs.example.test/job?secret=1")];
+  assert.deepEqual(classifyTabTransition("click", 1, before, [tab(1, "https://jobs.example.test/job?secret=1#x")]).transition, { kind: "none" });
   const blank = classifyTabTransition("click", 1, before, [tab(1, "about:blank")]);
-  assert.deepEqual(blank.transition, { kind: "blank", fromOrigin: "https://www.liepin.com", toOrigin: "about:blank" });
+  assert.deepEqual(blank.transition, { kind: "blank", fromOrigin: "https://jobs.example.test", toOrigin: "about:blank" });
   assert.equal(blank.suspected, true);
-  assert.equal(blank.hostname, "www.liepin.com");
+  assert.equal(blank.hostname, "jobs.example.test");
   const closed = classifyTabTransition("click", 1, before, []);
-  assert.deepEqual(closed.transition, { kind: "closed", fromOrigin: "https://www.liepin.com", toOrigin: null });
+  assert.deepEqual(closed.transition, { kind: "closed", fromOrigin: "https://jobs.example.test", toOrigin: null });
   assert.equal(closed.suspected, true);
   const opened = classifyTabTransition("click", 1, before, [...before, tab(2, "https://other.test/popup?token=1")]);
-  assert.deepEqual(opened.transition, { kind: "opened", fromOrigin: "https://www.liepin.com", toOrigin: "https://other.test" });
+  assert.deepEqual(opened.transition, { kind: "opened", fromOrigin: "https://jobs.example.test", toOrigin: "https://other.test" });
   assert.equal(opened.suspected, false);
   assert.equal(JSON.stringify([blank, closed, opened]).includes("secret"), false);
 });

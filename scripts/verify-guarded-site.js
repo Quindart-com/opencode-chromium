@@ -59,7 +59,7 @@ try {
     const baseline = await detections(inputMode);
     const result = await call("browser_run", { memoryMode: "off", returnMode: "all", inputMode, cursor: false, steps: [
       { action: "click", target: { selector: "#edit" }, inputMode },
-      { action: "fill", target: { selector: "#name" }, value: "Ayman", inputMode },
+      { action: "fill", target: { selector: "#name" }, value: "Test User", inputMode },
     ] });
     await sleep(1500);
     const steps = result.results ?? [];
