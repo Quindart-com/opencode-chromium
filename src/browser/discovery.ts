@@ -63,7 +63,7 @@ export function webMcpDiscoveryExpression({ limit = 20, maxSchemaChars = 2000 } 
 type FrameInput = { tabId: number; maxDepth: number; maxFrames: number };
 export function createDiscoveryOperations({ command, evaluate, getTab }: {
   command: PageCdpRequest<BrowserContext>;
-  evaluate(context: BrowserContext, tabId: number, expression: string, options?: { timeoutMs?: number }): Promise<unknown>;
+  evaluate(context: BrowserContext, tabId: number, expression: string, options?: { timeoutMs?: number; world?: "agent" | "page" }): Promise<unknown>;
   getTab(context: BrowserContext, tabId: number): Promise<{ url?: string }>;
 }) {
   const tabId = z.number().int().positive();
@@ -95,7 +95,7 @@ export function createDiscoveryOperations({ command, evaluate, getTab }: {
     browser_webmcp_discover: defineObjectOperation({ capabilityOnly: true, args: { tabId, limit: z.number().int().min(1).max(30).default(20), maxSchemaChars: z.number().int().min(100).max(3000).default(2000) }, async execute(args, context) {
       const tab = await getTab(context, args.tabId);
       assertNavigationAllowed(tab.url ?? "about:blank", context.urlPolicy);
-      const value = z.looseObject({ tools: z.array(z.looseObject({ origin: z.string() })).default([]) }).parse(await evaluate(context, args.tabId, webMcpDiscoveryExpression(args), { timeoutMs: 2000 }));
+      const value = z.looseObject({ tools: z.array(z.looseObject({ origin: z.string() })).default([]) }).parse(await evaluate(context, args.tabId, webMcpDiscoveryExpression(args), { timeoutMs: 2000, world: "page" }));
       const current = await getTab(context, args.tabId);
       if (current.url !== tab.url) throw new Error("Page navigated during discovery; retry on the current page.");
       return { ...value, tools: (value.tools ?? []).filter((tool) => context.urlPolicy?.evaluate(tool.origin).allowed ?? true) };

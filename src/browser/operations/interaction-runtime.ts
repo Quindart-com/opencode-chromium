@@ -22,7 +22,7 @@ export function selectorClickTargetExpression(selector: string) {
 }
 
 export function createInteractionRuntime(dependencies: Dependencies) {
-  const { cdp, runtimeEvaluate, pointCursor, inputGesture, activate, finiteNumber, pageBackend } = dependencies;
+  const { cdp, runtimeEvaluate, pointCursor, inputGesture, activate, finiteNumber, pageBackend, pointerInput, agentContextId } = dependencies;
 function domNodeClickTargetExpression(nodeId: string) {
   return `(() => {
     ${interactionHelpersSource()}
@@ -181,18 +181,41 @@ function setFocusedSelectValueExpression(value: string) {
   })()`;
 }
 
+// Chooses between the in-page click (dom) and trusted debugger mouse input
+// (pointer) and reports which route ran. Firefox always dispatches trusted input.
+async function performClick(context: BrowserContext, tabId: number, expression: (trusted: boolean) => string, options: { button?: "left" | "middle" | "right"; clickCount?: number } = {}) {
+  const route = await pointerInput.route(context, tabId);
+  const gecko = await pointerInput.isGecko(context);
+  if (route === "pointer" && !gecko) return { point: await pointerInput.click(context, tabId, expression, options), inputRoute: "pointer" as const };
+  return { point: await pageBackend.click(context, tabId, expression, options), inputRoute: gecko ? "pointer" as const : "dom" as const };
+}
+
+// In pointer mode a text target is focused with a trusted click, like a person
+// would, before the helper focuses and prepares it. Selects are left alone so no
+// native popup opens.
+async function focusWithPointer(context: BrowserContext, tabId: number, expression: (trusted: boolean) => string) {
+  if (await pointerInput.route(context, tabId) !== "pointer" || await pointerInput.isGecko(context)) return "dom" as const;
+  await pointerInput.click(context, tabId, expression, { skip: (point: Record<string, unknown>) => point.tagName === "select" }).catch(() => null);
+  return "pointer" as const;
+}
+
 async function clickPoint(context: BrowserContext, tabId: number, x: number, y: number, button: "left" | "middle" | "right" = "left") {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   await activate(context, tabId);
-  return pageBackend.click(context, tabId, (trusted: boolean) => clickAtPointExpression(x, y, { button, trusted }), { button });
+  return performClick(context, tabId, (trusted: boolean) => clickAtPointExpression(x, y, { button, trusted }), { button });
 }
 
 async function hoverPoint(context: BrowserContext, tabId: number, x: number, y: number) {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   await activate(context, tabId);
-  return pageBackend.hover(context, tabId, await runtimeEvaluate(context, tabId, hoverAtPointExpression(x, y), { userGesture: false }));
+  if (await pointerInput.route(context, tabId) === "pointer" && !await pointerInput.isGecko(context)) {
+    const resolved = await runtimeEvaluate(context, tabId, clickAtPointExpression(x, y, { trusted: true })).catch(() => null);
+    if (resolved) return { point: await pointerInput.hover(context, tabId, resolved), inputRoute: "pointer" as const };
+  }
+  const point = await pageBackend.hover(context, tabId, await runtimeEvaluate(context, tabId, hoverAtPointExpression(x, y), { userGesture: false }));
+  return { point, inputRoute: await pointerInput.isGecko(context) ? "pointer" as const : "dom" as const };
 }
 
 async function insertTextAndVerify(context: BrowserContext, tabId: number, before: unknown, text: string, options: { expectedValue?: string; includeSelect?: boolean } = {}) {
@@ -230,7 +253,11 @@ async function pressKey(context: BrowserContext, tabId: number, key: string, tar
   if (parsed.selectAll) await runtimeEvaluate(context, tabId, selectionSnapshotExpression());
 
   const steps: InputGestureStep[] = [];
-  if (target.nodeId || target.selector) steps.push({ method: "Runtime.evaluate", commandParams: { expression: focusExpression(target), returnByValue: true } });
+  if (target.nodeId || target.selector) {
+    // The focus helper resolves node ids registered in the agent world.
+    const contextId = await agentContextId(context, tabId).catch(() => null);
+    steps.push({ method: "Runtime.evaluate", commandParams: { expression: focusExpression(target), returnByValue: true, ...(contextId === null ? {} : { contextId }) } });
+  }
   steps.push(...keyDispatchEvents(parsed).map(event => ({ method: "Input.dispatchKeyEvent", commandParams: event })));
   await inputGesture(context, tabId, steps, Math.max(1, (context.deadlineAt ?? Date.now() + 10000) - Date.now()));
 
@@ -353,5 +380,5 @@ async function scrollTab(context: BrowserContext, tabId: number, args: { scrollX
   return { scrolled: didScroll(result.before, result.after), fallbackUsed: true, tabId, ...point, scrollX: args.scrollX, scrollY: args.scrollY, before, after: result.after };
 }
 
-  return { domNodeClickTargetExpression, backgroundClickExpression, domNodeClickExpression, domNodeHoverTargetExpression, domNodeEditableExpression, selectorClickTargetExpression, selectorClickExpression, clickAtPointExpression, hoverAtPointExpression, selectorHoverTargetExpression, selectorEditableExpression, selectorTextExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, verifyFocusedEditableExpression, setFocusedSelectValueExpression, clickPoint, hoverPoint, insertTextAndVerify, fillFocusedEditable, pressKey, sleep, scrollPoint, scrollSnapshotExpression, scrollFallbackExpression, didScroll, scrollTab };
+  return { performClick, focusWithPointer, domNodeClickTargetExpression, backgroundClickExpression, domNodeClickExpression, domNodeHoverTargetExpression, domNodeEditableExpression, selectorClickTargetExpression, selectorClickExpression, clickAtPointExpression, hoverAtPointExpression, selectorHoverTargetExpression, selectorEditableExpression, selectorTextExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, verifyFocusedEditableExpression, setFocusedSelectValueExpression, clickPoint, hoverPoint, insertTextAndVerify, fillFocusedEditable, pressKey, sleep, scrollPoint, scrollSnapshotExpression, scrollFallbackExpression, didScroll, scrollTab };
 }

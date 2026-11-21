@@ -5,11 +5,15 @@ import { errorDetails,shouldReobservePage } from "./failure-context.ts";
 import { summarizeAccessibilitySnapshot } from './observation-projection.ts';
 import type { FinalizeInput,MemoryQueryInput,MemorySearchInput,MemoryStatusInput,ObserveInput,RunInput,SessionInput } from "./registry.ts";
 import { requiresApproval,validateSteps } from './run-validation.ts';
-import { READ_ACTIONS,clamp,contextSessionId,publicProfiles,summarizeStepResult,type RunStepResult } from "./runtime-foundation.ts";
+import { READ_ACTIONS,clamp,contextSessionId,publicProfiles,summarizeStepResult,type RunStepResult,type StepOutcome } from "./runtime-foundation.ts";
 import { RuntimeMemory } from "./runtime-memory.ts";
 import type { RuntimeOptions } from "./runtime-types.ts";
 import type { BrowserContext } from "./tool-definition.ts";
 import { responseMetadata as contractMetadata } from "./versions.ts";
+
+function stepExtras(outcome: StepOutcome) {
+  return { ...(outcome.tabTransition ? { tabTransition: outcome.tabTransition } : {}), ...(outcome.warnings?.length ? { warnings: outcome.warnings } : {}) };
+}
 
 export class AgentBrowserRuntime extends RuntimeMemory {
   async run(args: RunInput, context: BrowserContext = {}) {
@@ -30,6 +34,8 @@ export class AgentBrowserRuntime extends RuntimeMemory {
       const reasons = requiresApproval(request.steps);
       if (reasons.length > 0 && !approved) return this.approvalResult(request, sessionId, reasons);
       const session = this.getSession(sessionId);
+      if (request.inputMode) session.inputMode = request.inputMode;
+      if (request.cursor !== undefined) session.cursor = request.cursor;
       await this.selectProfile(session, request.profile);
       const tabId = await this.ensureTab(session, request.tab);
       let correctiveCandidate: number | null = null;
@@ -57,6 +63,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
               ? `Stopped after ${replay.stepsReused} remembered steps to avoid repeating a mutation with uncertain state`
               : `Replayed ${replay.stepsReused} remembered steps`,
             results: selectedResults,
+            ...(replay.results.some(item => item.warnings?.length) ? { warnings: replay.results.flatMap(item => item.warnings ?? []).slice(0, 1) } : {}),
             ...(postObservation ? { observation: postObservation } : {}),
           }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
         }
@@ -80,11 +87,11 @@ export class AgentBrowserRuntime extends RuntimeMemory {
             if (mayHaveActed && session.activeTabId) {
               observation = await this.observeValue({ mode: "inspect", target: step.target, detail: "lean", limit: 5 }, tabId, session).catch(() => undefined);
             }
-            results.push({ index, id: step.id ?? null, action: step.action, ok: false, error: detail, ...(observation ? { observation } : {}) });
+            results.push({ index, id: step.id ?? null, action: step.action, ok: false, error: detail, ...(observation ? { observation } : {}), ...stepExtras(outcome) });
             if (step.onError !== "continue") break;
             continue;
           }
-          results.push({ index, id: step.id ?? null, action: step.action, ok: true, result: outcome.value, ...(outcome.settled ? { settle: outcome.settled } : {}) });
+          results.push({ index, id: step.id ?? null, action: step.action, ok: true, result: outcome.value, ...(outcome.settled ? { settle: outcome.settled } : {}), ...stepExtras(outcome) });
         }
       } finally {
         if (memoryEnabled) {
@@ -104,7 +111,8 @@ export class AgentBrowserRuntime extends RuntimeMemory {
       }
       const mode = request.returnMode ?? "last";
       const selectedResults = mode === "all" ? results : mode === "last" ? results.slice(-1) : results.map(summarizeStepResult);
-      const authorization = results.map(result => record(record(result).error).authorization).find(Boolean);
+      const authorization = results.map(result => record(result.error).authorization).find(Boolean);
+      const warnings = [...new Map(results.flatMap(result => result.warnings ?? []).map(warning => [warning.code, warning])).values()];
       return this.compact({
         ok: !failed,
         status: record(authorization).required === true ? "authorization_required" : failed ? "partial" : "completed",
@@ -113,6 +121,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         tabId: session.activeTabId,
         summary: `${results.filter((item) => item.ok).length}/${request.steps.length} actions completed`,
         results: selectedResults,
+        ...(warnings.length ? { warnings } : {}),
         ...(authorization ? { authorization } : {}),
         ...(postObservation !== undefined ? { observation: postObservation } : {}),
       }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");

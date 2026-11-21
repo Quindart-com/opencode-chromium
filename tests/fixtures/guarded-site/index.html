@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guarded site fixture</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 24px; max-width: 640px; }
+  button, input { font: inherit; padding: 8px 14px; margin: 4px 0; }
+  #form { display: none; margin-top: 12px; padding: 12px; border: 1px solid #888; border-radius: 6px; }
+  #form.open { display: block; }
+  #detections { margin-top: 16px; padding: 8px; background: #f3f3f3; white-space: pre-wrap; min-height: 2em; }
+</style>
+</head>
+<body>
+<h1>Guarded site fixture</h1>
+<p>Local stand-in for sites that detect automation. Detectors: console getter, untrusted click, window size.</p>
+<p>Add <code>?redirect=1</code> to navigate to about:blank when any detector fires.</p>
+
+<button id="edit" type="button">Edit</button>
+<div id="form" role="dialog" aria-label="Edit profile">
+  <label>Display name <input id="name" type="text" autocomplete="off"></label>
+  <button id="save" type="button">Save</button>
+</div>
+<pre id="detections" aria-live="polite">none</pre>
+
+<script>
+(function () {
+  "use strict";
+  const params = new URLSearchParams(location.search);
+  const redirect = params.get("redirect") === "1";
+  window.__detections = [];
+
+  function fire(name, detail) {
+    if (window.__detections.some(function (item) { return item.name === name; })) return;
+    window.__detections.push({ name: name, detail: detail || null, at: Math.round(performance.now()) });
+    document.getElementById("detections").textContent = window.__detections.map(function (item) { return item.name; }).join("\n");
+    if (redirect) location.replace("about:blank");
+  }
+
+  // (a) Console getter detector. A getter on `id` only runs when something serializes the
+  // object, which happens when a debugger client has enabled Runtime and the console is read.
+  // This is the trick used by disable-devtool's "DefineId" detector.
+  const probe = new Image();
+  Object.defineProperty(probe, "id", { get: function () { fire("console-getter"); return "probe"; } });
+  function consoleProbe() { console.log("%c", probe); console.clear(); }
+  setInterval(consoleProbe, 400);
+  consoleProbe();
+
+  // (b) Untrusted click: a synthetic click is not isTrusted, and a real click has a preceding
+  // pointerdown or mousedown from the same gesture.
+  let lastPointerDown = -Infinity;
+  ["pointerdown", "mousedown"].forEach(function (type) {
+    document.addEventListener(type, function () { lastPointerDown = performance.now(); }, true);
+  });
+  document.addEventListener("click", function (event) {
+    if (event.isTrusted === false) return fire("untrusted-click", { isTrusted: false });
+    if (performance.now() - lastPointerDown > 1000) fire("click-without-pointerdown", { isTrusted: true });
+  }, true);
+
+  // (c) Window size heuristic: docked devtools make the outer window larger than the viewport.
+  function sizeProbe() {
+    const width = window.outerWidth - window.innerWidth;
+    const height = window.outerHeight - window.innerHeight;
+    if (width > 160 || height > 160) fire("window-size", { width: width, height: height });
+  }
+  setInterval(sizeProbe, 500);
+  sizeProbe();
+
+  // The ordinary page behavior the agent is asked to drive.
+  document.getElementById("edit").addEventListener("click", function () {
+    document.getElementById("form").classList.add("open");
+    document.getElementById("name").focus();
+  });
+  document.getElementById("save").addEventListener("click", function () {
+    document.getElementById("detections").dataset.saved = "1";
+  });
+})();
+</script>
+</body>
+</html>

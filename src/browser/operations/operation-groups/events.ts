@@ -12,7 +12,7 @@ export { pageSearchUnitsExpression } from '../snapshot-expressions.ts';
 
 const tool = Object.assign(defineBrowserOperation, { schema: z });
 export function createEventOperations(dependencies: Dependencies) {
-  const { sessionParams, markProfileUsed, resolveSessionProfileId, targetProfileIdsForSession, extensionRequest, clearSessionCache, ensureAttached, executeCdpRequest, cdp, activate, enableInspection, stringify, compactDialogEvents, compactConsoleEvents, cdpParamsFromArgs, sleep, waitForPageReady, fetchConsoleSourceMaps } = dependencies;
+  const { sessionParams, markProfileUsed, resolveSessionProfileId, targetProfileIdsForSession, extensionRequest, clearSessionCache, ensureAttached, executeCdpRequest, cdp, activate, enableInspection, ensureConsoleCapture, stringify, compactDialogEvents, compactConsoleEvents, cdpParamsFromArgs, sleep, waitForPageReady, fetchConsoleSourceMaps } = dependencies;
   return {
       browser_enable_inspection: tool({
         description: "Enable CDP Runtime, Log, Network, Page, DOM, and Accessibility inspection domains for a tab.",
@@ -36,15 +36,19 @@ browser_console_logs: tool({
           sourceMap: tool.schema.boolean().default(false).describe("Resolve source-mapped stack frames by fetching maps through the page context."),
         },
         async execute(args, context) {
+          // Console capture needs the Runtime and Log domains. They are not
+          // enabled for ordinary actions, so reading logs starts the capture.
+          const captureStarted = await ensureConsoleCapture(context, args.tabId);
+          const note = captureStarted ? { captureStarted: true } : {};
           const response = await extensionRequest(context, "getCdpEvents", {
             tabId: args.tabId,
             limit: args.limit,
             methods: ["Runtime.consoleAPICalled", "Log.entryAdded"],
           });
-          if (!args.sourceMap) return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack }));
+          if (!args.sourceMap) return stringify({ ...compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack }), ...note });
           const resolver = new SourceMapResolver();
           await fetchConsoleSourceMaps(context, args.tabId, response?.events ?? [], resolver);
-          return stringify(compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack, sourceMapped: true, resolver }));
+          return stringify({ ...compactConsoleEvents(response, { raw: args.raw, includeStack: args.includeStack, sourceMapped: true, resolver }), ...note });
         },
       }),
       browser_dialog_events: tool({

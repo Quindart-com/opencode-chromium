@@ -14,16 +14,26 @@ export async function settleBrowserStep(runtime: RuntimePort, step: Step, tabId:
   const target = await runtime.resolveTarget({ target: spec.target ?? step.target }, tabId, prior, session.sessionId);
   const started = Date.now(), deadlineAt = started + timeoutMs;
   return runtime.operationScope.run({ frameId: target.frameId ?? nodeFrameId(target.nodeId), deadlineAt }, async () => {
-    let signature = "", changedAt = started;
+    let signature = "", changedAt = started, cheap = true;
     do {
       let passed: boolean;
       if (spec.condition === "dom-quiet") {
+        // The page already tracks the age of its last relevant DOM mutation, so one tiny probe replaces a
+        // full snapshot per poll. Hosts without the probe fall back to the snapshot comparison.
+        const quiet = cheap ? record(await runtime.invoke("browser_dom_quiet", { tabId }, session.sessionId).catch(() => null)) : null;
+        if (quiet && typeof quiet.lastMutationAgeMs === "number") {
+          const current = `${String(quiet.documentId)}:${String(quiet.revision)}`;
+          if (current !== signature) { signature = current; changedAt = Date.now(); }
+          passed = Date.now() - changedAt >= 500 && quiet.lastMutationAgeMs >= 500;
+        } else {
+        cheap = false;
         const snapshot = record(await runtime.invoke("browser_dom_snapshot", { tabId }, session.sessionId));
         const { observation, nodes, ...content } = snapshot;
         const current = createHash("sha256").update(JSON.stringify({ ...content, nodes: Array.isArray(nodes) ? nodes.map(value => { const { node_id: _id, ...node } = record(value); return node; }) : nodes })).digest("hex");
         if (current !== signature) { signature = current; changedAt = Date.now(); }
         const state = record(observation);
         passed = Date.now() - changedAt >= 500 && (typeof state.lastMutationAgeMs !== "number" || state.lastMutationAgeMs >= 500);
+        }
       } else if (spec.condition === "exists" || spec.condition === "not-exists") {
         if (target.selector) {
           const value = await runtime.invoke("browser_locator_count", { tabId, selector: target.selector }, session.sessionId);

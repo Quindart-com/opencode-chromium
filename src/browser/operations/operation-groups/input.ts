@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cursorActionForTool } from "../../cursor.ts";
-import { defineBrowserOperation,type BrowserOperationDependencies as Dependencies } from "../../operation-definition.ts";
+import { defineBrowserOperation,defineObjectOperation,type BrowserOperationDependencies as Dependencies } from "../../operation-definition.ts";
+import { pageStateExpression } from '../page-state.ts';
 import { domSnapshotExpression } from '../snapshot-expressions.ts';
 export { keyDispatchEvents,parseKeyPress } from "../../keyboard.ts";
 export { pageInspectExpression,visualMapExpression } from '../inspection-expressions.ts';
@@ -11,7 +12,7 @@ export { pageSearchUnitsExpression } from '../snapshot-expressions.ts';
 
 const tool = Object.assign(defineBrowserOperation, { schema: z });
 export function createInputOperations(dependencies: Dependencies) {
-  const { executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, pageBackend, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
+  const { executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, performClick, cursorEnabled, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
   return {
       browser_move: tool({
         description: "Move the visible OpenCode cursor overlay in a Chromium tab.",
@@ -38,8 +39,8 @@ export function createInputOperations(dependencies: Dependencies) {
         },
         async execute(args, context) {
           await pointCursor(context, args.tabId, args, "click");
-          await clickPoint(context, args.tabId, args.x, args.y, args.button);
-          return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y });
+          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y, args.button);
+          return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y, inputRoute });
         },
       }),
       browser_double_click: tool({
@@ -56,8 +57,8 @@ export function createInputOperations(dependencies: Dependencies) {
           const point = await resolveCursorPoint(context, args.tabId, args);
           if (point) await pointCursor(context, args.tabId, point, "click");
           await activate(context, args.tabId);
-          await pageBackend.click(context, args.tabId, (trusted: boolean) => clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2, trusted }), { button: args.button, clickCount: 2 });
-          return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y });
+          const { inputRoute } = await performClick(context, args.tabId, (trusted: boolean) => clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2, trusted }), { button: args.button, clickCount: 2 });
+          return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y, inputRoute });
         },
       }),
       browser_hover: tool({
@@ -81,8 +82,8 @@ export function createInputOperations(dependencies: Dependencies) {
             finiteNumber(point.y, "y");
           }
           await pointCursor(context, args.tabId, point, "observe");
-          await hoverPoint(context, args.tabId, point.x, point.y);
-          return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point });
+          const { inputRoute } = await hoverPoint(context, args.tabId, point.x, point.y);
+          return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point, inputRoute });
         },
       }),
       browser_handle_dialog: tool({
@@ -134,19 +135,20 @@ export function createInputOperations(dependencies: Dependencies) {
           }
           await pointCursor(context, args.tabId, args.path[0], "drag");
           await activate(context, args.tabId);
+          const showCursor = await cursorEnabled(context, args.tabId);
           const points = interpolatePath(args.path);
           const [start, ...rest] = points;
           if (!start) throw new Error("Drag path is empty");
           const steps = [
-            mouseStep({ type: "mouseMoved", x: start.x, y: start.y, button: args.button, buttons: 0, pointerType: "mouse" }, start),
-            mouseStep({ type: "mousePressed", x: start.x, y: start.y, button: args.button, buttons: mouseButtons(args.button), clickCount: 1, pointerType: "mouse" }, start, 24),
+            mouseStep({ type: "mouseMoved", x: start.x, y: start.y, button: args.button, buttons: 0, pointerType: "mouse" }, showCursor ? start : undefined),
+            mouseStep({ type: "mousePressed", x: start.x, y: start.y, button: args.button, buttons: mouseButtons(args.button), clickCount: 1, pointerType: "mouse" }, showCursor ? start : undefined, 24),
           ];
           for (const point of rest) {
-            steps.push(mouseStep({ type: "mouseMoved", x: point.x, y: point.y, button: args.button, buttons: mouseButtons(args.button), pointerType: "mouse" }, point, 8));
+            steps.push(mouseStep({ type: "mouseMoved", x: point.x, y: point.y, button: args.button, buttons: mouseButtons(args.button), pointerType: "mouse" }, showCursor ? point : undefined, 8));
           }
           const end = points.at(-1);
           if (!end) throw new Error("Drag path is empty");
-          steps.push(mouseStep({ type: "mouseReleased", x: end.x, y: end.y, button: args.button, buttons: 0, clickCount: 1, pointerType: "mouse" }, end, 16));
+          steps.push(mouseStep({ type: "mouseReleased", x: end.x, y: end.y, button: args.button, buttons: 0, clickCount: 1, pointerType: "mouse" }, showCursor ? end : undefined, 16));
           const timeoutMs = Math.min(180000, Math.max(30000, steps.length * 500 + 15000));
           await inputGesture(context, args.tabId, steps, timeoutMs);
           return stringify({ dragged: true, tabId: args.tabId, points: args.path.length, dispatchedPoints: points.length });
@@ -195,6 +197,16 @@ export function createInputOperations(dependencies: Dependencies) {
         },
         async execute(args, context) {
           return stringify(await runtimeEvaluate(context, args.tabId, domSnapshotExpression()));
+        },
+      }),
+      // Cheap settle probe: the mutation observer installed by the page helpers
+      // already tracks the age of the last relevant DOM change.
+      browser_dom_quiet: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Report how long the page DOM has been free of relevant mutations.",
+        args: { tabId: tool.schema.number().int().positive() },
+        async execute(args, context) {
+          return runtimeEvaluate(context, args.tabId, pageStateExpression());
         },
       }),
   };

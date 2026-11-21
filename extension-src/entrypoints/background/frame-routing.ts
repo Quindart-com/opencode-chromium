@@ -5,6 +5,7 @@ import { record } from "../../../src/shared/values.ts";
 
 type Route = { frameId: string; parentId: string | null; url: string; sessionId?: string; contextId?: number };
 type Send = (tabId: number, method: string, params: object, timeoutMs?: number, sessionId?: string) => Promise<unknown>;
+const AGENT_WORLD = "opencode-agent";
 function fail(code: string, message: string): never { throw Object.assign(new Error(message), { code, uncertain: false, executionState: "not_started" }); }
 
 /** Only child iframe sessions rooted in an already-owned tab enter this router. */
@@ -24,7 +25,8 @@ export class FrameRouting {
     }
     await this.request(tabId, "Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true, filter: [{ type: "iframe", exclude: false }] }, deadlineAt, sessionId);
   }
-  forget(tabId: number) { this.frames.delete(tabId); this.sessions.delete(tabId); this.objects.delete(tabId); }
+  private readonly agentWorlds = new Map<number, Set<number>>();
+  forget(tabId: number) { this.frames.delete(tabId); this.sessions.delete(tabId); this.objects.delete(tabId); this.agentWorlds.delete(tabId); }
   event(source: Browser.debugger.Debuggee, method: string, input: object | undefined) {
     const tabId = source.tabId;
     if (tabId === undefined) return;
@@ -42,6 +44,7 @@ export class FrameRouting {
     }
     if (method === "Page.frameNavigated" || method === "Runtime.executionContextsCleared" || method === "Runtime.executionContextDestroyed") {
       for (const route of this.frames.get(tabId)?.values() ?? []) route.contextId = undefined;
+      if (method !== "Page.frameNavigated" || !record(params.frame).parentId) this.agentWorlds.delete(tabId);
     }
   }
   async tree(tabId: number, deadlineAt = Date.now() + 10000) {
@@ -101,7 +104,23 @@ export class FrameRouting {
     const deadlineAt = Date.now() + timeoutMs;
     const params = { ...record(input) };
     const qualified = typeof params.contextId === "string" && params.contextId.startsWith("frame-context:") ? params.contextId.split(":") : null;
-    if ((params.contextId !== undefined && !qualified || params.uniqueContextId !== undefined || params.executionContextId !== undefined) && (!frameId || frameId === "main")) fail("UNSUPPORTED_FRAME", "Use a discovered frameId to select an owned execution context.");
+    const mainFrame = !frameId || frameId === "main";
+    // The runtime's own isolated helper world for the top-level document. Only
+    // contexts this router created for that world may be addressed directly.
+    if (mainFrame && method === "Page.createIsolatedWorld" && params.worldName === AGENT_WORLD && typeof params.frameId === "string") {
+      const root = String(record(record(record(await this.request(tabId, "Page.getFrameTree", {}, deadlineAt)).frameTree).frame).id ?? "");
+      if (root && root === params.frameId) {
+        const result = record(await this.request(tabId, method, { frameId: root, worldName: AGENT_WORLD, grantUniveralAccess: false }, deadlineAt));
+        if (typeof result.executionContextId === "number") {
+          const worlds = this.agentWorlds.get(tabId) ?? new Set<number>();
+          worlds.add(result.executionContextId); this.agentWorlds.set(tabId, worlds);
+        }
+        return result;
+      }
+    }
+    const agentContext = mainFrame && typeof params.contextId === "number" && this.agentWorlds.get(tabId)?.has(params.contextId) === true &&
+      params.uniqueContextId === undefined && params.executionContextId === undefined;
+    if (!agentContext && (params.contextId !== undefined && !qualified || params.uniqueContextId !== undefined || params.executionContextId !== undefined) && (!frameId || frameId === "main")) fail("UNSUPPORTED_FRAME", "Use a discovered frameId to select an owned execution context.");
     const selected = frameId ?? (method === "Page.createIsolatedWorld" && typeof params.frameId === "string" ? params.frameId : qualified ? decodeURIComponent(qualified[1] ?? "") : typeof params.objectId === "string" ? this.objects.get(tabId)?.get(params.objectId) : undefined);
     if (method === "Page.getFrameTree") return this.tree(tabId, deadlineAt);
     const remember = (result: unknown) => {

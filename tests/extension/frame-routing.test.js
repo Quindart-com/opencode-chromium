@@ -50,3 +50,24 @@ test("Firefox applies the selected frame policy before acting and refuses arbitr
   await router.command(1, "Runtime.evaluate", { expression: "1", agentFrameId: "untrusted" }, "first", () => {}, 1000);
   assert.equal(calls.at(-1).params.agentFrameId, "first");
 });
+
+test("the runtime's top-level helper world may be addressed only by contexts the router created", async () => {
+  const calls = [];
+  const router = new FrameRouting(async (tab, method, params) => {
+    calls.push({ method, params });
+    if (method === "Page.getFrameTree") return { frameTree: tree };
+    if (method === "Page.createIsolatedWorld") return { executionContextId: 17 };
+    return { result: { value: 1 } };
+  });
+  const world = await router.command(1, "Page.createIsolatedWorld", { frameId: "root", worldName: "opencode-agent" }, undefined, () => {}, 1000);
+  assert.equal(world.executionContextId, 17);
+  assert.equal(calls.find(call => call.method === "Page.createIsolatedWorld").params.grantUniveralAccess, false);
+  await router.command(1, "Runtime.evaluate", { expression: "1", contextId: 17 }, undefined, () => {}, 1000);
+  assert.equal(calls.at(-1).params.contextId, 17);
+  await assert.rejects(router.command(1, "Runtime.evaluate", { expression: "1", contextId: 99 }, undefined, () => {}, 1000), { code: "UNSUPPORTED_FRAME" });
+  // A child frame id never yields a numeric main-frame context.
+  const child = await router.command(1, "Page.createIsolatedWorld", { frameId: "first", worldName: "opencode-agent" }, undefined, () => {}, 1000);
+  assert.equal(typeof child.executionContextId, "string");
+  router.event({ tabId: 1 }, "Page.frameNavigated", { frame: { id: "root" } });
+  await assert.rejects(router.command(1, "Runtime.evaluate", { expression: "1", contextId: 17 }, undefined, () => {}, 1000), { code: "UNSUPPORTED_FRAME" });
+});

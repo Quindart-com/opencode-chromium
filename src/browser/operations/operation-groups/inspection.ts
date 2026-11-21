@@ -17,7 +17,7 @@ export { pageSearchUnitsExpression } from '../snapshot-expressions.ts';
 
 const tool = Object.assign(defineBrowserOperation, { schema: z });
 export function createInspectionOperations(dependencies: Dependencies) {
-  const { sessionParams, markProfileUsed, resolveSessionProfileId, cdp, enableCdpDomains, activate, pointCursor, resolveCursorPoint, stringify, shapePageSearchRanking, runtimeEvaluate, pageBackend, grantClipboardPermission, shouldRunVisualModel, captureVisualMapScreenshot, mergeVisualMapModelResult, domNodeClickExpression, domNodeEditableExpression, selectorClickExpression, selectorEditableExpression, selectorTextExpression, insertTextAndVerify, fillFocusedEditable } = dependencies;
+  const { sessionParams, markProfileUsed, resolveSessionProfileId, cdp, enableCdpDomains, activate, pointCursor, resolveCursorPoint, stringify, shapePageSearchRanking, runtimeEvaluate, agentContextId, grantClipboardPermission, shouldRunVisualModel, captureVisualMapScreenshot, mergeVisualMapModelResult, performClick, focusWithPointer, domNodeClickExpression, domNodeEditableExpression, selectorClickExpression, selectorEditableExpression, selectorTextExpression, insertTextAndVerify, fillFocusedEditable } = dependencies;
   return {
       browser_page_search: tool({
         description: "Search the current page with local semantic retrieval (auto by default) and return only relevant actionable page units.",
@@ -167,8 +167,8 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "click");
-          const target = await pageBackend.click(context, args.tabId, (trusted: boolean) => domNodeClickExpression(args.nodeId, { trusted }));
-          return stringify({ clicked: true, tabId: args.tabId, nodeId: args.nodeId, target });
+          const { point: target, inputRoute } = await performClick(context, args.tabId, (trusted: boolean) => domNodeClickExpression(args.nodeId, { trusted }));
+          return stringify({ clicked: true, tabId: args.tabId, nodeId: args.nodeId, target, inputRoute });
         },
       }),
       browser_dom_type: tool({
@@ -182,6 +182,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { nodeId: args.nodeId }), "text");
+          await focusWithPointer(context, args.tabId, () => domNodeClickExpression(args.nodeId, { trusted: true }));
           if (args.mode === "focus") return stringify(await runtimeEvaluate(context, args.tabId, focusExpression({ nodeId: args.nodeId })));
           const before = await runtimeEvaluate(context, args.tabId, domNodeEditableExpression(args.nodeId, {
             selectAll: args.mode === "replace",
@@ -213,8 +214,8 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "click");
-          const target = await pageBackend.click(context, args.tabId, (trusted: boolean) => selectorClickExpression(args.selector, { trusted }));
-          return stringify({ clicked: true, tabId: args.tabId, selector: args.selector, target });
+          const { point: target, inputRoute } = await performClick(context, args.tabId, (trusted: boolean) => selectorClickExpression(args.selector, { trusted }));
+          return stringify({ clicked: true, tabId: args.tabId, selector: args.selector, target, inputRoute });
         },
       }),
       browser_locator_fill: tool({
@@ -228,6 +229,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await pointCursor(context, args.tabId, await resolveCursorPoint(context, args.tabId, { selector: args.selector }), "text");
+          await focusWithPointer(context, args.tabId, () => selectorClickExpression(args.selector, { trusted: true }));
           if (args.mode === "focus") return stringify(await runtimeEvaluate(context, args.tabId, focusExpression({ selector: args.selector })));
           const before = await runtimeEvaluate(context, args.tabId, selectorEditableExpression(args.selector, {
             selectAll: args.mode === "replace",
@@ -249,7 +251,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
           return stringify(await runtimeEvaluate(context, args.tabId, selectorTextExpression(args.selector)));
         },
       }),
-      browser_set_file_input: createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }),
+      browser_set_file_input: createFileInputOperation({ tool, cdp, enableCdpDomains, stringify, agentContextId }),
       browser_clipboard_read_text: tool({
         description: "Read plain text from the browser clipboard in a controlled tab context.",
         args: {
@@ -258,7 +260,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await grantClipboardPermission(context, args.tabId);
-          const text = await runtimeEvaluate(context, args.tabId, "navigator.clipboard.readText()", { timeoutMs: 5000 });
+          const text = await runtimeEvaluate(context, args.tabId, "navigator.clipboard.readText()", { timeoutMs: 5000, world: "page" });
           return stringify({ text });
         },
       }),
@@ -271,7 +273,7 @@ selector: tool.schema.string().optional().describe("CSS selector to inspect when
         async execute(args, context) {
           await activate(context, args.tabId);
           await grantClipboardPermission(context, args.tabId);
-          await runtimeEvaluate(context, args.tabId, `navigator.clipboard.writeText(${JSON.stringify(args.text)})`, { timeoutMs: 5000 });
+          await runtimeEvaluate(context, args.tabId, `navigator.clipboard.writeText(${JSON.stringify(args.text)})`, { timeoutMs: 5000, world: "page" });
           return stringify({ written: true, length: args.text.length });
         },
       }),

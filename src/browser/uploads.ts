@@ -63,7 +63,7 @@ export function fileInputExpression(nodeId: string | undefined, selector = "inpu
   })()`;
 }
 
-export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringify }: { tool: typeof defineBrowserOperation & { schema: typeof z }; cdp: PageCdpRequest<BrowserContext>; enableCdpDomains(context: BrowserContext, tabId: number, domains: "DOM"[], options: { optional: boolean }): Promise<void>; stringify(value: unknown): string }) {
+export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringify, agentContextId }: { tool: typeof defineBrowserOperation & { schema: typeof z }; cdp: PageCdpRequest<BrowserContext>; agentContextId?(context: BrowserContext, tabId: number): Promise<number | null>; enableCdpDomains(context: BrowserContext, tabId: number, domains: "DOM"[], options: { optional: boolean }): Promise<void>; stringify(value: unknown): string }) {
   return tool({
     description: "Set files on a specific file input by page node ID or CSS selector using CDP.",
     args: {
@@ -75,8 +75,11 @@ export function createFileInputOperation({ tool, cdp, enableCdpDomains, stringif
     async execute(args, context) {
       validateUploadFiles(args.files, context.filePolicy ?? null);
       await enableCdpDomains(context, args.tabId, ["DOM"], { optional: true });
+      // Node ids are registered by the helper expressions in the agent world.
+      const contextId = await agentContextId?.(context, args.tabId).catch(() => null) ?? null;
       const result = await cdp(context, args.tabId, "Runtime.evaluate", {
         expression: fileInputExpression(args.nodeId, args.selector), returnByValue: false,
+        ...(contextId === null ? {} : { contextId }),
       });
       if (result.exceptionDetails) throw pageException(result.exceptionDetails);
       const objectId = result.result?.objectId;
