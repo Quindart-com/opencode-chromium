@@ -120,6 +120,7 @@ export async function manageSetup(argv: string[], remove = false, environment: S
       instruction: "Codex manages the plugin catalog separately from the browser runtime. Refresh the marketplace, then reopen Codex and select the updated plugin." }] : [],
     pendingReload: dryRun ? [] : rows.filter(row => selected.includes(row.id)).map(row => ({ id: row.id,
       instruction: row.restart === "desktop" ? "Quit and reopen the desktop application to reload MCP configuration." : "Reconnect MCP or relaunch the terminal session to reload tools." })),
+    warnings: hosts?.warnings ?? [],
     browserSetup: hosts ? `${dryRun ? "Will register" : "Registered"} native hosts for installed browsers. Install the browser extension; Firefox and LibreWolf also need remote debugging configured (see docs/firefox.md).` :
       "Browser extension and native host registration were left in place." };
 }
@@ -137,5 +138,6 @@ export function formatSetupResult(result: Awaited<ReturnType<typeof manageSetup>
   if ("pluginUpdates" in result) for (const entry of result.pluginUpdates) lines.push(`${entry.id}: ${entry.instruction} Run: ${entry.command}`);
   if ("pendingReload" in result) for (const entry of result.pendingReload) lines.push(`${entry.id}: ${entry.instruction}`);
   if ("browserSetup" in result) lines.push(result.browserSetup);
+  if ("warnings" in result) for (const warning of result.warnings) lines.push(`Warning: ${warning}`);
   return lines.join("\n");
 }
