@@ -76,7 +76,13 @@ function clickAtPointExpression(x: number, y: number, options: { button?: string
   return `(() => {
     ${interactionHelpersSource()}
     const point = { x: ${JSON.stringify(x)}, y: ${JSON.stringify(y)} };
-    const element = document.elementFromPoint(point.x, point.y);
+    let element = document.elementFromPoint(point.x, point.y);
+    // Pierce open shadow roots so the click reaches the control, not its host.
+    while (element?.shadowRoot?.elementFromPoint) {
+      const inner = element.shadowRoot.elementFromPoint(point.x, point.y);
+      if (!inner || inner === element) break;
+      element = inner;
+    }
     if (!element) throw new Error('No element at viewport point: ' + point.x + ', ' + point.y);
     if (element.matches('iframe,frame')) agentFail('FRAME_TARGET_REQUIRED', 'Choose a frameId from frames.list before interacting with embedded controls.');
     assertPointerInteractable(element);

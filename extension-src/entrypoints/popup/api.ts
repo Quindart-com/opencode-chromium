@@ -142,9 +142,15 @@ const sharedRequests = new Map<string, { promise: Promise<unknown>; settledAt: n
 export function sendMessageShared<T>(message: { type: string } & object, ttlMs = SHARED_TTL_MS): Promise<T> {
   const key = JSON.stringify(message);
   const found = sharedRequests.get(key);
-  if (found && (found.settledAt === null || Date.now() - found.settledAt < ttlMs)) return found.promise as Promise<T>;
+  if (ttlMs <= 0 && found?.settledAt !== null) sharedRequests.delete(key);
+  else if (found && (found.settledAt === null || Date.now() - found.settledAt < ttlMs)) return found.promise as Promise<T>;
   const entry: { promise: Promise<unknown>; settledAt: number | null } = { promise: Promise.resolve(), settledAt: null };
-  entry.promise = sendMessage<T>(message).then(value => { entry.settledAt = Date.now(); return value; }, error => { if (sharedRequests.get(key) === entry) sharedRequests.delete(key); throw error; });
+  const evict = () => { if (sharedRequests.get(key) === entry) sharedRequests.delete(key); };
+  entry.promise = sendMessage<T>(message).then(value => {
+    // An error reply is a failure too: a retry must reach the background again.
+    if (value && typeof value === "object" && "error" in value && (value as { error?: unknown }).error) evict(); else entry.settledAt = Date.now();
+    return value;
+  }, error => { evict(); throw error; });
   sharedRequests.set(key, entry);
   return entry.promise as Promise<T>;
 }

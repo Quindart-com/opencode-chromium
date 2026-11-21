@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { BrowserContext } from "../core/tool-definition.ts";
+import { BrowserRuntimeError } from "../core/errors.ts";
 import { isMainFrame } from "./agent-world.ts";
 
 // Genuine pointer input for Chromium main frames. Instead of calling
@@ -24,6 +25,9 @@ export interface PointerDependencies {
   cursorEnabled(context: BrowserContext, tabId: number): Promise<boolean>;
   key(context: BrowserContext, tabId: number): string;
   engine?(context: BrowserContext): Promise<"gecko" | "chromium" | string | undefined>;
+  /** Makes the tab the active tab of its window without focusing the window. */
+  revealTab?(context: BrowserContext, tabId: number): Promise<unknown>;
+  sleep?(ms: number): Promise<void>;
   random?(): number;
 }
 
@@ -88,7 +92,25 @@ export function createPointerInput(dependencies: PointerDependencies) {
     y: Math.max(1, Math.round(target.y - (30 + random() * 60))),
   };
 
+  // Chromium does not acknowledge debugger mouse events for a hidden page, so a
+  // pointer gesture sent to a background tab hangs until its deadline. Reveal the
+  // tab first and fail fast, before anything is dispatched, if it stays hidden.
+  const visible = async (context: BrowserContext, tabId: number) => await runtimeEvaluate(context, tabId, "document.visibilityState", { userGesture: false }).catch(() => "visible") !== "hidden";
+  async function ensureVisible(context: BrowserContext, tabId: number) {
+    if (await visible(context, tabId)) return;
+    await dependencies.revealTab?.(context, tabId).catch(() => null);
+    const wait = dependencies.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      if (await visible(context, tabId)) return;
+      await wait(100);
+    }
+    throw new BrowserRuntimeError("Pointer input needs a visible tab. Bring the agent's browser window to the front, or use inputMode \"dom\".", {
+      code: "TAB_NOT_VISIBLE", retryable: true, uncertain: false,
+    });
+  }
+
   async function dispatch(context: BrowserContext, tabId: number, steps: GestureStep[]) {
+    await ensureVisible(context, tabId);
     await inputGesture(context, tabId, steps, Math.max(1, (context.deadlineAt ?? Date.now() + 10000) - Date.now()));
   }
 

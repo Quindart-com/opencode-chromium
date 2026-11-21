@@ -91,3 +91,25 @@ test("a skipped target is resolved but never clicked", async () => {
   await input.click(context, 1, () => "e", { skip: point => point.tagName === "select" });
   assert.equal(gestures.length, 0);
 });
+
+test("a hidden tab is revealed before pointer input, and fails fast when it stays hidden", async () => {
+  for (const revealWorks of [true, false]) {
+    let hidden = true, revealed = 0;
+    const gestures = [];
+    const input = createPointerInput({
+      runtimeEvaluate: async (_context, _tab, expression) => expression === "document.visibilityState" ? (hidden ? "hidden" : "visible") : { x: 10, y: 10 },
+      inputGesture: async (_context, _tab, steps) => { gestures.push(steps); return {}; },
+      mouseStep: (commandParams, cursor, delayMs = 0) => ({ method: "Input.dispatchMouseEvent", commandParams, cursor, delayMs }),
+      tabFacts: async () => ({ active: false, hostname: "site.test" }),
+      cursorEnabled: async () => false,
+      key: () => "k",
+      revealTab: async () => { revealed += 1; if (revealWorks) hidden = false; },
+      sleep: async () => {},
+      random: fixedRandom(),
+    });
+    const click = input.click({ sessionId: "s" }, 1, () => "point");
+    if (revealWorks) { await click; assert.equal(gestures.length, 1); }
+    else { await assert.rejects(click, { code: "TAB_NOT_VISIBLE", uncertain: false }); assert.equal(gestures.length, 0); }
+    assert.equal(revealed, 1);
+  }
+});

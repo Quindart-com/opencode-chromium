@@ -209,7 +209,7 @@ function finiteNumber(value: unknown, label: string) {
   return value;
 }
 
-const pointerInput = createPointerInput({ engine: async (context: BrowserContext) => record(await extensionRequest(context, "getInfo")).engine as string | undefined, runtimeEvaluate, inputGesture, mouseStep, tabFacts, cursorEnabled, key: (context: BrowserContext, tabId: number) => `${sessionKey(context)}:${tabId}` });
+const pointerInput = createPointerInput({ revealTab: (context: BrowserContext, tabId: number) => extensionRequest(context, "activateTab", { tabId, foreground: false, active: true }), engine: async (context: BrowserContext) => record(await extensionRequest(context, "getInfo")).engine as string | undefined, runtimeEvaluate, inputGesture, mouseStep, tabFacts, cursorEnabled, key: (context: BrowserContext, tabId: number) => `${sessionKey(context)}:${tabId}` });
 const pageBackend = createPageBackend({ request: extensionRequest, evaluate: runtimeEvaluate, command: cdp, ready: waitForPageReady });
 const environmentController = createEnvironmentController({
   command: cdp,

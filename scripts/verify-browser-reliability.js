@@ -81,8 +81,14 @@ try {
   assert.equal(obstructed.results[0].error.code, "TARGET_OBSTRUCTED");
   assert.notEqual(obstructed.results[0].error.details.target, obstructed.results[0].error.details.hit);
   assert.ok(obstructed.results[0].error.details.samples.length <= 7);
-  await page.evaluate(() => { document.querySelector('#fixture-overlay').remove(); window.__agentBrowserDomNodeMap.set('fixture-shadow', document.querySelector('#shadow').shadowRoot.querySelector('button')); });
-  await run([{ action: "click", target: { nodeId: "fixture-shadow" } }]);
+  await page.evaluate(() => document.querySelector('#fixture-overlay').remove());
+  // Agent helpers run in an isolated world the page cannot write to, so the
+  // fixture can no longer seed the node map. A point inside the shadow root
+  // exercises the same shadow-piercing hit testing.
+  await page.evaluate(() => { const button = document.querySelector('#shadow').shadowRoot.querySelector('button'); button.onclick = () => { chosen.textContent = 'Shadow'; }; });
+  const shadowPoint = await page.evaluate(() => { const rect = document.querySelector('#shadow').shadowRoot.querySelector('button').getBoundingClientRect(); return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }; });
+  await run([{ action: "click", target: shadowPoint }]);
+  assert.equal(await page.locator("#chosen").innerText(), "Shadow");
   checked("self/descendant hits, lookalike overlay diagnostics, and shadow-root hit testing");
 
   for (const selector of ["#edit", "#readonly", "#choice", "#editable", "#custom", "#beta"]) {
@@ -201,6 +207,8 @@ try {
     CODEX_HOME: path.join(fixture.fixture, "codex"), DSH_HOME: path.join(fixture.fixture, "dsh"), XDG_CONFIG_HOME: path.join(fixture.fixture, ".config"), CLAUDE_CONFIG_DIR: path.join(fixture.fixture, "claude") };
   mcp = new McpWorker(process.cwd(), [], mcpEnv, message => { if (message.method === "notifications/tools/list_changed") toolListChanges++; });
   await mcp.initialize({ protocolVersion: "2026-07-28", capabilities: {}, clientInfo: { name: "codex-control-fixture", version: "1.0" } });
+  // The worker forwards the handshake only; like a real client, the fixture completes it.
+  mcp.notification({ jsonrpc: "2.0", method: "notifications/initialized" });
   for (let attempt = 0; attempt < 60 && !harnessControls(runtimeDir).some(row => row.harness === "codex"); attempt++) await new Promise(resolve => setTimeout(resolve, 50));
   assert.ok(harnessControls(runtimeDir).some(row => row.harness === "codex"), "the managed test worker owns a control endpoint before any CLI action");
   const mcpCall = async (name, args) => {
