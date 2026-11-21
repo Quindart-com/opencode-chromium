@@ -69,7 +69,7 @@ const diagnosticSchema = z.object({
 });
 
 const observationSchema = z.object({
-  mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
+  mode: z.enum(["read", "search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
   target: targetSchema,
   query: z.string().optional(),
   pack: z.string().max(64).optional(),
@@ -153,7 +153,7 @@ export type RunInput = z.output<typeof runInputSchema>;
 
 export const observeInputSchema = z.object({
         ...sessionFields,
-        mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
+        mode: z.enum(["read", "search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
         tabId: z.number().int().positive().optional(),
         target: targetSchema,
         query: z.string().optional(),

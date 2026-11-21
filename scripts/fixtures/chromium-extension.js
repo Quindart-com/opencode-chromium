@@ -2,13 +2,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync,spawn } from "node:child_process";
 import { createHash,generateKeyPairSync,randomBytes } from "node:crypto";
 import { chromium } from "playwright";
 import { writeLaunchers,writeRuntimeManifest } from "../../src/cli/runtime-link.ts";
 
-/** Unique host name and disposable profile: never replaces an installed host. */
-export async function chromiumExtensionFixture({ headless = true } = {}) {
+/**
+ * Unique host name and disposable profile: never replaces an installed host.
+ * `plain: true` starts Chromium without Playwright attached, so a live guarded site
+ * sees only the extension's own debugger footprint. It returns no Playwright context.
+ */
+export async function chromiumExtensionFixture({ headless = true, plain = false, startUrl = "about:blank" } = {}) {
   const root = process.cwd(), fixture = fs.mkdtempSync(path.join(os.tmpdir(), "browser-reliability-"));
   const source = path.join(fixture, "extension"), registry = path.join(fixture, "registry"), profile = path.join(fixture, "profile");
   fs.cpSync(path.join(root, "extension"), source, { recursive: true }); fs.mkdirSync(registry);
@@ -30,9 +34,10 @@ export async function chromiumExtensionFixture({ headless = true } = {}) {
   fs.writeFileSync(launcher, process.platform === "win32" ? '@echo off\r\n' + variables.map(k => 'set "' + k + '=' + env[k] + '"').join('\r\n') + '\r\n"' + process.execPath + '" "' + controller.host + '"\r\n' : '#!/bin/sh\n' + variables.map(k => 'export ' + k + '=' + JSON.stringify(env[k])).join('\n') + '\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(controller.host) + '\n', { mode: 0o700 });
   const nativeManifest = path.join(fixture, "native.json");
   fs.writeFileSync(nativeManifest, JSON.stringify({ name: host, description: "Disposable reliability verification", path: launcher, type: "stdio", allowed_origins: [`chrome-extension://${extensionId}/`] }));
-  let nativeKey, context;
+  let nativeKey, context, child;
   const cleanup = async () => {
     await context?.close().catch(() => {});
+    if (child && child.exitCode === null) { child.kill(); await new Promise(resolve => { child.once("exit", resolve); setTimeout(resolve, 3000); }); }
     if (nativeKey) { try { execFileSync("reg", ["delete", nativeKey, "/f"], { stdio: "ignore", windowsHide: true }); } catch {} }
     assert.equal(path.dirname(path.resolve(fixture)), path.resolve(os.tmpdir()));
     try { fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 15, retryDelay: 200 }); } catch { console.error("Owned fixture cleanup pending:", fixture); }
@@ -50,8 +55,9 @@ export async function chromiumExtensionFixture({ headless = true } = {}) {
       const dir = path.join(profile, "NativeMessagingHosts");
       fs.mkdirSync(dir, { recursive: true }); fs.copyFileSync(nativeManifest, path.join(dir, host + ".json"));
     }
-    context = await chromium.launchPersistentContext(profile, { headless, channel: "chromium", env, viewport: { width: 1100, height: 900 },
-      args: [`--disable-extensions-except=${source}`, `--load-extension=${source}`, "--site-per-process"] });
+    const extensionArgs = [`--disable-extensions-except=${source}`, `--load-extension=${source}`, "--site-per-process"];
+    if (plain) child = spawn(chromium.executablePath(), [`--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--window-size=1280,900", ...extensionArgs, startUrl], { env, stdio: "ignore" });
+    else context = await chromium.launchPersistentContext(profile, { headless, channel: "chromium", env, viewport: { width: 1100, height: 900 }, args: extensionArgs });
     let registration, startup = null;
     for (let attempt = 0; attempt < 2 && !registration; attempt++) {
       for (let i = 0; i < 100; i++) {
@@ -59,6 +65,7 @@ export async function chromiumExtensionFixture({ headless = true } = {}) {
         if (file) { try { registration = JSON.parse(fs.readFileSync(path.join(registry, file), "utf8")); break; } catch { /* The host is still publishing. */ } }
         await new Promise(resolve => setTimeout(resolve, 200));
       }
+      if (!registration && plain) break;
       if (!registration) {
         // Cold Windows workers occasionally miss the initial native handshake.
         // Retry only this disposable extension before any browser action runs.

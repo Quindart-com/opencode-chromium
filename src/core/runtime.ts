@@ -108,6 +108,10 @@ export class AgentBrowserRuntime extends RuntimeMemory {
           failed = true;
           postObservation = { ok: false, error: errorDetails(error) };
         }
+      } else if (session.activeTabId && request.steps.some(step => !READ_ACTIONS.has(step.action)) && await this.isGuardedTab(session.activeTabId, session)) {
+        // On a guarded host the agent gets the script-free change summary for free,
+        // so it never needs a screenshot to see what its action did.
+        postObservation = await this.readView(session.activeTabId, session, {}).catch(() => undefined);
       }
       const mode = request.returnMode ?? "last";
       const selectedResults = mode === "all" ? results : mode === "last" ? results.slice(-1) : results.map(summarizeStepResult);

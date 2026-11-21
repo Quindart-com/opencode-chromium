@@ -11,7 +11,7 @@ import { requiresApproval } from './run-validation.ts';
 import { READ_ACTIONS,clamp,isStaleTargetError,memoryMatchSchema,parseLegacyResult,rememberedStepMismatch,type MemoryCapture,type PriorResults,type ReplayOutcome,type RunStepResult,type StepExecution,type StepOutcome,type StepWarning } from "./runtime-foundation.ts";
 import { RuntimeInteraction } from "./runtime-interaction.ts";
 import type { RuntimeSession } from "./runtime-types.ts";
-import { PAGE_PROTECTION_WARNING,TRANSITION_ACTIONS,classifyTabTransition,snapshotTabs,type TabSnapshot } from "./tab-transition.ts";
+import { PAGE_PROTECTION_WARNING,TRANSITION_ACTIONS,classifyTabTransition,type TabSnapshot } from "./tab-transition.ts";
 
 export class RuntimeMemory extends RuntimeInteraction {
   async executeStep(step: Step, tabId: number, prior: PriorResults, session: RuntimeSession, chainId: string | null = null, stepIndex: number | null = null) {
@@ -328,11 +328,6 @@ export class RuntimeMemory extends RuntimeInteraction {
     return lastError
       ? { ok: false, executionState, error: { ...errorDetails(lastError), uncertain: executionState === "unknown" || errorDetails(lastError).uncertain }, rawError: lastError, value, settled, ...extras }
       : { ok: true, executionState, value, settled, ...extras };
-  }
-
-  // One cheap listing of the session's tabs; failures only disable the comparison.
-  async sessionTabs(session: RuntimeSession) {
-    try { return snapshotTabs(await this.invoke("browser_list_tabs", { scope: "session" }, session.sessionId)); } catch { return null; }
   }
 
   // Compares the tab before and after an action. A blank, closed, or unexpectedly

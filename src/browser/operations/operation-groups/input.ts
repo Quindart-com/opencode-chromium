@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cursorActionForTool } from "../../cursor.ts";
+import { VIEW_STYLES,layoutScale,projectSnapshot,renderDelta,renderView,type NativeView,type Snapshot } from "../../native-view.ts";
 import { defineBrowserOperation,defineObjectOperation,type BrowserOperationDependencies as Dependencies } from "../../operation-definition.ts";
 import { pageStateExpression } from '../page-state.ts';
 import { domSnapshotExpression } from '../snapshot-expressions.ts';
@@ -12,7 +13,8 @@ export { pageSearchUnitsExpression } from '../snapshot-expressions.ts';
 
 const tool = Object.assign(defineBrowserOperation, { schema: z });
 export function createInputOperations(dependencies: Dependencies) {
-  const { executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, performClick, cursorEnabled, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
+  const views = new Map<string, NativeView>();
+  const { sessionKey, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, performClick, cursorEnabled, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
   return {
       browser_move: tool({
         description: "Move the visible OpenCode cursor overlay in a Chromium tab.",
@@ -207,6 +209,33 @@ export function createInputOperations(dependencies: Dependencies) {
         args: { tabId: tool.schema.number().int().positive() },
         async execute(args, context) {
           return runtimeEvaluate(context, args.tabId, pageStateExpression());
+        },
+      }),
+      // Text view from the browser's DOMSnapshot: no script runs in the page. With
+      // delta, a repeat read of the same document returns only what changed.
+      browser_read_view: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Read the page as compact text lines without running page script; repeat reads return changes only.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          query: tool.schema.string().optional(),
+          scope: tool.schema.enum(["viewport", "page"]).default("viewport"),
+          maxChars: tool.schema.number().int().positive().default(3000),
+          delta: tool.schema.boolean().default(false),
+        },
+        async execute(args, context) {
+          const key = `${sessionKey(context)}:${args.tabId}`;
+          const [snapshot, metrics] = await Promise.all([
+            cdp(context, args.tabId, "DOMSnapshot.captureSnapshot", { computedStyles: VIEW_STYLES, includeDOMRects: false }),
+            cdp(context, args.tabId, "Page.getLayoutMetrics", {}),
+          ]);
+          const visual = metrics.cssVisualViewport ?? metrics.cssLayoutViewport;
+          const scale = layoutScale((snapshot as unknown as Snapshot).documents[0], metrics.cssContentSize);
+          const view = projectSnapshot(snapshot as unknown as Snapshot, { x: visual?.pageX ?? 0, y: visual?.pageY ?? 0, width: visual?.clientWidth ?? 1280, height: visual?.clientHeight ?? 800, scale }, args);
+          const comparable = !args.query && args.scope === "viewport";
+          const delta = args.delta && comparable ? renderDelta(views.get(key), view) : null;
+          if (comparable) { views.delete(key); views.set(key, view); if (views.size > 64) views.delete(views.keys().next().value!); }
+          return { url: view.url, title: view.title, view: delta ?? renderView(view), ...(delta ? { delta: true } : {}) };
         },
       }),
   };

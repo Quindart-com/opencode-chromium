@@ -7,6 +7,7 @@ import type { ObserveInput,Step } from "./registry.ts";
 import { RuntimeFoundation,clamp,usesLongSearchTimeout,type PriorResults,type ResolvedTarget,type ResultPayload,type ScreenshotOptions } from "./runtime-foundation.ts";
 import type { RuntimeSession } from "./runtime-types.ts";
 import { settleBrowserStep } from "./settling.ts";
+import { hostnameOf,snapshotTabs } from "./tab-transition.ts";
 import { responseMetadata as contractMetadata } from "./versions.ts";
 
 export class RuntimeInteraction extends RuntimeFoundation {
@@ -72,6 +73,10 @@ export class RuntimeInteraction extends RuntimeFoundation {
     const limit = clamp(args.limit, args.mode === "visual" ? 25 : 12, 1, 200);
     const target = args.target ?? {};
     if (args.mode === "capabilities") return (await this.capabilities()).manifest(args.pack ?? "core");
+    // A guarded host gets the script-free text view for page reading as well.
+    if (args.mode === "read" || ((args.mode === "search" || args.mode === "extract") && !target.selector && await this.isGuardedTab(tabId, session))) {
+      return this.readView(tabId, session, { query: args.query ?? target.query, fullPage: args.fullPage, maxChars: args.maxChars, delta: args.mode === "read" && args.detail !== "full" && args.detail !== "debug" });
+    }
     if (args.mode === "artifact") {
       const artifact = this.artifacts.read(args.uri ?? "", { sessionId: session.sessionId });
       if (!artifact) throw new Error("Artifact expired, missing, or belongs to another browser session.");
@@ -132,6 +137,29 @@ export class RuntimeInteraction extends RuntimeFoundation {
     if (args.mode === "screenshot") return this.screenshot(tabId, args, session.sessionId);
     if (args.mode === "raw-snapshot") return this.invoke("browser_snapshot", { tabId }, session.sessionId);
     throw new Error(`Unsupported observation mode: ${args.mode}`);
+  }
+
+  async readView(tabId: number, session: RuntimeSession, options: { query?: string; fullPage?: boolean; maxChars?: number; delta?: boolean }) {
+    return this.invoke("browser_read_view", {
+      tabId,
+      ...(options.query ? { query: options.query } : {}),
+      scope: options.fullPage ? "page" : "viewport",
+      // The same maxChars also caps the whole response, so the view leaves room for JSON escaping and metadata.
+      maxChars: options.maxChars ? clamp(Math.floor(options.maxChars * 0.75) - 300, 3000, 400, 16000) : 3000,
+      delta: options.delta !== false,
+    }, session.sessionId);
+  }
+
+  // Only consulted once a host was marked guarded in this session, so ordinary sites pay nothing.
+  async isGuardedTab(tabId: number, session: RuntimeSession) {
+    if (!session.guardedHosts.size) return false;
+    const tab = (await this.sessionTabs(session))?.find(item => item.id === tabId);
+    return hostnameOf(tab?.url) !== null && session.guardedHosts.has(hostnameOf(tab?.url)!);
+  }
+
+  // One cheap listing of the session's tabs; failures only disable the callers' checks.
+  async sessionTabs(session: RuntimeSession) {
+    try { return snapshotTabs(await this.invoke("browser_list_tabs", { scope: "session" }, session.sessionId)); } catch { return null; }
   }
 
   async diagnostic(args: Pick<ObserveInput, "diagnostic">, tabId: number, session: RuntimeSession) {
