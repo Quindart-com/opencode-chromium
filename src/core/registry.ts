@@ -46,6 +46,7 @@ const targetSchema = z.object({
   index: z.number().int().min(0).optional(),
   x: z.number().optional(),
   y: z.number().optional(),
+  ref: z.number().int().positive().optional(),
   requestId: z.string().optional(),
 }).optional();
 

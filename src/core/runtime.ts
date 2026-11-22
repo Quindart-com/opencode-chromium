@@ -15,6 +15,14 @@ function stepExtras(outcome: StepOutcome) {
   return { ...(outcome.tabTransition ? { tabTransition: outcome.tabTransition } : {}), ...(outcome.warnings?.length ? { warnings: outcome.warnings } : {}) };
 }
 
+// Every response is re-read by the model for the rest of the conversation, so step results
+// drop fields that carry no news: an unnamed id, an unchanged tab, a normal settle.
+function leanStepResult(item: RunStepResult) {
+  const { id, tabTransition, settle, ...rest } = item;
+  const plainSettle = JSON.stringify(settle) === JSON.stringify({ condition: "dom-quiet", settled: true });
+  return { ...rest, ...(id ? { id } : {}), ...(tabTransition && tabTransition.kind !== "none" ? { tabTransition } : {}), ...(settle && !plainSettle ? { settle } : {}) };
+}
+
 export class AgentBrowserRuntime extends RuntimeMemory {
   async run(args: RunInput, context: BrowserContext = {}) {
     let request = { ...args, steps: args.steps ?? [] };
@@ -114,7 +122,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         postObservation = await this.readView(session.activeTabId, session, {}).catch(() => undefined);
       }
       const mode = request.returnMode ?? "last";
-      const selectedResults = mode === "all" ? results : mode === "last" ? results.slice(-1) : results.map(summarizeStepResult);
+      const selectedResults = (mode === "all" ? results : mode === "last" ? results.slice(-1) : results.map(summarizeStepResult)).map(leanStepResult);
       const authorization = results.map(result => record(result.error).authorization).find(Boolean);
       const warnings = [...new Map(results.flatMap(result => result.warnings ?? []).map(warning => [warning.code, warning])).values()];
       return this.compact({

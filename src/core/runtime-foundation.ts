@@ -362,6 +362,11 @@ export class RuntimeFoundation {
       const candidates = resultCandidates(source);
       target = { ...target, ...record(candidates[target.index ?? 0] ?? source) };
     }
+    // A ref from the read view is located fresh, so a scroll since the read cannot misplace the action.
+    if (typeof target.ref === "number") {
+      const point = record(await this.invoke("browser_ref_point", { tabId, ref: target.ref }, sessionId));
+      target = { ...target, x: Number(point.x), y: Number(point.y) };
+    }
     if (target.query) {
       const prefs = await this.searchPreferences(this.getSession(sessionId));
       const search = await this.invoke("browser_page_search", {

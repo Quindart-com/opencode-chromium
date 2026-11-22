@@ -14,7 +14,8 @@ export class RuntimeInteraction extends RuntimeFoundation {
   async editTarget(target: ResolvedTarget, tabId: number, mode: string, value: string | undefined, sessionId: string, _chainId: string | null = null, _stepIndex: number | null = null) {
     if (target.nodeId) return this.invoke("browser_dom_type", ({ tabId, nodeId: target.nodeId, text: value, mode }), sessionId);
     if (target.selector) return this.invoke("browser_locator_fill", ({ tabId, selector: target.selector, value, mode }), sessionId);
-    throw new Error("Editable target needs nodeId, selector, or query");
+    if (Number.isFinite(target.x) && Number.isFinite(target.y)) return this.invoke("browser_point_type", ({ tabId, x: target.x, y: target.y, text: value ?? "", mode }), sessionId);
+    throw new Error("Editable target needs ref, nodeId, selector, query, or coordinates");
   }
 
   async clickTarget(toolName: string, target: ResolvedTarget, tabId: number, step: Step, sessionId: string, _chainId: string | null = null, _stepIndex: number | null = null) {

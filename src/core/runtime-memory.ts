@@ -65,7 +65,7 @@ export class RuntimeMemory extends RuntimeInteraction {
           return { filled: fields.length, fields };
         }
         case "type": {
-          if (target.nodeId || target.selector) return this.editTarget(target, tabId, "append", step.value, session.sessionId, chainId, stepIndex);
+          if (target.nodeId || target.selector || target.ref !== undefined) return this.editTarget(target, tabId, "append", step.value, session.sessionId, chainId, stepIndex);
           return this.invoke("browser_type", ({ tabId, text: step.value }), session.sessionId);
         }
         case "press": return this.invoke("browser_keypress", ({ tabId, key: step.key, nodeId: target.nodeId, selector: target.selector, frameId: target.frameId }), session.sessionId);

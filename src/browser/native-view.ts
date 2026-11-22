@@ -23,6 +23,7 @@ export interface SnapshotDocument {
     backendNodeId?: number[];
     attributes?: number[][];
     inputValue?: Rare<number>;
+    textValue?: Rare<number>;
     inputChecked?: Rare<never>;
     optionSelected?: Rare<never>;
     isClickable?: Rare<never>;
@@ -44,7 +45,7 @@ export function layoutScale(document: { contentWidth?: number; contentHeight?: n
   return Math.abs(ratio - 1) < 0.02 || ratio < 0.25 || ratio > 8 ? 1 : ratio;
 }
 export interface ViewOptions { scope?: "viewport" | "page"; query?: string; maxChars?: number }
-export interface ViewItem { key: string; line: string; ref?: number; y: number }
+export interface ViewItem { key: string; line: string; ref?: number; y: number; text?: string }
 export interface NativeView { url: string; title: string; header: string; items: ViewItem[]; omitted: number; matched?: number }
 
 /** Computed styles requested from DOMSnapshot.captureSnapshot, in this order. */
@@ -55,6 +56,7 @@ const INLINE = new Set(["inline", "contents", "inline-block", "inline-flex", "in
 const ROLES = new Set(["button", "link", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "checkbox", "radio", "switch", "combobox", "textbox", "searchbox", "slider", "spinbutton", "treeitem", "gridcell"]);
 const TEXT_INPUTS = new Set(["", "text", "search", "email", "password", "number", "tel", "url", "date", "datetime-local", "month", "time", "week"]);
 const CONTROL_LABEL = 80, TEXT_LABEL = 240;
+const AT = / @-?\d+,-?\d+$/;
 
 const clean = (value: string) => value.replace(/\s+/g, " ").trim();
 const clip = (value: string, max: number) => value.length > max ? value.slice(0, max - 1) + "…" : value;
@@ -89,7 +91,8 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
   doc.layout.nodeIndex.forEach((node, layout) => { if (!layoutOf.has(node)) layoutOf.set(node, layout); });
   const rare = (data: Rare<unknown> | undefined) => new Set(data?.index ?? []);
   const clickable = rare(nodes.isClickable), checked = rare(nodes.inputChecked), selected = rare(nodes.optionSelected);
-  const inputValue = new Map((nodes.inputValue?.index ?? []).map((node, i) => [node, str(nodes.inputValue?.value?.[i])]));
+  // Inputs report their value in inputValue, textareas in textValue.
+  const inputValue = new Map([...[nodes.textValue, nodes.inputValue].flatMap(data => (data?.index ?? []).map((node, i) => [node, str(data?.value?.[i])] as const))]);
   const tag = (i: number) => str(nodes.nodeName?.[i]).toLowerCase();
   const attrCache = new Map<number, Map<string, string>>();
   const attrs = (i: number) => {
@@ -167,6 +170,14 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
 
   type Box = { x: number; y: number; w: number; h: number };
   type Draft = { owner: number; kind: string | null; texts: { text: string; box: Box | null }[]; box: Box | null };
+  const icons = new Map<number, string>();
+  const ICON = /(?:^|[\s_-])(close|delete|del|remove|clear|edit|add|plus|minus|search|more|upload|download|copy|share|refresh|setting|settings)(?=$|[\s_-])/i;
+  const iconName = (i: number) => {
+    const name = tag(i);
+    if (name !== "i" && name !== "span" && name !== "em" && name !== "b") return null;
+    const a = attrs(i), match = `${a.get("aria-label") ?? ""} ${a.get("class") ?? ""}`.match(ICON);
+    return match ? match[1]!.toLowerCase() : null;
+  };
   const fragments = new Map<number, { text: string; box: Box | null }[]>();
   const boxes = doc.textBoxes;
   for (let k = 0; k < (boxes?.layoutIndex.length ?? 0); k += 1) {
@@ -195,6 +206,16 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
       if (box && box.w > 0 && box.h > 0) draftFor(i);
       continue;
     }
+    // A small text-less icon whose class or aria-label names an action (a tag's close "x",
+    // an edit pencil) is often the only way to do that action, so it gets a line too.
+    if (type === 1 && !kindOf(i)) {
+      const name = iconName(i), box = name ? boxOf(layoutOf.get(i)) : null;
+      if (name && box && box.w > 0 && box.h > 0 && box.w <= 48 && box.h <= 48 && !(parent[i]! >= 0 && icons.has(parent[i]!))) {
+        icons.set(i, name);
+        draftFor(i).kind = "icon";
+      }
+      continue;
+    }
     if (type !== 3) continue;
     const layout = layoutOf.get(i);
     if (layout === undefined) continue;
@@ -211,7 +232,8 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
   }
 
   const scrollX = (doc.scrollOffsetX ?? viewport.x * scale) / scale, scrollY = (doc.scrollOffsetY ?? viewport.y * scale) / scale;
-  const terms = clean(options.query ?? "").toLowerCase().split(" ").filter(Boolean);
+  // A lone ASCII letter ("K", "I") matches nearly every line, so it is not a useful term.
+  const terms = clean(options.query ?? "").toLowerCase().split(" ").filter(term => term && !/^[a-z0-9]$/.test(term));
   const inView = (box: Draft["box"]) => !!box && box.w > 0 && box.h > 0 && box.y < scrollY + viewport.height && box.y + box.h > scrollY && box.x < scrollX + viewport.width && box.x + box.w > scrollX;
   const items: ViewItem[] = [];
   for (const draft of order) {
@@ -221,7 +243,7 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
     const text = joinPieces(draft.texts);
     if (draft.kind && draft.kind !== "clickable" || (draft.kind === "clickable" && text.length <= CONTROL_LABEL)) {
       const a = attrs(draft.owner);
-      const label = clip(text || a.get("aria-label") || a.get("title") || a.get("placeholder") || a.get("alt") || a.get("name") || "", CONTROL_LABEL);
+      const label = clip(text || icons.get(draft.owner) || a.get("aria-label") || a.get("title") || a.get("placeholder") || a.get("alt") || a.get("name") || "", CONTROL_LABEL);
       const kind = draft.kind ?? "clickable";
       let extra = "";
       if (kind === "field" || kind === "select") {
@@ -237,13 +259,14 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
       // A targeted (query) read also gives text its point, so a clickable block without a
       // detectable listener can still be clicked; plain reads stay as short as possible.
       const at = terms.length ? ` @${Math.round(Math.min(draft.box.x + draft.box.w / 2, draft.box.x + 40) - scrollX)},${Math.round(draft.box.y + Math.min(draft.box.h, 40) / 2 - scrollY)}` : "";
-      items.push({ key: `t:${text.slice(0, 120)}`, line: clip(text, TEXT_LABEL) + at, y: draft.box.y });
+      items.push({ key: `t:${text.slice(0, 120)}`, line: clip(text, TEXT_LABEL) + at, y: draft.box.y, text });
     }
   }
 
   let selectedItems = items, matched: number | undefined;
   if (terms.length) {
-    const hits = items.filter(item => terms.some(term => item.line.toLowerCase().includes(term)));
+    // Match the full text: a long block is clipped in its line, but its whole text is searchable.
+    const hits = items.filter(item => terms.some(term => (item.text ?? item.line).toLowerCase().includes(term)));
     matched = hits.length;
     if (hits.length) selectedItems = hits;
   }
@@ -280,7 +303,9 @@ export function renderDelta(previous: NativeView | undefined, next: NativeView):
   for (const item of next.items) {
     const old = before.get(item.key);
     if (!old) added.push("+ " + item.line);
-    else if (old.line !== item.line) changed.push("~ " + item.line);
+    // A move alone is not news: refs are located again when an action runs, and carousels
+    // would otherwise report the same controls on every read.
+    else if (old.line.replace(AT, "") !== item.line.replace(AT, "")) changed.push("~ " + item.line);
   }
   for (const item of previous.items) if (!after.has(item.key)) removed.push("- " + clip(item.line, 60));
   const total = added.length + changed.length + removed.length;

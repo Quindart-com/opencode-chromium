@@ -14,7 +14,7 @@ export { pageSearchUnitsExpression } from '../snapshot-expressions.ts';
 const tool = Object.assign(defineBrowserOperation, { schema: z });
 export function createInputOperations(dependencies: Dependencies) {
   const views = new Map<string, NativeView>();
-  const { sessionKey, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, performClick, cursorEnabled, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
+  const { sessionKey, fillFocusedEditable, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, performClick, cursorEnabled, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
   return {
       browser_move: tool({
         description: "Move the visible OpenCode cursor overlay in a Chromium tab.",
@@ -209,6 +209,45 @@ export function createInputOperations(dependencies: Dependencies) {
         args: { tabId: tool.schema.number().int().positive() },
         async execute(args, context) {
           return runtimeEvaluate(context, args.tabId, pageStateExpression());
+        },
+      }),
+      // Locates a read-view [ref] (a backend node id) through the DOM domain, without page
+      // script, scrolling it into view first so the point is current.
+      browser_ref_point: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Return the current click point of a [ref] from the read view, scrolled into view.",
+        args: { tabId: tool.schema.number().int().positive(), ref: tool.schema.number().int().positive() },
+        async execute(args, context) {
+          await enableCdpDomains(context, args.tabId, ["DOM"], { optional: true });
+          await cdp(context, args.tabId, "DOM.scrollIntoViewIfNeeded", { backendNodeId: args.ref }).catch(() => null);
+          const quads = await cdp(context, args.tabId, "DOM.getContentQuads", { backendNodeId: args.ref }).then((result: { quads?: number[][] }) => result.quads ?? [], () => [] as number[][]);
+          const quad = quads.find((points: number[]) => points.length >= 8 && Math.abs((points[4]! - points[0]!) * (points[5]! - points[1]!)) > 1);
+          if (!quad) throw Object.assign(new Error(`[${args.ref}] is no longer on the page or has no size; read the page again.`), { code: "STALE_TARGET", retryable: false });
+          const xs = [quad[0]!, quad[2]!, quad[4]!, quad[6]!], ys = [quad[1]!, quad[3]!, quad[5]!, quad[7]!];
+          // Wide fields are clicked near their start, like the read view's own points.
+          const left = Math.min(...xs), right = Math.max(...xs);
+          return { ref: args.ref, x: Math.round(Math.min((left + right) / 2, left + 40)), y: Math.round((Math.min(...ys) + Math.max(...ys)) / 2) };
+        },
+      }),
+      // Clicks a point like a person would, then types into whatever that focused.
+      browser_point_type: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Click a viewport point, then replace or append text in the editable it focused.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          x: tool.schema.number(),
+          y: tool.schema.number(),
+          text: tool.schema.string().default(""),
+          mode: tool.schema.enum(["replace", "append", "focus"]).default("replace"),
+        },
+        async execute(args, context) {
+          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y);
+          if (args.mode === "focus") return { focused: true, inputRoute };
+          const before = await runtimeEvaluate(context, args.tabId, focusedEditableSnapshotExpression());
+          // Replacing starts from a full selection (the selectAll editing command, on every platform).
+          if (args.mode === "replace" && before?.kind !== "select" && before?.value) await pressKey(context, args.tabId, "Control+A");
+          const after = args.mode === "replace" ? await fillFocusedEditable(context, args.tabId, before, args.text) : await insertTextAndVerify(context, args.tabId, before, args.text);
+          return { ...(typeof after === "object" && after ? after : {}), inputRoute };
         },
       }),
       // Text view from the browser's DOMSnapshot: no script runs in the page. With

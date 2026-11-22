@@ -95,6 +95,8 @@ test("a query narrows the view, and the character budget is reported", () => {
   assert.ok(budget.omitted > 0);
   assert.match(renderView(budget), /… \d+ more \(scroll, narrow with query, or scope "page"\)/);
   assert.match(renderView(projectSnapshot(snap, viewport, { query: "nothing-matches" })), /no line matched the query/);
+  const long = snapshot(["body", {}, [0, 0, 1000, 2000], [["div", {}, [0, 0, 800, 200], ["Intro " + "x".repeat(300) + " tail-marker"]]]]);
+  assert.equal(projectSnapshot(long, viewport, { query: "tail-marker" }).items.length, 1, "text past the clipped line still matches");
 });
 
 test("repeat reads return only what changed, and a new page returns a full view", () => {
@@ -166,5 +168,41 @@ test("ordinary hosts pay nothing extra after an action", async () => {
     const run = await runtime.run({ sessionId: "plain", memoryMode: "off", steps: [{ action: "click", target: { x: 10, y: 10 } }] });
     assert.equal(run.observation, undefined);
     assert.equal(calls.some(([call]) => call === "browser_read_view"), false);
+  } finally { runtime.close(); }
+});
+
+test("icon-only controls get a line, moves alone are not changes, and lone letters are not query terms", () => {
+  const page = (top, rowY = 100) => snapshot(["body", {}, [0, 0, 1000, 2000], [
+    ["div", {}, [0, top, 300, 40], [["span", {}, [0, top, 100, 40], ["Tag"], { display: "inline" }], ["i", { class: "ui-icon-close" }, [110, top + 10, 18, 18], [], { display: "inline-block" }]]],
+    ["a", { href: "/next" }, [0, rowY, 100, 20], ["Next page"], { display: "inline" }],
+    ["div", {}, [0, 300, 600, 20], ["Salary 35K"]],
+  ]]);
+  const first = projectSnapshot(page(10), viewport);
+  assert.match(renderView(first), /\[\d+\] icon "close" @\d+,\d+/);
+  assert.match(renderDelta(first, projectSnapshot(page(10, 160), viewport)), /no visible change since the last read/, "a moved link is not reported");
+  const narrowed = projectSnapshot(page(10), viewport, { query: "K salary" });
+  assert.deepEqual(narrowed.items.map(item => item.line.replace(/ @.*/, "")), ["Salary 35K"]);
+});
+
+test("a ref target is located fresh, then clicked or typed into at that point", async () => {
+  const { runtime, calls } = runtimeWithView();
+  const located = [];
+  const invoke = runtime.invoke;
+  runtime.invoke = async (name, args, sessionId) => {
+    if (name === "browser_ref_point") { located.push(args.ref); return { ref: args.ref, x: 40, y: 50 }; }
+    return invoke(name, args, sessionId);
+  };
+  runtime.executeStep = undefined;
+  delete runtime.executeStep;
+  try {
+    const run = await runtime.run({ sessionId: "refs", memoryMode: "off", returnMode: "all", steps: [
+      { action: "click", target: { ref: 516 } },
+      { action: "fill", target: { ref: 5444 }, value: "技术总监" },
+      { action: "type", target: { ref: 5444 }, value: "!" },
+    ] });
+    assert.equal(run.ok, true, JSON.stringify(run).slice(0, 400));
+    assert.deepEqual(located, [516, 5444, 5444]);
+    assert.deepEqual(calls.filter(([name]) => name === "browser_click").map(([, args]) => [args.x, args.y]), [[40, 50]]);
+    assert.deepEqual(calls.filter(([name]) => name === "browser_point_type").map(([, args]) => [args.x, args.y, args.text, args.mode]), [[40, 50, "技术总监", "replace"], [40, 50, "!", "append"]]);
   } finally { runtime.close(); }
 });

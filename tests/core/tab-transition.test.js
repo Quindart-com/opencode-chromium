@@ -80,7 +80,7 @@ test("a vanished tab is reported as closed, and an unchanged tab as none without
   const quiet = runtimeWith([tab(7, "https://guarded.test/page?q=1")]);
   try {
     const result = await quiet.runtime.run({ sessionId: "quiet", memoryMode: "off", returnMode: "all", steps: [{ action: "click", target: { selector: "#edit" } }] });
-    assert.deepEqual(result.results[0].tabTransition, { kind: "none" });
+    assert.equal(result.results[0].tabTransition, undefined, "an unchanged tab adds nothing to the response");
     assert.equal(result.results[0].warnings, undefined);
     assert.equal(result.warnings, undefined);
     assert.equal(quiet.runtime.getSession("quiet").guardedHosts.size, 0);
