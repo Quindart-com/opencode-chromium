@@ -135,3 +135,23 @@ export async function memoryCall<T>(method: string, params: object = {}): Promis
 }
 
 export const MB = 1024 * 1024;
+
+const SHARED_TTL_MS = 2000;
+const sharedRequests = new Map<string, { promise: Promise<unknown>; settledAt: number | null }>();
+/** Identical read-only requests made close together share one background round trip. Failures are never cached. */
+export function sendMessageShared<T>(message: { type: string } & object, ttlMs = SHARED_TTL_MS): Promise<T> {
+  const key = JSON.stringify(message);
+  const found = sharedRequests.get(key);
+  if (ttlMs <= 0 && found?.settledAt !== null) sharedRequests.delete(key);
+  else if (found && (found.settledAt === null || Date.now() - found.settledAt < ttlMs)) return found.promise as Promise<T>;
+  const entry: { promise: Promise<unknown>; settledAt: number | null } = { promise: Promise.resolve(), settledAt: null };
+  const evict = () => { if (sharedRequests.get(key) === entry) sharedRequests.delete(key); };
+  entry.promise = sendMessage<T>(message).then(value => {
+    // An error reply is a failure too: a retry must reach the background again.
+    if (value && typeof value === "object" && "error" in value && (value as { error?: unknown }).error) evict(); else entry.settledAt = Date.now();
+    return value;
+  }, error => { evict(); throw error; });
+  sharedRequests.set(key, entry);
+  return entry.promise as Promise<T>;
+}
+export function clearSharedMessages(): void { sharedRequests.clear(); }

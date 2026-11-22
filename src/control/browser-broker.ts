@@ -17,6 +17,17 @@ import { parseRuntimeActivation } from "./state.ts";
 type RpcId = string | number;
 type RpcMessage = { jsonrpc?: string; id?: RpcId; method?: string; params?: Record<string, unknown>; result?: unknown; error?: unknown };
 
+/**
+ * A routing failure affects one request, not the connection. Requests (id and
+ * method) get a retryable JSON-RPC error; notifications and responses get none.
+ */
+export function routeFailureReply(value: unknown, error: unknown) {
+  const message = record(value) as RpcMessage;
+  if (message.id === undefined || typeof message.method !== "string") return null;
+  const code = record(error).code === "worker_restarting" ? "worker_restarting" : "route_failed";
+  return { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: error instanceof Error ? error.message : String(error), data: { code, retryable: true, uncertain: false } } };
+}
+
 export async function runBrowserBroker(dir: string) {
   const controller = createController({ dir });
   const reconciliationToken = controlToken(dir);
@@ -75,7 +86,7 @@ export async function runBrowserBroker(dir: string) {
       }
       if (message.id !== undefined && !message.method) extensionRequests.delete(message.id);
       if (message.id !== undefined && message.method) childRequests.add(message.id);
-      void sendExtension(value).catch(() => shutdown());
+      void sendExtension(value).catch(() => fatal());
     } });
     worker.stdout.on("data", chunk => { try { output.push(chunk); } catch { worker.kill(); } });
     worker.stderr.on("data", chunk => process.stderr.write(chunk));
@@ -85,7 +96,7 @@ export async function runBrowserBroker(dir: string) {
       child = null;
       failForwarded();
       for (const probe of probes.values()) { clearTimeout(probe.timer); probe.resolve(null); } probes.clear();
-      if (!closing) { try { startWorker(selected()); } catch (error) { process.stderr.write(`[controller] ${error instanceof Error ? error.message : String(error)}\n`); shutdown(); } }
+      if (!closing) { try { startWorker(selected()); } catch (error) { process.stderr.write(`[controller] ${error instanceof Error ? error.message : String(error)}\n`); fatal(); } }
     });
   }
 
@@ -172,22 +183,30 @@ export async function runBrowserBroker(dir: string) {
     } finally { swapping = false; }
   }
 
-  const input = new FrameDecoder({ onMessage: value => { void route(value).catch(error => { process.stderr.write(`[controller] ${String(error)}\n`); shutdown(); }); } });
-  const timer = setInterval(() => { void reconcile(); }, 5000); timer.unref();
+  const input = new FrameDecoder({ onMessage: value => { void route(value).catch(error => {
+    process.stderr.write(`[controller] ${String(error)}\n`);
+    const id = record(value).id;
+    if (id !== undefined && typeof record(value).method === "string") extensionRequests.delete(id as RpcId);
+    const reply = routeFailureReply(value, error);
+    if (reply) void sendExtension(reply).catch(() => fatal());
+  }); } });
+  const timer = setInterval(() => { void reconcile().catch(error => { process.stderr.write(`[controller] ${String(error)}\n`); fatal(); }); }, 5000); timer.unref();
   function shutdown() {
     if (closing) return; closing = true; clearInterval(timer); child?.kill("SIGTERM"); child = null; lease.close();
   }
+  // A broker that cannot reach the extension or run a worker is useless and must
+  // not linger: exiting lets the browser start a fresh host.
+  function fatal(code = 1) { shutdown(); process.exit(code); }
   startWorker(release);
   process.stdin.on("data", chunk => {
     try {
       if (typeof chunk !== "string") input.push(chunk);
     } catch {
-      shutdown();
-      process.exitCode = 1;
       process.stdin.destroy();
+      fatal(1);
     }
   });
-  process.stdin.on("end", shutdown);
+  process.stdin.on("end", () => fatal(0));
   process.once("SIGTERM", () => { shutdown(); process.exit(0); });
   process.once("SIGINT", () => { shutdown(); process.exit(0); });
   process.once("exit", shutdown);

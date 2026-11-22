@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { chooseNodeRuntime } from "./node-runtime.ts";
 import { browserIds,BROWSERS,browserUserDataRoot,installedBrowsers,nativeMessagingDir,windowsRegistryKey } from "./browsers.ts";
 
 const HOST_NAME = PRODUCT.nativeHost;
@@ -131,11 +132,11 @@ function detectExtensionIds(browser: string): string[] {
 }
 
 function writeWrapper(targetDir: string, launcherPath: string) {
-  const windows = process.platform === "win32";
+  const windows = process.platform === "win32", node = chooseNodeRuntime().execPath;
   const wrapperPath = path.join(targetDir, windows ? "opencode-browser-host.cmd" : "opencode-browser-host");
   fs.writeFileSync(wrapperPath, windows
-    ? `@echo off\r\n"${process.execPath}" "${launcherPath}"\r\n`
-    : `#!/usr/bin/env sh\nexec "${process.execPath}" "${launcherPath}"\n`, { encoding: "utf8", mode: windows ? undefined : 0o755 });
+    ? `@echo off\r\n"${node}" "${launcherPath}"\r\n`
+    : `#!/usr/bin/env sh\nexec "${node}" "${launcherPath}"\n`, { encoding: "utf8", mode: windows ? undefined : 0o755 });
   return wrapperPath;
 }
 
@@ -164,7 +165,8 @@ function writeManifest({ browser, extensionIds, hostPath, targetDir }: { browser
 export function planNativeHosts(targetDir = runtimeDir()) {
   const changes: FileChange[] = [], registry: RegistryChange[] = [], seen = new Set<string>();
   const hostPath = path.join(targetDir, process.platform === "win32" ? "opencode-browser-host.cmd" : "opencode-browser-host");
-  const wrapper = process.platform === "win32" ? `@echo off\r\n"${process.execPath}" "${path.join(targetDir, "host.mjs")}"\r\n` : `#!/usr/bin/env sh\nexec "${process.execPath}" "${path.join(targetDir, "host.mjs")}"\n`;
+  const runtime = chooseNodeRuntime(), node = runtime.execPath;
+  const wrapper = process.platform === "win32" ? `@echo off\r\n"${node}" "${path.join(targetDir, "host.mjs")}"\r\n` : `#!/usr/bin/env sh\nexec "${node}" "${path.join(targetDir, "host.mjs")}"\n`;
   const add = (filePath: string, after: string) => changes.push({ filePath, before: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null, after });
   add(hostPath, wrapper);
   for (const browser of installedBrowsers()) {
@@ -176,7 +178,7 @@ export function planNativeHosts(targetDir = runtimeDir()) {
     add(filePath, JSON.stringify({ name: HOST_NAME, description: "OpenCode Browser native messaging host", path: hostPath, type: "stdio", ...(BROWSERS[browser]?.engine === "gecko" ? { allowed_extensions: [FIREFOX_EXTENSION_ID] } : { allowed_origins: ids.map(value => `chrome-extension://${value}/`) }) }, null, 2) + "\n");
     if (process.platform === "win32") registry.push({ key: requiredRegistryKey(browser), before: registryManifestPath(browser), after: filePath });
   }
-  return { changes, registry, hostPath };
+  return { changes, registry, hostPath, warnings: runtime.warning ? [runtime.warning] : [] as string[] };
 }
 export function applyRegistryChanges(changes: RegistryChange[], restore = false) {
   const completed = [];

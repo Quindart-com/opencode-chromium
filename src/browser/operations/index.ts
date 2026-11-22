@@ -13,6 +13,7 @@ import { type BrowserEvent } from "../events.ts";
 import { inspectNetworkEvents } from "../network.ts";
 import { defineBrowserOperation } from "../operation-definition.ts";
 import { createPageBackend } from "../page-backend.ts";
+import { createPointerInput } from "../pointer-input.ts";
 export { keyDispatchEvents,parseKeyPress } from "../keyboard.ts";
 export { pageInspectExpression,visualMapExpression } from './inspection-expressions.ts';
 export { pageSearchUnitsExpression } from './snapshot-expressions.ts';
@@ -30,7 +31,7 @@ const tool = Object.assign(defineBrowserOperation, { schema: z });
 type SearchResult = z.infer<typeof candidateSchema>;
 
 const operationSession = createOperationSessionRuntime();
-const { selectedProfilesBySession, usedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, contextValue, sessionKey, sessionParams, explicitProfileId, markProfileUsed, resolveSessionProfileId, profileSessionParams, targetProfileIdsForSession, parseExtensionResult, extensionProfileRequest, extensionRequest, addProfileToTabResult, attachedTabKeys, enabledDomainsByTabKey, tabCacheKey, clearTabCache, clearSessionCache, cdpRequestOptions, ensureAttached, isDebuggerDetachedError, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, enableInspection, mouseButtons, stringify, compactConsoleValue, consoleEventText, consoleEventLevel, consoleEventUrl, compactDialogEvents, runtimeEvaluate } = operationSession;
+const { selectedProfilesBySession, usedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, contextValue, sessionKey, sessionParams, explicitProfileId, markProfileUsed, resolveSessionProfileId, profileSessionParams, targetProfileIdsForSession, parseExtensionResult, extensionProfileRequest, extensionRequest, addProfileToTabResult, attachedTabKeys, enabledDomainsByTabKey, tabCacheKey, clearTabCache, clearSessionCache, cdpRequestOptions, ensureAttached, isDebuggerDetachedError, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, enableInspection, mouseButtons, stringify, compactConsoleValue, consoleEventText, consoleEventLevel, consoleEventUrl, compactDialogEvents, runtimeEvaluate, agentContextId, ensureConsoleCapture, tabFacts, isGuardedTab, cursorEnabled } = operationSession;
 export const compactConsoleEvents = operationSession.compactConsoleEvents;
 function pageSearchLabel(result: SearchResult) {
   return compactConsoleValue(result.name || result.text || result.selector || result.kind).slice(0, 220) || null;
@@ -208,6 +209,17 @@ function finiteNumber(value: unknown, label: string) {
   return value;
 }
 
+// Chromium focus emulation keeps a background tab rendering, so pointer input and
+// screenshots work without bringing it in front of the user's tab. The debugger
+// detach at turn end releases it.
+function keepTabRendering(context: BrowserContext, tabId: number) {
+  return cdp(context, tabId, "Emulation.setFocusEmulationEnabled", { enabled: true });
+}
+async function keepHiddenTabRendering(context: BrowserContext, tabId: number) {
+  const state = await runtimeEvaluate(context, tabId, "document.visibilityState", { userGesture: false }).catch(() => "visible");
+  if (state === "hidden") await keepTabRendering(context, tabId).catch(() => null);
+}
+const pointerInput = createPointerInput({ keepRendering: keepTabRendering, revealTab: (context: BrowserContext, tabId: number) => extensionRequest(context, "activateTab", { tabId, foreground: false, active: true }), engine: async (context: BrowserContext) => record(await extensionRequest(context, "getInfo")).engine as string | undefined, runtimeEvaluate, inputGesture, mouseStep, tabFacts, cursorEnabled, key: (context: BrowserContext, tabId: number) => `${sessionKey(context)}:${tabId}` });
 const pageBackend = createPageBackend({ request: extensionRequest, evaluate: runtimeEvaluate, command: cdp, ready: waitForPageReady });
 const environmentController = createEnvironmentController({
   command: cdp,
@@ -324,8 +336,8 @@ function mergeVisualMapModelResult(mapInput: unknown, visualInput: unknown, orig
   };
 }
 
-const interactionRuntime = createInteractionRuntime({ cdp, runtimeEvaluate, pointCursor, moveCursor, inputGesture, stringify, activate, extensionRequest, finiteNumber, pageBackend });
-const { domNodeClickTargetExpression, backgroundClickExpression, domNodeClickExpression, domNodeHoverTargetExpression, domNodeEditableExpression, selectorClickTargetExpression, selectorClickExpression, clickAtPointExpression, hoverAtPointExpression, selectorHoverTargetExpression, selectorEditableExpression, selectorTextExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, verifyFocusedEditableExpression, setFocusedSelectValueExpression, clickPoint, hoverPoint, insertTextAndVerify, fillFocusedEditable, pressKey, sleep, scrollPoint, scrollSnapshotExpression, scrollFallbackExpression, didScroll, scrollTab } = interactionRuntime;
+const interactionRuntime = createInteractionRuntime({ cdp, runtimeEvaluate, pointCursor, moveCursor, inputGesture, stringify, activate, extensionRequest, finiteNumber, pageBackend, pointerInput, agentContextId });
+const { performClick, focusWithPointer, domNodeClickTargetExpression, backgroundClickExpression, domNodeClickExpression, domNodeHoverTargetExpression, domNodeEditableExpression, selectorClickTargetExpression, selectorClickExpression, clickAtPointExpression, hoverAtPointExpression, selectorHoverTargetExpression, selectorEditableExpression, selectorTextExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, verifyFocusedEditableExpression, setFocusedSelectValueExpression, clickPoint, hoverPoint, insertTextAndVerify, fillFocusedEditable, pressKey, sleep, scrollPoint, scrollSnapshotExpression, scrollFallbackExpression, didScroll, scrollTab } = interactionRuntime;
 async function waitForPageReady(context: BrowserContext, tabId: number, waitUntil: string = "domcontentloaded", timeoutMs: number = 15000) {
   if (waitUntil === "none") return { waitUntil, readyState: null };
   const expected = waitUntil === "load" ? ["complete"] : ["interactive", "complete"];
@@ -386,6 +398,7 @@ async function fetchConsoleSourceMaps(context: BrowserContext, tabId: number, ev
   for (const url of urls) {
     if (resolver.has(url)) continue;
     const map = await runtimeEvaluate(context, tabId, fetchSourceMapFromPageExpression(url), {
+      world: "page",
       timeoutMs: 10000,
     }).catch(() => null);
     if (map) resolver.set(url, map);
@@ -417,7 +430,7 @@ const networkInspectOperation = Object.assign(tool({
 }), { capabilityOnly: true });
 
 export const createBrowserOperations = async () => {
-  const dependencies = { selectedProfilesBySession, usedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, contextValue, sessionKey, sessionParams, explicitProfileId, markProfileUsed, resolveSessionProfileId, profileSessionParams, targetProfileIdsForSession, parseExtensionResult, extensionProfileRequest, extensionRequest, addProfileToTabResult, attachedTabKeys, enabledDomainsByTabKey, tabCacheKey, clearTabCache, clearSessionCache, cdpRequestOptions, ensureAttached, isDebuggerDetachedError, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, enableInspection, mouseButtons, stringify, compactConsoleValue, consoleEventText, consoleEventLevel, consoleEventUrl, compactDialogEvents, compactConsoleEvents, pageSearchLabel, leanPageSearchResult, compactPageSearchResult, compactModelUse, shapePageSearchRanking, parseJsonObject, cdpParamsFromArgs, escapeHtml, decodeDataUrl, documentForDataUrl, navigateDataUrl, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, pageBackend, environmentController, navigateHistory, grantClipboardPermission, validClip, visualMapCaptureClip, shouldRunVisualModel, captureVisualMapScreenshot, visualElementForDetail, mergeVisualMapModelResult, domNodeClickTargetExpression, backgroundClickExpression, domNodeClickExpression, domNodeHoverTargetExpression, domNodeEditableExpression, selectorClickTargetExpression, selectorClickExpression, clickAtPointExpression, hoverAtPointExpression, selectorHoverTargetExpression, selectorEditableExpression, selectorTextExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, verifyFocusedEditableExpression, setFocusedSelectValueExpression, clickPoint, hoverPoint, insertTextAndVerify, fillFocusedEditable, pressKey, sleep, scrollPoint, scrollSnapshotExpression, scrollFallbackExpression, didScroll, scrollTab, waitForPageReady, applyEnvironment, resetEnvironment, fetchSourceMapFromPageExpression, fetchConsoleSourceMaps, networkInspectOperation };
+  const dependencies = { selectedProfilesBySession, usedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, contextValue, sessionKey, sessionParams, explicitProfileId, markProfileUsed, resolveSessionProfileId, profileSessionParams, targetProfileIdsForSession, parseExtensionResult, extensionProfileRequest, extensionRequest, addProfileToTabResult, attachedTabKeys, enabledDomainsByTabKey, tabCacheKey, clearTabCache, clearSessionCache, cdpRequestOptions, ensureAttached, isDebuggerDetachedError, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, enableInspection, mouseButtons, stringify, compactConsoleValue, consoleEventText, consoleEventLevel, consoleEventUrl, compactDialogEvents, compactConsoleEvents, agentContextId, ensureConsoleCapture, tabFacts, isGuardedTab, cursorEnabled, pointerInput, pageSearchLabel, leanPageSearchResult, compactPageSearchResult, compactModelUse, shapePageSearchRanking, parseJsonObject, cdpParamsFromArgs, escapeHtml, decodeDataUrl, documentForDataUrl, navigateDataUrl, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, pageBackend, performClick, focusWithPointer, environmentController, navigateHistory, grantClipboardPermission, validClip, visualMapCaptureClip, shouldRunVisualModel, captureVisualMapScreenshot, visualElementForDetail, mergeVisualMapModelResult, domNodeClickTargetExpression, backgroundClickExpression, domNodeClickExpression, domNodeHoverTargetExpression, domNodeEditableExpression, selectorClickTargetExpression, selectorClickExpression, clickAtPointExpression, hoverAtPointExpression, selectorHoverTargetExpression, selectorEditableExpression, selectorTextExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, verifyFocusedEditableExpression, setFocusedSelectValueExpression, clickPoint, hoverPoint, insertTextAndVerify, fillFocusedEditable, pressKey, sleep, scrollPoint, scrollSnapshotExpression, scrollFallbackExpression, didScroll, scrollTab, waitForPageReady, applyEnvironment, resetEnvironment, fetchSourceMapFromPageExpression, fetchConsoleSourceMaps, networkInspectOperation, keepHiddenTabRendering };
   const tools = {
     ...createSessionOperations(dependencies),
     ...createInputOperations(dependencies),

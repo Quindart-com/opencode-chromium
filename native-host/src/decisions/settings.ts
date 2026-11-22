@@ -67,9 +67,10 @@ export function configureProvider(settings: unknown): ProviderSettings {
 }
 export function providerStatus() {
   const settings = getProviderSettings();
-  const credentialConfigured = Boolean(providerKey(settings));
   let stored: Record<string, string> = {};
   try { stored = z.record(z.string(), z.string()).parse(JSON.parse(fs.readFileSync(credentialPath(), "utf8"))); } catch { /* Environment-only setup. */ }
+  // Presence only: decrypting here would spawn PowerShell on every status poll.
+  const credentialConfigured = Boolean(stored[settings.route] || process.env[settings.keyEnv]);
   const credentialRoutes = Object.keys(decisionServices).filter(route => Boolean(stored[route] || process.env[route === settings.route ? settings.keyEnv : decisionServices[route as ProviderSettings["route"]].keyEnv]));
   const ready = settings.provider !== "off" && (settings.provider !== "openai-decisions" || settings.route !== "typesafe") && (settings.provider !== "jev" || settings.route !== "openai") && settings.shareText && credentialConfigured;
   return { ...settings, ready, credentialConfigured, credentialRoutes, model: providerModel(settings), imageModel: providerModel(settings, true),

@@ -1,6 +1,7 @@
 import { useCallback,useEffect,useMemo,useRef,useState,type RefObject } from "react";
+import { useMemoryStatus } from "./memoryStatusStore";
 import { t } from "../../i18n";
-import { errorMessage,formatBytes,MB,memoryCall,type MemoryProfiles,type MemoryStatus } from "./api";
+import { errorMessage,formatBytes,MB,memoryCall,type MemoryStatus } from "./api";
 import Icon from "./Icon";
 
 const EMPTY_COUNTS: MemoryStatus["counts"] = {
@@ -74,54 +75,24 @@ function MemoryChart({ daily }: { daily: MemoryStatus["recent_daily"] }): React.
 }
 
 export default function MemoryView({ view = "overview", onView, viewButtonRef, onDetails, available = true, onRetry }: { view?: "overview" | "settings" | "toggle" | "summary" | "storage-summary"; onView?: () => void; viewButtonRef?: RefObject<HTMLButtonElement | null>; onDetails?: (open: boolean) => void; available?: boolean; onRetry?: () => void }): React.JSX.Element {
-  const [status, setStatus] = useState<MemoryStatus | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryFeedback, setMemoryFeedback] = useState("");
   const [quotaValue, setQuotaValue] = useState(100);
   const [purgeDays, setPurgeDays] = useState(7);
-  const [profiles, setProfiles] = useState<MemoryProfiles | null>(null);
   const [scope, setScope] = useState("current");
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
-  const [loadError, setLoadError] = useState("");
-  const requestId = useRef(0);
   const dirty = useRef({ quota: false, purge: false });
   const quotaTimer = useRef<number | null>(null);
-
-  const refreshMemory = useCallback(async () => {
-    if (!available) return;
-    const id = ++requestId.current;
-    try {
-      const known = await memoryCall<MemoryProfiles>("memory.profiles").catch(() => null);
-      if (id !== requestId.current) return;
-      setProfiles(known);
-      const profileIds = scope === "all" ? null : scope === "current" ? known?.currentProfileId ? [known.currentProfileId] : null : scope === "unknown" ? [] : selectedProfiles;
-      const next = await memoryCall<MemoryStatus>("memory.stats", { profileIds, includeUnattributed: scope === "unknown" });
-      if (id !== requestId.current) return;
-      if (next.supported === false) throw new Error(t("memorySqlite"));
-      setStatus(next);
-      setLoadError("");
-      if (!dirty.current.quota) setQuotaValue(Math.round(next.quota_bytes / MB));
-      if (!dirty.current.purge) setPurgeDays(next.purge_days);
-    } catch (error) {
-      if (id === requestId.current) setLoadError(errorMessage(error));
-    }
-  }, [scope, selectedProfiles, available]);
+  // One shared poller per scope: several MemoryView instances never multiply requests.
+  const shared = useMemoryStatus({ scope, selectedProfiles }, available);
+  const { status, profiles, refresh: refreshMemory } = shared;
+  const loadError = available ? shared.error : "";
 
   useEffect(() => {
-    if (!available) { setStatus(null); return; }
-    let disposed = false;
-    let timer: number;
-    const poll = async () => {
-      if (document.visibilityState === "visible") await refreshMemory();
-      if (!disposed) timer = window.setTimeout(() => void poll(), 2500);
-    };
-    void poll();
-    return () => {
-      disposed = true;
-      ++requestId.current;
-      window.clearTimeout(timer);
-    };
-  }, [refreshMemory]);
+    if (!status) return;
+    if (!dirty.current.quota) setQuotaValue(Math.round(status.quota_bytes / MB));
+    if (!dirty.current.purge) setPurgeDays(status.purge_days);
+  }, [status]);
 
   useEffect(() => () => {
     if (quotaTimer.current !== null) window.clearTimeout(quotaTimer.current);
@@ -297,13 +268,13 @@ export default function MemoryView({ view = "overview", onView, viewButtonRef, o
         </dl>
         {available ? <details className="usage-details" onToggle={event => onDetails?.(event.currentTarget.open)}><summary>{t("moreStatistics")}</summary>
         <label className="field-label" htmlFor="statistics-scope">{t("showActivity")}</label>
-        <select id="statistics-scope" value={scope} disabled={!profiles || !status?.capabilities?.profileStatistics} onChange={(event) => { ++requestId.current; setStatus(null); setScope(event.target.value); }}>
+        <select id="statistics-scope" value={scope} disabled={!profiles || !status?.capabilities?.profileStatistics} onChange={(event) => { setScope(event.target.value); }}>
           <option value="current">{t("thisProfile")}</option>
           <option value="all">{t("allProfiles")}</option>
           <option value="selected">{t("selectedProfiles")}</option>
           <option value="unknown">{t("oldActivity")}</option>
         </select>
-        {scope === "selected" ? <fieldset className="profile-options"><legend>{t("profilesInclude")}</legend>{profiles?.profiles.map((profile, index) => <label className="checkbox-row" key={profile.profileId}><input type="checkbox" checked={selectedProfiles.includes(profile.profileId)} onChange={(event) => { ++requestId.current; setStatus(null); setSelectedProfiles((previous) => event.target.checked ? [...previous, profile.profileId] : previous.filter((id) => id !== profile.profileId)); }} />{profile.profileLabel || profile.browserName || t("profileNumber", String(index + 1))}{profile.profileId === profiles.currentProfileId ? t("thisProfileSuffix") : ""}</label>)}</fieldset> : null}
+        {scope === "selected" ? <fieldset className="profile-options"><legend>{t("profilesInclude")}</legend>{profiles?.profiles.map((profile, index) => <label className="checkbox-row" key={profile.profileId}><input type="checkbox" checked={selectedProfiles.includes(profile.profileId)} onChange={(event) => { setSelectedProfiles((previous) => event.target.checked ? [...previous, profile.profileId] : previous.filter((id) => id !== profile.profileId)); }} />{profile.profileLabel || profile.browserName || t("profileNumber", String(index + 1))}{profile.profileId === profiles.currentProfileId ? t("thisProfileSuffix") : ""}</label>)}</fieldset> : null}
         <p className="help-note">{!status ? t("loadingStats") : !status.capabilities?.profileStatistics || !profiles ? t("hostTotals") : scope === "current" ? t("currentProfileValue", profiles.profiles.find((item) => item.profileId === profiles.currentProfileId)?.profileLabel || t("currentBrowserProfile")) : scope === "selected" ? t("selectedCount", String(selectedProfiles.length)) : scope === "unknown" ? t("oldHistory") : t("allHistory")}</p>
         <dl className="decision-usage memory-usage">
           {[stats[4]!, ...secondaryStats].map(([id, value, label]) => <div key={id}><dt>{label}</dt><dd id={id}>{status ? value : "—"}</dd></div>)}

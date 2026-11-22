@@ -8,6 +8,21 @@ import { parse as parseToml } from "smol-toml";
 import { planConfiguration, nativeCodexPluginEnabled, managedConfiguration } from "../../src/management/configuration.ts";
 import { applyTransaction } from "../../src/management/transaction.ts";
 import { harnessVersion } from "../../src/management/harnesses.ts";
+import { linkClientSurfaces } from "../../src/cli/runtime-link.ts";
+
+test("setup preserves direct Codex MCP recovery when the skill plugin's bundled server is explicitly disabled", () => {
+  const before = '[plugins."opencode-browser-plugin@quindart-browser"]\nenabled = true\n' +
+    '[plugins."opencode-browser-plugin@quindart-browser".mcp_servers.opencode-browser-plugin]\nenabled = false\n' +
+    '[mcp_servers.opencode-browser-plugin]\ncommand = "node"\nargs = ["/runtime/mcp.mjs"]\nstartup_timeout_sec = 60\n';
+  expect(nativeCodexPluginEnabled(before)).toBe(true);
+  expect(managedConfiguration(before, "codex")).toBe(true);
+  const options = { client: "codex" as const, serverPath: "/runtime/mcp.mjs", interpreter: "node" };
+  expect(planConfiguration(before, options)).toBe(before);
+  const changed = planConfiguration(before, { ...options, serverPath: "/new-runtime/mcp.mjs" });
+  expect((parseToml(changed).mcp_servers as Record<string, { startup_timeout_sec: number }>)["opencode-browser-plugin"]!.startup_timeout_sec).toBe(60);
+  const removed = planConfiguration(before, { ...options, action: "uninstall" });
+  expect(managedConfiguration(removed, "codex")).toBe(false);
+});
 
 test("JSONC comments survive native/MCP migration and repeated setup", () => {
   const before = '{\n // retain my comment\n "plugins": ["opencode-chromium@1.7.2", "other"],\n "mcp": {"opencode-browser-plugin": {"type":"local"}}\n}';
@@ -106,4 +121,27 @@ test("dry run preserves files; conflicting edit rolls back earlier writes", () =
     expect(fs.readFileSync(a, "utf8")).toBe("original");
     expect(fs.readFileSync(b, "utf8")).toBe("concurrent change");
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("OpenCode 2.3.2 plan points plugins at the v2 directory of the launcher", () => {
+  const serverPath = path.join(os.tmpdir(), "runtime", "plugin.mjs");
+  const after = planConfiguration("{}", { client: "opencode", serverPath, version: "2.3.2" });
+  expect(parse(after).plugins).toEqual([pathToFileURL(path.join(os.tmpdir(), "runtime", "v2")).href]);
+  expect(parse(after).plugin).toBeUndefined();
+});
+
+test("link passes the installed OpenCode version and writes the v2 wrapper", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-link-v2-"));
+  const config = path.join(root, "opencode.json");
+  const saved = process.env.OPENCODE_BROWSER_OPENCODE_CONFIG;
+  process.env.OPENCODE_BROWSER_OPENCODE_CONFIG = config;
+  try {
+    const result = linkClientSurfaces({ dir: path.join(root, "runtime"), clients: ["opencode"], openCodeVersion: "2.3.2" });
+    expect(parse(fs.readFileSync(config, "utf8")).plugins).toEqual([pathToFileURL(path.join(root, "runtime", "v2")).href]);
+    expect(fs.readFileSync(path.join(root, "runtime", "v2", "index.ts"), "utf8")).toContain("../plugin.mjs");
+    expect(result.results).toHaveLength(1);
+  } finally {
+    if (saved === undefined) delete process.env.OPENCODE_BROWSER_OPENCODE_CONFIG; else process.env.OPENCODE_BROWSER_OPENCODE_CONFIG = saved;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

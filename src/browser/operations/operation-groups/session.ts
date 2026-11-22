@@ -14,7 +14,7 @@ export { pageSearchUnitsExpression } from '../snapshot-expressions.ts';
 
 const tool = Object.assign(defineBrowserOperation, { schema: z });
 export function createSessionOperations(dependencies: Dependencies) {
-  const { selectedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, sessionKey, markProfileUsed, resolveSessionProfileId, extensionProfileRequest, extensionRequest, addProfileToTabResult, clearTabCache, clearSessionCache, cdp, enableCdpDomains, activate, stringify, navigateDataUrl, runtimeEvaluate, navigateHistory, waitForPageReady } = dependencies;
+  const { keepHiddenTabRendering, selectedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, sessionKey, markProfileUsed, resolveSessionProfileId, extensionProfileRequest, extensionRequest, addProfileToTabResult, clearTabCache, clearSessionCache, cdp, enableCdpDomains, activate, stringify, navigateDataUrl, runtimeEvaluate, navigateHistory, waitForPageReady } = dependencies;
   return {
       browser_status: tool({
         description: "Check the agent-browser native host connection status.",
@@ -238,6 +238,8 @@ async execute(args, context) {
         async execute(args, context) {
           await activate(context, args.tabId);
           await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
+          // A hidden tab never produces the frame a capture waits for; keep it rendering in place.
+          await keepHiddenTabRendering(context, args.tabId);
           const observation = record(await runtimeEvaluate(context, args.tabId, pageStateExpression()));
           const params: CdpParams<"Page.captureScreenshot"> = { format: args.format, optimizeForSpeed: true };
           if (args.format !== "png" && args.quality !== undefined) params.quality = args.quality;

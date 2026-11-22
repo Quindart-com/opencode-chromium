@@ -17,6 +17,7 @@ import { errorDetails } from "./failure-context.ts";
 import { createLogger } from "./logging.ts";
 import { createObservationOperations } from "./observation-diffs.ts";
 import { candidateSchema,parseOperationResult,type OperationResult } from "./operation-results.ts";
+import type { TabTransition } from "./tab-transition.ts";
 import type { BrowserProfile } from "./profiles.ts";
 import { selectProfile as selectConnectedProfile } from "./profiles.ts";
 import type { RunInput,Step,Target } from "./registry.ts";
@@ -29,9 +30,11 @@ export type PriorResults = Map<string, unknown>;
 export type ResolvedTarget = Target & { node_id?: string | number | null; id?: string | number | null };
 export type MemoryCapture = { enabled: boolean; paused: boolean; embedding_profile?: string | null };
 export const memoryMatchSchema = z.looseObject({ id: z.number().optional(), kind: z.string(), steps: z.array(recipeSchema), embedding_profile: z.string().nullable().optional(), confidence: z.number().optional(), similarity: z.number().optional(), deterministic: z.boolean().optional(), failed_count: z.number().optional() });
-export type RunStepResult = { index: number; action: Step["action"]; id?: string | null; ok: boolean; result?: unknown; error?: ReturnType<typeof errorDetails>; settle?: unknown; observation?: unknown };
+export type RunStepResult = { index: number; action: Step["action"]; id?: string | null; ok: boolean; result?: unknown; error?: ReturnType<typeof errorDetails>; settle?: unknown; observation?: unknown; tabTransition?: TabTransition; warnings?: StepWarning[] };
+export type StepWarning = { code: string; uncertain: boolean; message: string };
 export function summarizeStepResult(item: RunStepResult) { const { result, ...rest } = item; const value = record(result); return { ...rest, ...(value.screenshot ? { artifact: value.screenshot } : value.artifact ? { artifact: value.artifact } : {}) }; }
-export type StepOutcome = { ok: true; value: unknown; settled: unknown; executionState: string } | { ok: false; error: ReturnType<typeof errorDetails>; rawError: unknown; value: unknown; settled: unknown; executionState: string };
+type OutcomeExtras = { tabTransition?: TabTransition; warnings?: StepWarning[] };
+export type StepOutcome = ({ ok: true; value: unknown; settled: unknown; executionState: string } | { ok: false; error: ReturnType<typeof errorDetails>; rawError: unknown; value: unknown; settled: unknown; executionState: string }) & OutcomeExtras;
 export type ReplayOutcome = { used: true; stepsReused: number; results: RunStepResult[]; failed?: boolean } | { used?: false; fallback: true; supersedes?: number | null } | null;
 export type StepExecution = { step: Step; index: number; tabId: number; prior: PriorResults; session: RuntimeSession; chainId: string; memoryEnabled: boolean };
 export type ScreenshotOptions = { fullPage?: boolean; format?: "png" | "jpeg" | "webp"; quality?: number; timeoutMs?: number; delivery?: "artifact" | "inline" };
@@ -41,7 +44,7 @@ export const READ_ACTIONS = new Set(["find", "hover", "assert", "screenshot", "c
 export const READ_LEGACY_TOOLS = new Set([
   "browser_page_search", "browser_page_inspect", "browser_visual_map", "browser_dom_snapshot",
   "browser_locator_count", "browser_locator_text", "browser_console_logs", "browser_network_events",
-  "browser_network_inspect", "browser_download_events", "browser_snapshot", "browser_selected_tab", "browser_list_tabs",
+  "browser_network_inspect", "browser_dom_quiet", "browser_download_events", "browser_snapshot", "browser_selected_tab", "browser_list_tabs",
 ]);
 
 export function parseLegacyResult(value: unknown): unknown {
@@ -122,7 +125,7 @@ export function publicProfiles(profiles: BrowserProfile[]) {
 }
 
 export class RuntimeFoundation {
-  readonly operationScope = new AsyncLocalStorage<{ frameId?: string; deadlineAt?: number }>();
+  readonly operationScope = new AsyncLocalStorage<{ frameId?: string; deadlineAt?: number; inputMode?: "auto" | "pointer" | "dom" }>();
   readonly artifacts: ArtifactStore;
   readonly approvalTtlMs: number;
   readonly logger: ReturnType<typeof createLogger>;
@@ -168,7 +171,7 @@ export class RuntimeFoundation {
   getSession(sessionId: string): RuntimeSession {
     let session = this.sessions.get(sessionId);
     if (!session) {
-      session = { sessionId, profileId: null, activeTabId: null, configuredTabs: new Map(), createdAt: new Date().toISOString() };
+      session = { sessionId, profileId: null, activeTabId: null, configuredTabs: new Map(), createdAt: new Date().toISOString(), guardedHosts: new Set() };
       this.sessions.set(sessionId, session);
     }
     return session;
@@ -179,7 +182,12 @@ export class RuntimeFoundation {
     const definition = (this.observationOperations as Record<string, BrowserOperation>)[name] ?? tools[name];
     if (!definition) throw new Error(`Legacy operation is unavailable: ${name}`);
     const parsed = z.object(definition.args).parse(args ?? {});
-    const context = { ...this.operationScope.getStore(), sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy,
+    const owner = this.sessions.get(sessionId);
+    const scope = this.operationScope.getStore();
+    const context = { ...scope, sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy,
+      ...(scope?.inputMode ?? owner?.inputMode ? { inputMode: scope?.inputMode ?? owner?.inputMode } : {}),
+      ...(owner?.cursor === false ? { cursor: false } : {}),
+      ...(owner?.guardedHosts.size ? { guardedHosts: owner.guardedHosts } : {}),
       ...(typeof args.frameId === "string" ? { frameId: args.frameId } : nodeFrameId(args.nodeId) ? { frameId: nodeFrameId(args.nodeId) } : {}) };
     const checkTab = async (after = false) => {
       if (this.urlPolicy.allowedOrigins?.length === 0 && this.urlPolicy.blockedOrigins?.length === 0) return;
@@ -353,6 +361,11 @@ export class RuntimeFoundation {
       if (!source) throw new Error(`No result available for step ${target.fromStep}`);
       const candidates = resultCandidates(source);
       target = { ...target, ...record(candidates[target.index ?? 0] ?? source) };
+    }
+    // A ref from the read view is located fresh, so a scroll since the read cannot misplace the action.
+    if (typeof target.ref === "number") {
+      const point = record(await this.invoke("browser_ref_point", { tabId, ref: target.ref }, sessionId));
+      target = { ...target, x: Number(point.x), y: Number(point.y) };
     }
     if (target.query) {
       const prefs = await this.searchPreferences(this.getSession(sessionId));

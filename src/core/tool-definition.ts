@@ -18,6 +18,12 @@ export interface BrowserContext {
   filePolicy?: FilePolicy;
   signal?: AbortSignal;
   agent?: string;
+  /** Pointer route for click/hover/focus actions. Unset behaves as "auto". */
+  inputMode?: "auto" | "pointer" | "dom";
+  /** false keeps the visible cursor overlay from being injected. */
+  cursor?: boolean;
+  /** Hostnames of this session that reacted to automation; they get the low-footprint settings. */
+  guardedHosts?: ReadonlySet<string>;
 }
 export interface ToolAnnotations { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean }
 export interface RuntimeTool {

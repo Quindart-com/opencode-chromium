@@ -46,6 +46,7 @@ const targetSchema = z.object({
   index: z.number().int().min(0).optional(),
   x: z.number().optional(),
   y: z.number().optional(),
+  ref: z.number().int().positive().optional(),
   requestId: z.string().optional(),
 }).optional();
 
@@ -69,7 +70,7 @@ const diagnosticSchema = z.object({
 });
 
 const observationSchema = z.object({
-  mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
+  mode: z.enum(["read", "search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
   target: targetSchema,
   query: z.string().optional(),
   pack: z.string().max(64).optional(),
@@ -105,6 +106,7 @@ const stepSchema = z.object({
   scrollX: z.number().optional(),
   scrollY: z.number().optional(),
   button: z.enum(["left", "middle", "right"]).optional(),
+  inputMode: z.enum(["auto", "pointer", "dom"]).optional(),
   waitUntil: z.enum(["none", "domcontentloaded", "load"]).optional(),
   condition: z.enum(["exists", "not-exists", "contains", "equals"]).optional(),
   timeoutMs: z.number().int().positive().optional(),
@@ -139,6 +141,8 @@ export const runInputSchema = z.object({
           tabId: z.number().int().positive().optional(),
         }).optional(),
         steps: z.array(stepSchema).max(20).optional(),
+        inputMode: z.enum(["auto", "pointer", "dom"]).optional().describe("pointer = trusted mouse input; dom = in-page click; auto picks per tab."),
+        cursor: z.boolean().optional().describe("false hides the cursor overlay."),
         approvalToken: z.string().optional(),
         postObserve: observationSchema,
         returnMode: z.enum(["last", "all", "summary"]).optional(),
@@ -150,7 +154,7 @@ export type RunInput = z.output<typeof runInputSchema>;
 
 export const observeInputSchema = z.object({
         ...sessionFields,
-        mode: z.enum(["search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
+        mode: z.enum(["read", "search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
         tabId: z.number().int().positive().optional(),
         target: targetSchema,
         query: z.string().optional(),

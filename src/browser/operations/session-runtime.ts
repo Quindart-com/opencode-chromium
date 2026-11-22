@@ -2,9 +2,9 @@ import type { Target } from "../../core/registry.ts";
 import type { BrowserContext } from "../../core/tool-definition.ts";
 import type { CdpMethod,CdpParams,CdpResult } from "../../shared/cdp.ts";
 import type { CursorAction } from "../../shared/cursor-actions.ts";
-import { pageException } from "../../shared/page-error.ts";
 import { SourceMapResolver,mapCallFrames } from "../../shared/source-maps.ts";
 import { isRecord,record } from "../../shared/values.ts";
+import { createAgentWorld,type EvaluateOptions } from "../agent-world.ts";
 import { browserRequest,resolveBrowserProfile } from "../client.ts";
 import { cursorPoint } from "../cursor.ts";
 import { extensionResultSchemas,type BrowserEvent,type BrowserEvents,type ExtensionMethod,type ExtensionResult } from "../events.ts";
@@ -139,6 +139,8 @@ function addProfileToTabResult(result: unknown, profileId: string) {
 
 const attachedTabKeys = new Set<string>();
 const enabledDomainsByTabKey = new Map<string, Set<string>>();
+const agentWorld = createAgentWorld({ cdp: (...args) => cdp(...args), key: (context, tabId) => `${sessionKey(context)}:${tabId}` });
+const tabFactsCache = new Map<string, { at: number; facts: { active: boolean; hostname: string | null } | null }>();
 
 function tabCacheKey(context: BrowserContext, profileId: string, tabId: number) {
   return `${sessionKey(context)}:${profileId}:${tabId}`;
@@ -149,6 +151,8 @@ function clearTabCache(context: BrowserContext, tabId: number, profileId: string
     const key = tabCacheKey(context, profileId, tabId);
     attachedTabKeys.delete(key);
     enabledDomainsByTabKey.delete(key);
+    agentWorld.forgetTab(sessionKey(context), tabId);
+    tabFactsCache.delete(`${sessionKey(context)}:${tabId}`);
     return;
   }
 
@@ -160,6 +164,8 @@ function clearTabCache(context: BrowserContext, tabId: number, profileId: string
   for (const key of [...enabledDomainsByTabKey.keys()]) {
     if (key.startsWith(prefix) && key.endsWith(suffix)) enabledDomainsByTabKey.delete(key);
   }
+  agentWorld.forgetTab(sessionKey(context), tabId);
+  tabFactsCache.delete(`${sessionKey(context)}:${tabId}`);
 }
 
 function clearSessionCache(context: BrowserContext, profileId: string | null = null) {
@@ -170,6 +176,8 @@ function clearSessionCache(context: BrowserContext, profileId: string | null = n
   for (const key of [...enabledDomainsByTabKey.keys()]) {
     if (key.startsWith(prefix)) enabledDomainsByTabKey.delete(key);
   }
+  agentWorld.forgetSession(`${sessionKey(context)}:`);
+  for (const key of [...tabFactsCache.keys()]) if (key.startsWith(`${sessionKey(context)}:`)) tabFactsCache.delete(key);
 }
 
 function cdpRequestOptions(timeoutMs: unknown) {
@@ -263,8 +271,37 @@ async function moveCursor(context: BrowserContext, tabId: number, x: number, y: 
 // wait for the animation to finish.
 async function pointCursor(context: BrowserContext, tabId: number, point: { x?: unknown; y?: unknown } | null | undefined, action: CursorAction | null) {
   const target = cursorPoint(point);
-  if (!target || !action) return null;
+  if (!target || !action || !await cursorEnabled(context, tabId)) return null;
   return moveCursor(context, tabId, target.x, target.y, { action, waitForArrival: false });
+}
+
+
+// Short-lived tab facts (active flag, hostname) used to choose the input route
+// and to keep the cursor overlay off guarded sites without a round trip per call.
+async function tabFacts(context: BrowserContext, tabId: number) {
+  const key = `${sessionKey(context)}:${tabId}`;
+  const cached = tabFactsCache.get(key);
+  if (cached && Date.now() - cached.at < 750) return cached.facts;
+  const facts = await extensionRequest(context, "getTab", { tabId }).then((result: unknown) => {
+    const tab = record(result);
+    const hostname = typeof tab.url === "string" ? URL.canParse(tab.url) ? new URL(tab.url).hostname || null : null : null;
+    return { active: tab.active === true, hostname };
+  }, () => null);
+  tabFactsCache.set(key, { at: Date.now(), facts });
+  return facts;
+}
+
+async function isGuardedTab(context: BrowserContext, tabId: number) {
+  if (!context.guardedHosts?.size) return false;
+  const facts = await tabFacts(context, tabId);
+  return facts?.hostname ? context.guardedHosts.has(facts.hostname) : false;
+}
+
+// The visible cursor overlay is an injected DOM element; it stays off when the
+// caller disabled it or the site is known to react to automation.
+async function cursorEnabled(context: BrowserContext, tabId: number) {
+  if (context.cursor === false) return false;
+  return !await isGuardedTab(context, tabId);
 }
 
 // Resolves a selector or node to a viewport point without clicking, so the
@@ -397,20 +434,22 @@ function compactConsoleEvents(response: BrowserEvents, options: { raw?: boolean;
   };
 }
 
-async function runtimeEvaluate(context: BrowserContext, tabId: number, expression: string, options: { userGesture?: boolean; timeoutMs?: number; runtimeTimeoutMs?: number; awaitPromise?: boolean; returnByValue?: boolean } = {}) {
-  await enableCdpDomains(context, tabId, ["Runtime"], { optional: true });
-  const result = await cdp(context, tabId, "Runtime.evaluate", {
-    expression,
-    awaitPromise: options.awaitPromise !== false,
-    returnByValue: options.returnByValue !== false,
-    userGesture: options.userGesture !== false,
-    timeout: options.runtimeTimeoutMs,
-  }, options.timeoutMs);
-  if (result.exceptionDetails) {
-    throw pageException(result.exceptionDetails);
-  }
-  return result.result?.value;
+function runtimeEvaluate(context: BrowserContext, tabId: number, expression: string, options: EvaluateOptions = {}) {
+  return agentWorld.evaluate(context, tabId, expression, options);
 }
 
-  return { selectedProfilesBySession, usedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, contextValue, sessionKey, sessionParams, explicitProfileId, markProfileUsed, resolveSessionProfileId, profileSessionParams, targetProfileIdsForSession, parseExtensionResult, extensionProfileRequest, extensionRequest, addProfileToTabResult, attachedTabKeys, enabledDomainsByTabKey, tabCacheKey, clearTabCache, clearSessionCache, cdpRequestOptions, ensureAttached, isDebuggerDetachedError, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, enableInspection, mouseButtons, stringify, compactConsoleValue, consoleEventText, consoleEventLevel, consoleEventUrl, compactDialogEvents, compactConsoleEvents, runtimeEvaluate };
+/** Context id for helper expressions that must run in the agent world (null means main world). */
+function agentContextId(context: BrowserContext, tabId: number) {
+  return agentWorld.contextId(context, tabId);
+}
+
+/** Starts console and exception capture. Returns true when it was not already running. */
+async function ensureConsoleCapture(context: BrowserContext, tabId: number) {
+  const key = tabCacheKey(context, await resolveSessionProfileId(context), tabId);
+  const had = enabledDomainsByTabKey.get(key)?.has("Runtime") === true;
+  await enableCdpDomains(context, tabId, ["Runtime", "Log"], { optional: true });
+  return !had;
+}
+
+  return { selectedProfilesBySession, usedProfilesBySession, MAX_CAPTURE_DIMENSION, MAX_CAPTURE_BASE64_CHARS, screenshotMime, contextValue, sessionKey, sessionParams, explicitProfileId, markProfileUsed, resolveSessionProfileId, profileSessionParams, targetProfileIdsForSession, parseExtensionResult, extensionProfileRequest, extensionRequest, addProfileToTabResult, attachedTabKeys, enabledDomainsByTabKey, tabCacheKey, clearTabCache, clearSessionCache, cdpRequestOptions, ensureAttached, isDebuggerDetachedError, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, enableInspection, mouseButtons, stringify, compactConsoleValue, consoleEventText, consoleEventLevel, consoleEventUrl, compactDialogEvents, compactConsoleEvents, runtimeEvaluate, agentContextId, ensureConsoleCapture, tabFacts, isGuardedTab, cursorEnabled };
 }

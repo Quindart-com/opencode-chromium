@@ -2,7 +2,11 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { parseRuntimeActivation } from "../control/state.ts";
+import { existingFile,findExecutable } from "../management/executable-discovery.ts";
+import { harnessVersion } from "../management/harnesses.ts";
+import { opencodeV2Launcher } from "../management/opencode-v2.ts";
 import { supervisorFiles } from "../management/supervisor.ts";
+import { harnessEnv } from "../shared/harnesses.ts";
 import { samePath } from "../shared/node-files.ts";
 import { record } from "../shared/values.ts";
 import { browserIds,installedBrowsers } from "./browsers.ts";
@@ -120,7 +124,12 @@ export function writeLaunchers(root: string, dir = runtimeDir()) {
 
 // Point every agent-facing surface at the launchers. Each config is rewritten
 // in place from a backup, so re-linking is idempotent and reversible.
-export function linkClientSurfaces({ dir = runtimeDir(), clients = ["codex", "opencode", "dsh"], dryRun = false } = {}) {
+export function installedOpenCodeVersion(): string | null {
+  const override = process.env[harnessEnv("opencode", "EXECUTABLE")];
+  return harnessVersion(override ? existingFile(override) : findExecutable("opencode"));
+}
+
+export function linkClientSurfaces({ dir = runtimeDir(), clients = ["codex", "opencode", "dsh"], dryRun = false, openCodeVersion = installedOpenCodeVersion() as string | null } = {}) {
   const mcp = path.join(dir, "mcp.mjs");
   const plugin = path.join(dir, "plugin.mjs");
   const results = [];
@@ -130,7 +139,12 @@ export function linkClientSurfaces({ dir = runtimeDir(), clients = ["codex", "op
       continue;
     }
     if (client === "opencode") {
-      results.push(installClient({ client: "opencode", pluginPath: plugin, dryRun }));
+      // OpenCode 2.x loads plugin directories, so it needs the v2 wrapper next to plugin.mjs.
+      if (Number.parseInt(openCodeVersion ?? "1", 10) >= 2 && !dryRun) {
+        fs.mkdirSync(path.join(dir, "v2"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "v2", "index.ts"), opencodeV2Launcher, "utf8");
+      }
+      results.push(installClient({ client: "opencode", pluginPath: plugin, dryRun, version: openCodeVersion ?? undefined }));
       continue;
     }
     if (client === "dsh") {

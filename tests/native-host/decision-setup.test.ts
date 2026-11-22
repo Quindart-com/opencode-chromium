@@ -106,3 +106,19 @@ test("recipe decisions resolve finite IDs and reject stale or uncertain recipes"
     expect((await selectRecipe("Open settings dialog", () => ++reads === 1 ? [recipe] : [], valid))?.match).toBe(null);
   } finally { delete process.env.SYNTHETIC_DECISION_KEY; }
 });
+
+test("providerStatus reports a stored credential without decrypting it", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "provider-status-"));
+  const previous = process.env.AGENT_BROWSER_PROVIDER_DIR;
+  process.env.AGENT_BROWSER_PROVIDER_DIR = root;
+  try {
+    configureProvider({ provider: "jev", route: "typesafe", shareText: true });
+    fs.writeFileSync(credentialPath(), JSON.stringify({ typesafe: "dpapi:not-decryptable" }));
+    const status = providerStatus();
+    expect(status.credentialConfigured).toBe(true);
+    expect(status.credentialRoutes).toContain("typesafe");
+  } finally {
+    if (previous === undefined) delete process.env.AGENT_BROWSER_PROVIDER_DIR; else process.env.AGENT_BROWSER_PROVIDER_DIR = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -4,7 +4,7 @@ import { harnessControls,refreshHarnessControl } from "../control/harness-contro
 import { runProcess } from "../control/process.ts";
 import { harnessTargets,type HarnessTarget } from "../shared/connections.ts";
 import { harnessDefinitions } from "../shared/harnesses.ts";
-import { nativeCodexPluginEnabled } from "./configuration.ts";
+import { nativeCodexMcpEnabled } from "./configuration.ts";
 import { detectHarnesses,planHarness,type Harness } from "./harnesses.ts";
 import { applyTransaction } from "./transaction.ts";
 
@@ -42,7 +42,7 @@ export async function reconnectHarness(target: unknown, dir: string, {
   const cli = command(harness);
   if (cli && target === "opencode") {
     await run(cli.executable, [...cli.args, "reload"], { cwd: path.dirname(harness.configPath), timeoutMs: 15000 });
-  } else if (target === "codex" && fs.existsSync(harness.configPath) && nativeCodexPluginEnabled(fs.readFileSync(harness.configPath, "utf8"))) {
+  } else if (target === "codex" && fs.existsSync(harness.configPath) && nativeCodexMcpEnabled(fs.readFileSync(harness.configPath, "utf8"))) {
     // A separate CLI cannot attach to the desktop app's failed per-chat MCP
     // connection. Reinstalling metadata does not reload it and can undo a repair.
     return { ok: true, code: "plugin_reload_required", refreshed: 0 };

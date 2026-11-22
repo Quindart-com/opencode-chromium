@@ -8,9 +8,10 @@ import { screenshotResultSchema } from "./operation-results.ts";
 import type { RunInput,Step } from "./registry.ts";
 import { replayGateRejection } from "./replay-gate.ts";
 import { requiresApproval } from './run-validation.ts';
-import { READ_ACTIONS,clamp,isStaleTargetError,memoryMatchSchema,parseLegacyResult,rememberedStepMismatch,type MemoryCapture,type PriorResults,type ReplayOutcome,type RunStepResult,type StepExecution,type StepOutcome } from "./runtime-foundation.ts";
+import { READ_ACTIONS,clamp,isStaleTargetError,memoryMatchSchema,parseLegacyResult,rememberedStepMismatch,type MemoryCapture,type PriorResults,type ReplayOutcome,type RunStepResult,type StepExecution,type StepOutcome,type StepWarning } from "./runtime-foundation.ts";
 import { RuntimeInteraction } from "./runtime-interaction.ts";
 import type { RuntimeSession } from "./runtime-types.ts";
+import { PAGE_PROTECTION_WARNING,TRANSITION_ACTIONS,classifyTabTransition,type TabSnapshot } from "./tab-transition.ts";
 
 export class RuntimeMemory extends RuntimeInteraction {
   async executeStep(step: Step, tabId: number, prior: PriorResults, session: RuntimeSession, chainId: string | null = null, stepIndex: number | null = null) {
@@ -64,7 +65,7 @@ export class RuntimeMemory extends RuntimeInteraction {
           return { filled: fields.length, fields };
         }
         case "type": {
-          if (target.nodeId || target.selector) return this.editTarget(target, tabId, "append", step.value, session.sessionId, chainId, stepIndex);
+          if (target.nodeId || target.selector || target.ref !== undefined) return this.editTarget(target, tabId, "append", step.value, session.sessionId, chainId, stepIndex);
           return this.invoke("browser_type", ({ tabId, text: step.value }), session.sessionId);
         }
         case "press": return this.invoke("browser_keypress", ({ tabId, key: step.key, nodeId: target.nodeId, selector: target.selector, frameId: target.frameId }), session.sessionId);
@@ -93,12 +94,12 @@ export class RuntimeMemory extends RuntimeInteraction {
       }
     };
     try {
-      return await this.operationScope.run({ ...this.operationScope.getStore(), frameId: target.frameId ?? nodeFrameId(target.nodeId) ?? this.operationScope.getStore()?.frameId }, dispatch);
+      return await this.operationScope.run({ ...this.operationScope.getStore(), frameId: target.frameId ?? nodeFrameId(target.nodeId) ?? this.operationScope.getStore()?.frameId, ...(step.inputMode ? { inputMode: step.inputMode } : {}) }, dispatch);
     } catch (error) {
       if (record(error).code === "STALE_TARGET") throw error;
       if (errorDetails(error).uncertain || !isStaleTargetError(error) || (!step.target?.selector && !step.target?.query)) throw error;
       target = await this.resolveTarget({ ...step, target: { ...step.target, nodeId: undefined } }, tabId, prior, session.sessionId);
-      return this.operationScope.run({ ...this.operationScope.getStore(), frameId: target.frameId ?? nodeFrameId(target.nodeId) ?? this.operationScope.getStore()?.frameId }, dispatch);
+      return this.operationScope.run({ ...this.operationScope.getStore(), frameId: target.frameId ?? nodeFrameId(target.nodeId) ?? this.operationScope.getStore()?.frameId, ...(step.inputMode ? { inputMode: step.inputMode } : {}) }, dispatch);
     }
   }
 
@@ -226,7 +227,7 @@ export class RuntimeMemory extends RuntimeInteraction {
       if (outcome.ok) {
         if (record(outcome.settled).settled === false) allOk = false;
         if (!READ_ACTIONS.has(step.action)) completedMutation = true;
-        results.push({ index, action: step.action, ok: true, ...(outcome.settled ? { settle: outcome.settled } : {}) });
+        results.push({ index, action: step.action, ok: true, ...(outcome.settled ? { settle: outcome.settled } : {}), ...(outcome.tabTransition ? { tabTransition: outcome.tabTransition } : {}), ...(outcome.warnings?.length ? { warnings: outcome.warnings } : {}) });
       } else {
         allOk = false;
         const detail = outcome.error;
@@ -288,6 +289,8 @@ export class RuntimeMemory extends RuntimeInteraction {
     let lastError = null;
     let settled = null;
     let executionState = "not_started";
+    const watchTab = TRANSITION_ACTIONS.has(step.action);
+    const tabsBefore = watchTab ? await this.sessionTabs(session) : null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         value = await this.executeStep(step, tabId, prior, session, chainId, index);
@@ -308,6 +311,7 @@ export class RuntimeMemory extends RuntimeInteraction {
         else settled = { settled: false, degraded: true, error: errorDetails(error) };
       }
     }
+    const { tabTransition, warnings } = await this.detectTabTransition(step, tabId, tabsBefore, session);
     if (!lastError && step.id) prior.set(step.id, value);
     if (memoryEnabled) {
       await this.recordMemoryStep({
@@ -320,8 +324,24 @@ export class RuntimeMemory extends RuntimeInteraction {
         errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : record(settled).settled === false ? "SETTLE_UNVERIFIED" : null,
       }, session).catch(() => {});
     }
+    const extras = { ...(tabTransition ? { tabTransition } : {}), ...(warnings.length ? { warnings } : {}) };
     return lastError
-      ? { ok: false, executionState, error: { ...errorDetails(lastError), uncertain: executionState === "unknown" || errorDetails(lastError).uncertain }, rawError: lastError, value, settled }
-      : { ok: true, executionState, value, settled };
+      ? { ok: false, executionState, error: { ...errorDetails(lastError), uncertain: executionState === "unknown" || errorDetails(lastError).uncertain }, rawError: lastError, value, settled, ...extras }
+      : { ok: true, executionState, value, settled, ...extras };
+  }
+
+  // Compares the tab before and after an action. A blank, closed, or unexpectedly
+  // redirected tab is reported as an uncertain warning and the host is marked
+  // guarded for the rest of the session. Nothing is retried or replayed.
+  async detectTabTransition(step: Step, tabId: number, before: TabSnapshot[] | null, session: RuntimeSession) {
+    const warnings: StepWarning[] = [];
+    if (!before) return { tabTransition: undefined, warnings };
+    const classified = classifyTabTransition(step.action, tabId, before, await this.sessionTabs(session));
+    if (!classified) return { tabTransition: undefined, warnings };
+    if (classified.suspected) {
+      warnings.push({ ...PAGE_PROTECTION_WARNING });
+      if (classified.hostname) session.guardedHosts.add(classified.hostname);
+    }
+    return { tabTransition: classified.transition, warnings };
   }
 }

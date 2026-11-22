@@ -10,7 +10,7 @@ import { atomicJson,processAlive } from "./leases.ts";
 import { runtimeDirectory } from "./state.ts";
 
 export interface HarnessControlRecord { id: string; pid: number; harness: HarnessKind; version: string; harnessVersion: string | null; socket: string; token: string; updatedAt: number }
-function ownSocket(id: string) {
+export function ownSocket(id: string) {
   if (process.platform === "win32") return "\\\\.\\pipe\\opencode-browser-agent-" + id;
   const name = "ocb-" + id.replaceAll("-", "") + ".sock", candidate = path.join(os.tmpdir(), name);
   // macOS limits sockaddr_un paths to 104 bytes, including the terminator.
@@ -18,14 +18,30 @@ function ownSocket(id: string) {
   return Buffer.byteLength(candidate) < 100 ? candidate : path.join("/tmp", name);
 }
 const validId = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9-]{36}$/.test(value);
-export function harnessControls(dir = runtimeDirectory()): HarnessControlRecord[] {
-  const folder = path.join(dir, "harness-links");
+const STALE_MS = 90000, REAP_INTERVAL_MS = 30000;
+const lastReap = new Map<string, number>();
+const unlinkQuietly = (file: string) => { try { fs.unlinkSync(file); } catch { /* Best effort; another process may have removed it. */ } };
+/**
+ * Link files are rewritten every 15s, so an old mtime or `updatedAt` is stale on
+ * its own. Process ids are reused on Windows, so liveness alone never keeps a
+ * record. Stale files are deleted at most once per 30s per folder unless forced;
+ * reads still filter them out every time.
+ */
+export function harnessControls(dir = runtimeDirectory(), { reap = false }: { reap?: boolean } = {}): HarnessControlRecord[] {
+  const folder = path.join(dir, "harness-links"), now = Date.now();
+  const due = reap || now - (lastReap.get(folder) ?? 0) >= REAP_INTERVAL_MS;
+  if (due) lastReap.set(folder, now);
   try { return fs.readdirSync(folder).filter(name => /^[a-f0-9-]{36}\.json$/.test(name)).flatMap(name => {
+    const file = path.join(folder, name);
     try {
-      const row = record(JSON.parse(fs.readFileSync(path.join(folder, name), "utf8")) as unknown);
-      if (!validId(row.id) || name !== row.id + ".json" || !Number.isSafeInteger(row.pid) || Number(row.pid) <= 0 || !processAlive(Number(row.pid)) ||
+      const modified = fs.statSync(file).mtimeMs;
+      if (modified < now - STALE_MS) { if (due) unlinkQuietly(file); return []; }
+      const row = record(JSON.parse(fs.readFileSync(file, "utf8")) as unknown);
+      const stale = typeof row.updatedAt === "number" && row.updatedAt < now - STALE_MS || Number.isSafeInteger(row.pid) && Number(row.pid) > 0 && !processAlive(Number(row.pid));
+      if (stale) { if (due) unlinkQuietly(file); return []; }
+      if (!validId(row.id) || name !== row.id + ".json" || !Number.isSafeInteger(row.pid) || Number(row.pid) <= 0 ||
         !Object.hasOwn(harnessLabels, String(row.harness)) || row.socket !== ownSocket(row.id) || typeof row.token !== "string" || !/^[a-f0-9-]{36}$/.test(row.token) ||
-        typeof row.updatedAt !== "number" || row.updatedAt < Date.now() - 90000 || row.updatedAt > Date.now() + 5000 || !safeClientVersion(row.version)) return [];
+        typeof row.updatedAt !== "number" || row.updatedAt > now + 5000 || !safeClientVersion(row.version)) return [];
       return [row as unknown as HarnessControlRecord];
     } catch { return []; }
   }); } catch { return []; }
@@ -36,6 +52,7 @@ export async function startHarnessControl({ harness, version, harnessVersion, id
 }) {
   const id = randomUUID(), token = randomUUID(), socket = ownSocket(id), folder = path.join(dir, "harness-links");
   fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+  harnessControls(dir, { reap: true });
   const file = path.join(folder, id + ".json");
   const row: HarnessControlRecord = { id, token, socket, pid: process.pid, harness, harnessVersion: safeClientVersion(harnessVersion), version, updatedAt: Date.now() };
   let running = false, closed = false;

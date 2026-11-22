@@ -21,16 +21,10 @@ export function lines(onMessage: (message: Message) => void) {
     }
   };
 }
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value !== "object" || value === null) return value;
-  return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)]));
-}
 export class McpWorker {
   readonly child: ChildProcess;
   readonly identity = randomUUID();
   readonly root: string;
-  contract = "";
   initialized: Message | null = null;
   #nextId = 1;
   #pending = new Map<number, { resolve(message: Message): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
@@ -87,14 +81,9 @@ export class McpWorker {
     const initialized = await this.request("initialize", params, undefined, 15000);
     if (initialized.error) throw new Error("Candidate worker could not initialize");
     this.initialized = initialized;
-    this.send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    const tools = await this.request("tools/list", {}, undefined, 15000);
-    const resources = await this.request("resources/templates/list", {}, undefined, 15000);
-    if (tools.error || resources.error) throw new Error("Candidate MCP contract could not be read");
-    const result = initialized.result as { protocolVersion?: unknown; capabilities?: unknown };
-    const definitions = (tools.result as { tools?: Record<string, unknown>[] }).tools;
-    this.contract = JSON.stringify(canonical({ protocolVersion: result.protocolVersion, capabilities: result.capabilities,
-      tools: definitions?.map(({ ...definition }) => definition).sort((a, b) => String(a.name).localeCompare(String(b.name))), resources: resources.result }));
+    // Forward the handshake promptly. The client owns its initialized
+    // notification and catalog requests; prefetching them here delays startup
+    // and sends initialized twice when the client's notification arrives.
     return initialized;
   }
   close() { this.#fail(new Error("Browser worker closed")); this.child.stdin?.end(); this.child.kill(); }

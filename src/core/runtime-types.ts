@@ -12,6 +12,12 @@ export interface RuntimeSession {
   configuredTabs: Map<string, { tabId: number; profileId: string | null }>;
   createdAt: string;
   environment?: Environment;
+  /** Default pointer route for click/hover/focus steps. */
+  inputMode?: "auto" | "pointer" | "dom";
+  /** false keeps the cursor overlay out of the page. */
+  cursor?: boolean;
+  /** Hostnames that closed, blanked, or redirected the tab after an action; they get low-footprint input. */
+  guardedHosts: Set<string>;
 }
 export interface PendingApproval { sessionId: string; request: RunInput; expiresAt: number }
 export interface SearchPreferences { maxResults: number; detail: string; mode: string }

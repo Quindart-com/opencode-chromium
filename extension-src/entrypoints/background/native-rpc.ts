@@ -28,6 +28,8 @@ export class NativeRpc {
   readonly #pending = new Map<number, Pending>();
   #activeHandlers = 0;
   #port: Browser.runtime.Port | null = null;
+  #markedConnected = false;
+  #generation = 0;
   #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly options: {
     chrome: WxtBrowser; hostName: string; timeoutMs: number;
@@ -38,18 +40,22 @@ export class NativeRpc {
   constructor(options: NativeRpc["options"]) { this.options = options; }
 
   register(method: string, handler: (params: CommandParams) => Promise<unknown>): void { this.#handlers.set(method, handler); }
+  /** Increments whenever the native connection is torn down or re-established. */
+  connectionGeneration(): number { return this.#generation; }
   idle(): boolean { return this.#pending.size === 0 && this.#activeHandlers === 0; }
 
   connect(): void {
     if (this.#port) return;
     try {
       this.#port = this.options.chrome.runtime.connectNative(this.options.hostName);
+      this.#markedConnected = false; this.#generation++;
       this.options.status({ state: "connecting", error: null, nextRetryMs: null, versionChecked: false, nativeHostVersion: null, clientVersions: [], unknownClientVersion: false,
         browserCompatible: undefined,browserContractVersion: undefined,runtimeBrowserContractVersions: undefined });
       const port = this.#port;
       port.onMessage.addListener((message: unknown) => { if (this.#port === port) void this.#handleMessage(message); });
       port.onDisconnect.addListener(() => {
         if (this.#port !== port) return;
+        this.#markedConnected = false; this.#generation++;
         this.options.disconnected();
         const error = this.options.chrome.runtime.lastError;
         this.#port = null;
@@ -71,6 +77,7 @@ export class NativeRpc {
     if (this.#reconnectTimer) clearTimeout(this.#reconnectTimer);
     this.#reconnectTimer = null;
     port?.disconnect();
+    this.#markedConnected = false; this.#generation++;
     this.options.disconnected();
     this.options.status({ state: "reconnecting", nativeHostVersion: null, clientVersions: [], versionChecked: false });
     this.connect();
@@ -101,6 +108,7 @@ export class NativeRpc {
     const port = this.#port;
     void this.request("ping", { time: new Date().toISOString() }).catch(error => {
       if (this.#port !== port) return;
+      this.#markedConnected = false; this.#generation++;
       this.options.status({ state: "disconnected", error: String(error instanceof Error ? error.message : error) });
       this.#rejectPending("Native host heartbeat failed");
       this.#port?.disconnect(); this.#port = null; this.#scheduleReconnect();
@@ -149,6 +157,9 @@ export class NativeRpc {
     if (!pending) return;
     this.#pending.delete(message.id); clearTimeout(pending.timeout);
     if (message.error) pending.reject(Object.assign(new Error(String(record(message.error).message ?? "RPC error")), record(record(message.error).data)));
-    else { this.options.status({ state: "connected", error: null, nextRetryMs: null }); pending.resolve(message.result); }
+    else {
+      if (!this.#markedConnected) { this.#markedConnected = true; this.options.status({ state: "connected", error: null, nextRetryMs: null }); }
+      pending.resolve(message.result);
+    }
   }
 }

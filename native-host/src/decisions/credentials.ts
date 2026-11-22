@@ -12,12 +12,25 @@ export function protectKey(key: string): string {
   return process.platform === "win32" ? `dpapi:${dpapi(Buffer.from(key).toString("base64"), false)}` : key;
 }
 const cache = new Map<string, string>();
+const FAILURE_CACHE_MS = 60_000;
+const failures = new Map<string, { error: Error; until: number }>();
+export function resetCredentialCache(): void { cache.clear(); failures.clear(); }
 export function revealKey(value: string): string {
   if (!value.startsWith("dpapi:")) return value;
   if (process.platform !== "win32") throw new Error("Credential belongs to another operating system");
   const found = cache.get(value);
   if (found) return found;
-  const key = Buffer.from(dpapi(value.slice(6), true), "base64").toString("utf8");
-  cache.clear(); cache.set(value, key);
+  const failure = failures.get(value);
+  if (failure && failure.until > Date.now()) throw failure.error;
+  failures.delete(value);
+  let key: string;
+  try { key = Buffer.from(dpapi(value.slice(6), true), "base64").toString("utf8"); }
+  catch (error) {
+    // Do not respawn PowerShell on every call while decryption keeps failing.
+    const cached = error instanceof Error ? error : new Error(String(error));
+    failures.clear(); failures.set(value, { error: cached, until: Date.now() + FAILURE_CACHE_MS });
+    throw cached;
+  }
+  cache.clear(); failures.clear(); cache.set(value, key);
   return key;
 }

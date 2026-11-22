@@ -1,6 +1,9 @@
 import type { NativeRpc } from "./native-rpc.ts";
 import { runtimeSetupCommand } from "../../runtime-update.ts";
 
+type Capabilities = { protocolVersion?: number; methods?: string[] };
+const capabilityCache = new WeakMap<NativeRpc, { generation: number; value: Capabilities }>();
+
 /** Connection controls are restricted to our panel, never content scripts or pages. */
 export async function connectionPanelMessage(message: { type: string; params?: Record<string, unknown>; enabled?: unknown }, sender: { id?: string; tab?: { url?: string }; url?: string; frameId?: number }, dependencies: {
   extensionId: string; panelUrl?: string; rpc: NativeRpc; idle(): boolean;
@@ -8,8 +11,15 @@ export async function connectionPanelMessage(message: { type: string; params?: R
   const ownPanelTab = dependencies.panelUrl && sender.url === dependencies.panelUrl && sender.tab?.url === dependencies.panelUrl && sender.frameId === 0;
   if (sender.id !== dependencies.extensionId || sender.tab && !ownPanelTab) throw new Error("Open connection controls from the extension panel");
   const capabilities = async () => {
-    try { return await dependencies.rpc.request("control.capabilities", {}, { timeoutMs: 1500 }) as { protocolVersion?: number; methods?: string[] }; }
-    catch { return null; }
+    const generation = dependencies.rpc.connectionGeneration?.();
+    const cached = capabilityCache.get(dependencies.rpc);
+    if (generation !== undefined && cached && cached.generation === generation) return cached.value;
+    try {
+      const value = await dependencies.rpc.request("control.capabilities", {}, { timeoutMs: 1500 }) as Capabilities;
+      // A reconnect during the request makes the answer belong to a stale connection.
+      if (generation !== undefined && dependencies.rpc.connectionGeneration() === generation) capabilityCache.set(dependencies.rpc, { generation, value });
+      return value;
+    } catch { return null; }
   };
   if (message.type === "GET_HARNESS_CONNECTIONS") {
     const snapshot = await dependencies.rpc.request("connections.list", {}, { timeoutMs: 2500 });

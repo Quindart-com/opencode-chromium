@@ -52,11 +52,17 @@ export function nativeCodexPluginEnabled(before: string): boolean {
   return Object.entries(plugins).some(([name, settings]) =>
     name.startsWith(`${SERVER_ID}@`) && object(settings).enabled === true);
 }
+export function nativeCodexMcpEnabled(before: string): boolean {
+  return Object.entries(object(parseToml(before).plugins)).some(([name, settings]) => {
+    const plugin = object(settings);
+    return name.startsWith(`${SERVER_ID}@`) && plugin.enabled === true && object(object(plugin.mcp_servers)[SERVER_ID]).enabled !== false;
+  });
+}
 
 export function managedConfiguration(before: string, client: HarnessId, serverPath = ""): boolean {
   try {
     if (client === "dsh") return deepSeekManaged(before);
-    if (client === "codex") return nativeCodexPluginEnabled(before) || object(parseToml(before).mcp_servers)[SERVER_ID] !== undefined;
+    if (client === "codex") return nativeCodexMcpEnabled(before) || object(parseToml(before).mcp_servers)[SERVER_ID] !== undefined;
     const config = jsonConfig(before);
     if (client.startsWith("claude")) return object(config.mcpServers)[SERVER_ID] !== undefined;
     const plugins = [...(Array.isArray(config.plugin) ? config.plugin : []), ...(Array.isArray(config.plugins) ? config.plugins : [])];
@@ -83,7 +89,7 @@ function codexConfig(before: string, options: ConfigOptions): string {
   const parsed = parseToml(before);
   const existing = object(object(parsed.mcp_servers)[SERVER_ID]);
   const owned = codexTables(before).filter(table => table.owned);
-  const removing = options.action === "uninstall" || nativeCodexPluginEnabled(before);
+  const removing = options.action === "uninstall" || nativeCodexMcpEnabled(before);
   if (removing) {
     if (!owned.length && Object.keys(existing).length) throw new Error("Inline Codex browser settings require manual removal; no files changed");
     return owned.reverse().reduce((text, table) => text.slice(0, table.start) + text.slice(table.end), before);

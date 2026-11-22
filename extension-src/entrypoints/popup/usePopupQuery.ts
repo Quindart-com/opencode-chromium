@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { sendMessage } from "./api";
+import { sendMessageShared } from "./api";
 
 /** Small read-only summaries must distinguish missing data from loading. */
 export default function usePopupQuery<T>(type: string, field: "result" | "semantic", enabled: boolean) {
@@ -10,7 +10,7 @@ export default function usePopupQuery<T>(type: string, field: "result" | "semant
     setData(null); setState("loading");
     if (!enabled) return;
     const timer = window.setTimeout(() => { if (active) { active = false; setState("error"); } }, 10000);
-    void sendMessage<{ result?: T; semantic?: T; error?: string }>({ type }).then(response => {
+    void sendMessageShared<{ result?: T; semantic?: T; error?: string }>({ type }, revision > 0 ? 0 : undefined).then(response => {
       window.clearTimeout(timer);
       if (response.error || response[field] == null) throw new Error("unavailable");
       if (active) { setData(response[field]); setState("ready"); }

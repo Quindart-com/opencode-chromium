@@ -24,7 +24,7 @@ type OpenCodeOptions = RuntimeOptions & { runtime?: AgentBrowserRuntime; memory?
 type NativeTool = ReturnType<typeof nativeTool>;
 interface OpenCodeContext { runtime?: AgentBrowserRuntime; logger?: Pick<ReturnType<typeof createLogger>, "info">;
   tools?: { add?(name: string, tool: NativeTool): unknown | Promise<unknown> };
-  tool?: { reload?(): unknown | Promise<unknown>; add?(name: string, tool: NativeTool): unknown | Promise<unknown>; transform?(input: (editor: { add(tool: { name: string; description: string; input: unknown; execute(input: unknown, context: BrowserContext): Promise<unknown> }): unknown }) => unknown): unknown | Promise<unknown> };
+  tool?: { reload?(): unknown | Promise<unknown>; add?(name: string, tool: NativeTool): unknown | Promise<unknown>; transform?(input: (editor: ToolEditor) => unknown): unknown | Promise<unknown> };
   addTool?(name: string, tool: NativeTool): unknown | Promise<unknown>;
 }
 const IMAGE_ATTACHMENT_LIMIT = 4;
@@ -146,13 +146,22 @@ function createLegacyOpenCodeHooks(options: OpenCodeOptions = {}) {
   };
 }
 
-async function registerWithContext(ctx: OpenCodeContext, name: string, tool: NativeTool) {
-  if (typeof ctx?.tools?.add === "function") return ctx.tools.add(name, tool);
-  if (typeof ctx?.tool?.add === "function") return ctx.tool.add(name, tool);
-  if (typeof ctx?.addTool === "function") return ctx.addTool(name, tool);
+type ToolEditor = { add(tool: { name: string; description: string; input: unknown; execute(input: unknown, context: BrowserContext): Promise<unknown> }): unknown };
+
+function editorTool(name: string, tool: NativeTool) {
+  return { name, description: tool.description, input: tool.inputSchema,
+    async execute(input: unknown, context: BrowserContext) { const result = await tool.execute(input, context); return { content: result.output, attachments: result.attachments }; } };
+}
+
+/** Registers every tool through the first supported context surface; returns a disposable registration when the host provides one. */
+async function registerWithContext(ctx: OpenCodeContext, tools: Record<string, NativeTool>): Promise<{ dispose?(): unknown } | undefined> {
+  const entries = Object.entries(tools);
+  const add = typeof ctx?.tools?.add === "function" ? ctx.tools.add.bind(ctx.tools) : typeof ctx?.tool?.add === "function" ? ctx.tool.add.bind(ctx.tool) :
+    typeof ctx?.addTool === "function" ? ctx.addTool.bind(ctx) : null;
+  if (add) { for (const [name, tool] of entries) await add(name, tool); return undefined; }
   if (typeof ctx?.tool?.transform === "function") {
-    return ctx.tool.transform(editor => editor.add({ name, description: tool.description, input: tool.inputSchema,
-      async execute(input, context) { const result = await tool.execute(input, context); return { content: result.output, attachments: result.attachments }; } }));
+    // One transform adds every tool, so a single Registration owns them all.
+    return await ctx.tool.transform((editor: ToolEditor) => { for (const [name, tool] of entries) editor.add(editorTool(name, tool)); }) as { dispose?(): unknown } | undefined;
   }
   throw new Error("This OpenCode context cannot register custom tools. Install the standard server plugin or configure the browser MCP server.");
 }
@@ -162,9 +171,7 @@ export async function createOpenCodeSetup(ctx: OpenCodeContext = {}, options: Op
   const registry = { ...createCoreRegistry(runtime), ...(options.memory ?? memoryEnabledForServer() ? createMemoryRegistry(runtime) : {}) };
   const tools = Object.fromEntries(Object.entries(registry).map(([name, definition]) => [name, nativeTool(name, definition, runtime)]));
   const logger = options.logger ?? ctx.logger ?? createLogger({ name: PLUGIN_NAME, sink: process.stderr });
-  for (const [name, tool] of Object.entries(tools)) {
-    await registerWithContext(ctx, name, tool);
-  }
+  const registration = await registerWithContext(ctx, tools);
   logger.info("OpenCode V2 browser tools registered", { plugin: PLUGIN_NAME, tools: Object.keys(tools) });
   trackRuntime(runtime);
   const stopPresence = startBrowserClientPresence("opencode", null, "plugin", announceBrowserClient);
@@ -175,6 +182,7 @@ export async function createOpenCodeSetup(ctx: OpenCodeContext = {}, options: Op
   const cleanup = async () => {
     if (closed) return;
     closed = true;
+    try { await registration?.dispose?.(); } catch { /* Best effort: the host may already have torn the registration down. */ }
     stopPresence();
     control?.close();
     trackRuntime(runtime).close();
@@ -210,9 +218,11 @@ Object.assign(opencodeBrowserPluginEntry, {
 Object.defineProperty(opencodeBrowserPluginEntry, "name", { value: PLUGIN_NAME, configurable: true });
 
 export const opencodeBrowserPlugin = opencodeBrowserPluginEntry;
+// Dual-shaped default export: OpenCode 1.x loads `server`, OpenCode 2.x loads `setup`.
 export const opencodePluginModule = Object.freeze({
   id: PLUGIN_NAME,
   server: opencodeBrowserPluginEntry,
+  setup: createOpenCodeSetup,
 });
 export { opencodeV2Plugin };
 export default opencodePluginModule;

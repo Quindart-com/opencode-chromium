@@ -3,14 +3,14 @@ import path from "node:path";
 import { npmMetadata } from "../control/npm-client.ts";
 import { createRuntimeUpdater,installGlobalRelease,newerRelease,releaseVersion } from "../control/update.ts";
 import { record } from "../shared/values.ts";
-import { nativeCodexPluginEnabled } from "./configuration.ts";
+import { nativeCodexMcpEnabled } from "./configuration.ts";
 import { detectHarnesses } from "./harnesses.ts";
 import { refreshBrowserMarketplace } from "./marketplace.ts";
 import { planSkills } from "./skills.ts";
 import { applyTransaction } from "./transaction.ts";
 
 function refreshInstalledSkills(root: string) {
-  const targets = detectHarnesses().filter(row => row.managed && (row.id !== "codex" || !nativeCodexPluginEnabled(fs.readFileSync(row.configPath, "utf8")))).map(row => row.id);
+  const targets = detectHarnesses().filter(row => row.managed && (row.id !== "codex" || !nativeCodexMcpEnabled(fs.readFileSync(row.configPath, "utf8")))).map(row => row.id);
   return applyTransaction(planSkills(root, targets)).changedFiles.length;
 }
 

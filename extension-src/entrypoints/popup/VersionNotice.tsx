@@ -2,7 +2,7 @@ import { useEffect,useState } from "react";
 import { browser } from "wxt/browser";
 import { t } from "../../i18n";
 import { versionNotice } from "../../version-status";
-import { sendMessage,type NativeStatus } from "./api";
+import { sendMessage,sendMessageShared,type NativeStatus } from "./api";
 import useLocalAction from "./useLocalAction";
 import { requiresRuntimeSetup } from "../../runtime-update";
 import RuntimeSetup from "./RuntimeSetup";
@@ -17,7 +17,7 @@ export default function VersionNotice({ status, showSnoozed }: { status: NativeS
     let disposed = false;
     setChecking(true); setSetupRequired(false);
     if (!notice || notice.kind === "extension") { setChecking(false); return; }
-    void sendMessage<{ result?: { state?: string; controllerSupported?: boolean } }>({ type: "GET_RUNTIME_UPDATES" }).then(response => {
+    void sendMessageShared<{ result?: { state?: string; controllerSupported?: boolean } }>({ type: "GET_RUNTIME_UPDATES" }).then(response => {
       if (!disposed) setSetupRequired(requiresRuntimeSetup(response.result));
     }).catch(() => {}).finally(() => { if (!disposed) setChecking(false); });
     return () => { disposed = true; };

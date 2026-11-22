@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { cursorActionForTool } from "../../cursor.ts";
-import { defineBrowserOperation,type BrowserOperationDependencies as Dependencies } from "../../operation-definition.ts";
+import { VIEW_STYLES,layoutScale,projectSnapshot,renderDelta,renderView,type NativeView,type Snapshot } from "../../native-view.ts";
+import { defineBrowserOperation,defineObjectOperation,type BrowserOperationDependencies as Dependencies } from "../../operation-definition.ts";
+import { pageStateExpression } from '../page-state.ts';
 import { domSnapshotExpression } from '../snapshot-expressions.ts';
 export { keyDispatchEvents,parseKeyPress } from "../../keyboard.ts";
 export { pageInspectExpression,visualMapExpression } from '../inspection-expressions.ts';
@@ -11,7 +13,8 @@ export { pageSearchUnitsExpression } from '../snapshot-expressions.ts';
 
 const tool = Object.assign(defineBrowserOperation, { schema: z });
 export function createInputOperations(dependencies: Dependencies) {
-  const { executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, pageBackend, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
+  const views = new Map<string, NativeView>();
+  const { sessionKey, fillFocusedEditable, executeCdpRequest, cdp, enableCdpDomains, activate, moveCursor, pointCursor, resolveCursorPoint, inputGesture, mouseButtons, stringify, mouseStep, interpolatePath, runtimeEvaluate, finiteNumber, performClick, cursorEnabled, domNodeHoverTargetExpression, clickAtPointExpression, selectorHoverTargetExpression, focusedEditableSnapshotExpression, focusedEditableTargetExpression, clickPoint, hoverPoint, insertTextAndVerify, pressKey, scrollTab } = dependencies;
   return {
       browser_move: tool({
         description: "Move the visible OpenCode cursor overlay in a Chromium tab.",
@@ -38,8 +41,8 @@ export function createInputOperations(dependencies: Dependencies) {
         },
         async execute(args, context) {
           await pointCursor(context, args.tabId, args, "click");
-          await clickPoint(context, args.tabId, args.x, args.y, args.button);
-          return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y });
+          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y, args.button);
+          return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y, inputRoute });
         },
       }),
       browser_double_click: tool({
@@ -56,8 +59,8 @@ export function createInputOperations(dependencies: Dependencies) {
           const point = await resolveCursorPoint(context, args.tabId, args);
           if (point) await pointCursor(context, args.tabId, point, "click");
           await activate(context, args.tabId);
-          await pageBackend.click(context, args.tabId, (trusted: boolean) => clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2, trusted }), { button: args.button, clickCount: 2 });
-          return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y });
+          const { inputRoute } = await performClick(context, args.tabId, (trusted: boolean) => clickAtPointExpression(args.x, args.y, { button: args.button, clickCount: 2, trusted }), { button: args.button, clickCount: 2 });
+          return stringify({ doubleClicked: true, tabId: args.tabId, x: args.x, y: args.y, inputRoute });
         },
       }),
       browser_hover: tool({
@@ -81,8 +84,8 @@ export function createInputOperations(dependencies: Dependencies) {
             finiteNumber(point.y, "y");
           }
           await pointCursor(context, args.tabId, point, "observe");
-          await hoverPoint(context, args.tabId, point.x, point.y);
-          return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point });
+          const { inputRoute } = await hoverPoint(context, args.tabId, point.x, point.y);
+          return stringify({ hovered: true, tabId: args.tabId, x: point.x, y: point.y, target: point, inputRoute });
         },
       }),
       browser_handle_dialog: tool({
@@ -134,19 +137,20 @@ export function createInputOperations(dependencies: Dependencies) {
           }
           await pointCursor(context, args.tabId, args.path[0], "drag");
           await activate(context, args.tabId);
+          const showCursor = await cursorEnabled(context, args.tabId);
           const points = interpolatePath(args.path);
           const [start, ...rest] = points;
           if (!start) throw new Error("Drag path is empty");
           const steps = [
-            mouseStep({ type: "mouseMoved", x: start.x, y: start.y, button: args.button, buttons: 0, pointerType: "mouse" }, start),
-            mouseStep({ type: "mousePressed", x: start.x, y: start.y, button: args.button, buttons: mouseButtons(args.button), clickCount: 1, pointerType: "mouse" }, start, 24),
+            mouseStep({ type: "mouseMoved", x: start.x, y: start.y, button: args.button, buttons: 0, pointerType: "mouse" }, showCursor ? start : undefined),
+            mouseStep({ type: "mousePressed", x: start.x, y: start.y, button: args.button, buttons: mouseButtons(args.button), clickCount: 1, pointerType: "mouse" }, showCursor ? start : undefined, 24),
           ];
           for (const point of rest) {
-            steps.push(mouseStep({ type: "mouseMoved", x: point.x, y: point.y, button: args.button, buttons: mouseButtons(args.button), pointerType: "mouse" }, point, 8));
+            steps.push(mouseStep({ type: "mouseMoved", x: point.x, y: point.y, button: args.button, buttons: mouseButtons(args.button), pointerType: "mouse" }, showCursor ? point : undefined, 8));
           }
           const end = points.at(-1);
           if (!end) throw new Error("Drag path is empty");
-          steps.push(mouseStep({ type: "mouseReleased", x: end.x, y: end.y, button: args.button, buttons: 0, clickCount: 1, pointerType: "mouse" }, end, 16));
+          steps.push(mouseStep({ type: "mouseReleased", x: end.x, y: end.y, button: args.button, buttons: 0, clickCount: 1, pointerType: "mouse" }, showCursor ? end : undefined, 16));
           const timeoutMs = Math.min(180000, Math.max(30000, steps.length * 500 + 15000));
           await inputGesture(context, args.tabId, steps, timeoutMs);
           return stringify({ dragged: true, tabId: args.tabId, points: args.path.length, dispatchedPoints: points.length });
@@ -195,6 +199,82 @@ export function createInputOperations(dependencies: Dependencies) {
         },
         async execute(args, context) {
           return stringify(await runtimeEvaluate(context, args.tabId, domSnapshotExpression()));
+        },
+      }),
+      // Cheap settle probe: the mutation observer installed by the page helpers
+      // already tracks the age of the last relevant DOM change.
+      browser_dom_quiet: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Report how long the page DOM has been free of relevant mutations.",
+        args: { tabId: tool.schema.number().int().positive() },
+        async execute(args, context) {
+          return runtimeEvaluate(context, args.tabId, pageStateExpression());
+        },
+      }),
+      // Locates a read-view [ref] (a backend node id) through the DOM domain, without page
+      // script, scrolling it into view first so the point is current.
+      browser_ref_point: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Return the current click point of a [ref] from the read view, scrolled into view.",
+        args: { tabId: tool.schema.number().int().positive(), ref: tool.schema.number().int().positive() },
+        async execute(args, context) {
+          await enableCdpDomains(context, args.tabId, ["DOM"], { optional: true });
+          await cdp(context, args.tabId, "DOM.scrollIntoViewIfNeeded", { backendNodeId: args.ref }).catch(() => null);
+          const quads = await cdp(context, args.tabId, "DOM.getContentQuads", { backendNodeId: args.ref }).then((result: { quads?: number[][] }) => result.quads ?? [], () => [] as number[][]);
+          const quad = quads.find((points: number[]) => points.length >= 8 && Math.abs((points[4]! - points[0]!) * (points[5]! - points[1]!)) > 1);
+          if (!quad) throw Object.assign(new Error(`[${args.ref}] is no longer on the page or has no size; read the page again.`), { code: "STALE_TARGET", retryable: false });
+          const xs = [quad[0]!, quad[2]!, quad[4]!, quad[6]!], ys = [quad[1]!, quad[3]!, quad[5]!, quad[7]!];
+          // Wide fields are clicked near their start, like the read view's own points.
+          const left = Math.min(...xs), right = Math.max(...xs);
+          return { ref: args.ref, x: Math.round(Math.min((left + right) / 2, left + 40)), y: Math.round((Math.min(...ys) + Math.max(...ys)) / 2) };
+        },
+      }),
+      // Clicks a point like a person would, then types into whatever that focused.
+      browser_point_type: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Click a viewport point, then replace or append text in the editable it focused.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          x: tool.schema.number(),
+          y: tool.schema.number(),
+          text: tool.schema.string().default(""),
+          mode: tool.schema.enum(["replace", "append", "focus"]).default("replace"),
+        },
+        async execute(args, context) {
+          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y);
+          if (args.mode === "focus") return { focused: true, inputRoute };
+          const before = await runtimeEvaluate(context, args.tabId, focusedEditableSnapshotExpression());
+          // Replacing starts from a full selection (the selectAll editing command, on every platform).
+          if (args.mode === "replace" && before?.kind !== "select" && before?.value) await pressKey(context, args.tabId, "Control+A");
+          const after = args.mode === "replace" ? await fillFocusedEditable(context, args.tabId, before, args.text) : await insertTextAndVerify(context, args.tabId, before, args.text);
+          return { ...(typeof after === "object" && after ? after : {}), inputRoute };
+        },
+      }),
+      // Text view from the browser's DOMSnapshot: no script runs in the page. With
+      // delta, a repeat read of the same document returns only what changed.
+      browser_read_view: defineObjectOperation({
+        capabilityOnly: true,
+        description: "Read the page as compact text lines without running page script; repeat reads return changes only.",
+        args: {
+          tabId: tool.schema.number().int().positive(),
+          query: tool.schema.string().optional(),
+          scope: tool.schema.enum(["viewport", "page"]).default("viewport"),
+          maxChars: tool.schema.number().int().positive().default(3000),
+          delta: tool.schema.boolean().default(false),
+        },
+        async execute(args, context) {
+          const key = `${sessionKey(context)}:${args.tabId}`;
+          const [snapshot, metrics] = await Promise.all([
+            cdp(context, args.tabId, "DOMSnapshot.captureSnapshot", { computedStyles: VIEW_STYLES, includeDOMRects: false }),
+            cdp(context, args.tabId, "Page.getLayoutMetrics", {}),
+          ]);
+          const visual = metrics.cssVisualViewport ?? metrics.cssLayoutViewport;
+          const scale = layoutScale((snapshot as unknown as Snapshot).documents[0], metrics.cssContentSize);
+          const view = projectSnapshot(snapshot as unknown as Snapshot, { x: visual?.pageX ?? 0, y: visual?.pageY ?? 0, width: visual?.clientWidth ?? 1280, height: visual?.clientHeight ?? 800, scale }, args);
+          const comparable = !args.query && args.scope === "viewport";
+          const delta = args.delta && comparable ? renderDelta(views.get(key), view) : null;
+          if (comparable) { views.delete(key); views.set(key, view); if (views.size > 64) views.delete(views.keys().next().value!); }
+          return { url: view.url, title: view.title, view: delta ?? renderView(view), ...(delta ? { delta: true } : {}) };
         },
       }),
   };
