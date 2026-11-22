@@ -38,6 +38,8 @@ let semanticSettings = { enabled: true, modelId: SEMANTIC_MODELS.find(model => m
 let runtimeUpdates = { supported: true, enabled: true, state: "waiting", targetVersion: "1.9.3", installedVersion: "1.9.2" };
 let updateStartCode = null, bridgeReconnects = 0;
 let profileLabel = "Primary";
+// Set around the rename check so the stored label arrives after the user has typed.
+let profileLoadDelayMs = 0;
 const failedSummaryTypes = new Set();
 let additionalProfiles = [];
 const updateParams = [];
@@ -126,6 +128,8 @@ const server = http.createServer(async (req, res) => {
         versionStatus.versionReminder = { key: versionNotice("1.9.1", versionStatus).key, until: Date.now() + 7 * 86400000 };
         result = { ok: true };
       } else result = { status: versionStatus };
+      // The reply is computed now but delivered late, like a stale load racing the user's typing.
+      if (message.type === "GET_PROFILE" && profileLoadDelayMs) await new Promise(resolve => setTimeout(resolve, profileLoadDelayMs));
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(result));
       return;
@@ -205,12 +209,17 @@ try {
   await page.keyboard.press("Escape");
   assert.equal(await page.locator(".profile-trigger").evaluate(el => el === document.activeElement), true);
   await page.locator(".profile-trigger").click();
+  profileLoadDelayMs = 800;
   await page.getByRole("button", { name: "Rename this profile", exact: true }).click();
   assert.equal(await page.getByRole("heading", { name: "Browser profile" }).evaluate(el => el === document.activeElement), true);
   assert.equal(requests.filter(request => request.type === "GET_PROFILE_DETAILS").length, 0, "identifiers stay hidden before an explicit reveal or copy");
   await page.getByLabel("Profile label", { exact: true }).fill("Testing");
   await page.getByRole("button", { name: "Save label", exact: true }).click();
   await page.getByText(fixtureMessages.profileSaved, { exact: true }).waitFor();
+  await new Promise(resolve => setTimeout(resolve, profileLoadDelayMs));
+  const labelAfterSlowLoad = await page.getByLabel("Profile label", { exact: true }).inputValue();
+  assert.equal(labelAfterSlowLoad, "Testing", `a slow profile load does not overwrite the typed label (got ${JSON.stringify(labelAfterSlowLoad)})`);
+  profileLoadDelayMs = 0;
   await capture("profile");
   await home();
   await page.locator(".profile-trigger").getByText("Testing", { exact: false }).waitFor();

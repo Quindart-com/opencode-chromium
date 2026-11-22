@@ -1,4 +1,4 @@
-import { useCallback,useEffect,useMemo,useState,type FormEvent } from "react";
+import { useCallback,useEffect,useMemo,useRef,useState,type FormEvent } from "react";
 import { t } from "../../i18n";
 import {
   errorMessage,
@@ -43,6 +43,8 @@ function semanticStatusText(semantic: SemanticState): string {
 export default function ConnectionView({ status, view = "profiles", onProfileSaved }: ConnectionViewProps): React.JSX.Element {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLabel, setProfileLabel] = useState("");
+  // The stored label only fills the input until the user types; a slow load must not overwrite an edit.
+  const labelEdited = useRef(false);
   const [profileHelp, setProfileHelp] = useState(t("profileLabelHelp"));
   const [profileBusy, setProfileBusy] = useState(false);
   const [semantic, setSemantic] = useState<SemanticState | null>(null);
@@ -113,7 +115,7 @@ export default function ConnectionView({ status, view = "profiles", onProfileSav
         if (error) throw new Error(error);
         if (response.profile) {
           setProfile(response.profile);
-          setProfileLabel(response.profile.profileLabel ?? "");
+          if (!labelEdited.current) setProfileLabel(response.profile.profileLabel ?? "");
         }
       })
       .catch((error) => {
@@ -251,7 +253,7 @@ export default function ConnectionView({ status, view = "profiles", onProfileSav
     {view === "profiles" ? <>
       <form id="profile-form" className="profile-form" onSubmit={saveProfile}>
         <label htmlFor="profile-label">{t("profileLabel")}</label>
-        <input id="profile-label" name="profile-label" maxLength={80} value={profileLabel} disabled={profileBusy} onChange={event => setProfileLabel(event.target.value)} />
+        <input id="profile-label" name="profile-label" maxLength={80} value={profileLabel} disabled={profileBusy} onChange={event => { labelEdited.current = true; setProfileLabel(event.target.value); }} />
         <p className="help-note">{t("profileLabelLocal")}</p>
         <div className="split-actions"><p id="profile-help" className="help-note" role="status">{profileHelp}</p><button type="submit" className="button" disabled={profileBusy}>{t("saveLabel")}</button></div>
       </form><hr />
