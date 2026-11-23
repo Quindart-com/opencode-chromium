@@ -125,17 +125,6 @@ async function worker(arm: string, providerDir: string, visual?: any) {
   });
 }
 
-function chart(report: any) {
-  const escape = (text: any) => String(text).replace(/[&<>\"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]!);
-  const height = 175 + report.arms.length * 70;
-  const rows = report.arms.map((arm: any, index: number) => {
-    const y = 116 + index * 70;
-    const count = arm.accuracy.total.correct;
-    return `<text x="30" y="${y + 14}" class="label">${escape(arm.arm)}</text><rect x="170" y="${y}" width="300" height="22" rx="3" fill="#e2e8ef"/><rect x="170" y="${y}" width="${300 * count / 12}" height="22" rx="3" fill="#17644c"/><text x="485" y="${y + 16}" class="label">${count}/12</text><text x="570" y="${y + 16}" class="label">${arm.latency.paraphraseP50Ms} ms</text><text x="170" y="${y + 42}" class="note">${arm.decisions.paidCalls} requests · ${arm.decisions.fallback} fallbacks · cost ${arm.usage.costUsd === null ? "unknown" : "$" + arm.usage.costUsd}</text>`;
-  }).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="850" height="${height}" viewBox="0 0 850 ${height}" role="img" aria-labelledby="title description"><title id="title">Component target accuracy on 12 synthetic queries</title><desc id="description">${escape(report.scope)} One round; paraphrase latency is the median of six queries. Timeouts retain local ranking.</desc><style>text{font-family:system-ui,sans-serif;fill:#17243a}.label{font-size:14px}.note{font-size:12px;fill:#56647a}</style><rect width="850" height="${height}" fill="#ffffff"/><text x="30" y="35" font-size="21" font-weight="600">Target selection on a synthetic settings page</text><text x="30" y="59" class="note">v${report.packageVersion} · 12 unique queries · one round · 1.5 s decision deadline · no agent planning</text><text x="170" y="94" class="label">Correct target (6 exact + 6 paraphrased)</text><text x="570" y="94" class="label">Paraphrase selection p50</text>${rows}<text x="30" y="${height - 18}" class="note">Small component fixture, not WebVoyager or full task success. Missing reported cost remains unknown.</text></svg>\n`;
-}
-
 async function main() {
   const arm = value("--worker");
   if (arm) {
@@ -186,7 +175,6 @@ async function main() {
         "Provider-reported tokens/cost may be missing; aborted requests may incur unreported charges."], arms: measured };
     fs.mkdirSync(path.dirname(output), { recursive: true });
     fs.writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
-    fs.writeFileSync(output.replace(/\.json$/, ".svg"), chart(report));
     process.stdout.write(JSON.stringify({ scope: report.scope, fixtureSha256: fixtureHash, arms: measured.map(({ samples, ...summary }) => summary) }, null, 2) + "\n");
   } finally {
     if (previousProviderDir === undefined) delete process.env.AGENT_BROWSER_PROVIDER_DIR;

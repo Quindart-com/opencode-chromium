@@ -27,7 +27,7 @@ Enable screenshot sharing separately in Settings or with `--share-images`. For a
 
 Requests follow the [multimodal state contract](https://openrouter.ai/docs/guides/community/multimodal-decisions): text plus a base64 `image_url` part with low detail. [Luna documentation](https://openrouter.ai/openai/gpt-6-luna-decisions). Images may contain private page content.
 
-Decision assistance only ranks targets already found locally. Exact matches stay local; timeouts, low confidence and unavailable services preserve local results. See the README benchmark for measured results and limits.
+Decision assistance only ranks targets already found locally. Exact matches stay local; timeouts, low confidence and unavailable services preserve local results. See [Benchmarks](benchmarking.md) for measured results and limits.
 
 ## Jev image fallback (experimental)
 

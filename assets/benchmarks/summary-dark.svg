@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 438" width="760" height="438" role="img" aria-label="Benchmark summary for v2.0.5: Target selection Exact labels 6 of 6, Target selection Paraphrased intents 1 of 6, Target selection Answer in candidate pool 11 of 12, Full browser pipeline Exact labels 12 of 12, Full browser pipeline Paraphrased intents 0 of 6">
+<g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+<rect x="0.5" y="0.5" width="759" height="437" rx="12" fill="#0d1117" stroke="#30363d"/>
+<text x="28" y="38" font-size="18" font-weight="700" fill="#e6edf3">Benchmarks · v2.0.5</text>
+<text x="28" y="60" font-size="12" fill="#9198a1">Synthetic fixtures · local lexical search · no cloud calls · measured Nov 23, 2026</text>
+<text x="28" y="92" font-size="14" font-weight="700" fill="#e6edf3">Target selection</text>
+<text x="28" y="110" font-size="11.5" fill="#9198a1">In-process ranking · 12 queries · 30-control settings page</text>
+<text x="732" y="110" text-anchor="end" font-size="11" fill="#9198a1">median time</text>
+<text x="28" y="137" font-size="13" font-weight="600" fill="#e6edf3">Exact labels</text>
+<text x="28" y="153" font-size="11" fill="#9198a1">query matches the visible text</text>
+<rect x="300" y="126" width="280" height="14" rx="7" fill="#21262d"/>
+<rect x="300" y="126" width="280.0" height="14" rx="7" fill="#4493f8"/>
+<text x="594" y="137" font-size="13" font-weight="700" fill="#4493f8">6/6</text>
+<text x="732" y="137" text-anchor="end" font-size="12.5" fill="#e6edf3">0.51 ms</text>
+<text x="28" y="183" font-size="13" font-weight="600" fill="#e6edf3">Paraphrased intents</text>
+<text x="28" y="199" font-size="11" fill="#9198a1">same goal, different words</text>
+<rect x="300" y="172" width="280" height="14" rx="7" fill="#21262d"/>
+<rect x="300" y="172" width="46.7" height="14" rx="7" fill="#4493f8"/>
+<text x="594" y="183" font-size="13" font-weight="700" fill="#4493f8">1/6</text>
+<text x="732" y="183" text-anchor="end" font-size="12.5" fill="#e6edf3">0.40 ms</text>
+<text x="28" y="229" font-size="13" font-weight="600" fill="#e6edf3">Answer in candidate pool</text>
+<text x="28" y="245" font-size="11" fill="#9198a1">top 16 handed to a decision model</text>
+<rect x="300" y="218" width="280" height="14" rx="7" fill="#21262d"/>
+<rect x="300" y="218" width="256.7" height="14" rx="7" fill="#4493f8"/>
+<text x="594" y="229" font-size="13" font-weight="700" fill="#4493f8">11/12</text>
+<text x="732" y="229" text-anchor="end" font-size="12.5" fill="#e6edf3">—</text>
+<text x="28" y="292" font-size="14" font-weight="700" fill="#e6edf3">Full browser pipeline</text>
+<text x="28" y="310" font-size="11.5" fill="#9198a1">Chromium + extension + native host + SDK · search, click, verify · 3 rounds</text>
+<text x="732" y="310" text-anchor="end" font-size="11" fill="#9198a1">median time</text>
+<text x="28" y="337" font-size="13" font-weight="600" fill="#e6edf3">Exact labels</text>
+<text x="28" y="353" font-size="11" fill="#9198a1">found, clicked and verified</text>
+<rect x="300" y="326" width="280" height="14" rx="7" fill="#21262d"/>
+<rect x="300" y="326" width="280.0" height="14" rx="7" fill="#4493f8"/>
+<text x="594" y="337" font-size="13" font-weight="700" fill="#4493f8">12/12</text>
+<text x="732" y="337" text-anchor="end" font-size="12.5" fill="#e6edf3">600 ms</text>
+<text x="28" y="383" font-size="13" font-weight="600" fill="#e6edf3">Paraphrased intents</text>
+<text x="28" y="399" font-size="11" fill="#9198a1">local search only, no model</text>
+<rect x="300" y="372" width="280" height="14" rx="7" fill="#21262d"/>
+<text x="594" y="383" font-size="13" font-weight="700" fill="#4493f8">0/6</text>
+<text x="732" y="383" text-anchor="end" font-size="12.5" fill="#e6edf3">600 ms</text>
+</g>
+</svg>

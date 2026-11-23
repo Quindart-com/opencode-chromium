@@ -1,9 +1,21 @@
 # Decision latency investigation
 
-Measured on 2026-10-29 with synthetic UI labels and images. Existing service keys
-were reused without changing the active service, consent settings or credentials.
-No browser content was submitted. This is a small diagnostic sample, not a model
-speed or accuracy guarantee.
+> **Historical record, measured on October 29, 2026 (v1.10.x).** The fixes below
+> have shipped. For current numbers, see [Benchmarks](../benchmarking.md).
+
+**Summary**
+
+- Both decision providers now try text before screenshots. In a mocked test, the
+  Luna screenshot path fell from 349 ms to 60 ms, with no captures.
+- Node's 250 ms per-address connect timeout dropped usable connections on this
+  network. Raising it to 1 second turned 6-second failures into connections in
+  about 1 second.
+- Live text decisions had a median of about 0.5 to 0.6 s per request.
+
+Measured with synthetic UI labels and images. Existing service keys were reused
+without changing the active service, consent settings or credentials. No browser
+content was submitted. This is a small diagnostic sample, not a model speed or
+accuracy guarantee.
 
 ## Integration findings
 

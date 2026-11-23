@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-23T17:22:40.193Z",
+  "packageVersion": "2.0.5",
+  "scope": "Disposable browser, extension, native host and SDK; local lexical search, no cloud calls or agent planning",
+  "rounds": 3,
+  "accuracy": {
+    "correct": 12,
+    "total": 18
+  },
+  "wall": {
+    "p50Ms": 599.9110000000001,
+    "p95Ms": 688.0423000000001
+  },
+  "toolCalls": 38,
+  "responseBytes": 50823,
+  "driverCpuMicros": {
+    "user": 1062000,
+    "system": 188000
+  },
+  "driverPeakRss": 173616,
+  "samples": [
+    {
+      "round": 0,
+      "task": "exact-archive",
+      "expected": "Archive project",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 688.0423000000001,
+      "toolCalls": 2,
+      "responseBytes": 2771
+    },
+    {
+      "round": 0,
+      "task": "exact-download",
+      "expected": "Download report",
+      "selected": "Download report",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 598.4651000000003,
+      "toolCalls": 2,
+      "responseBytes": 2773
+    },
+    {
+      "round": 0,
+      "task": "exact-add",
+      "expected": "Add collaborator",
+      "selected": "Add collaborator",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 599.9110000000001,
+      "toolCalls": 2,
+      "responseBytes": 2775
+    },
+    {
+      "round": 0,
+      "task": "ambiguous-report",
+      "expected": "Print report",
+      "selected": "Print report",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 602.0144999999993,
+      "toolCalls": 2,
+      "responseBytes": 2767
+    },
+    {
+      "round": 0,
+      "task": "paraphrase-alert",
+      "expected": "Mute alerts",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": false,
+      "wallMs": 596.8690999999999,
+      "toolCalls": 2,
+      "responseBytes": 2775
+    },
+    {
+      "round": 0,
+      "task": "paraphrase-restore",
+      "expected": "Restore project",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": false,
+      "wallMs": 599.5802999999996,
+      "toolCalls": 2,
+      "responseBytes": 2789
+    },
+    {
+      "round": 1,
+      "task": "exact-archive",
+      "expected": "Archive project",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 600.1965,
+      "toolCalls": 2,
+      "responseBytes": 2757
+    },
+    {
+      "round": 1,
+      "task": "exact-download",
+      "expected": "Download report",
+      "selected": "Download report",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 600.2152999999998,
+      "toolCalls": 2,
+      "responseBytes": 2774
+    },
+    {
+      "round": 1,
+      "task": "exact-add",
+      "expected": "Add collaborator",
+      "selected": "Add collaborator",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 600.1341000000011,
+      "toolCalls": 2,
+      "responseBytes": 2776
+    },
+    {
+      "round": 1,
+      "task": "ambiguous-report",
+      "expected": "Print report",
+      "selected": "Print report",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 598.2892999999985,
+      "toolCalls": 2,
+      "responseBytes": 2754
+    },
+    {
+      "round": 1,
+      "task": "paraphrase-alert",
+      "expected": "Mute alerts",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": false,
+      "wallMs": 601.7543999999998,
+      "toolCalls": 2,
+      "responseBytes": 2776
+    },
+    {
+      "round": 1,
+      "task": "paraphrase-restore",
+      "expected": "Restore project",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": false,
+      "wallMs": 605.3308000000015,
+      "toolCalls": 2,
+      "responseBytes": 2789
+    },
+    {
+      "round": 2,
+      "task": "exact-archive",
+      "expected": "Archive project",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 601.6481999999996,
+      "toolCalls": 2,
+      "responseBytes": 2773
+    },
+    {
+      "round": 2,
+      "task": "exact-download",
+      "expected": "Download report",
+      "selected": "Download report",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 599.6563000000006,
+      "toolCalls": 2,
+      "responseBytes": 2774
+    },
+    {
+      "round": 2,
+      "task": "exact-add",
+      "expected": "Add collaborator",
+      "selected": "Add collaborator",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 586.8555000000015,
+      "toolCalls": 2,
+      "responseBytes": 2776
+    },
+    {
+      "round": 2,
+      "task": "ambiguous-report",
+      "expected": "Print report",
+      "selected": "Print report",
+      "clicked": true,
+      "correct": true,
+      "wallMs": 586.8542999999991,
+      "toolCalls": 2,
+      "responseBytes": 2768
+    },
+    {
+      "round": 2,
+      "task": "paraphrase-alert",
+      "expected": "Mute alerts",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": false,
+      "wallMs": 600.5507999999991,
+      "toolCalls": 2,
+      "responseBytes": 2760
+    },
+    {
+      "round": 2,
+      "task": "paraphrase-restore",
+      "expected": "Restore project",
+      "selected": "Archive project",
+      "clicked": true,
+      "correct": false,
+      "wallMs": 594.5303000000004,
+      "toolCalls": 2,
+      "responseBytes": 2789
+    }
+  ]
+}

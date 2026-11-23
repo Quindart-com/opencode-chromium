@@ -152,6 +152,7 @@
     "benchmark:decisions:capped": "bun scripts/benchmark-decision-capped.ts",
     "benchmark:lexical": "bun scripts/benchmark-lexical.ts",
     "benchmark:accuracy": "bun scripts/benchmark-accuracy.ts",
+    "benchmark:chart": "bun scripts/benchmark-chart.ts",
     "version": "node scripts/sync-release-metadata.mjs",
     "check:metadata": "node scripts/sync-release-metadata.mjs --check"
   },
