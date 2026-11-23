@@ -61,6 +61,8 @@ const AT = / @-?\d+,-?\d+$/;
 const clean = (value: string) => value.replace(/\s+/g, " ").trim();
 const clip = (value: string, max: number) => value.length > max ? value.slice(0, max - 1) + "…" : value;
 const WIDE = /[\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF\u3000-\u303F]/;
+// Punctuation that hugs its neighbour: "<b>board</b>." reads "board." rather than "board .".
+const CLOSES = /^[.,;:!?%)\]}\u00BB\u201D\u2019]/, OPENS = /[([{\u00AB\u201C\u2018]$/;
 
 // Reads a block's text in on-screen order. Some sites shuffle text nodes in the DOM and
 // position them with CSS so DOM order is unreadable; line, then x, restores reading order.
@@ -74,7 +76,7 @@ function joinPieces(pieces: { text: string; box: { x: number; y: number; h: numb
       }).map(entry => entry.piece)
     : pieces;
   let text = "";
-  for (const { text: next } of ordered) text += !text || WIDE.test(text.at(-1)!) && WIDE.test(next[0]!) ? next : " " + next;
+  for (const { text: next } of ordered) text += !text || WIDE.test(text.at(-1)!) && WIDE.test(next[0]!) || CLOSES.test(next) || OPENS.test(text) ? next : " " + next;
   return clean(text);
 }
 

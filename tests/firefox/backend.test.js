@@ -85,3 +85,25 @@ test("failed attachment removes its own preload without affecting another tab", 
   expect(removed).toEqual(["failed-preload"]);
   expect(backend.contexts.get(2)).toBe("another-tab"); expect(backend.preloads.get(2)).toBe("another-preload");
 });
+
+test("read-view commands run in an isolated BiDi sandbox, never in the page realm", async () => {
+  const backend = new FirefoxBackend(); backend.contexts.set(4, "owned"); const calls = [];
+  const replies = {
+    snapshot: { documents: [{ documentURL: 0, title: 1, nodes: { parentIndex: [-1] }, layout: { nodeIndex: [], styles: [], bounds: [], text: [] } }], strings: ["https://site.test/", "Site"] },
+    metrics: { cssContentSize: { width: 1000, height: 2000 }, cssVisualViewport: { pageX: 0, pageY: 40, clientWidth: 1000, clientHeight: 700 } },
+    quads: [[1, 2, 3, 2, 3, 4, 1, 4]],
+  };
+  backend.send = async (method, params) => {
+    calls.push({ method, params });
+    const reply = params.functionDeclaration.includes("documents:") ? replies.snapshot : params.functionDeclaration.includes("cssVisualViewport") ? replies.metrics : params.functionDeclaration.includes("getClientRects()") && params.functionDeclaration.includes("JSON.stringify(Array.from") ? replies.quads : true;
+    return { type: "success", result: { type: typeof reply === "boolean" ? "boolean" : "string", value: typeof reply === "boolean" ? reply : JSON.stringify(reply) } };
+  };
+  expect(await backend.command(4, "DOMSnapshot.captureSnapshot", { computedStyles: ["display"] })).toEqual(replies.snapshot);
+  expect(await backend.command(4, "Page.getLayoutMetrics", {})).toEqual(replies.metrics);
+  expect(await backend.command(4, "DOM.scrollIntoViewIfNeeded", { backendNodeId: 12 })).toEqual({});
+  expect(await backend.command(4, "DOM.getContentQuads", { backendNodeId: 12 })).toEqual({ quads: replies.quads });
+  expect(calls.every(({ method, params }) => method === "script.callFunction" && params.target.context === "owned" && params.target.sandbox === "opencode-read-view")).toBe(true);
+  expect(calls.slice(2).map(({ params }) => params.arguments)).toEqual([[{ type: "number", value: 12 }], [{ type: "number", value: 12 }]]);
+  backend.send = async () => ({ type: "exception", exceptionDetails: { text: "TypeError: boom" } });
+  await expect(backend.command(4, "DOMSnapshot.captureSnapshot", {})).rejects.toThrow("Firefox read view failed: TypeError: boom");
+});

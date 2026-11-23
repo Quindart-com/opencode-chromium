@@ -84,6 +84,13 @@ test("text is read in on-screen line order, and CJK pieces join without spaces",
   assert.match(renderView(projectSnapshot(snap, viewport)), /第一行开头第一行结尾第二行内容/);
 });
 
+test("punctuation from a neighbouring element joins without a space", () => {
+  const snap = snapshot(["body", {}, [0, 0, 1000, 2000], [["p", {}, [0, 0, 800, 20], [
+    "Welcome to the", ["b", {}, [80, 0, 40, 20], ["board"], { display: "inline" }], ". Find work", ["sup", {}, [200, 0, 20, 20], ["[", "12", "]"], { display: "inline" }], "(see notes)",
+  ]]]]);
+  assert.match(renderView(projectSnapshot(snap, viewport)), /^Welcome to the board\. Find work \[12\] \(see notes\)$/m);
+});
+
 test("a query narrows the view, and the character budget is reported", () => {
   const rows = Array.from({ length: 60 }, (_, i) => ["div", {}, [0, i * 12, 800, 12], [`Row ${i} lorem ipsum dolor sit amet`]]);
   const snap = snapshot(["body", {}, [0, 0, 1000, 2000], [...rows, ["div", {}, [0, 740, 800, 20], ["Salary range 15-16k"]]]]);

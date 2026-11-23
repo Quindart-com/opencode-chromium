@@ -11,6 +11,24 @@ type ExtensionWriter = (message: object) => unknown | Promise<unknown>;
 
 const JSON_RPC_VERSION = "2.0";
 const DEFAULT_RELAY_TIMEOUT_MS = 30000;
+// Browsers cap one native message to the extension at 1 MB and drop the whole host
+// connection when a message is larger, so an oversized result becomes an error instead.
+const MAX_EXTENSION_MESSAGE_BYTES = 1024 * 1024 - 1024;
+
+function fitExtensionMessage(message: { jsonrpc: string; id?: RpcId; result?: unknown }, method: string) {
+  if (!("result" in message)) return message;
+  const bytes = Buffer.byteLength(JSON.stringify(message) ?? "", "utf8");
+  if (bytes <= MAX_EXTENSION_MESSAGE_BYTES) return message;
+  return {
+    jsonrpc: message.jsonrpc,
+    id: message.id,
+    error: {
+      code: -32000,
+      message: `${method} result is ${(bytes / 1048576).toFixed(1)} MB, over the 1 MB browser message limit; request less (a viewport capture, lower quality, or a narrower read).`,
+      data: { code: "RESULT_TOO_LARGE", retryable: false, uncertain: false },
+    },
+  };
+}
 
 function requestTimeoutMs(message: RpcMessage) {
   const deadlineAt = message.params?.deadlineAt;
@@ -321,11 +339,11 @@ export class RpcRelay {
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,
         error: { code: -32000, message: local.error, data: local.errorData },
-      } : {
+      } : fitExtensionMessage({
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,
         result: local.result,
-      });
+      }, message.method));
       return;
     }
 
