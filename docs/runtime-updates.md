@@ -31,7 +31,7 @@ The extension reports separate rows for:
 - active worker versions; and
 - harness or marketplace adapters.
 
-States include available, staging, draining, blocked, major approval required, rollback available, and failed. A global CLI at 1.10.2 with a selected 1.10.1 runtime and staged 1.10.2 release is a reconcilable component mismatch, not an “old CLI.” A new extension connected to a legacy host reports that the compatibility bridge is required and never calls an unsupported update method.
+States include available, staging, draining, blocked, major approval required, rollback available, and failed. For example, a global CLI at 2.0.5 with a selected 2.0.4 runtime and a staged 2.0.5 release is a reconcilable component mismatch, not an “old CLI.” A new extension connected to a legacy host reports that the compatibility bridge is required and never calls an unsupported update method.
 
 The stable controller exposes `control.capabilities`, `control.status`, `control.update`, `control.job`, `control.rollback`, and `control.reconcile`. Jobs persist across host reconnection and return structured state and error codes. Recovery details sanitize connection identities and do not expose credentials or private paths.
 

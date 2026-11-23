@@ -19,7 +19,7 @@ agent.close();
 
 Use `openai`, `anthropic`, `gemini`, or `mcp` for provider-specific schema syntax. These adapters change only field names and result envelopes; Snowflake-default search, safety, profiles, retries, and artifacts stay in the core.
 
-OpenCode V2 uses the native package root export. Stable OpenCode, Codex, and other clients use the universal MCP server. The default tool surface is always four tools.
+OpenCode 1.18, 1.19 and 2.x load the native package root export ([OpenCode](opencode.md)). Codex, Claude Code, Claude Desktop and other clients use the universal MCP server; Codex can also load the native plugin. The tool surface is always the same four tools.
 
 The same runtime also supports lazy capabilities. Every client requests the network manifest through `browser_observe` and executes `network.inspect` as a `browser_run` capability step; no client-specific fifth tool or schema is added. This includes OpenCode, Codex/MCP, direct OpenAI/Anthropic/Gemini SDK adapters, and the HTTP MCP deployment used by cloud clients.
 
