@@ -110,7 +110,7 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 <a href="https://www.chromium.org/getting-involved/download-chromium/"><img alt="Download Chromium" src="https://img.shields.io/badge/Chromium-3057A4?logo=googlechrome&logoColor=white"></a>
 <a href="https://www.firefox.com/download/"><img alt="Download Firefox" src="https://img.shields.io/badge/Firefox-FF7139?logo=firefoxbrowser&logoColor=white"></a>
 <a href="https://librewolf.net/installation/"><img alt="Download LibreWolf" src="https://img.shields.io/badge/LibreWolf-00ACFF?logo=librewolf&logoColor=white"></a>
-<a href="docs/ladybird.md"><img alt="Ladybird experimental setup" src="https://img.shields.io/badge/Ladybird-Experimental-B91C1C"></a>
+<a href="https://ladybird.org/download/"><img alt="Download Ladybird" src="https://img.shields.io/badge/Ladybird-B91C1C"></a>
 </p>
 
 | Browser family | Connection | Setup |
