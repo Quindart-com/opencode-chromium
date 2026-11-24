@@ -1608,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "Some settings could not be loaded."
+  },
+  "capabilityAvailable": {
+    "message": "Available"
+  },
+  "captureSharingOff": {
+    "message": "Sharing off"
+  },
+  "captureSharingOn": {
+    "message": "Sharing on"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "Agents can find content on tabs they control."
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "Agents can fill fields on tabs they control."
+  },
+  "captureCapabilityHelp": {
+    "message": "Agents can capture controlled tabs. Decision assistance shares screenshots only with your permission."
   }
 }

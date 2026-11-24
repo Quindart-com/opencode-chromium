@@ -1608,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "Não foi possível carregar algumas configurações."
+  },
+  "capabilityAvailable": {
+    "message": "Disponível"
+  },
+  "captureSharingOff": {
+    "message": "Compartilhamento desativado"
+  },
+  "captureSharingOn": {
+    "message": "Compartilhamento ativado"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "Os agentes podem buscar conteúdo nas abas que controlam."
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "Os agentes podem preencher campos nas abas que controlam."
+  },
+  "captureCapabilityHelp": {
+    "message": "Os agentes podem capturar suas abas. A assistência só compartilha capturas com sua permissão."
   }
 }

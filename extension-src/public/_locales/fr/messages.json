@@ -1608,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "Certains réglages n’ont pas pu être chargés."
+  },
+  "capabilityAvailable": {
+    "message": "Disponible"
+  },
+  "captureSharingOff": {
+    "message": "Partage désactivé"
+  },
+  "captureSharingOn": {
+    "message": "Partage activé"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "Les agents peuvent rechercher du contenu dans les onglets qu’ils contrôlent."
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "Les agents peuvent remplir des champs dans les onglets qu’ils contrôlent."
+  },
+  "captureCapabilityHelp": {
+    "message": "Les agents peuvent capturer leurs onglets. L’assistance ne partage les captures qu’avec votre autorisation."
   }
 }

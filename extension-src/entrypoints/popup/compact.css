@@ -88,7 +88,13 @@ body:has(.compact-popup) { width: 380px; overflow: clip; background: #0f1216; co
 .compact-popup .browser-tools { min-height: 56px; }
 .compact-popup .browser-tools h2 { color: var(--text-muted); font-size: 12px; line-height: 16px; }
 .compact-popup .browser-tools ul { display: flex; justify-content: space-between; gap: 10px; margin: 8px 0 0; padding: 0; list-style: none; }
-.compact-popup .browser-tools li { display: flex; align-items: center; gap: 6px; flex: 1; min-height: 32px; color: var(--text-muted); font-size: 10.5px; }
+.compact-popup .browser-tools li { flex: 1; }
+.compact-popup .browser-tools .capability-button { display: flex; align-items: flex-start; gap: 5px; width: 100%; min-height: 32px; padding: 0 2px; border: 0; border-radius: 5px; background: transparent; color: var(--text); text-align: start; font-size: 10.5px; line-height: 15px; }
+.compact-popup .browser-tools .capability-button .popup-icon { margin-top: 1px; }
+.compact-popup .browser-tools .capability-button:hover, .compact-popup .browser-tools .capability-button[aria-expanded="true"] { background: var(--surface-raised); }
+.compact-popup .capability-button small { display: block; overflow-wrap: anywhere; }
+.compact-popup .capability-detail { margin-top: 4px; color: var(--text-muted); font-size: 11px; }
+.compact-popup .capability-detail .text-button { margin-top: 2px; }
 .compact-popup .home-decision { min-height: 54px; padding: 4px 0; }
 .compact-popup .home-decision p { margin-top: 6px; font-size: 11px; color: var(--text-muted); }
 .compact-popup .home-memory { min-height: 48px; }
@@ -112,7 +118,7 @@ body:has(.compact-popup) { width: 380px; overflow: clip; background: #0f1216; co
 .compact-popup .setting-row small { display: block; margin-top: 3px; }
 .compact-popup .setting-row:hover:not(section) { background: var(--surface); }
 .compact-popup .setting-row > p { flex-basis: 100%; font-size: 11px; }
-.compact-popup .switch { width: 48px; height: 32px; padding: 0; flex: none; border: 0; border-radius: 0; background: url('/images/popup/switch-off.svg') no-repeat right center; box-shadow: none; }
+.compact-popup button.switch { width: 48px; height: 32px; min-height: 32px; padding: 0; flex: none; border: 0; border-radius: 5px; background: url('/images/popup/switch-off.svg') no-repeat right center; box-shadow: none; transition: none; }
 .compact-popup button.switch.on { background: url('/images/popup/switch-on.svg') no-repeat right center; }
 .compact-popup .switch > span { display: none; }
 .compact-popup .switch:disabled { opacity: .55; }

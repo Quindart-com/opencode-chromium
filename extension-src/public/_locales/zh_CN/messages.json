@@ -1608,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "部分设置无法加载。"
+  },
+  "capabilityAvailable": {
+    "message": "可用"
+  },
+  "captureSharingOff": {
+    "message": "共享已关闭"
+  },
+  "captureSharingOn": {
+    "message": "共享已开启"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "代理可以在其控制的标签页中查找内容。"
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "代理可以在其控制的标签页中填写表单。"
+  },
+  "captureCapabilityHelp": {
+    "message": "代理可以截取其控制的标签页。决策辅助仅在获得您的许可后共享截图。"
   }
 }

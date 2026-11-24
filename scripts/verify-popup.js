@@ -35,6 +35,7 @@ let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUT
 if (storeFixture) decisionSettings = { ...decisionSettings, provider: "off", shareText: false, ready: false };
 let uploadSettings = { allowWithoutConfirmation: false };
 let telemetrySettings = { enabled: true, configured: true, environmentDisabled: false, browserAllowed: true };
+let uploadReadDelayMs = 0;
 let semanticSettings = { enabled: true, modelId: SEMANTIC_MODELS.find(model => model.role === "adaptive").id, deepModelId: SEMANTIC_MODELS.find(model => model.role === "deep").id, strategyPreference: "auto" };
 let runtimeUpdates = { supported: true, enabled: true, state: "waiting", targetVersion: "1.9.3", installedVersion: "1.9.2" };
 let updateStartCode = null, bridgeReconnects = 0;
@@ -90,9 +91,12 @@ const server = http.createServer(async (req, res) => {
       else if (message.type === "GET_LOCAL_ACTION") result = { result: localJobs.get(message.params.id) ?? null };
       else if (message.type === "DISCONNECT_HARNESS") { harnessConnections = { ...harnessConnections, clients: harnessConnections.clients.filter(client => client.id !== message.params.id) }; result = { result: harnessConnections }; }
       else if (message.type === "RECONNECT_NATIVE_HOST") { bridgeReconnects++; result = { result: { reconnecting: true } }; }
-      else if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
       else if (message.type === "GET_TELEMETRY_SETTINGS") result = { result: telemetrySettings };
       else if (message.type === "SET_TELEMETRY_SETTINGS") { telemetrySettings = { ...telemetrySettings, enabled: message.enabled }; result = { result: telemetrySettings }; }
+      else if (message.type === "GET_UPLOAD_SETTINGS") {
+        if (uploadReadDelayMs) await new Promise(resolve => setTimeout(resolve, uploadReadDelayMs));
+        result = { result: uploadSettings };
+      }
       else if (message.type === "GET_RUNTIME_UPDATES") result = { result: runtimeUpdates };
       else if (message.type === "SET_RUNTIME_UPDATES") { runtimeUpdates = { ...runtimeUpdates, enabled: message.enabled }; result = { result: runtimeUpdates }; }
       else if (message.type === "SET_UPLOAD_SETTINGS") { uploadSettings = { allowWithoutConfirmation: message.allowWithoutConfirmation === true }; result = { result: uploadSettings }; }
@@ -203,6 +207,17 @@ try {
   assert.equal(new Set(alignment.map(row => row.name)).size, 1);
   assert.equal(new Set(alignment.map(row => row.right)).size, 1);
   await capture("home");
+  const capabilities = page.getByRole("region", { name: fixtureMessages.availableToAgent });
+  const captureTool = capabilities.getByRole("button", { name: /Capture/ });
+  await captureTool.getByText(fixtureMessages.captureSharingOff).waitFor();
+  await capabilities.getByRole("button", { name: /Find pages/ }).press("Enter");
+  await capabilities.getByText(fixtureMessages.findPagesCapabilityHelp, { exact: true }).waitFor();
+  await captureTool.click();
+  assert.equal(await captureTool.getAttribute("aria-expanded"), "true");
+  await capabilities.getByText(fixtureMessages.captureCapabilityHelp, { exact: true }).waitFor();
+  await capabilities.getByRole("button", { name: fixtureMessages.decisionAssistance, exact: true }).click();
+  await page.locator("#decision-provider:not(:disabled)").waitFor();
+  await home();
 
   await page.locator(".profile-trigger").click();
   await page.getByRole("radio", { name: /Secondary/ }).click();
@@ -263,7 +278,20 @@ try {
   await page.locator("#memory-reindex").click();
   await page.getByText("Fixture request failed", { exact: false }).waitFor();
 
+  uploadReadDelayMs = 800;
   await settings();
+  const uploads = page.getByRole("switch", { name: "Allow uploads without confirmation", exact: true });
+  await uploads.waitFor();
+  assert.equal(await uploads.isDisabled(), true, "upload settings are disabled while the saved value is loading");
+  await page.locator("#upload-permission-copy").getByText(fixtureMessages.loadingSettings).waitFor();
+  const switchPaint = button => button.evaluate(el => ({ image: getComputedStyle(el).backgroundImage,
+    color: getComputedStyle(el).backgroundColor, height: el.getBoundingClientRect().height }));
+  const loadingPaint = await switchPaint(uploads);
+  assert.match(loadingPaint.image, /switch-off\.svg/);
+  assert.equal(loadingPaint.color, "rgba(0, 0, 0, 0)");
+  assert.equal(loadingPaint.height, 32);
+  uploadReadDelayMs = 0;
+  await page.locator(".compact-upload button:not(:disabled)").waitFor();
   await page.waitForSelector("#memory-enabled:not(:disabled)");
   await capture("settings");
   const diagnostics = page.getByRole("switch", { name: fixtureMessages.anonymousDiagnostics, exact: true });
@@ -281,11 +309,13 @@ try {
   await page.waitForFunction(() => document.querySelector("#memory-enabled")?.getAttribute("aria-checked") === "false");
   await memoryToggle.click();
   await page.waitForFunction(() => document.querySelector("#memory-enabled")?.getAttribute("aria-checked") === "true");
-  const uploads = page.getByRole("switch", { name: "Allow uploads without confirmation", exact: true });
   assert.equal(await uploads.getAttribute("aria-checked"), "false");
+  await uploads.hover();
+  assert.deepEqual(await switchPaint(uploads), loadingPaint, "hover preserves the off switch's track and transparent bounds");
   await uploads.click();
   await page.waitForFunction(() => document.querySelector(".compact-upload button")?.getAttribute("aria-checked") === "true");
   assert.equal(uploadSettings.allowWithoutConfirmation, true);
+  assert.match((await switchPaint(uploads)).image, /switch-on\.svg/);
   await uploads.click();
   await page.waitForFunction(() => document.querySelector(".compact-upload button")?.getAttribute("aria-checked") === "false");
 
@@ -328,6 +358,11 @@ try {
   await page.locator(".provider-feedback-ok").waitFor();
   assert.equal(await page.locator("#decision-api-key").inputValue(), "", "saved keys clear from the input");
   assert.equal(decisionSettings.shareImages, true);
+  await home();
+  await captureTool.getByText(fixtureMessages.captureSharingOn).waitFor();
+  await section("Decision assistance");
+  await page.locator("#decision-provider:not(:disabled)").waitFor();
+  assert.equal(await images.isChecked(), true);
   await page.selectOption("#decision-provider", "openai-direct");
   assert.equal(await images.isChecked(), false, "switching services resets screenshot consent");
   await page.locator("#decision-api-key").fill(`fixture-${randomUUID()}`);
@@ -339,6 +374,8 @@ try {
   await page.selectOption("#decision-provider", "off");
   await page.getByRole("button", { name: fixtureMessages.saveSettings, exact: true }).click();
   await page.getByText(fixtureMessages.decisionOff, { exact: false }).waitFor();
+  await home();
+  await captureTool.getByText(fixtureMessages.captureSharingOff).waitFor();
 
   await section("Updates");
   const automatic = page.getByLabel(fixtureMessages.keepUpdated, { exact: false });
@@ -374,6 +411,7 @@ try {
   versionStatus.state = "disconnected";
   await home(); await page.reload();
   await page.getByText("Local bridge not connected", { exact: true }).waitFor();
+  await captureTool.getByText(fixtureMessages.memoryUnavailableShort).waitFor();
   await capture("disconnected");
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   assert.equal(bridgeReconnects, 2);
@@ -385,6 +423,7 @@ try {
   failedSummaryTypes.add("GET_RUNTIME_UPDATES");
   await page.reload();
   await page.getByText(fixtureMessages.assistanceStatusUnavailable, { exact: true }).waitFor();
+  await captureTool.getByText(fixtureMessages.statusUnknown).waitFor();
   await capture("summary-unavailable");
   failedSummaryTypes.clear();
   await page.locator(".home-decision").getByRole("button", { name: "Retry", exact: true }).click();

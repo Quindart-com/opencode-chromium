@@ -1608,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "Не удалось загрузить некоторые настройки."
+  },
+  "capabilityAvailable": {
+    "message": "Доступно"
+  },
+  "captureSharingOff": {
+    "message": "Передача отключена"
+  },
+  "captureSharingOn": {
+    "message": "Передача включена"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "Агент может искать содержимое на вкладках, которыми управляет."
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "Агент может заполнять поля на вкладках, которыми управляет."
+  },
+  "captureCapabilityHelp": {
+    "message": "Агент может делать снимки своих вкладок. Помощник передаёт снимки только с вашего разрешения."
   }
 }

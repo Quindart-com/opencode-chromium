@@ -1608,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "No se pudieron cargar algunos ajustes."
+  },
+  "capabilityAvailable": {
+    "message": "Disponible"
+  },
+  "captureSharingOff": {
+    "message": "Sin compartir"
+  },
+  "captureSharingOn": {
+    "message": "Se comparte"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "Los agentes pueden buscar contenido en las pestañas que controlan."
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "Los agentes pueden rellenar campos en las pestañas que controlan."
+  },
+  "captureCapabilityHelp": {
+    "message": "Los agentes pueden capturar sus pestañas. La asistencia comparte capturas solo con tu permiso."
   }
 }
