@@ -24,7 +24,7 @@ The first managed tab launches the driver on an OS-assigned loopback port. On Wi
 - Click, focus, type in text fields, send common keyboard actions, and capture viewport PNG screenshots. On the tested alpha, Ladybird emitted trusted click and keydown events but marked the text input event as untrusted. Sites that depend on trusted input events may behave differently.
 - Finish the session with `browser_finalize`. It returns managed tab details and closes the browser and its driver. The runtime also closes the browser on shutdown or after ten minutes without browser operations.
 
-Ladybird uses the DOM for observations and supports basic lexical search. Personal tabs, visible handoff, file picking and uploads, raw CDP, frame targeting, network and console diagnostics, origin-restricted sessions, and full-page or clipped captures are unavailable in this implementation. WebDriver waits for DOM readiness on navigation. The `load` option also waits for the document to finish loading.
+Ladybird uses the DOM for observations and supports basic lexical search. Personal tabs, visible handoff, file picking and uploads, raw CDP, frame targeting, network and console diagnostics, origin-restricted sessions, and full-page or clipped captures are unavailable in this implementation. Navigation waits for the document to finish loading on every request. The alpha can stall element clicks with the earlier WebDriver page-load strategy.
 
 Keep the driver on loopback. The plugin starts its own local process, and a Ladybird WebDriver port accepts local automation without authentication.
 

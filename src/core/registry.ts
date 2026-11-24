@@ -249,7 +249,7 @@ export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" 
       execute: (args, context) => runtime.session(args, context),
     }),
     browser_finalize: defineRuntimeTool({
-      description: "Finish work: leave all tabs open for human review in a blue group and release ownership. Only explicit keep status 'handoff' retains a tab in the active session.",
+      description: "Finish the session. Extension browsers leave review tabs open and keep explicit handoffs controlled. Ladybird closes its managed browser.",
       inputSchema: finalizeInputSchema,
       outputSchema: resultSchema,
       annotations: { destructiveHint: true, openWorldHint: true },

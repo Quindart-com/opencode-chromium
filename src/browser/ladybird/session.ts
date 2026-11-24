@@ -74,8 +74,9 @@ export class LadybirdSession {
         }
       }
       if (this.#closing) throw new Error("Ladybird stopped before creating a session.");
+      // The pinned alpha can stall Element Click when using the eager strategy.
       const value = record(await driverRequest(this.#endpoint, "POST", "/session", {
-        capabilities: { alwaysMatch: { browserName: "ladybird", "ladybird:headless": true, pageLoadStrategy: "eager", unhandledPromptBehavior: "ignore" } },
+        capabilities: { alwaysMatch: { browserName: "ladybird", "ladybird:headless": true, pageLoadStrategy: "normal", unhandledPromptBehavior: "ignore" } },
       }, 20000));
       if (typeof value.sessionId !== "string" || !value.sessionId) throw new Error("Ladybird WebDriver did not return a session ID.");
       this.#session = "/session/" + encodeURIComponent(value.sessionId);
@@ -86,7 +87,12 @@ export class LadybirdSession {
       if (typeof handle !== "string" || !handle) throw new Error("Ladybird WebDriver did not open an initial tab.");
       this.#initialHandle = handle;
       this.#activeHandle = handle;
-    } catch (error) { await this.close(); throw error; }
+    } catch (error) {
+      const log = driver.startupLog();
+      await this.close();
+      if (log && error instanceof Error) error.message += "\n" + log;
+      throw error;
+    }
   }
 
   request(method: string, target: string, body?: object, timeoutMs?: number) {

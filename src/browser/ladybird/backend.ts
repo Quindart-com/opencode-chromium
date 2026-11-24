@@ -1,4 +1,3 @@
-import { setTimeout as delay } from "node:timers/promises";
 import { BrowserRuntimeError } from "../../core/errors.ts";
 import type { BrowserContext } from "../../core/tool-definition.ts";
 import { record } from "../../shared/values.ts";
@@ -103,13 +102,6 @@ async function tabOperation(session: LadybirdSession, tab: LadybirdTab, name: st
       const timeoutMs = Math.max(1, Math.min(Number(args.timeoutMs ?? 15000), (context.deadlineAt ?? Infinity) - Date.now()));
       await session.request("POST", "/timeouts", { pageLoad: timeoutMs });
       await session.request("POST", "/url", { url }, timeoutMs + 250);
-      if (args.waitUntil === "load") {
-        const deadline = Date.now() + timeoutMs;
-        while (await session.evaluate("return document.readyState;") !== "complete") {
-          if (Date.now() >= deadline) throw new BrowserRuntimeError("The Ladybird page did not finish loading.", { code: "TIMEOUT" });
-          await delay(50);
-        }
-      }
       return session.refresh(tab);
     }
     case "browser_reload":

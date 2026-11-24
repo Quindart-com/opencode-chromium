@@ -26,8 +26,9 @@ export function launchLadybird(config: LadybirdConfig) {
   const args = [config.driver, "--headless", "--force-cpu-painting", "--listen-address", "127.0.0.1", "--port", "0"];
   const encoded = Buffer.from("set -- " + args.map(shellQuote).join(" ") + "\n" + supervisor).toString("base64");
   const child = config.distro
-    ? spawn("wsl.exe", ["--distribution", config.distro, "--", "sh", "-c",
-        'exec sh -c "$(echo ' + encoded + ' | base64 -d)"'], { windowsHide: true })
+    ? spawn("wsl.exe", ["--distribution", config.distro, "--exec", "sh", "-c",
+        'exec sh -c "$(echo ' + encoded + ' | base64 -d)"'],
+      { windowsHide: true })
     : spawn("/bin/sh", ["-c", supervisor, "ladybird", ...args], { windowsHide: true });
   child.stdin.on("error", () => {});
   let stderr = "";
@@ -44,14 +45,14 @@ export function launchLadybird(config: LadybirdConfig) {
       if (port > 0 && port <= 65535) resolve(port);
     });
     child.once("error", reject);
-    child.once("close", code => reject(new Error("WebDriver exited before listening (" + String(code) + "). " + stderr.trim())));
+    child.once("close", code => reject(new Error("WebDriver exited before listening (" + String(code) + ").")));
   });
   return {
     async endpoint() {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const port = await Promise.race([listening, new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => reject(new Error("Timed out waiting for WebDriver")), 15000);
+          timer = setTimeout(() => reject(new Error("Timed out waiting for Ladybird WebDriver.")), 15000);
         })]);
         return "http://127.0.0.1:" + port;
       } finally { clearTimeout(timer); }
@@ -65,6 +66,7 @@ export function launchLadybird(config: LadybirdConfig) {
         })]);
       } finally { clearTimeout(timer); }
     },
+    startupLog() { return stderr.trim(); },
   };
 }
 
@@ -74,7 +76,9 @@ export class WebDriverError extends BrowserRuntimeError {
   readonly webdriverCode: string;
   constructor(webdriverCode: string, message: string) {
     const stale = ["stale element reference", "no such element"].includes(webdriverCode);
-    super(message, { code: stale ? "STALE_TARGET" : webdriverCode === "unexpected alert open" ? "DIALOG_OPEN" : "LADYBIRD_WEBDRIVER_ERROR" });
+    const timedOut = ["timeout", "script timeout"].includes(webdriverCode);
+    const code = stale ? "STALE_TARGET" : timedOut ? "TIMEOUT" : webdriverCode === "unexpected alert open" ? "DIALOG_OPEN" : "LADYBIRD_WEBDRIVER_ERROR";
+    super(message, { code, uncertain: timedOut });
     this.webdriverCode = webdriverCode;
   }
 }
@@ -89,7 +93,8 @@ export async function driverRequest(endpoint: string, method: string, target: st
   } catch (cause) {
     const timedOut = cause instanceof Error && cause.name === "TimeoutError";
     const connected = timedOut || !["ECONNREFUSED", "ENETUNREACH"].includes(String(record(record(cause).cause).code));
-    throw new BrowserRuntimeError(timedOut ? "Ladybird WebDriver timed out." : "Could not reach Ladybird WebDriver over loopback.", {
+    const command = target.replace(/^\/session\/[^/]+/, "").replace(/\/element\/[^/]+/, "/element/:id") || "/session";
+    throw new BrowserRuntimeError(timedOut ? "Ladybird WebDriver timed out on " + method + " " + command + "." : "Could not reach Ladybird WebDriver over loopback.", {
       code: timedOut ? "TIMEOUT" : "LADYBIRD_DISCONNECTED", uncertain: connected && method !== "GET", cause,
     });
   }
