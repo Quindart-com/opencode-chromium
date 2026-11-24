@@ -1,4 +1,5 @@
 import { browserRequest,closeBrowserClients } from "../browser/client.ts";
+import { LADYBIRD_PROFILE } from "../browser/ladybird/config.ts";
 import { record } from "../shared/values.ts";
 import { cleanupSessionEnvironment } from "./environment-cleanup.ts";
 import { errorDetails,shouldReobservePage } from "./failure-context.ts";
@@ -191,6 +192,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
       if (args.action === "open") {
         if (args.name) await this.invoke("browser_name_session", { name: args.name }, sessionId);
         value = await this.invoke("browser_list_tabs", { scope: args.scope ?? "session" }, sessionId);
+        if (profile.experimental) value = { ...record(value), profileLabel: profile.profileLabel, experimental: true };
       } else if (args.action === "configure") {
         const tabId = args.tabId ?? session.activeTabId ?? (await this.invoke("browser_selected_tab", {}, sessionId))?.id;
         if (!tabId) throw new Error("configure requires an active tab or an explicit tabId");
@@ -238,7 +240,9 @@ export class AgentBrowserRuntime extends RuntimeMemory {
     const sessionId = contextSessionId(args, context);
     try {
       const session = this.getSession(sessionId);
-      await this.selectProfile(session, args.profile);
+      // A session still owns its disposable browser if its on-disk driver
+      // configuration was removed after launch.
+      if (session.profileId !== LADYBIRD_PROFILE || args.profile) await this.selectProfile(session, args.profile);
       const blockedTabs = args.keepEnvironment === true ? [] : await cleanupSessionEnvironment(this, session);
       const result = await this.invoke("browser_finalize", { keep: args.keep ?? [], blockedTabs }, sessionId);
       if (record(result).partial || blockedTabs.length) return { ...contractMetadata(), ok: false, status: "partial", sessionId, result, ...(blockedTabs.length ? { environmentCleanup: blockedTabs } : {}) };
@@ -309,6 +313,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
     this.capabilityRegistry = null;
     this.searchPrefsCache.clear();
     closeBrowserClients();
+    return this.ladybird.close();
   }
 }
 export function createAgentBrowserRuntime(options: RuntimeOptions = {}) {

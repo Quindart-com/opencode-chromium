@@ -85,6 +85,7 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "firefox") { const { runFirefoxCommand } = await import("./firefox.ts"); console.log(JSON.stringify(await runFirefoxCommand(rest), null, 2)); return; }
+  if (command === "ladybird") { const { runLadybirdCommand } = await import("./ladybird.ts"); console.log(JSON.stringify(await runLadybirdCommand(rest), null, 2)); return; }
   if (["setup", "manage", "update"].includes(command) || command === "uninstall" && !has(rest, "--client")) {
     if (has(rest, "--help") || has(rest, "-h")) {
       console.log("Connect your browser to agent apps:\n  opencode-chromium setup --all\n  opencode-chromium setup --targets codex,opencode\n  opencode-chromium setup --all --dry-run --json\n\nOptions:\n  --all           Connect all detected, supported apps\n  --targets       Choose apps: codex,opencode,claude-code,claude-desktop,dsh\n  --config        Override a file: harness-id=/absolute/path\n  --dry-run       Preview changes without writing files\n  --json          Print a machine-readable result\n  --production    Switch from a linked development runtime to this release\n  --restart       Gracefully restart selected desktop apps\n  --no-auto-update  Disable managed runtime updates\n  --auto-update     Enable managed runtime updates\n\nUpdate controls: opencode-chromium updates <status|on|off>");

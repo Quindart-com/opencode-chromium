@@ -116,6 +116,7 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 | --- | --- | --- |
 | Chrome, Edge, Brave, Chromium | Chromium extension and CDP | Store extension + native host |
 | Firefox, LibreWolf | Firefox extension and WebDriver BiDi | Signed add-on + native host + Remote Agent enabled at launch |
+| Ladybird **⚑ Experimental** | Built-in WebDriver | Managed headless browser. Linux or Windows via WSL2. [Setup and limits](docs/ladybird.md) |
 
 Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later; LibreWolf must expose the matching Remote Agent. Compatible derivatives need individual validation; this does not claim support for every fork. See [Firefox capabilities](docs/firefox.md) and [compatibility](docs/compatibility.md) for transport differences and verification limits.
 

@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { browserRequest,listBrowserProfiles } from "../browser/client.ts";
 import { createFilePolicy,filePolicyFromEnv } from "../browser/file-policy.ts";
+import { assertLadybirdPolicy,LadybirdBackend } from "../browser/ladybird/backend.ts";
+import { LADYBIRD_PROFILE } from "../browser/ladybird/config.ts";
 import type { BrowserOperation } from "../browser/operation-definition.ts";
 import { createBrowserOperations } from "../browser/operations/index.ts";
 import { nodeFrameId } from "../browser/operations/page-state.ts";
@@ -121,12 +123,14 @@ export function publicProfiles(profiles: BrowserProfile[]) {
     browserName: profile.browserName ?? null,
     browserVersion: profile.browserVersion ?? null,
     extensionVersion: profile.extensionVersion ?? null,
+    ...(profile.experimental ? { experimental: true } : {}),
   }));
 }
 
 export class RuntimeFoundation {
   readonly operationScope = new AsyncLocalStorage<{ frameId?: string; deadlineAt?: number; inputMode?: "auto" | "pointer" | "dom" }>();
   readonly artifacts: ArtifactStore;
+  readonly ladybird = new LadybirdBackend();
   readonly approvalTtlMs: number;
   readonly logger: ReturnType<typeof createLogger>;
   readonly urlPolicy: ReturnType<typeof createUrlPolicy>;
@@ -189,6 +193,9 @@ export class RuntimeFoundation {
       ...(owner?.cursor === false ? { cursor: false } : {}),
       ...(owner?.guardedHosts.size ? { guardedHosts: owner.guardedHosts } : {}),
       ...(typeof args.frameId === "string" ? { frameId: args.frameId } : nodeFrameId(args.nodeId) ? { frameId: nodeFrameId(args.nodeId) } : {}) };
+    if (owner?.profileId === LADYBIRD_PROFILE) {
+      return parseOperationResult(name, await this.ladybird.execute(sessionId, name, parsed, context));
+    }
     const checkTab = async (after = false) => {
       if (this.urlPolicy.allowedOrigins?.length === 0 && this.urlPolicy.blockedOrigins?.length === 0) return;
       if (!parsed.tabId || !tools.browser_get_tab || ["browser_claim_tab", "browser_close_tab", "browser_configure"].includes(name)) return;
@@ -269,7 +276,7 @@ export class RuntimeFoundation {
   async selectProfile(session: RuntimeSession, requested: string | null | undefined) {
     const profiles = await this.connectedProfiles();
     if (profiles.length === 0) {
-      const error = new BrowserRuntimeError("No connected browser profiles. Open Chromium with the extension installed and retry.", { code: "NO_BROWSER_PROFILE" });
+      const error = new BrowserRuntimeError("No browser profiles are available. Connect a browser extension or configure Ladybird WebDriver and retry.", { code: "NO_BROWSER_PROFILE" });
       throw error;
     }
     const selector = requested ?? session.profileId;
@@ -286,7 +293,12 @@ export class RuntimeFoundation {
       }
     }
     if (session.profileId !== profile.profileId) {
-      await this.invoke("browser_select_profile", { profileId: profile.profileId }, session.sessionId);
+      const managed = profile.profileId === LADYBIRD_PROFILE;
+      if (session.profileId && (managed || session.profileId === LADYBIRD_PROFILE)) {
+        throw new BrowserRuntimeError("Open a new session to switch between Ladybird and an extension browser.", { code: "PROFILE_SWITCH_REQUIRES_NEW_SESSION" });
+      }
+      if (managed) assertLadybirdPolicy({ urlPolicy: this.urlPolicy });
+      else await this.invoke("browser_select_profile", { profileId: profile.profileId }, session.sessionId);
       session.profileId = profile.profileId;
       session.activeTabId = null;
       this.searchPrefsCache.clear();
@@ -365,7 +377,7 @@ export class RuntimeFoundation {
     // A ref from the read view is located fresh, so a scroll since the read cannot misplace the action.
     if (typeof target.ref === "number") {
       const point = record(await this.invoke("browser_ref_point", { tabId, ref: target.ref }, sessionId));
-      target = { ...target, x: Number(point.x), y: Number(point.y) };
+      target = typeof point.nodeId === "string" ? { ...target, nodeId: point.nodeId } : { ...target, x: Number(point.x), y: Number(point.y) };
     }
     if (target.query) {
       const prefs = await this.searchPreferences(this.getSession(sessionId));

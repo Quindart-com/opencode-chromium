@@ -18,7 +18,7 @@ export function createBrowserAgent(options: RuntimeOptions & { runtime?: AgentBr
       return dispatchBrowserTool(registry, name, args, context);
     },
     close() {
-      runtime.close();
+      return runtime.close();
     },
   };
 }

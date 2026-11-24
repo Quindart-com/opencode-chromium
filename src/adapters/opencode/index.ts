@@ -139,7 +139,7 @@ function createLegacyOpenCodeHooks(options: OpenCodeOptions = {}) {
       if (disposed) return;
       disposed = true;
       trackRuntime(runtime).close();
-      runtime.close();
+      return runtime.close();
     },
     runtime,
     registry,
@@ -186,7 +186,7 @@ export async function createOpenCodeSetup(ctx: OpenCodeContext = {}, options: Op
     stopPresence();
     control?.close();
     trackRuntime(runtime).close();
-    runtime.close();
+    await runtime.close();
     logger.info("OpenCode V2 browser tools cleaned up", { plugin: PLUGIN_NAME });
   };
   cleanup.tools = tools;

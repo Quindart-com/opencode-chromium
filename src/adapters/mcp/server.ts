@@ -19,7 +19,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
-import { announceBrowserClient,closeBrowserClients,resetBrowserClientConnections } from "../../browser/client.ts";
+import { announceBrowserClient,resetBrowserClientConnections } from "../../browser/client.ts";
 import { startHarnessControl } from "../../control/harness-control.ts";
 import { artifactUriTemplate } from "../../core/artifacts.ts";
 import { createCoreRegistry,createMemoryRegistry } from "../../core/registry.ts";
@@ -228,6 +228,8 @@ export async function createServer({ runtime, fallbackSessionId = `mcp-${randomU
 export async function serveStdio(options: ServerOptions, runtime: AgentBrowserRuntime) {
   const fallbackSessionId = process.env.AGENT_BROWSER_SESSION_ID ?? process.env.CODEX_SESSION_ID ?? `mcp-${randomUUID()}`;
   const server = await createServer({ runtime, fallbackSessionId });
+  const onclose = server.server.onclose;
+  server.server.onclose = () => { onclose?.(); void runtime.close(); };
   await server.connect(new StdioServerTransport());
   return server;
 }
@@ -305,12 +307,11 @@ export async function main(argv = process.argv.slice(2)) {
   });
   const cleanup = () => {
     trackRuntime(runtime).close();
-    runtime.close();
-    closeBrowserClients();
+    return runtime.close();
   };
-  process.once("SIGINT", () => { cleanup(); process.exit(0); });
-  process.once("SIGTERM", () => { cleanup(); process.exit(0); });
-  process.once("exit", cleanup);
+  const shutdown = () => { void cleanup().finally(() => process.exit(0)); };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
   await startMcpServer(options, { runtime });
 }
 

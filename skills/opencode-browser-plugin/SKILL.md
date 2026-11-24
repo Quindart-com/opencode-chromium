@@ -57,7 +57,11 @@ For deeper network inspection of one controlled tab, request the lazy network pa
 
 The default network result is lifecycle-only. Headers are redacted, bodies are disabled by default, and `includeBody: "request" | "response" | "both"` is bounded, redacted, and approval-gated.
 
-When a result is `approval_required`, review the chain and call `browser_run` again with only `approvalToken`. Never recreate or modify the approved chain. Retrieve screenshots and oversized results from their artifact URI. When work is complete, call `browser_finalize`:
+When a result is `approval_required`, review the chain and call `browser_run` again with only `approvalToken`. Never recreate or modify the approved chain. Retrieve screenshots and oversized results from their artifact URI. When work is complete, call `browser_finalize`.
+
+**Ladybird (Experimental)** uses disposable headless tabs. Finalization returns the tab details and closes the browser. Capture any required screenshots before finishing. Use selectors or references for element actions and PNG for viewport screenshots.
+
+For Chromium, Firefox and LibreWolf:
 
 - By default, **all tabs stay open for human review**, including research and source pages. The session's existing group keeps its name and turns **blue**; ownership, cursors and debugger attachments are released. Do not close tabs just to clean up before finalization.
 - Omit `keep` for completed work. A numeric keep entry or `{"tabId": <id>, "status": "deliverable"}` also means human review; omitting the status defaults to `deliverable`.
