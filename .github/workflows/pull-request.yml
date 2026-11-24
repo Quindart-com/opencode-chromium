@@ -92,6 +92,7 @@ jobs:
           cd "$RUNNER_TEMP"
           curl --fail --location --retry 3 --max-time 120 https://apt.ladybird.org/pool/main/l/ladybird/ladybird_2026.47.7-1~ubuntu24.04_amd64.deb -o ladybird.deb
           echo '67e33f0a234b672734b8965ea7dd5c63c8f0b616313b91d43522c53ad686b1d4  ladybird.deb' | sha256sum --check
+          sudo apt-get update
           sudo apt-get install --yes --no-install-recommends ./ladybird.deb
       - run: bun scripts/verify-ladybird.js
         env:

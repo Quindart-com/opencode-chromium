@@ -71,9 +71,11 @@ export function launchLadybird(config: LadybirdConfig) {
 export type LadybirdDriver = ReturnType<typeof launchLadybird>;
 
 export class WebDriverError extends BrowserRuntimeError {
-  constructor(readonly webdriverCode: string, message: string) {
+  readonly webdriverCode: string;
+  constructor(webdriverCode: string, message: string) {
     const stale = ["stale element reference", "no such element"].includes(webdriverCode);
     super(message, { code: stale ? "STALE_TARGET" : webdriverCode === "unexpected alert open" ? "DIALOG_OPEN" : "LADYBIRD_WEBDRIVER_ERROR" });
+    this.webdriverCode = webdriverCode;
   }
 }
 

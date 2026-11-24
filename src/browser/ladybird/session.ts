@@ -39,12 +39,13 @@ export class LadybirdSession {
   #tail = Promise.resolve();
   #closing = false;
   #closed: Promise<void> | null = null;
+  readonly #allocateId: () => number;
   deadlineAt?: number;
   readonly tabs = new Map<number, LadybirdTab>();
   selected: number | null = null;
   version: string | null = null;
 
-  constructor(private readonly allocateId: () => number) {}
+  constructor(allocateId: () => number) { this.#allocateId = allocateId; }
 
   async serial<T>(work: () => Promise<T>) {
     const pending = this.#tail.then(async () => {
@@ -107,7 +108,7 @@ export class LadybirdSession {
       await this.request("POST", "/window", { handle });
       this.#activeHandle = handle;
     }
-    const id = this.allocateId();
+    const id = this.#allocateId();
     const tab = { id, handle, url: "about:blank", title: "", refs: new Map<number, string>(), elementRefs: new Map<string, number>() };
     this.tabs.set(id, tab);
     this.selected = id;
@@ -163,7 +164,7 @@ export class LadybirdSession {
       tab.elementRefs.delete(tab.refs.get(oldest)!);
       tab.refs.delete(oldest);
     }
-    const ref = this.allocateId();
+    const ref = this.#allocateId();
     tab.refs.set(ref, id);
     tab.elementRefs.set(id, ref);
     return ref;
