@@ -16,12 +16,13 @@ codex plugin add opencode-browser-plugin@quindart-browser
 ```
 
 The native manifest at `.codex-plugin/plugin.json` bundles the browser skill
-and `.mcp.json`. The MCP configuration runs the published `opencode-chromium`
-runtime through `npx`; Node.js 24 or later is required. Sparse checkout includes
-the plugin resources and documentation without fetching the development source
-directories. Install the browser
-extension and register its native host with `npx -y opencode-chromium@latest setup --targets codex`
-before controlling a browser. See [Firefox setup](firefox.md) for Firefox profiles.
+and `.mcp.json`. The MCP configuration starts the local runtime that setup
+installs; Node.js 24 or later is required. Sparse checkout includes the plugin
+resources and documentation without fetching the development source directories.
+Install the browser extension and run `npx -y opencode-chromium@latest setup --targets codex`
+before controlling a browser. Setup installs that runtime and registers the native
+host. If it has not run, the plugin's MCP server exits with
+`MCP_RUNTIME_SETUP_REQUIRED`. See [Firefox setup](firefox.md) for Firefox profiles.
 
 If you already registered the same MCP server manually, remove that registration
 with `codex mcp remove opencode-browser-plugin` before enabling the native plugin
@@ -77,12 +78,13 @@ instead to connect every detected, supported agent app.
 Register the required MCP server named `opencode-browser-plugin` from the npm package:
 
 ```powershell
-codex mcp add opencode-browser-plugin -- npx -y opencode-chromium-mcp
+codex mcp add opencode-browser-plugin -- npx -y opencode-chromium@latest mcp
 codex mcp list
 ```
 
-`opencode-chromium-mcp` is published on npm as a standalone launcher for the
-MCP server shipped inside `opencode-chromium`, so `npx` resolves it directly.
+The `mcp` command starts the MCP server shipped inside `opencode-chromium`. The
+separate `opencode-chromium-mcp` npm package was removed in 2.0. Replace any
+registration that still uses it.
 
 From a local checkout, register `dist/adapters/mcp/server.js` with Bun instead:
 

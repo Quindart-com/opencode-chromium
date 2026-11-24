@@ -1,10 +1,12 @@
 # Security Policy
 
-This project controls a real browser through a Chromium extension, native messaging, and OpenCode tools. Treat security reports seriously.
+This project controls a real browser for coding agents. It uses Chromium and Firefox extensions, native messaging, a local runtime controller, and MCP, OpenCode and SDK adapters. Treat security reports seriously.
+
+Security fixes are made in the latest release. If you can, update with `npx -y opencode-chromium@latest setup --all` and confirm the issue there before reporting.
 
 ## Reporting A Vulnerability
 
-Please open a private security advisory on GitHub if the repository is hosted there. If that is not available yet, contact the maintainer privately before publishing details.
+Please [open a private security advisory](https://github.com/Quindart-com/opencode-chromium/security/advisories/new) on GitHub. Do not use public issues or discussions for vulnerabilities.
 
 Include:
 
@@ -22,5 +24,10 @@ Security-sensitive areas include:
 - Local IPC socket/pipe behavior.
 - Clipboard and file upload tools.
 - CDP execution and tab/session ownership.
+- The Firefox WebDriver BiDi connection to the loopback Remote Agent.
+- Runtime controller updates, release validation and rollback.
+- Stored decision-provider credentials and data sent to opt-in cloud services.
+- Local action memory and session artifacts.
+- MCP HTTP transport, authentication and origin policy.
 
 Please do not publicly disclose a working exploit before the maintainer has had time to investigate and release a fix.

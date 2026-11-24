@@ -67,7 +67,8 @@ try {
     process.stderr.write(`Completed fixture case ${samples.length}/${rounds * tasks.length}\n`);
   }
   const percentile = (values, p) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * p) - 1];
-  const report = { scope: "Disposable browser, extension, native host and SDK; local lexical search, no cloud calls or agent planning", rounds,
+  const packageVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
+  const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), packageVersion, scope: "Disposable browser, extension, native host and SDK; local lexical search, no cloud calls or agent planning", rounds,
     accuracy: { correct: samples.filter(s => s.correct).length, total: samples.length },
     wall: { p50Ms: percentile(samples.map(s => s.wallMs), 0.5), p95Ms: percentile(samples.map(s => s.wallMs), 0.95) },
     toolCalls: calls, responseBytes: bytes, driverCpuMicros: process.cpuUsage(cpu), driverPeakRss: process.resourceUsage().maxRSS, samples };

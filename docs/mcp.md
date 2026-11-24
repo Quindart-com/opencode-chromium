@@ -28,6 +28,20 @@ stdio reserves stdout for MCP JSON-RPC. HTTP is loopback-only by default and ref
 
 Artifacts are registered as resources using `browser://sessions/{sessionId}/artifacts/{artifactId}`. Screenshots and oversized values are not injected into the ordinary model context.
 
+## Reading pages
+
+`browser_observe` with `mode: "read"` returns the page as compact text instead of pixels. Each control gets a short line with a ref and a click point, such as `[1042] link "Frontend engineer" @768,528`. Pass `postObserve: { "mode": "read" }` to `browser_run` to read the page again after a set of actions.
+
+```json
+{ "action": "click", "target": { "ref": 1042 } }
+```
+
+- **Refs** work with `click`, `hover`, `fill`, `replaceText` and `type`. The control is located again when the action runs, so a scroll since the read cannot misplace it. Raw `x`/`y` points are valid only until the page moves.
+- **Repeat reads** of the same page return only `+` added, `~` changed and `-` removed lines. Pass `detail: "full"` for the whole view, `query` to keep matching lines, or `fullPage: true` to include content beyond the viewport.
+- **No page script runs**, so the read works on sites that block automation and on hidden tabs. On a host marked `PAGE_PROTECTION_SUSPECTED`, page search uses this view and every action returns its change summary automatically.
+
+Prefer reads to screenshots, which cost far more tokens. Use screenshots for images, canvas and layout questions. Background agent tabs keep rendering without being brought forward, so pointer input and screenshots work there, and several agents can work in parallel.
+
 ## Optional capabilities
 
 Discover a pack with `browser_observe` using `mode: "capabilities"` and the pack name. Execute a capability in `browser_run`: `{ "action": "capability", "capability": "visual.capture", "input": { "kind": "both" } }`. Pass the same profile, session and controlled tab throughout.

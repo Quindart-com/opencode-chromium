@@ -11,6 +11,17 @@
 <a href="https://addons.mozilla.org/firefox/addon/opencode-browser-plugin/"><img alt="Firefox Add-ons" src="https://img.shields.io/badge/Firefox_Add--ons-Install-2563eb?style=for-the-badge&logo=firefoxbrowser&logoColor=white"></a>
 </p>
 
+## Highlights
+
+- **One small toolset for every agent.** `browser_run`, `browser_observe`, `browser_session` and `browser_finalize` work the same way in Codex, Claude Code, Claude Desktop, OpenCode 1.x and 2.x, DeepSeek Harness, any MCP client and the JavaScript SDK.
+- **Pages read as compact text** *(new in 2.0.5)*. `browser_observe` mode `read` returns the page as short lines with `[ref]` targets, using far fewer tokens than a screenshot. A repeat read returns only what changed. Act on a ref directly with `target: { "ref": … }`.
+- **Background tabs and guarded sites** *(new in 2.0.5)*. Agent tabs keep rendering without being brought forward, so several agents can work in parallel. Input uses genuine pointer and keyboard events, so sites that block devtools still work.
+- **Your tabs stay yours** *(2.0.1)*. A session controls only the tabs it opened or that you let it claim. Finished work stays open in a blue group for your review.
+- **Updates that never interrupt work** *(2.0)*. Each new release is checked before use. Sessions already running stay on their version until they finish. Rollback works the same way.
+- **Local first.** Search and the optional action memory run on your machine. Cloud decision assistance and screenshot sharing stay off until you turn them on.
+
+[What's new in each release →](https://quindart-com.github.io/opencode-chromium/updates/)
+
 ## Get started
 
 Install the matching browser extension, then connect all detected supported harnesses and native hosts:
@@ -118,21 +129,18 @@ Optional capability packs provide snapshot/pixel diffs, bounded frame inspection
 
 </details>
 
-## Measured target selection
+## Benchmarks
 
-![Target accuracy and selection latency on 12 synthetic queries](assets/benchmarks/accuracy.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/benchmarks/summary-dark.svg">
+  <img src="assets/benchmarks/summary.svg" alt="Benchmark summary for v2.0.5: exact labels 6 of 6 and paraphrases 1 of 6 in-process; 12 of 12 and 0 of 6 through the full browser pipeline" width="100%">
+</picture>
 
-The current recording measures local target selection on one synthetic page. These are component measurements, not complete browser-agent task success or a ranking against Browser Use. Cloud comparisons require an explicit opt-in; exact matches skip paid calls and missing cost reports remain unknown. The report records the measured package version and source fingerprints. [Results and methodology](assets/benchmarks/accuracy.json).
+- **Exact labels:** local search finds the target every time, in under 1 ms, with no model or network.
+- **Paraphrases:** lexical search alone usually misses them. The right target is still among the top 16 candidates in 11 of 12 queries, ready for an optional [decision provider](docs/DECISION-PROVIDERS.md) to rerank.
+- **Full pipeline:** a search followed by a click and a verification takes about 600 ms in a real Chromium with the extension and native host.
 
-<details><summary><strong>Reproduce the benchmark</strong></summary>
-
-```sh
-bun run benchmark:accuracy
-```
-
-The default runs locally without paid requests. Add `--cloud` to compare Jev text, Luna text and Luna image using your configured OpenRouter key in isolated temporary settings. That experiment makes at most 18 requests and can incur charges. It does not change your saved provider choice. Candidate-pool misses, abstentions and timeouts remain in the score.
-
-</details>
+These are small synthetic fixtures, not general agent task success. [Full results, commands and limits →](docs/benchmarking.md)
 
 <a id="firefox-agent-setup"></a>
 <details><summary><strong>Firefox and LibreWolf: enable remote debugging for agent control</strong></summary>
