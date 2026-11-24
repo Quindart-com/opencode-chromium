@@ -18,7 +18,8 @@ const supervisor = [
 
 export function launchLadybird(config: LadybirdConfig) {
   const args = [config.driver, "--headless", "--force-cpu-painting", "--listen-address", "127.0.0.1", "--port", "0"];
-  const child = spawn("/bin/sh", ["-c", supervisor, "ladybird", ...args]);
+  // Give the managed browser and its helpers their own process group.
+  const child = spawn("/bin/sh", ["-c", supervisor, "ladybird", ...args], { detached: true });
   child.stdin.on("error", () => {});
   let stderr = "";
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr = (stderr + chunk).slice(-3000); });
@@ -50,9 +51,17 @@ export function launchLadybird(config: LadybirdConfig) {
       child.stdin.end();
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await Promise.race([exited, new Promise<void>(resolve => {
-          timer = setTimeout(() => { child.kill(); resolve(); }, 4000);
+        await Promise.race([exited, new Promise<void>((resolve, reject) => {
+          timer = setTimeout(() => {
+            try {
+              if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+            } catch (error) {
+              if (record(error).code !== "ESRCH") { reject(error); return; }
+            }
+            resolve();
+          }, 4000);
         })]);
+        await exited;
       } finally { clearTimeout(timer); }
     },
     startupLog() { return stderr.trim(); },

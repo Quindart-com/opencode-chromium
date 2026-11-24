@@ -4,6 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { launchLadybird } from "../src/browser/ladybird/driver.ts";
 import { createCoreRegistry } from "../src/core/registry.ts";
 import { createAgentBrowserRuntime } from "../src/core/runtime.ts";
 
@@ -38,6 +39,28 @@ const server = http.createServer((request, response) => {
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   response.end(request.url === "/next" ? "<title>Next fixture</title><h1>Next fixture</h1>" : page);
 });
+
+async function verifyForcedShutdown() {
+  const stub = path.join(root, "stubborn-driver.mjs");
+  fs.writeFileSync(stub, [
+    "#!/usr/bin/env node",
+    'import { createServer } from "node:http";',
+    'process.on("SIGTERM", () => {});',
+    'const server = createServer((_request, response) => response.end("running"));',
+    'server.listen(0, "127.0.0.1", () => console.log("Listening on 127.0.0.1:" + server.address().port));',
+    'setTimeout(() => process.exit(0), 12000).unref();',
+    "",
+  ].join("\n"), { mode: 0o700 });
+  const managed = launchLadybird({ driver: stub });
+  let endpoint;
+  try {
+    endpoint = await managed.endpoint();
+    assert.equal(await (await fetch(endpoint)).text(), "running");
+  } finally {
+    await managed.close();
+  }
+  await assert.rejects(fetch(endpoint), "Forced shutdown must stop the driver as well as its supervisor");
+}
 
 try {
   server.listen(0, "127.0.0.1");
@@ -82,6 +105,7 @@ try {
   assert.deepEqual(finalized.result.tabs.map(tab => tab.id), [firstId, secondId]);
   const fresh = await ok("browser_session", { action: "open" });
   assert.deepEqual(fresh.result.tabs, []);
+  await verifyForcedShutdown();
   console.log("Ladybird passed profile selection, tab isolation, navigation, read and reference input, lexical search, file-picker blocking, PNG capture, stale references, and finalization.");
 } finally {
   await runtime.close();
