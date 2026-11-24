@@ -63,13 +63,13 @@ test("a local result over the browser's 1 MB message limit becomes an error inst
   const relay = new RpcRelay({
     state: { startedAt: "fixture", profile: null, nativeHostVersion: "1.10.1" },
     extensionWriter: value => { extension.push(value as Record<string, unknown>); },
-    localHandler: method => method === "firefox.command" ? { data: "x".repeat(2 * 1024 * 1024) } : method === "firefox.attach" ? { ok: true } : undefined,
+    localHandler: method => method === "firefox.command" ? { data: "🧪".repeat(300 * 1024) } : method === "firefox.attach" ? { ok: true } : undefined,
   });
   await relay.handleExtensionMessage({ jsonrpc: "2.0", id: 1, method: "firefox.command", params: {} });
   await relay.handleExtensionMessage({ jsonrpc: "2.0", id: 2, method: "firefox.attach", params: {} });
   const [large, small] = extension;
   expect(large?.result).toBeUndefined();
   expect(large?.error).toMatchObject({ code: -32000, data: { code: "RESULT_TOO_LARGE", retryable: false } });
-  expect(String((large?.error as { message?: string })?.message)).toContain("firefox.command result is 2.0 MB");
+  expect(String((large?.error as { message?: string })?.message)).toContain("firefox.command result is 1.2 MB");
   expect(small).toMatchObject({ id: 2, result: { ok: true } });
 });

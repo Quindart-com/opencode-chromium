@@ -16,7 +16,7 @@
 export const VIEW_SANDBOX = "opencode-read-view";
 
 /** Traversal bound and serialized-size budget (bytes, estimated conservatively). */
-export const VIEW_LIMITS = { maxNodes: 30000, maxBytes: 600_000 };
+export const VIEW_LIMITS = { maxNodes: 30000, maxBytes: 600_000, maxStringChars: 4_000 };
 
 /** Builds a DOMSnapshot-shaped JSON string of the main document. Argument: VIEW_LIMITS. */
 export const SNAPSHOT_FUNCTION = String.raw`function (limits) {
@@ -29,7 +29,15 @@ export const SNAPSHOT_FUNCTION = String.raw`function (limits) {
   const ICONISH = new Set(["i", "span", "em", "b"]);
   const root = document.documentElement;
   const sx = window.scrollX, sy = window.scrollY, vw = window.innerWidth, vh = window.innerHeight;
-  const size = (text) => /[^\x00-\x7f]/.test(text) ? text.length * 3 : text.length + 8;
+  const size = (text) => 8 + text.length * (/[\x00-\x1f"\\]/.test(text) ? 6 : /[^\x00-\x7f]/.test(text) ? 3 : 1);
+  let clippedString = false;
+  const bounded = (text) => {
+    if (text.length <= limits.maxStringChars) return text;
+    clippedString = true;
+    const end = limits.maxStringChars - 1;
+    const last = text.charCodeAt(end - 1);
+    return text.slice(0, last >= 0xd800 && last <= 0xdbff ? end - 1 : end) + "…";
+  };
   // Collected in document order, parents before children; emitted after pruning.
   const parent = [], type = [], name = [], value = [], attrs = [], id = [], cost = [];
   const styles = [], bounds = [], inView = [], flags = [], formValue = [];
@@ -44,7 +52,7 @@ export const SNAPSHOT_FUNCTION = String.raw`function (limits) {
   while (stack.length && parent.length < limits.maxNodes) {
     const [node, up, upCursor] = stack.pop();
     if (node.nodeType === 3) {
-      const text = node.nodeValue || "";
+      const text = bounded(node.nodeValue || "");
       if (!text.trim()) continue;
       range.selectNodeContents(node);
       const rect = range.getBoundingClientRect();
@@ -61,8 +69,8 @@ export const SNAPSHOT_FUNCTION = String.raw`function (limits) {
     if (display === "none" || (style && (style.visibility === "hidden" || style.visibility === "collapse" || style.opacity === "0"))) continue;
     const list = [];
     let weight = 40 + tag.length;
-    for (const key of KEEP) { const text = node.getAttribute(key); if (text !== null) { list.push(key, text); weight += key.length + size(text); } }
-    if (ICONISH.has(tag)) { const text = node.getAttribute("class"); if (text) { list.push("class", text); weight += size(text); } }
+    for (const key of KEEP) { const raw = node.getAttribute(key); if (raw !== null) { const text = bounded(raw); list.push(key, text); weight += key.length + size(text); } }
+    if (ICONISH.has(tag)) { const raw = node.getAttribute("class"); if (raw) { const text = bounded(raw); list.push("class", text); weight += size(text); } }
     let nodeId = ids.get(node);
     if (!nodeId) { nodeId = nextId++; ids.set(node, nodeId); }
     live.set(nodeId, new WeakRef(node));
@@ -71,9 +79,9 @@ export const SNAPSHOT_FUNCTION = String.raw`function (limits) {
     if (tag === "input") {
       const kind = (node.getAttribute("type") || "").toLowerCase();
       if (kind === "checkbox" || kind === "radio") { if (node.checked) flag |= 1; }
-      else if (node.value) form = ["input", node.value];
-    } else if (tag === "textarea") { if (node.value) form = ["textarea", node.value]; }
-    else if (tag === "select") { const option = node.selectedOptions && node.selectedOptions[0]; if (option && option.text) form = ["input", option.text]; }
+      else if (node.value) form = ["input", bounded(node.value)];
+    } else if (tag === "textarea") { if (node.value) form = ["textarea", bounded(node.value)]; }
+    else if (tag === "select") { const option = node.selectedOptions && node.selectedOptions[0]; if (option && option.text) form = ["input", bounded(option.text)]; }
     else if (tag === "option" && node.selected) flag |= 2;
     // No listener list is visible from here, so a pointer cursor that starts at this
     // element (or an inline handler) stands in for Chromium's click-listener flag.
@@ -98,9 +106,17 @@ export const SNAPSHOT_FUNCTION = String.raw`function (limits) {
   g.__ocViewNext = nextId;
   g.__ocViewNodes = live;
 
-  const count = parent.length, keep = new Uint8Array(count);
+  const count = parent.length, keep = new Uint8Array(count), cannotFit = new Uint8Array(count);
   let used = 0;
-  const mark = (i) => { for (; i >= 0 && !keep[i]; i = parent[i]) { keep[i] = 1; used += cost[i]; } };
+  const mark = (i) => {
+    let additional = 0;
+    for (let node = i; node >= 0 && !keep[node]; node = parent[node]) {
+      additional += cost[node];
+      if (cannotFit[node] || used + additional > limits.maxBytes) { cannotFit[i] = 1; return; }
+    }
+    for (; i >= 0 && !keep[i]; i = parent[i]) keep[i] = 1;
+    used += additional;
+  };
   for (let i = 0; i < count; i += 1) if (inView[i]) mark(i);
   for (let i = 0; i < count && used < limits.maxBytes; i += 1) mark(i);
 
@@ -125,9 +141,9 @@ export const SNAPSHOT_FUNCTION = String.raw`function (limits) {
   }
   const width = Math.max(vw, root ? root.scrollWidth : 0), height = Math.max(vh, root ? root.scrollHeight : 0);
   return JSON.stringify({
-    documents: [{ documentURL: s(location.href), title: s(document.title), scrollOffsetX: sx, scrollOffsetY: sy, contentWidth: width, contentHeight: height, nodes, layout }],
+    documents: [{ documentURL: s(bounded(location.href)), title: s(bounded(document.title)), scrollOffsetX: sx, scrollOffsetY: sy, contentWidth: width, contentHeight: height, nodes, layout }],
     strings,
-    truncated: kept < count || !!stack.length,
+    truncated: clippedString || kept < count || !!stack.length,
   });
 }`;
 

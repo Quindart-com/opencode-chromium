@@ -42,7 +42,19 @@ fs.writeFileSync(launcher, process.platform === 'win32' ? '@echo off\r\n' + vari
 const manifest = path.join(fixture, 'native.json');
 fs.writeFileSync(manifest, JSON.stringify({ name: host, description: 'Disposable extension verification host', path: launcher, type: 'stdio', allowed_extensions: ['opencode-browser-plugin@quindart.com'] }));
 let nativeKey, nativeFile, child, agent, profileId;
+const denseRows = Array.from({ length: 500 }, (_, index) =>
+  '<p>Item ' + index + ': ' + '配送 — réception — 🧪 '.repeat(14) + '</p>').join('');
+const oversizedValue = '配送🧪'.repeat(150_000);
 const server = http.createServer((req, res) => {
+  if (req.url === '/read-fixture') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end('<title>Deep read fixture</title>' + denseRows + '<section id="deep">' +
+      '<button id="read-action">Confirm delivery</button><p id="read-result">Awaiting confirmation</p>' +
+      '<textarea aria-label="Delivery notes">' + oversizedValue + '</textarea></section>' + denseRows +
+      '<script>document.getElementById("read-action").onclick = event => {' +
+      'document.getElementById("read-result").textContent = event.isTrusted ? "Delivery confirmed" : "Synthetic confirmation";};</script>');
+    return;
+  }
   if (req.url === '/frame') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Frame fixture</p><button id="frame-choice" onclick="document.querySelector(\'#frame-result\').textContent=event.isTrusted?\'Trusted frame\':\'Synthetic frame\'">Frame choose</button><input id="frame-name"><button id="frame-prompt" onclick="prompt(123)">Frame prompt</button><p id="frame-result">Ready</p><iframe src="/leaf"></iframe>'); return; }
   if (req.url === '/leaf') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Nested frame fixture</p>'); return; }
   if (req.url === '/download') { res.setHeader('Content-Type', 'text/plain'); res.setHeader('Content-Disposition', 'attachment; filename="fixture.txt"'); res.end('owned fixture'); return; }
@@ -148,6 +160,24 @@ try {
   const replayed = await call('browser_run', remembered);
   assert.equal(replayed.status, 'memory_replay'); report.checks.push('local action memory replay through runtime');
   await call('browser_session', { action: 'configure', tabId, environment: { viewport: { width: 800, height: 600 } } }); await call('browser_session', { action: 'configure', tabId, environment: { reset: true } }); report.checks.push('viewport configuration and reset');
+  await call('browser_run', {
+    tabId, memoryMode: 'off', steps: [{ action: 'navigate', url: origin + '/read-fixture#deep' }],
+  });
+  const read = await call('browser_observe', { tabId, mode: 'read', detail: 'full' });
+  const view = read.result.view;
+  assert.match(view, /Awaiting confirmation/);
+  const ref = view.match(/\[(\d+)\] button "Confirm delivery"/);
+  assert.ok(ref, view);
+  const confirmed = await call('browser_run', {
+    tabId, memoryMode: 'off', steps: [{ action: 'click', target: { ref: Number(ref[1]) } }],
+    postObserve: { mode: 'read' },
+  });
+  assert.match(confirmed.observation.view, /Delivery confirmed/);
+  const unchanged = await call('browser_observe', { tabId, mode: 'read' });
+  assert.match(unchanged.result.view, /no visible change/i);
+  const inspected = await call('browser_observe', { tabId, mode: 'inspect', target: { selector: '#read-result' } });
+  assert.match(JSON.stringify(inspected.result), /Delivery confirmed/);
+  report.checks.push('deep viewport read and trusted ref click with oversized multilingual form text, followed by delta and inspection');
   const second = await call('browser_session', { action: 'new-tab', sessionId: 'firefox-second-session' });
   await call('browser_run', { sessionId: 'firefox-second-session', tabId: second.activeTabId, steps: [{ action: 'navigate', url: origin }] });
   const secondDownloads = await call('browser_observe', { sessionId: 'firefox-second-session', tabId: second.activeTabId, mode: 'downloads' });
