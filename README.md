@@ -24,7 +24,7 @@
 
 ## Get started
 
-Install the matching browser extension for Chromium, Firefox, or LibreWolf. For Ladybird, install the browser and use its built-in WebDriver. Then connect your agent app:
+For Chromium, Firefox, or LibreWolf, install the matching browser extension. For Ladybird, follow the [experimental setup instructions](#ladybird-agent-setup). To connect your agent app:
 
 ```sh
 npx -y opencode-chromium@latest setup --all
@@ -110,14 +110,14 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 <a href="https://www.chromium.org/getting-involved/download-chromium/"><img alt="Download Chromium" src="https://img.shields.io/badge/Chromium-3057A4?logo=googlechrome&logoColor=white"></a>
 <a href="https://www.firefox.com/download/"><img alt="Download Firefox" src="https://img.shields.io/badge/Firefox-FF7139?logo=firefoxbrowser&logoColor=white"></a>
 <a href="https://librewolf.net/installation/"><img alt="Download LibreWolf" src="https://img.shields.io/badge/LibreWolf-00ACFF?logo=librewolf&logoColor=white"></a>
-<a href="https://ladybird.org/download/"><img alt="Download Ladybird" src="https://img.shields.io/badge/Ladybird-B91C1C"></a>
+<a href="https://ladybird.org/download/"><img alt="Download Ladybird (Experimental)" src="https://img.shields.io/badge/Ladybird%20%28Experimental%29-B91C1C"></a>
 </p>
 
 | Browser family | Connection | Setup |
 | --- | --- | --- |
 | Chrome, Edge, Brave, Chromium | Chromium extension and CDP | Store extension + native host |
 | Firefox, LibreWolf | Firefox extension and WebDriver BiDi | Signed add-on + native host + Remote Agent enabled at launch |
-| Ladybird **⚑ Experimental** | Built-in WebDriver | Managed headless browser on Linux and Apple silicon macOS. [Setup and limits](docs/ladybird.md) |
+| Ladybird **⚑ Experimental** | Built-in WebDriver | Managed headless browser on Linux and Apple silicon macOS. [Setup instructions](#ladybird-agent-setup) |
 
 Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later; LibreWolf must expose the matching Remote Agent. Compatible derivatives need individual validation; this does not claim support for every fork. See [Firefox capabilities](docs/firefox.md) and [compatibility](docs/compatibility.md) for transport differences and verification limits.
 
@@ -191,6 +191,36 @@ These are small synthetic fixtures, not general agent task success. [Full result
 The status command checks port reachability; the extension verifies the browser/tab identity when automation attaches. Repeat the launch flag whenever you start the browser for agent use. For multiple profiles, use a separate port per running browser instance and configure each extension profile accordingly.
 
 Keep remote debugging bound to loopback; do not expose its port to your network. Other local programs can access the Remote Agent, so a dedicated automation profile is recommended. To stop remote debugging, fully exit the browser and relaunch without the flag. See [Firefox setup and troubleshooting](docs/firefox.md) and [Mozilla's Remote Agent security documentation](https://firefox-source-docs.mozilla.org/remote/Security.html).
+
+</details>
+
+<a id="ladybird-agent-setup"></a>
+<details><summary><strong>Ladybird (Experimental) setup for Linux and Apple silicon macOS</strong></summary>
+
+Ladybird uses its built-in WebDriver for agent control. You only need Ladybird and the OpenCode Browser Plugin in your agent app.
+
+1. Install [Ladybird](https://ladybird.org/download/). The plugin detects the WebDriver included in the Ubuntu package and the standard macOS app installation.
+2. Connect your agent app using the instructions above. For Codex, run:
+
+   ```sh
+   npx -y opencode-chromium@latest setup --targets codex
+   ```
+
+3. Check that the plugin can find WebDriver:
+
+   ```sh
+   npx -y opencode-chromium@latest ladybird status
+   ```
+
+   If you installed Ladybird in a custom location, point the plugin at its WebDriver executable:
+
+   ```sh
+   npx -y opencode-chromium@latest ladybird configure --driver "/absolute/path/to/WebDriver"
+   ```
+
+4. Ask your agent to use **Ladybird (Experimental)** or select the `ladybird` profile. The plugin starts a disposable headless browser when the agent opens its first tab and closes that browser when the session finishes.
+
+See the [Ladybird guide](docs/ladybird.md) for driver paths, troubleshooting, and feature limits.
 
 </details>
 
