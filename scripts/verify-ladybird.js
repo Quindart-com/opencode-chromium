@@ -19,15 +19,12 @@ if (process.argv.includes("--fixture")) {
   process.exit(0);
 }
 const driver = process.env.LADYBIRD_TEST_DRIVER;
-const distro = process.env.LADYBIRD_TEST_WSL;
-const externalFixture = process.env.LADYBIRD_TEST_FIXTURE_URL;
 if (!driver) throw new Error("Set LADYBIRD_TEST_DRIVER to the Ladybird WebDriver executable.");
-if (distro && !externalFixture) throw new Error("For a Windows-to-WSL run, set LADYBIRD_TEST_FIXTURE_URL to this fixture served from inside WSL.");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-ladybird-test-"));
 process.env.OPENCODE_BROWSER_RUNTIME_DIR = root;
 process.env.AGENT_BROWSER_PROFILE_REGISTRY_DIR = path.join(root, "empty-profiles");
-fs.writeFileSync(path.join(root, "ladybird.json"), JSON.stringify({ driver, ...(distro ? { distro } : {}) }));
+fs.writeFileSync(path.join(root, "ladybird.json"), JSON.stringify({ driver }));
 const runtime = createAgentBrowserRuntime();
 const tools = createCoreRegistry(runtime);
 const sessionId = "ladybird-fixture";
@@ -37,17 +34,15 @@ async function ok(name, args, session) {
   assert.equal(result.ok, true, JSON.stringify({ ...result, result: undefined }));
   return result;
 }
-const server = !externalFixture ? http.createServer((request, response) => {
+const server = http.createServer((request, response) => {
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   response.end(request.url === "/next" ? "<title>Next fixture</title><h1>Next fixture</h1>" : page);
-}) : null;
+});
 
 try {
-  if (server) {
-    server.listen(0, "127.0.0.1");
-    await once(server, "listening");
-  }
-  const url = externalFixture ?? "http://127.0.0.1:" + server.address().port + "/";
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const url = "http://127.0.0.1:" + server.address().port + "/";
   const opened = await ok("browser_session", { action: "open", profile: "Ladybird (Experimental)" });
   assert.equal(opened.result.experimental, true);
   assert.deepEqual(opened.result.tabs, []);
@@ -90,7 +85,7 @@ try {
   console.log("Ladybird passed profile selection, tab isolation, navigation, read and reference input, lexical search, file-picker blocking, PNG capture, stale references, and finalization.");
 } finally {
   await runtime.close();
-  if (server?.listening) {
+  if (server.listening) {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
   }

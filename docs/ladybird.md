@@ -4,18 +4,21 @@ Ladybird adds an independent rendering engine for inspecting pages and trying co
 
 ## Setup
 
-Install [Ladybird](https://ladybird.org/download/) in the environment where the browser will run. The Ubuntu alpha package includes WebDriver at `/opt/ladybird/bin/WebDriver`. The plugin discovers that path on Linux. On Windows, install the Linux package inside a WSL2 distribution and configure its driver from PowerShell.
+1. Install [Ladybird](https://ladybird.org/download/). The plugin looks for the Ubuntu package's WebDriver at `/opt/ladybird/bin/WebDriver` on Linux and for `/Applications/Ladybird.app/Contents/MacOS/WebDriver` on Apple silicon macOS.
+2. Connect your agent app using the normal plugin setup. For example, use `npx -y opencode-chromium@latest setup --targets codex` for Codex. Ladybird's built-in WebDriver supplies the browser connection.
+3. Check that the plugin can find the driver, then choose **Ladybird (Experimental)** in your agent.
 
-    npx -y opencode-chromium@latest ladybird configure --wsl Ubuntu --driver /opt/ladybird/bin/WebDriver
     npx -y opencode-chromium@latest ladybird status
 
-For an unpacked package or a source build on Linux, supply the absolute path using `ladybird configure --driver`. The macOS launcher path is recognized on Apple silicon, with integration verification pending. Use the Ladybird WebDriver executable that ships with or was built alongside the browser.
+For an unpacked package, a source build, or a custom installation directory, point the CLI at the executable shipped with or built alongside your browser.
+
+    npx -y opencode-chromium@latest ladybird configure --driver "/absolute/path/to/WebDriver"
 
 Select the profile by the ID `ladybird` or its displayed label. For example, send this to `browser_session` to open the profile, then use `new-tab` or start `browser_run` with a navigation step.
 
     {"action":"open","profile":"ladybird","sessionId":"ladybird-check"}
 
-The first managed tab launches the driver on an OS-assigned loopback port. On Windows, WSL must forward localhost to the distribution. A start failure can indicate that WSL lacks system resources or that the driver executable or its runtime libraries are unavailable. The headless launcher uses CPU painting for screenshot compatibility.
+The first managed tab launches the driver on an OS-assigned loopback port. If startup fails, check the driver path and the browser's runtime libraries. The headless launcher uses CPU painting for screenshot compatibility.
 
 ## What works in this implementation
 
@@ -28,8 +31,8 @@ Ladybird uses the DOM for observations and supports basic lexical search. Person
 
 Keep the driver on loopback. The plugin starts its own local process, and a Ladybird WebDriver port accepts local automation without authentication.
 
-## Verify on a pinned Linux build
+## Verify on a pinned build
 
     LADYBIRD_TEST_DRIVER=/opt/ladybird/bin/WebDriver bun scripts/verify-ladybird.js
 
-The integration check runs the four public tools against a local form fixture and removes the temporary configuration and browser session after the run. The PR workflow uses Ladybird 2026.47.7 on Ubuntu 24.04.
+The integration check runs the four public tools against a local form fixture and removes the temporary configuration and browser session after the run. The PR workflow uses Ladybird 2026.47.7 on Ubuntu 24.04 and Apple silicon macOS.

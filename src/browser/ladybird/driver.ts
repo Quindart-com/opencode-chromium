@@ -16,20 +16,9 @@ const supervisor = [
   'exit "$result"',
 ].join("\n");
 
-// WSL serializes Windows argv into a Linux command. Quote each argument
-// inside the one fixed shell command so paths with spaces are preserved.
-function shellQuote(value: string) {
-  return "'" + value.replaceAll("'", "'\\''") + "'";
-}
-
 export function launchLadybird(config: LadybirdConfig) {
   const args = [config.driver, "--headless", "--force-cpu-painting", "--listen-address", "127.0.0.1", "--port", "0"];
-  const encoded = Buffer.from("set -- " + args.map(shellQuote).join(" ") + "\n" + supervisor).toString("base64");
-  const child = config.distro
-    ? spawn("wsl.exe", ["--distribution", config.distro, "--exec", "sh", "-c",
-        'exec sh -c "$(echo ' + encoded + ' | base64 -d)"'],
-      { windowsHide: true })
-    : spawn("/bin/sh", ["-c", supervisor, "ladybird", ...args], { windowsHide: true });
+  const child = spawn("/bin/sh", ["-c", supervisor, "ladybird", ...args]);
   child.stdin.on("error", () => {});
   let stderr = "";
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr = (stderr + chunk).slice(-3000); });

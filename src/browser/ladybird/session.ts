@@ -65,7 +65,6 @@ export class LadybirdSession {
     const driver = this.#driver = launchLadybird(config);
     try {
       this.#endpoint = await driver.endpoint();
-      // WSL can take a moment to forward a newly bound Linux port.
       for (let attempt = 0; ; attempt += 1) {
         try { await driverRequest(this.#endpoint, "GET", "/status", undefined, 1000); break; }
         catch (error) {
