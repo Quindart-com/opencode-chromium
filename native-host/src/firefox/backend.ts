@@ -8,6 +8,7 @@ import type { ProfileRegistration } from "../../../src/shared/profile-registry.t
 import { isRecord,record } from "../../../src/shared/values.ts";
 import { resolveFirefoxFrame,translateFirefoxPoint,verifyFirefoxContext } from "./frame-operations.ts";
 import { bridgedFrameTree } from "./frames.ts";
+import { LAYOUT_METRICS_FUNCTION,REF_QUADS_FUNCTION,SCROLL_REF_FUNCTION,SNAPSHOT_FUNCTION,VIEW_LIMITS,VIEW_SANDBOX } from "./read-view.ts";
 import type { BidiParams,BidiSend } from "./protocol.ts";
 type EventSink = (tabId: number, method: string, params: Record<string, unknown>) => void;
 type RemoteObject = { context: string; handle?: string; sharedId?: string };
@@ -231,7 +232,17 @@ export class FirefoxBackend {
     }
     if (method === "Page.stopLoading") { await value("window.stop()"); return {}; }
     if (method === "Page.setDocumentContent") { await value(`document.open();document.write(${JSON.stringify(p.html)});document.close()`); return {}; }
-    if (method === "Page.getLayoutMetrics") { const size = await value("({x:0,y:0,width:Math.max(innerWidth,document.documentElement.scrollWidth),height:Math.max(innerHeight,document.documentElement.scrollHeight)})"); return { contentSize: size, cssContentSize: size }; }
+    // Read-view commands run in an isolated sandbox realm, never in page script.
+    const sandboxed = async (functionDeclaration: string, args: unknown[] = []): Promise<unknown> => {
+      const r = await run("script.callFunction", { functionDeclaration, target: { context: selectedContext, sandbox: VIEW_SANDBOX }, arguments: args.map(localValue), awaitPromise: false, resultOwnership: "none" });
+      if (r.type === "exception") throw new Error(`Firefox read view failed: ${r.exceptionDetails.text ?? "script error"}`);
+      return remoteValue(r.result);
+    };
+    const sandboxedJson = async (functionDeclaration: string, args: unknown[] = []): Promise<unknown> => JSON.parse(text(await sandboxed(functionDeclaration, args), "read view result"));
+    if (method === "Page.getLayoutMetrics") return sandboxedJson(LAYOUT_METRICS_FUNCTION);
+    if (method === "DOMSnapshot.captureSnapshot") return sandboxedJson(SNAPSHOT_FUNCTION, [VIEW_LIMITS]);
+    if (method === "DOM.scrollIntoViewIfNeeded" && p.backendNodeId !== undefined) { await sandboxed(SCROLL_REF_FUNCTION, [number(p.backendNodeId, "backendNodeId")]); return {}; }
+    if (method === "DOM.getContentQuads" && p.backendNodeId !== undefined) return { quads: await sandboxedJson(REF_QUADS_FUNCTION, [number(p.backendNodeId, "backendNodeId")]) };
     if (method === "Page.captureScreenshot") {
       if (p.format === "webp") throw new Error("unsupported_capability: Firefox screenshots support PNG and JPEG");
       return run("browsingContext.captureScreenshot", { context, origin: p.captureBeyondViewport ? "document" : "viewport", format: { type: `image/${p.format ?? "png"}`, ...(p.quality !== undefined ? { quality: number(p.quality, "quality") / 100 } : {}) }, ...(p.clip ? { clip: { type: "box", x: number(record(p.clip).x, "clip.x"), y: number(record(p.clip).y, "clip.y"), width: number(record(p.clip).width, "clip.width"), height: number(record(p.clip).height, "clip.height") } } : {}) });

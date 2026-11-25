@@ -55,6 +55,7 @@ test("native OpenCode V2 uses the editor callback and projects browser results",
   const cleanup = await createOpenCodeSetup({ tool: { transform: callback => callback({ add: tool => registered.push(tool) }) }, logger: { info() {} } }, { memory: false });
   try {
     assert.deepEqual(registered.map(tool => tool.name), ["browser_run", "browser_observe", "browser_session", "browser_finalize"]);
+    assert.ok(registered.every(tool => tool.options.codemode === false));
     const response = await registered.find(tool => tool.name === "browser_observe").execute({ mode: "capabilities" }, { sessionId: "fixture" });
     assert.equal(JSON.parse(response.content).ok, true);
   } finally { await cleanup(); }

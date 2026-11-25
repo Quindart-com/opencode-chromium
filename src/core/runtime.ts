@@ -1,20 +1,24 @@
 import { browserRequest,closeBrowserClients } from "../browser/client.ts";
 import { LADYBIRD_PROFILE } from "../browser/ladybird/config.ts";
 import { record } from "../shared/values.ts";
+import { prepareTabClaim,type TabClaimApproval } from "./claim-approval.ts";
 import { cleanupSessionEnvironment } from "./environment-cleanup.ts";
-import { errorDetails,shouldReobservePage } from "./failure-context.ts";
+import { BrowserRuntimeError } from "./errors.ts";
+import { shouldReobservePage } from "./failure-context.ts";
 import { summarizeAccessibilitySnapshot } from './observation-projection.ts';
-import type { FinalizeInput,MemoryQueryInput,MemorySearchInput,MemoryStatusInput,ObserveInput,RunInput,SessionInput } from "./registry.ts";
+import type { FinalizeInput,MemoryQueryInput,MemorySearchInput,MemoryStatusInput,ObserveInput,RunInput,SessionInput,Step } from "./registry.ts";
 import { requiresApproval,validateSteps } from './run-validation.ts';
-import { READ_ACTIONS,clamp,contextSessionId,publicProfiles,summarizeStepResult,type RunStepResult,type StepOutcome } from "./runtime-foundation.ts";
+import { READ_ACTIONS,callerSessionId,clamp,contextSessionId,publicProfiles,summarizeStepResult,type RunStepResult,type StepOutcome } from "./runtime-foundation.ts";
 import { RuntimeMemory } from "./runtime-memory.ts";
-import type { RuntimeOptions } from "./runtime-types.ts";
+import type { RuntimeOptions,RuntimeSession } from "./runtime-types.ts";
 import type { BrowserContext } from "./tool-definition.ts";
 import { responseMetadata as contractMetadata } from "./versions.ts";
 
 function stepExtras(outcome: StepOutcome) {
   return { ...(outcome.tabTransition ? { tabTransition: outcome.tabTransition } : {}), ...(outcome.warnings?.length ? { warnings: outcome.warnings } : {}) };
 }
+
+const UNKNOWN_POST_ACTION_STATE = ". Post-action state is unknown. Check with browser_observe.";
 
 // Every response is re-read by the model for the rest of the conversation, so step results
 // drop fields that carry no news: an unnamed id, an unchanged tab, a normal settle.
@@ -30,23 +34,75 @@ export class AgentBrowserRuntime extends RuntimeMemory {
     let sessionId = contextSessionId(args, context);
     let approved = false;
     try {
-      if (args.approvalToken) {
-        const extraKeys = Object.keys(args).filter((key) => !["approvalToken", "sessionId"].includes(key) && record(args)[key] !== undefined);
-        if (extraKeys.length > 0) throw new Error("An approval follow-up must contain only approvalToken");
-        const stored = this.takeApproval(args.approvalToken);
-        request = { ...stored.request, steps: stored.request.steps ?? [] };
+      if (args.approvalToken !== undefined) {
+        const extraKeys = Object.keys(args).filter((key) => !["approvalToken", "approvalDecision", "sessionId"].includes(key) && record(args)[key] !== undefined);
+        if (extraKeys.length > 0) throw new Error("An approval follow-up must contain only approvalToken and an optional decline decision");
+        const stored = this.takeApproval(args.approvalToken, args.sessionId, callerSessionId(context));
         sessionId = stored.sessionId;
+        if (args.approvalDecision === "decline") {
+          if (stored.claim) {
+            const { profileId, tab, claimToken } = stored.claim;
+            await this.hostRequest("declineTabClaim", { profile_id: profileId, session_id: sessionId, tabId: tab.id, claimToken }, { profileId }).catch(() => {});
+          }
+          return { ...contractMetadata(), ok: false, status: "approval_declined", sessionId };
+        }
+        if (stored.claim) {
+          const claim = stored.claim, session = this.getSession(sessionId);
+          return await this.claimScope.run({ sessionId, profileId: claim.profileId }, async () => {
+            const tab = await this.commitTabClaim(session, claim, stored.expiresAt);
+            if (!stored.request) return { ...contractMetadata(), ok: true, status: "ready", sessionId, profileId: claim.profileId, activeTabId: tab.id, environment: session.environment ?? {}, result: tab };
+            // The chain keeps its approved target if another call changes the session selection.
+            const claimed = { ...session, profileId: claim.profileId, activeTabId: tab.id };
+            try {
+              return await this.runRequest({ ...stored.request, steps: stored.request.steps ?? [] }, sessionId, true, context.deadlineAt, claimed);
+            } finally {
+              if (session.profileId === claim.profileId && session.activeTabId === tab.id) session.activeTabId = claimed.activeTabId;
+            }
+          });
+        }
+        if (!stored.request) throw new Error("Approval requires a browser action");
+        request = { ...stored.request, steps: stored.request.steps ?? [] };
         approved = true;
+      } else if (args.approvalDecision) {
+        throw new Error("An approval decision requires approvalToken");
       }
       validateSteps(request.steps);
       await this.validateCapabilitySteps(request.steps);
       const reasons = requiresApproval(request.steps);
+      if (request.tab?.mode === "claim") {
+        const { tabId } = request.tab;
+        if (!tabId) throw new Error("tab.mode=claim requires tab.tabId");
+        if (request.steps.some(step => step.action === "capability" && record(step.input).tabId !== undefined && record(step.input).tabId !== tabId)) {
+          throw new Error("A claim action chain must target the selected tab");
+        }
+        const profile = await this.selectProfile(this.getSession(sessionId), request.profile);
+        const claim = await prepareTabClaim(this.hostRequest, profile, sessionId, tabId, this.urlPolicy);
+        return this.approvalResult(request, sessionId, ["claim existing tab", ...reasons], claim, callerSessionId(context));
+      }
       if (reasons.length > 0 && !approved) return this.approvalResult(request, sessionId, reasons);
-      const session = this.getSession(sessionId);
+      return await this.runRequest(request, sessionId, approved, context.deadlineAt);
+    } catch (error) {
+      return this.failure(sessionId, error);
+    }
+  }
+
+  private async commitTabClaim(session: RuntimeSession, claim: TabClaimApproval, expiresAt: number) {
+    if (session.profileId !== claim.profileId) throw new BrowserRuntimeError("The selected profile changed. Request approval in the intended profile.", { code: "TAB_CLAIM_PROFILE_MISMATCH" });
+    if (Date.now() >= expiresAt) throw new BrowserRuntimeError("The tab approval expired. Request it again.", { code: "APPROVAL_TOKEN_INVALID" });
+    const deadlineAt = Math.min(expiresAt, Date.now() + 10000);
+    const result = await this.operationScope.run({ deadlineAt }, () =>
+      this.invoke("browser_claim_tab", { profileId: claim.profileId, tabId: claim.tab.id, claimToken: claim.claimToken }, session.sessionId));
+    if (result.id !== claim.tab.id) throw new BrowserRuntimeError("The browser returned a different tab after claiming.", { code: "TAB_CLAIM_CHANGED" });
+    if (session.profileId === claim.profileId) session.activeTabId = result.id;
+    return result;
+  }
+
+  private async runRequest(request: RunInput & { steps: Step[] }, sessionId: string, approved: boolean, deadlineAt?: number, claimedSession?: RuntimeSession) {
+      const session = claimedSession ?? this.getSession(sessionId);
       if (request.inputMode) session.inputMode = request.inputMode;
       if (request.cursor !== undefined) session.cursor = request.cursor;
-      await this.selectProfile(session, request.profile);
-      const tabId = await this.ensureTab(session, request.tab);
+      if (!claimedSession) await this.selectProfile(session, request.profile);
+      const tabId = claimedSession?.activeTabId ?? await this.ensureTab(session, request.tab);
       let correctiveCandidate: number | null = null;
       const memoryRequested = request.memoryMode !== "off";
       const memoryState = memoryRequested ? await this.memoryCaptureState(session) : null;
@@ -54,26 +110,27 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         const replay = await this.tryMemoryReplay(request, session, tabId, memoryState);
         if (replay?.used) {
           await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
-          let postObservation;
-          if (request.postObserve && session.activeTabId) {
-            try { postObservation = await this.observeValue(request.postObserve, session.activeTabId, session); }
-            catch (error) { replay.failed = true; postObservation = { ok: false, error: errorDetails(error) }; }
-          }
+          const completedMutation = replay.results.every(item => item.ok) && replay.results.some(item => !READ_ACTIONS.has(item.action));
+          const observed = request.postObserve && session.activeTabId
+            ? await this.observeAfterRun(request.postObserve, session.activeTabId, session, completedMutation, deadlineAt)
+            : undefined;
+          const failed = replay.failed === true || observed?.failed === true;
+          const summary = replay.failed === true
+            ? `Stopped after ${replay.stepsReused} remembered steps to avoid repeating a mutation with uncertain state`
+            : `Replayed ${replay.stepsReused} remembered steps`;
           const mode = request.returnMode ?? "last";
           const selectedResults = mode === "all" ? replay.results : mode === "last" ? replay.results.slice(-1) : replay.results.map(summarizeStepResult);
           return this.compact({
-            ok: replay.failed !== true,
-            status: replay.failed === true ? "partial" : "memory_replay",
+            ok: !failed,
+            status: failed ? "partial" : "memory_replay",
             sessionId,
             profileId: session.profileId,
             tabId: session.activeTabId,
             memory: { used: true, stepsReused: replay.stepsReused, fallback: false },
-            summary: replay.failed === true
-              ? `Stopped after ${replay.stepsReused} remembered steps to avoid repeating a mutation with uncertain state`
-              : `Replayed ${replay.stepsReused} remembered steps`,
+            summary: summary + (observed?.stateUnknown ? UNKNOWN_POST_ACTION_STATE : ""),
             results: selectedResults,
             ...(replay.results.some(item => item.warnings?.length) ? { warnings: replay.results.flatMap(item => item.warnings ?? []).slice(0, 1) } : {}),
-            ...(postObservation ? { observation: postObservation } : {}),
+            ...(observed?.value !== undefined ? { observation: observed.value } : {}),
           }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
         }
         correctiveCandidate = replay && !replay.used ? replay.supersedes ?? null : null;
@@ -110,13 +167,13 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
       }
       let postObservation;
+      let stateUnknown = false;
       if (request.postObserve && session.activeTabId) {
-        try {
-          postObservation = await this.observeValue(request.postObserve, session.activeTabId, session);
-        } catch (error) {
-          failed = true;
-          postObservation = { ok: false, error: errorDetails(error) };
-        }
+        const completedMutation = !failed && results.some(item => item.ok && !READ_ACTIONS.has(item.action));
+        const observed = await this.observeAfterRun(request.postObserve, session.activeTabId, session, completedMutation, deadlineAt);
+        postObservation = observed.value;
+        stateUnknown = observed.stateUnknown;
+        failed ||= observed.failed;
       } else if (session.activeTabId && request.steps.some(step => !READ_ACTIONS.has(step.action)) && await this.isGuardedTab(session.activeTabId, session)) {
         // On a guarded host the agent gets the script-free change summary for free,
         // so it never needs a screenshot to see what its action did.
@@ -132,15 +189,12 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         sessionId,
         profileId: session.profileId,
         tabId: session.activeTabId,
-        summary: `${results.filter((item) => item.ok).length}/${request.steps.length} actions completed`,
+        summary: `${results.filter((item) => item.ok).length}/${request.steps.length} actions completed` + (stateUnknown ? UNKNOWN_POST_ACTION_STATE : ""),
         results: selectedResults,
         ...(warnings.length ? { warnings } : {}),
         ...(authorization ? { authorization } : {}),
         ...(postObservation !== undefined ? { observation: postObservation } : {}),
       }, sessionId, clamp(request.maxChars, 4096, 512, 20000), "run");
-    } catch (error) {
-      return this.failure(sessionId, error);
-    }
   }
 
   async observe(args: ObserveInput, context: BrowserContext = {}) {
@@ -160,7 +214,9 @@ export class AgentBrowserRuntime extends RuntimeMemory {
       }
       const session = this.getSession(sessionId);
       await this.selectProfile(session, args.profile);
-      const tabId = args.tabId ?? session.activeTabId ?? (await this.invoke("browser_selected_tab", {}, sessionId))?.id;
+      const tabId = args.tabId === undefined
+        ? session.activeTabId ?? (await this.invoke("browser_selected_tab", {}, sessionId))?.id
+        : await this.selectExplicitTab(session, args.tabId);
       if (!tabId) throw new Error("No controlled tab is selected. Create or claim one with browser_session.");
       session.activeTabId = tabId;
       const value = await this.observeValue(args, tabId, session);
@@ -196,7 +252,6 @@ export class AgentBrowserRuntime extends RuntimeMemory {
       } else if (args.action === "configure") {
         const tabId = args.tabId ?? session.activeTabId ?? (await this.invoke("browser_selected_tab", {}, sessionId))?.id;
         if (!tabId) throw new Error("configure requires an active tab or an explicit tabId");
-        session.activeTabId = tabId;
         const environment = args.environment ?? {};
         const configuredTabKey = `${session.profileId}:${tabId}`;
         // Track before dispatch so a partially applied or timed-out configure
@@ -205,6 +260,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
           session.configuredTabs.set(configuredTabKey, { tabId, profileId: session.profileId });
         }
         const configured = await this.invoke("browser_configure", { tabId, environment }, sessionId);
+        session.activeTabId = tabId;
         if (environment.reset === true) session.configuredTabs.delete(configuredTabKey);
         session.environment = environment.reset === true ? {} : { ...(session.environment ?? {}), ...environment };
         value = { tabId, environment: session.environment, configured };
@@ -214,9 +270,8 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         value = tab;
       } else if (args.action === "claim-tab") {
         if (!args.tabId) throw new Error("claim-tab requires tabId");
-        const tab = await this.invoke("browser_claim_tab", { tabId: args.tabId }, sessionId);
-        session.activeTabId = tab.id ?? tab.tabId ?? args.tabId;
-        value = tab;
+        const claim = await prepareTabClaim(this.hostRequest, profile, sessionId, args.tabId, this.urlPolicy);
+        return this.approvalResult(null, sessionId, ["claim existing tab"], claim, callerSessionId(context));
       } else if (args.action === "release-tab") {
         if (!args.tabId) throw new Error("release-tab requires tabId");
         const configuredTabKey = `${session.profileId}:${args.tabId}`;
@@ -244,10 +299,25 @@ export class AgentBrowserRuntime extends RuntimeMemory {
       // configuration was removed after launch.
       if (session.profileId !== LADYBIRD_PROFILE || args.profile) await this.selectProfile(session, args.profile);
       const blockedTabs = args.keepEnvironment === true ? [] : await cleanupSessionEnvironment(this, session);
-      const result = await this.invoke("browser_finalize", { keep: args.keep ?? [], blockedTabs }, sessionId);
+      const keep = (args.keep ?? []).map(item => {
+        if (!args.profile || !session.profileId) return item;
+        return typeof item === "number" ? { tabId: item, profileId: session.profileId } : { profileId: session.profileId, ...item };
+      });
+      const result = await this.invoke("browser_finalize", { keep, blockedTabs }, sessionId);
       if (record(result).partial || blockedTabs.length) return { ...contractMetadata(), ok: false, status: "partial", sessionId, result, ...(blockedTabs.length ? { environmentCleanup: blockedTabs } : {}) };
-      this.sessions.delete(sessionId);
-      this.artifacts.cleanupSession(sessionId);
+      for (const [token, approval] of this.approvals) if (approval.claim && approval.sessionId === sessionId) this.approvals.delete(token);
+      const profiles = record(record(result).profiles);
+      const handedOff = Object.values(profiles).some(profile => {
+        const tabs = record(profile).tabs;
+        return Array.isArray(tabs) && tabs.some(tab => record(tab).status === "kept");
+      });
+      if (!handedOff) {
+        this.sessions.delete(sessionId);
+        this.artifacts.cleanupSession(sessionId);
+      } else {
+        const selected = record(profiles[session.profileId ?? ""]).tabs;
+        if (Array.isArray(selected) && !selected.some(tab => record(tab).status === "kept" && record(tab).tabId === session.activeTabId)) session.activeTabId = null;
+      }
       return { ...contractMetadata(), ok: true, status: "finalized", sessionId, result };
     } catch (error) {
       return this.failure(sessionId, error);

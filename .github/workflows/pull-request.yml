@@ -3,6 +3,12 @@ name: Pull request checks
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      browser_suite:
+        description: Verified Chromium action suite
+        type: choice
+        options: [smoke, full, load]
+        default: smoke
 
 permissions:
   contents: read
@@ -34,11 +40,19 @@ jobs:
         timeout-minutes: 5
       - run: node scripts/verify-tab-lifecycle.js
         timeout-minutes: 3
+      - name: Verify seeded Chromium actions
+        env:
+          BROWSER_SUITE: ${{ inputs.browser_suite || 'smoke' }}
+        run: node benchmarks/browser/run.mjs --suite "$BROWSER_SUITE" --managed --rounds 1 --seed ci-v1 --out reports/verified-browser/ci
+        timeout-minutes: 5
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: browser-reliability
-          path: reports/browser-reliability.json
+          path: |
+            reports/browser-reliability.json
+            reports/verified-browser/ci/results.jsonl
+            reports/verified-browser/ci/summary.json
 
   firefox-integration:
     name: Firefox / extension and native host / Node 24
@@ -67,6 +81,7 @@ jobs:
           echo "OPENCODE_FIREFOX_TEST_EXECUTABLE=$release/firefox/firefox" >> "$GITHUB_ENV"
       - run: node scripts/verify-firefox.js
       - run: node scripts/verify-firefox-extension.js
+      - run: node scripts/verify-firefox-extension.js --claims-only
       - run: node scripts/verify-firefox-uploads.js
       - run: node scripts/verify-firefox-uploads.js --frames
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

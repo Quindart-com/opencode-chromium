@@ -40,6 +40,14 @@ try {
   }));
   if (!setup.ok || !setup.dryRun || setup.targets?.join(",") !== "codex") throw new Error("Installed targeted setup did not preview Codex configuration");
   if (fs.readFileSync(config, "utf8") !== before || fs.existsSync(runtime)) throw new Error("Installed setup dry run changed user files");
+  const verification = JSON.parse(execFileSync("node", ["dist/cli/index.js", "verify"], {
+    cwd: packageRoot, encoding: "utf8", timeout: 15000, windowsHide: true,
+    env: { ...process.env, OPENCODE_BROWSER_RUNTIME_DIR: runtime, OPENCODE_BROWSER_PROFILE_REGISTRY_DIR: path.join(temp, "profiles"),
+      OPENCODE_BROWSER_MEMORY: "0", OPENCODE_BROWSER_SKIP_RECOVERY: "1" },
+  }));
+  if (verification.tools?.join(",") !== "browser_run,browser_observe,browser_session,browser_finalize" || !verification.verified?.includes("opencode")) {
+    throw new Error("Installed verify did not confirm the OpenCode tool catalog");
+  }
   execFileSync("node", ["--input-type=module", "-e", "await import('opencode-chromium/sdk'); await import('opencode-chromium/core'); await import('opencode-chromium/browser');"], { cwd: packageRoot, stdio: "pipe", timeout: 15000, windowsHide: true });
   const consumer = path.join(packageRoot, "consumer.ts");
   fs.writeFileSync(consumer, [

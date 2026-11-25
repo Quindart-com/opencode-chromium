@@ -2,7 +2,7 @@
 <h1 align="center">OpenCode Browser Plugin</h1>
 <p align="center">Your browser, connected to your coding agent.<br>Four compact tools. Local action memory. Optional decision assistance.</p>
 <p align="center">
-<a href="https://www.npmjs.com/package/opencode-chromium"><img alt="npm version" src="https://img.shields.io/npm/v/opencode-chromium?color=2563eb"></a>
+<a href="https://www.npmjs.com/package/opencode-chromium"><img alt="npm version" src="assets/npm-version.svg"></a>
 <a href="https://www.npmjs.com/package/opencode-chromium"><img alt="npm downloads" src="https://img.shields.io/npm/dw/opencode-chromium?color=2563eb"></a>
 <a href="https://github.com/Quindart-com/opencode-chromium/discussions"><img alt="Community" src="https://img.shields.io/badge/community-discussions-2563eb?logo=github"></a>
 </p>
@@ -105,7 +105,7 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 
 <p>
 <a href="https://www.google.com/chrome/"><img alt="Download Chrome" src="https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=white"></a>
-<a href="https://www.microsoft.com/edge/download"><img alt="Download Edge" src="https://img.shields.io/badge/Edge-0078D7?logo=microsoftedge&logoColor=white"></a>
+<a href="https://www.microsoft.com/edge/download"><img alt="Download Edge" src="assets/badges/edge.svg"></a>
 <a href="https://brave.com/download/"><img alt="Download Brave" src="https://img.shields.io/badge/Brave-FB542B?logo=brave&logoColor=white"></a>
 <a href="https://www.chromium.org/getting-involved/download-chromium/"><img alt="Download Chromium" src="https://img.shields.io/badge/Chromium-3057A4?logo=googlechrome&logoColor=white"></a>
 <a href="https://www.firefox.com/download/"><img alt="Download Firefox" src="https://img.shields.io/badge/Firefox-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -119,11 +119,11 @@ import { createBrowserAgent } from "opencode-chromium/sdk";
 | Firefox, LibreWolf | Firefox extension and WebDriver BiDi | Signed add-on + native host + Remote Agent enabled at launch |
 | Ladybird **⚑ Experimental** | Built-in WebDriver | Managed headless browser on Linux and Apple silicon macOS. [Setup instructions](#ladybird-agent-setup) |
 
-Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later; LibreWolf must expose the matching Remote Agent. Compatible derivatives need individual validation; this does not claim support for every fork. See [Firefox capabilities](docs/firefox.md) and [compatibility](docs/compatibility.md) for transport differences and verification limits.
+Desktop discovery covers Windows, macOS, and Linux. Firefox requires version 140 or later. LibreWolf must expose the matching Remote Agent. The Firefox read fix was also exercised on Waterfox 6.6.17 with an explicit executable. [Firefox capabilities](docs/firefox.md) · [Compatibility](docs/compatibility.md)
 
 Named profiles choose the browser. Agents keep the same four tools: `browser_run`, `browser_observe`, `browser_session`, and `browser_finalize`. Sessions own their tabs, targets are checked against the live page, and uploads require confirmation by default. [Runtime operations](docs/runtime-updates.md#profiles-and-sessions) · [Security](docs/security.md).
 
-Extension browsers leave finished tabs open in a blue group for human review. Existing pages can be claimed with the user's permission, provided they are ungrouped and unclaimed. Ladybird closes its managed browser at finalization.
+Extension browsers leave finished tabs open in a blue group for human review. With permission for a specific tab, an agent can claim an eligible personal or review tab and preserve its existing group. The runtime protects restricted pages and tabs owned by a live session. Finalization closes the managed Ladybird browser.
 
 <details><summary><strong>Visual checks, frames and debugging</strong></summary>
 
@@ -133,16 +133,43 @@ Optional capability packs provide snapshot/pixel diffs, bounded frame inspection
 
 ## Benchmarks
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/benchmarks/summary-dark.svg">
-  <img src="assets/benchmarks/summary.svg" alt="Benchmark summary for v2.0.5: exact labels 6 of 6 and paraphrases 1 of 6 in-process; 12 of 12 and 0 of 6 through the full browser pipeline" width="100%">
-</picture>
+The evaluator runs public browser tools on seeded local pages and independently verifies the intended effects. Five matched Chromium trials used the same targeted-read workflow on both builds.
 
-- **Exact labels:** local search finds the target every time, in under 1 ms, with no model or network.
-- **Paraphrases:** lexical search alone usually misses them. The right target is still among the top 16 candidates in 11 of 12 queries, ready for an optional [decision provider](docs/DECISION-PROVIDERS.md) to rerank.
-- **Full pipeline:** a search followed by a click and a verification takes about 600 ms in a real Chromium with the extension and native host.
+| Chromium benchmark | Master reference | Evaluation build |
+| --- | ---: | ---: |
+| Verified actions | 130 / 140 | **140 / 140** |
+| Estimated tool tokens per verified action | 1,789 | **1,620** |
+| Full action p50 / p95 | 1.45 s / 5.21 s | **1.23 s / 5.11 s** |
 
-These are small synthetic fixtures, not general agent task success. [Full results, commands and limits →](docs/benchmarking.md)
+On stock Firefox 157.0.1, the evaluation verified **25 of 25** smoke actions across five matched runs.
+
+Five interleaved trials per tool used the same Chromium executable. Each tool verified 140 actions and passed all 10 abstention checks. The runs recorded zero wrong or extra effects.
+
+| Tool | Estimated tool tokens per verified action | Verified action p50 / p95 |
+| --- | ---: | ---: |
+| OpenCode Browser Plugin | **1,617** | 1.24 s / 5.12 s |
+| Playwright MCP | 5,915 | 1.15 s / **1.57 s** |
+| Chrome DevTools MCP | 8,072 | **0.44 s** / 6.22 s |
+
+[Tool versions, session times and measurement scope](docs/benchmarking.md#comparison-with-other-browser-tools)
+
+| Clients sharing one Chromium browser | 1 | 4 | 8 |
+| --- | ---: | ---: | ---: |
+| Warm action p95 | 130 ms | 117 ms | 217 ms |
+| Verified actions/sec | 13.7 | 42.9 | 47.0 |
+
+Eight-client p95 fell from 1.04 s to **217 ms** after the admission changes. Separate healthy 16-client waves measured 505–563 ms p95. The load runs recorded zero extra effects and zero focus loss. [Fixtures and reproduction commands](docs/benchmarking.md#shared-browser)
+
+| Existing-tab workflow | Approval or setup tested | Observed result |
+| --- | --- | --- |
+| OpenCode extension | Approval bound to one tab, profile and session | A competing claim had one winner. Release and reclaim preserved the tab. |
+| Playwright extension | Tab picker and **Allow** | The selected tab and its neighbor stayed open after disconnect. |
+| Browser MCP extension | Match the six-digit code and select **Allow** | The already-open tab could be acted on. The connection refused to close it. |
+| Chrome DevTools MCP | Preconfigured loopback CDP endpoint | Reused the seeded tab and left it open after disconnect. |
+
+[Connection versions, timings and untested workflows](docs/benchmarking.md#existing-browser-tabs)
+
+In the paired resource tests, the managed runtime used 31% less CPU per verified action. The six-case Jev test used 46% fewer provider-reported input tokens. [CPU and resident memory](docs/benchmarking.md#cpu-and-resident-memory) · [Decision-model results](docs/benchmarking.md#decision-model-context-and-token-cost)
 
 <a id="firefox-agent-setup"></a>
 <details><summary><strong>Firefox and LibreWolf: enable remote debugging for agent control</strong></summary>
@@ -229,6 +256,10 @@ See the [Ladybird guide](docs/ladybird.md) for driver paths, troubleshooting, an
 **Overview** shows the local connection, selected decision model, and memory status, with setup guidance when disconnected. **Profiles** lets you name and copy the profile for your agent. **Settings** holds decision assistance, uploads, memory retention, and advanced controls. Detailed usage, timings, and storage controls expand when you need them, with consistent widths and automatic light and dark themes.
 
 Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, or OpenAI Luna through OpenAI Platform or OpenRouter. Separately opt in to bounded screenshots for visual decisions. Experimental image fallback runs only after an unsure text answer, with persistent request caps. Exact matches stay local; timeouts and abstentions retain local results. [Decision assistance, costs and limits](docs/DECISION-PROVIDERS.md) · [Local action memory](docs/action-memory.md).
+
+## Anonymous diagnostics
+
+Anonymous diagnostics are on by default to help improve tool reliability. Turn them off in **Settings → Anonymous diagnostics**. Only aggregated tool outcomes, allowlisted error codes, timing/retry categories and coarse release/browser/OS information are shared through Google Analytics; browsing content and persistent analytics identifiers are excluded. Firefox also respects its built-in technical-data permission. See [what is collected and how to opt out](docs/telemetry.md) and the [privacy policy](docs/PRIVACY.md).
 
 ## Updates
 

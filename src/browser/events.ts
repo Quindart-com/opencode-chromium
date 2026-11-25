@@ -13,7 +13,7 @@ export const eventSchema = z.looseObject({ method: z.string(), time: z.union([z.
 export const eventResponseSchema = z.looseObject({ events: z.array(eventSchema).default([]) });
 export type BrowserEvent = z.infer<typeof eventSchema>;
 export type BrowserEvents = z.infer<typeof eventResponseSchema>;
-export const browserTabSchema = z.looseObject({ id: z.number().int().positive(), tabId: z.number().int().positive().optional(), url: z.string().optional(), title: z.string().optional() });
+export const browserTabSchema = z.looseObject({ id: z.number().int().positive(), tabId: z.number().int().positive().optional(), url: z.string().optional(), title: z.string().nullable().optional() });
 export const extensionResultSchemas = {
   getTab: browserTabSchema, createTab: browserTabSchema, claimUserTab: browserTabSchema, getSelectedTab: browserTabSchema.nullable(),
   getTabs: z.looseObject({ tabs: z.array(browserTabSchema) }), getUserTabs: z.looseObject({ tabs: z.array(browserTabSchema) }),

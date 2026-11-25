@@ -7,6 +7,7 @@ import MemoryView from "./MemoryView";
 import ProviderSettings from "./ProviderSettings";
 import RuntimeUpdates from "./RuntimeUpdates";
 import UploadSettings from "./UploadSettings";
+import TelemetrySettings from "./TelemetrySettings";
 import type { DecisionSettings } from "./decision-types";
 import usePopupQuery from "./usePopupQuery";
 
@@ -34,6 +35,7 @@ export default function SettingsView({ status, section, onSection }: { status: N
     {row("decision", titles.decision, decision ? decision.provider === "off" ? t("localSearchOnly") : t(decision.ready ? "statusConnected" : "assistanceNeedsConnection") : fallback(decisionQuery.state))}
     {row("models", titles.models, semantic ? `${t(semantic.settings?.enabled ? "onLabel" : "offLabel")}${activeModel ? ` · ${activeModel.label}` : ""}` : fallback(semanticQuery.state))}
     <UploadSettings compact />
+    <TelemetrySettings />
     <MemoryView view="toggle" />
     <MemoryView view="storage-summary" onView={() => onSection("storage")} />
     {row("updates", titles.updates, updates === undefined ? fallback(updatesQuery.state) : t(updates ? "automaticUpdatesOn" : "updatesOff"))}

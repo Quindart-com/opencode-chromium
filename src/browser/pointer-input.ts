@@ -127,10 +127,12 @@ export function createPointerInput(dependencies: PointerDependencies) {
     await inputGesture(context, tabId, steps, Math.max(1, (context.deadlineAt ?? Date.now() + 10000) - Date.now()));
   }
 
-  async function moveSteps(context: BrowserContext, tabId: number, target: Point) {
+  async function moveSteps(context: BrowserContext, tabId: number, target: Point, animated = true) {
     const showCursor = await cursorEnabled(context, tabId);
     const cursorFor = (point: Point) => showCursor ? { x: point.x, y: point.y } : undefined;
-    const path = pointerPath(origin(target, lastPoint.get(key(context, tabId))), target, random);
+    const path = animated
+      ? pointerPath(origin(target, lastPoint.get(key(context, tabId))), target, random)
+      : [{ ...target, delayMs: 0 }];
     return { cursorFor, steps: path.map(point => mouseStep({ type: "mouseMoved", x: point.x, y: point.y, button: "none", buttons: 0, pointerType: "mouse" }, cursorFor(point), point.delayMs)) };
   }
 
@@ -143,7 +145,11 @@ export function createPointerInput(dependencies: PointerDependencies) {
       if (options.skip?.(point)) return point;
       const button = options.button ?? "left";
       const mask = BUTTON_MASK[button];
-      const { cursorFor, steps } = await moveSteps(context, tabId, point);
+      // A background Chromium tab can acknowledge each move on a throttled
+      // frame. Keep the explicit pointer click's movement, press and release
+      // while skipping intermediate animation points in that case.
+      const animated = context.inputMode !== "pointer" || (await tabFacts(context, tabId))?.active !== false;
+      const { cursorFor, steps } = await moveSteps(context, tabId, point, animated);
       const at = { x: point.x, y: point.y };
       for (let count = 1; count <= Math.max(1, options.clickCount ?? 1); count += 1) {
         steps.push(mouseStep({ type: "mousePressed", x: at.x, y: at.y, button, buttons: mask, clickCount: count, pointerType: "mouse" }, cursorFor(at), 25 + Math.round(random() * 40)));

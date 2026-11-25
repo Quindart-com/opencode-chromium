@@ -34,6 +34,7 @@ const versionStatus = { state: "connected", versionChecked: true, nativeHostVers
 let decisionSettings = { provider: "jev", route: "openrouter", keyEnv: "OPENROUTER_API_KEY", shareText: true, shareImages: false, ready: true };
 if (storeFixture) decisionSettings = { ...decisionSettings, provider: "off", shareText: false, ready: false };
 let uploadSettings = { allowWithoutConfirmation: false };
+let telemetrySettings = { enabled: true, configured: true, environmentDisabled: false, browserAllowed: true };
 let semanticSettings = { enabled: true, modelId: SEMANTIC_MODELS.find(model => model.role === "adaptive").id, deepModelId: SEMANTIC_MODELS.find(model => model.role === "deep").id, strategyPreference: "auto" };
 let runtimeUpdates = { supported: true, enabled: true, state: "waiting", targetVersion: "1.9.3", installedVersion: "1.9.2" };
 let updateStartCode = null, bridgeReconnects = 0;
@@ -90,6 +91,8 @@ const server = http.createServer(async (req, res) => {
       else if (message.type === "DISCONNECT_HARNESS") { harnessConnections = { ...harnessConnections, clients: harnessConnections.clients.filter(client => client.id !== message.params.id) }; result = { result: harnessConnections }; }
       else if (message.type === "RECONNECT_NATIVE_HOST") { bridgeReconnects++; result = { result: { reconnecting: true } }; }
       else if (message.type === "GET_UPLOAD_SETTINGS") result = { result: uploadSettings };
+      else if (message.type === "GET_TELEMETRY_SETTINGS") result = { result: telemetrySettings };
+      else if (message.type === "SET_TELEMETRY_SETTINGS") { telemetrySettings = { ...telemetrySettings, enabled: message.enabled }; result = { result: telemetrySettings }; }
       else if (message.type === "GET_RUNTIME_UPDATES") result = { result: runtimeUpdates };
       else if (message.type === "SET_RUNTIME_UPDATES") { runtimeUpdates = { ...runtimeUpdates, enabled: message.enabled }; result = { result: runtimeUpdates }; }
       else if (message.type === "SET_UPLOAD_SETTINGS") { uploadSettings = { allowWithoutConfirmation: message.allowWithoutConfirmation === true }; result = { result: uploadSettings }; }
@@ -263,6 +266,16 @@ try {
   await settings();
   await page.waitForSelector("#memory-enabled:not(:disabled)");
   await capture("settings");
+  const diagnostics = page.getByRole("switch", { name: fixtureMessages.anonymousDiagnostics, exact: true });
+  await diagnostics.waitFor({ state: "visible" });
+  assert.equal(await diagnostics.getAttribute("aria-checked"), "true", "diagnostics default on");
+  await diagnostics.click();
+  await page.waitForFunction(() => document.querySelector('[aria-labelledby="diagnostics-title"] [role="switch"]')?.getAttribute("aria-checked") === "false");
+  assert.equal(telemetrySettings.enabled, false, "diagnostics preference saved");
+  await settings();
+  assert.equal(await diagnostics.getAttribute("aria-checked"), "false", "diagnostics opt-out survives reopening Settings");
+  await diagnostics.click();
+  await page.waitForFunction(() => document.querySelector('[aria-labelledby="diagnostics-title"] [role="switch"]')?.getAttribute("aria-checked") === "true");
   const memoryToggle = page.getByRole("switch", { name: "Action memory", exact: true });
   await memoryToggle.click();
   await page.waitForFunction(() => document.querySelector("#memory-enabled")?.getAttribute("aria-checked") === "false");

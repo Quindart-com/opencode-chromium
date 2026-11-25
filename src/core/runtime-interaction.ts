@@ -1,5 +1,6 @@
 import { nodeFrameId } from "../browser/operations/page-state.ts";
 import { runRecoveryDoctor } from "../browser/recovery.ts";
+import { beforeDeadline } from "../shared/deadline.ts";
 import { record } from "../shared/values.ts";
 import { errorDetails } from "./failure-context.ts";
 import { fitInlinePreview,summarizeNetworkEvents } from './observation-projection.ts';
@@ -8,6 +9,7 @@ import { RuntimeFoundation,clamp,usesLongSearchTimeout,type PriorResults,type Re
 import type { RuntimeSession } from "./runtime-types.ts";
 import { settleBrowserStep } from "./settling.ts";
 import { hostnameOf,snapshotTabs } from "./tab-transition.ts";
+import { measureTelemetryStage,noteTelemetryRetry } from "./telemetry.ts";
 import { responseMetadata as contractMetadata } from "./versions.ts";
 
 export class RuntimeInteraction extends RuntimeFoundation {
@@ -66,8 +68,37 @@ export class RuntimeInteraction extends RuntimeFoundation {
     return settleBrowserStep(this, step, tabId, prior, session);
   }
 
-  async observeValue(args: ObserveInput, tabId: number, session: RuntimeSession) {
-    return this.operationScope.run({ frameId: args.target?.frameId ?? nodeFrameId(args.target?.nodeId) }, () => this.observeInScope(args, tabId, session));
+  async observeValue(args: ObserveInput, tabId: number, session: RuntimeSession, deadlineAt?: number) {
+    return measureTelemetryStage("observe", () =>
+      this.operationScope.run({ frameId: args.target?.frameId ?? nodeFrameId(args.target?.nodeId), deadlineAt }, () => this.observeInScope(args, tabId, session)));
+  }
+
+  protected async observeAfterRun(args: ObserveInput, tabId: number, session: RuntimeSession, completedMutation: boolean, runDeadlineAt?: number) {
+    const canRecover = completedMutation && (args.mode === "read" || args.mode === "search" || args.mode === "extract");
+    const ranksPage = args.mode === "search" || (args.mode === "extract" && !args.target?.selector);
+    // With no explicit strategy the active profile can select a long search.
+    const longSearch = ranksPage && (!args.searchStrategy || usesLongSearchTimeout(args.searchStrategy));
+    const deadlineAt = canRecover ? Math.min(runDeadlineAt ?? Infinity, Date.now() + (longSearch ? 120000 : 10000)) : undefined;
+    const read = () => this.observeValue(args, tabId, session, deadlineAt);
+    const attempt = () => deadlineAt === undefined ? read() : beforeDeadline(read, deadlineAt, { phase: "post-observation", tabId, executionState: "not_started" });
+    try {
+      let value;
+      try {
+        value = await attempt();
+      } catch (error) {
+        if (deadlineAt === undefined || record(error).code !== "STALE_OBSERVATION" || Date.now() >= deadlineAt) throw error;
+        // Refresh only the read. The step results already acknowledge dispatch.
+        noteTelemetryRetry();
+        value = await attempt();
+      }
+      return { value, failed: false, stateUnknown: false };
+    } catch (error) {
+      const detail = errorDetails(error);
+      const failure = canRecover
+        ? { ...detail, uncertain: true, retryable: false, hint: "Check the current page with browser_observe before taking further action." }
+        : detail;
+      return { value: { ok: false, error: failure }, failed: true, stateUnknown: canRecover };
+    }
   }
 
   async observeInScope(args: ObserveInput, tabId: number, session: RuntimeSession) {
@@ -144,7 +175,7 @@ export class RuntimeInteraction extends RuntimeFoundation {
     return this.invoke("browser_read_view", {
       tabId,
       ...(options.query ? { query: options.query } : {}),
-      scope: options.fullPage ? "page" : "viewport",
+      scope: options.fullPage ? "page" : options.query && options.fullPage === undefined ? "target" : "viewport",
       // The same maxChars also caps the whole response, so the view leaves room for JSON escaping and metadata.
       maxChars: options.maxChars ? clamp(Math.floor(options.maxChars * 0.75) - 300, 3000, 400, 16000) : 3000,
       delta: options.delta !== false,

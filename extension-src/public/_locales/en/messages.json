@@ -1,4 +1,9 @@
 {
+  "anonymousDiagnostics": { "message": "Anonymous diagnostics" },
+  "diagnosticsDescription": { "message": "Share tool outcomes and errors through Google Analytics. No browsing content. Turn off anytime." },
+  "diagnosticsLoadFail": { "message": "Reconnect the browser bridge to load diagnostics settings." },
+  "diagnosticsSaveFail": { "message": "Could not save diagnostics settings. Try again." },
+  "diagnosticsBrowserPermission": { "message": "Allow technical data sharing in Firefox to enable diagnostics." },
   "extensionName": {
     "message": "opencode-chromium"
   },

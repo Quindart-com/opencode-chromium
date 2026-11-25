@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProfileSelectionError } from "../../../core/profiles.ts";
 import { record } from "../../../shared/values.ts";
 import { browserRequest } from "../../client.ts";
 import { defineBrowserOperation,type BrowserOperationDependencies as Dependencies } from "../../operation-definition.ts";
@@ -57,7 +58,7 @@ export function createConfigurationOperations(dependencies: Dependencies) {
       }),
 
 browser_finalize: tool({
-        description: "End the session: preserve all tabs in a blue group for human review and release ownership. Only explicit keep status 'handoff' retains a tab for later work in the green session group.",
+        description: "Return tabs open for user review. Preserve pre-existing groups and keep ownership only for explicit handoffs.",
         args: {
           keep: tool.schema.array(
             tool.schema.union([
@@ -74,8 +75,12 @@ browser_finalize: tool({
         async execute(args, context) {
           const profileIds = await targetProfileIdsForSession(context);
           const keep: { tabId: number; status: "handoff" | "deliverable"; profileId?: string }[] = args.keep.map((item) => (typeof item === "number" ? { tabId: item, status: "deliverable" as const } : item));
+          const profiles = profileIds.map((profileId: string) => ({ profileId }));
           if (profileIds.length > 1 && keep.some((item) => !item.profileId)) {
-            throw new Error("browser_finalize keep items must include profileId when multiple browser profiles were used");
+            throw new ProfileSelectionError("PROFILE_SELECTION_REQUIRED", "Several profiles were used. Include profileId on each keep item or supply profile for the unqualified keep items.", profiles);
+          }
+          if (keep.some(item => item.profileId && !profileIds.includes(item.profileId))) {
+            throw new ProfileSelectionError("PROFILE_SELECTION_REQUIRED", "A keep item names a profile outside this session. Choose one of the session's profiles.", profiles);
           }
 
           const results: Record<string, unknown> = {};
@@ -92,7 +97,14 @@ browser_finalize: tool({
             }
           }));
           const partial = Object.values(results).some(value => record(value).partial === true);
-          if (!partial) usedProfilesBySession.delete(sessionKey(context));
+          if (!partial) {
+            const handedOff = profileIds.filter((profileId: string) => {
+              const tabs = record(results[profileId]).tabs;
+              return Array.isArray(tabs) && tabs.some(tab => record(tab).status === "kept");
+            });
+            if (handedOff.length) usedProfilesBySession.set(sessionKey(context), new Set(handedOff));
+            else usedProfilesBySession.delete(sessionKey(context));
+          }
           return stringify({ partial, profiles: results });
         },
       }),

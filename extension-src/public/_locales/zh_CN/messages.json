@@ -1,4 +1,9 @@
 {
+  "anonymousDiagnostics": { "message": "匿名诊断" },
+  "diagnosticsDescription": { "message": "通过 Google Analytics 分享工具结果和错误。不包含浏览内容，可随时关闭。" },
+  "diagnosticsLoadFail": { "message": "请重新连接浏览器桥接程序以加载诊断设置。" },
+  "diagnosticsSaveFail": { "message": "无法保存诊断设置，请重试。" },
+  "diagnosticsBrowserPermission": { "message": "请在 Firefox 中允许分享技术数据以启用诊断。" },
   "extensionName": {
     "message": "opencode-chromium"
   },

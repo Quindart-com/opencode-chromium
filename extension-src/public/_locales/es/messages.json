@@ -1,4 +1,9 @@
 {
+  "anonymousDiagnostics": { "message": "Diagnósticos anónimos" },
+  "diagnosticsDescription": { "message": "Compartir resultados y errores de herramientas mediante Google Analytics. Sin contenido de navegación. Se puede desactivar en cualquier momento." },
+  "diagnosticsLoadFail": { "message": "Vuelve a conectar el puente del navegador para cargar los ajustes de diagnóstico." },
+  "diagnosticsSaveFail": { "message": "No se pudieron guardar los ajustes de diagnóstico. Inténtalo de nuevo." },
+  "diagnosticsBrowserPermission": { "message": "Permite compartir datos técnicos en Firefox para activar los diagnósticos." },
   "extensionName": {
     "message": "opencode-chromium"
   },

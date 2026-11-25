@@ -1,9 +1,8 @@
 import type { UsageQuery } from "../../../src/shared/decision-usage.ts";
 import { record } from "../../../src/shared/values.ts";
 import { decisionBudget } from "./budget.js";
-import { saveAndTestProvider } from "./connection.js";
 import { reserveImageRequest } from "./image-budget.js";
-import { DEFAULT_DECISION_TIMEOUT_MS,JevProvider,type DecisionRequest,type DecisionResult } from "./provider.js";
+import type { DecisionRequest,DecisionResult,JevProvider } from "./provider.js";
 import { configureProvider,getProviderSettings,providerKey,providerModel,providerStatus,storeProviderKey } from "./settings.js";
 import { decisionUsage,recordDecision,usageProviderId } from "./usage.js";
 
@@ -13,6 +12,8 @@ export async function decide(request: DecisionRequest, signal?: AbortSignal): Pr
   const key = providerKey(settings);
   if (!providerStatus().ready || !key) return { status: "unavailable", elapsedMs: 0, reason: "provider_not_enabled" };
   if (request.image && !settings.shareImages) return { status: "unavailable", elapsedMs: 0, reason: "image_sharing_not_enabled" };
+  if (signal?.aborted) return { status: "abstained", elapsedMs: 0, reason: "cancelled" };
+  const { DEFAULT_DECISION_TIMEOUT_MS,JevProvider } = await import("./provider.js");
   if (signal?.aborted) return { status: "abstained", elapsedMs: 0, reason: "cancelled" };
   if (request.image && !reserveImageRequest()) return { status: "unavailable", elapsedMs: 0, reason: "image_budget_exhausted" };
   const model = providerModel(settings, !!request.image)!;
@@ -34,7 +35,7 @@ export async function handleDecisionHostMethod(method: string, params: unknown) 
     const settings = getProviderSettings(), query = record(record(params).usage) as UsageQuery;
     return { ...providerStatus(), usage: decisionUsage({ provider: query.provider ?? usageProviderId(settings), period: query.period ?? "7d" }), efficiency: decisionBudget.stats() };
   }
-  if (method === "decision.saveAndTest") return saveAndTestProvider(params);
+  if (method === "decision.saveAndTest") return (await import("./connection.js")).saveAndTestProvider(params);
   if (method === "decision.removeKey") { storeProviderKey(getProviderSettings().route, null); cached = undefined; return providerStatus(); }
   if (method === "decision.configure") { cached = undefined; return configureProvider(params); }
   if (method === "decision.evaluate") return decide(params as DecisionRequest);

@@ -4,11 +4,6 @@ import type { RuntimeTool } from "../../core/tool-definition.ts";
 import { record } from "../../shared/values.ts";
 import { imageCandidates,sanitizeImages } from "../image-content.ts";
 
-import {
-  localhostHostValidation,
-  localhostOriginValidation,
-  NodeStreamableHTTPServerTransport,
-} from "@modelcontextprotocol/node";
 import { McpServer,ResourceTemplate } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { randomUUID,timingSafeEqual } from "node:crypto";
@@ -39,8 +34,8 @@ export const SERVER_INSTRUCTIONS = [
   "Transport failures run a bounded CLI doctor and return recovery results. Follow those checks; if unresolved, run opencode-chromium doctor --repair-runtime --json before one targeted repair and verification. Never replay an uncertain mutation unchanged.",
   "Page search uses the auto retrieval strategy by default (lexical first, escalating to the active local embedding model); request lexical for lowest latency, semantic to always embed, and deep for reranked multilingual or code-heavy matching.",
   "For a specific tab's deeper network debugging, request browser_observe mode capabilities with pack network, then execute network.inspect inside browser_run; bodies are opt-in and approval-gated.",
-  "Only claim an existing tab after the user's explicit request or permission. browser_session action open with scope user lists ungrouped, unclaimed tabs; grouped or owned tabs cannot be claimed. Prefer new-tab otherwise.",
-  "Approval-required results must be followed by browser_run with only the approvalToken. Call browser_finalize when finished: all tabs remain open in a blue review group and ownership is released. Pass explicit keep status 'handoff' only for unfinished work that must retain the live session in a green group. Omitted keep or status means human review; finalization never closes tabs.",
+  "Discover eligible existing tabs with browser_session action open and scope user. Claim only the existing tab the user authorized. Approve the returned claimTarget with its approvalToken.",
+  "Call browser_run with only approvalToken after approval. After a decline, send approvalToken and approvalDecision=decline. Finalize when finished to release tabs for review. Existing groups are preserved. Explicit handoffs retain ownership.",
   "When local action memory is enabled, browser_run replays a remembered recipe for steps you already issue on the same host and reports memory.used with stepsReused; targets are re-resolved against the live DOM and stale steps fall back to normal exploration. Pass memoryMode 'off' to skip memory, or memoryIntent to also try bounded semantic recall.",
 ].join(" ");
 
@@ -238,6 +233,7 @@ export async function serveHttp(options: ServerOptions, runtime: AgentBrowserRun
   const loopback = isLoopback(options.host);
   const configuredToken = process.env[options.authTokenEnv];
   if (!loopback && !configuredToken) throw new Error(`Refusing non-loopback MCP binding without a bearer token in ${options.authTokenEnv}`);
+  const { localhostHostValidation,localhostOriginValidation,NodeStreamableHTTPServerTransport } = await import("@modelcontextprotocol/node");
   const validateHost = loopback ? localhostHostValidation() : null;
   const validateOrigin = loopback ? localhostOriginValidation() : null;
   const server = http.createServer(async (request, response) => {

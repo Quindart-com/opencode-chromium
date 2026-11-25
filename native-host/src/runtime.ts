@@ -16,6 +16,7 @@ import { record } from "../../src/shared/values.ts";
 import { handleDecisionHostMethod } from "./decisions/index.ts";
 import { selectRecipe } from "./decisions/recipes.ts";
 import { decisionSearch } from "./decisions/search.ts";
+import { providerStatus } from "./decisions/settings.ts";
 import { handleDiagnosticsHostMethod } from "./diagnostics/index.ts";
 import { createFirefoxHost } from "./firefox/backend.ts";
 import { memoryCommandSchema } from "./memory/commands.ts";
@@ -27,6 +28,7 @@ import { RpcRelay } from "./rpc-relay.ts";
 import { embedMemoryTexts,handleSemanticHostMethod,rankPageUnits } from "./semantic-search.ts";
 import { rankInputSchema } from "./semantic-types.ts";
 import { createUploadFiles } from "./uploads.ts";
+import { createTelemetry } from "./telemetry/index.ts";
 import { handleVisualHostMethod } from "./visual-map.ts";
 
 const PLUGIN_NAME = PRODUCT.pluginId;
@@ -38,6 +40,8 @@ const nativeHostVersion = z.string().parse(record(JSON.parse(fs.readFileSync(new
 const hostActivity = createParticipant(runtimeDirectory(), "host", nativeHostVersion);
 const state: RelayState = { startedAt: new Date().toISOString(), ipcPath, profile: null, nativeHostVersion };
 let activeProfileId: string | null = null;
+const telemetry = createTelemetry({ environment: () => state.profile,
+  allowed: async () => record(await relay.requestExtension("telemetry.permission", {}, 1500)).allowed === true });
 
 function registerProfile(profile: ProfileHello) {
   if (activeProfileId && activeProfileId !== profile.profileId) {
@@ -60,6 +64,8 @@ function registerProfile(profile: ProfileHello) {
   writeProfileRegistration(registration);
   state.profile = { ...registration, uploadConsentVersion: profile.uploadConsentVersion };
   activeProfileId = profile.profileId;
+  if (providerStatus().ready) void import("./decisions/provider.ts").catch(() => {});
+  void telemetry.start(nativeHostVersion);
   memoryStore?.profiles.register(profile);
 }
 
@@ -99,6 +105,8 @@ const relay: RpcRelay = new RpcRelay({
   canDisconnect: () => !participants(runtimeDirectory()).some(row => participantActive(row) && participantBusy(row)),
   connectionDetails: () => ({}),
   localHandler: async (method, params): Promise<unknown> => {
+    const diagnosticsTelemetry = telemetry.handle(method, params);
+    if (diagnosticsTelemetry !== undefined) return diagnosticsTelemetry;
     const firefox = await firefoxHost(method, params);
     if (firefox !== undefined) return firefox;
     if (method.startsWith("uploads.")) return uploadFiles(method, params);
@@ -231,6 +239,7 @@ function shutdownHost(reason: string|undefined, exitCode = 0) {
   cleanupProfileRegistration();
   relay.shutdown(reason);
   server.close(async () => {
+    await telemetry.close();
     await firefoxHost.close();
     cleanupSocketPath();
     process.exit(exitCode);

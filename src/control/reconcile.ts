@@ -61,7 +61,13 @@ export async function reconcileRuntimeState(dir: string, options: {
   let releasedSessions = 0, removedProfiles = 0;
   for (const [profileId, sessionIds] of requested) {
     const profile = byProfile.get(profileId); if (!profile || !sessionIds.size) continue;
-    const reply = await request(profile, "runtime.reconcileSessions", { sessionIds: [...sessionIds],inactiveBefore: now - participantGraceMs,reconciliationToken });
+    // A second lease can still be live, in its grace period, or holding approval
+    // for a session named by an older abandoned lease.
+    const protectedSessions = new Set(participants(dir)
+      .filter(row => !participantEligible(row, now, participantGraceMs)).flatMap(row => row.sessions));
+    const eligibleIds = [...sessionIds].filter(id => !protectedSessions.has(id));
+    if (!eligibleIds.length) continue;
+    const reply = await request(profile, "runtime.reconcileSessions", { sessionIds: eligibleIds,inactiveBefore: now - participantGraceMs,reconciliationToken });
     const ids = Array.isArray(reply.result?.settledSessionIds) ? reply.result.settledSessionIds.filter((id): id is string => typeof id === "string") : [];
     settled.set(profileId, new Set(ids)); releasedSessions += ids.length;
   }

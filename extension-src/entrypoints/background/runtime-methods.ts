@@ -1,4 +1,3 @@
-import type { Browser } from "wxt/browser";
 import { browser as chrome } from "wxt/browser";
 import { z } from "zod/mini";
 import { beforeDeadline } from "../../../src/shared/deadline.ts";
@@ -14,7 +13,7 @@ import type { BackgroundRuntimeDependencies as Dependencies } from "./types.ts";
 
 export function registerRuntimeMethods(dependencies: Dependencies) {
   const rpc = dependencies.rpc as NativeRpc;
-  const { profileMetadata, setProfileLabel, attachTab, detachTab, executeCdp, executeInputGesture, resolveTabActivation, moveMouse, framePoint, tabIdFromParams, cursorIdFromParams, cursorArrivalWaiters, cursorWaiterKey, cdpEventsByTabId, traceBuffers, requiredSessionId, sessionState, updateTurn, focusedNormalWindowId, creationRequestIds, trackTab, getTab, assertClaimableTab, normalizeTab, queryTabs, isClaimableTab, findTabOwner, assertSessionUrl, untrackTab, ensureControlledTab, hideCursor, ungroupTab, persistSessions, normalizeKeepItem, commandHealth, sessions, SESSION_GROUP_COLOR, downloadEvents, IS_FIREFOX, attachedTabs, recordCdpEvent, sendCdpCommand, HOST_NAME, focusTab, nowIso, uploadConsent, reconciliationToken } = dependencies;
+  const { profileMetadata, setProfileLabel, attachTab, detachTab, executeCdp, executeInputGesture, resolveTabActivation, moveMouse, framePoint, tabIdFromParams, cursorIdFromParams, cursorArrivalWaiters, cursorWaiterKey, cdpEventsByTabId, traceBuffers, requiredSessionId, sessionState, updateTurn, focusedNormalWindowId, creationRequestIds, trackTab, getTab, normalizeTab, tabClaims, reserveCleanup, assertSessionUrl, untrackTab, ensureControlledTab, hideCursor, ungroupTab, persistSessions, normalizeKeepItem, commandHealth, sessions, SESSION_GROUP_COLOR, downloadEvents, IS_FIREFOX, attachedTabs, recordCdpEvent, sendCdpCommand, HOST_NAME, focusTab, nowIso, uploadConsent, reconciliationToken } = dependencies;
 rpc.register("ping", async () => "pong");
 rpc.register("getInfo", async () => {
     const profile = await profileMetadata();
@@ -56,17 +55,20 @@ rpc.register("attach", async (params) => {
     const { sessionId } = ensureControlledTab(params, tabId);
     return attachTab(tabId, sessionId, params.deadlineAt);
 });
-rpc.register("detach", async (params) => detachTab(tabIdFromParams(params)));
+rpc.register("detach", async (params) => {
+    const tabId = tabIdFromParams(params);
+    ensureControlledTab(params, tabId);
+    return detachTab(tabId);
+});
 rpc.register("executeCdp", executeCdp);
 rpc.register("uploadPolicy", async () => ({ version: 1 }));
 rpc.register("inputGesture", executeInputGesture);
 rpc.register("activateTab", async (params) => {
     const tabId = tabIdFromParams(params);
-    const { session } = ensureControlledTab(params, tabId);
-    session.activeTabId = tabId;
-    await persistSessions().catch(() => { });
-    const activation = resolveTabActivation(params);
-    return normalizeTab(await focusTab(tabId, activation));
+    return commandHealth.run(tabId, async () => {
+        ensureControlledTab(params, tabId);
+        return normalizeTab(await focusTab(tabId, resolveTabActivation(params)));
+    }, params.deadlineAt, "activateTab");
 });
 rpc.register("moveMouse", moveMouse);
 rpc.register("framePoint", framePoint);
@@ -150,20 +152,12 @@ rpc.register("createTab", async (params) => {
     if (tab.id === undefined)
         throw new Error("Could not identify browser tab");
     if (params.creationRequestId) creationRequestIds.set(tab.id, params.creationRequestId);
-    await trackTab(id, tab.id, "agent");
+    await trackTab(id, tab, "agent");
     return normalizeTab(tab);
 });
-rpc.register("claimUserTab", async (params) => {
-    const id = requiredSessionId(params);
-    const session = sessionState(id);
-    updateTurn(session, params);
-    const tabId = tabIdFromParams(params);
-    const tab = await getTab(tabId);
-    assertClaimableTab(tab, findTabOwner(tabId));
-    assertSessionUrl(session, tab.url ?? "about:blank");
-    await trackTab(id, tabId, "user");
-    return normalizeTab(tab);
-});
+rpc.register("prepareTabClaim", params => tabClaims.prepare(params));
+rpc.register("claimUserTab", params => tabClaims.claim(params));
+rpc.register("declineTabClaim", params => tabClaims.decline(params));
 rpc.register("getTabs", async (params) => {
     const id = requiredSessionId(params);
     const session = sessionState(id);
@@ -185,9 +179,7 @@ rpc.register("getTabs", async (params) => {
                 origin: session.tabOrigins.get(tabId) ?? "agent",
             }));
         }
-        catch {
-            await untrackTab(id, tabId);
-        }
+        catch { /* The tab removal event owns cleanup. */ }
     }
     return { tabs, health: commandHealth.snapshot(session.tabIds) };
 });
@@ -195,15 +187,13 @@ rpc.register("getSelectedTab", async (params) => {
     const id = requiredSessionId(params);
     const session = sessionState(id);
     updateTurn(session, params);
-    if (session.activeTabId === null || !Number.isInteger(session.activeTabId) || !session.tabIds.has(session.activeTabId))
+    const tabId = session.activeTabId;
+    if (tabId === null || !Number.isInteger(tabId) || !session.tabIds.has(tabId))
         return null;
     try {
-        return normalizeTab(await getTab(session.activeTabId), { selected: true });
+        return normalizeTab(await getTab(tabId), { selected: true });
     }
-    catch {
-        await untrackTab(id, session.activeTabId);
-        return null;
-    }
+    catch { return null; }
 });
 rpc.register("getTab", async (params) => {
     const tabId = tabIdFromParams(params);
@@ -212,13 +202,7 @@ rpc.register("getTab", async (params) => {
     assertSessionUrl(sessionState(requiredSessionId(params)), tab.url ?? "about:blank");
     return normalizeTab(tab);
 });
-rpc.register("getUserTabs", async () => {
-    const tabs = await queryTabs({});
-    const normalized = tabs.filter((tab: Browser.tabs.Tab) => isClaimableTab(tab, tab.id === undefined ? null : findTabOwner(tab.id)))
-        .sort((a: Browser.tabs.Tab, b: Browser.tabs.Tab) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0)).slice(0, 1000)
-        .map((tab: Browser.tabs.Tab) => normalizeTab(tab, { tabGroup: null, claimable: true }));
-    return { tabs: normalized };
-});
+rpc.register("getUserTabs", params => tabClaims.list(params));
 rpc.register("getUserHistory", async (params) => {
     const items = await chrome.history.search({
         text: params.query ?? "",
@@ -240,27 +224,34 @@ rpc.register("getUserHistory", async (params) => {
 rpc.register("closeTab", async (params) => {
     const tabId = tabIdFromParams(params);
     const { sessionId } = ensureControlledTab(params, tabId);
-    await detachTab(tabId);
-    await chrome.tabs.remove(tabId);
-    await untrackTab(sessionId, tabId);
+    const finish = reserveCleanup(tabId);
+    try {
+        await detachTab(tabId);
+        await chrome.tabs.remove(tabId);
+        await untrackTab(sessionId, tabId);
+    } finally { finish(); }
     return {};
 });
 rpc.register("releaseTab", async (params) => {
     const tabId = tabIdFromParams(params);
     const { sessionId, session } = ensureControlledTab(params, tabId);
     const origin = session.tabOrigins.get(tabId) ?? "agent";
-    await detachTab(tabId);
-    await hideCursor(tabId).catch(() => { });
-    await ungroupTab(tabId).catch(() => { });
-    await untrackTab(sessionId, tabId);
-    await persistSessions().catch(() => { });
+    const finish = reserveCleanup(tabId);
+    try {
+        await detachTab(tabId);
+        await hideCursor(tabId).catch(() => { });
+        await ungroupTab(sessionId, tabId);
+        await untrackTab(sessionId, tabId);
+    } finally { finish(); }
     return { released: true, tabId, origin };
 });
 rpc.register("reloadTab", async (params) => {
     const tabId = tabIdFromParams(params);
-    ensureControlledTab(params, tabId);
-    await chrome.tabs.reload(tabId, { bypassCache: Boolean(params.bypassCache) });
-    return {};
+    return commandHealth.run(tabId, async () => {
+        ensureControlledTab(params, tabId);
+        await chrome.tabs.reload(tabId, { bypassCache: Boolean(params.bypassCache) });
+        return {};
+    }, params.deadlineAt, "reloadTab");
 });
 rpc.register("finalizeTabs", async (params) => {
     const id = requiredSessionId(params);
@@ -272,8 +263,9 @@ rpc.register("finalizeTabs", async (params) => {
             throw new Error(`Cannot keep unmanaged tab ${normalized.tabId}`);
         return [normalized.tabId, normalized.status];
     }));
-    const result = await finalizeOwnedTabs(session, keep, { blocked: tabId => params.blockedTabs?.find(tab => tab.tabId === tabId)?.reason, dialog: tabId => commandHealth.dialog(tabId), detach: detachTab, hide: hideCursor,
-      deliver: tabIds => groupReviewTabs(session, tabIds, chrome), untrack: tabId => untrackTab(id, tabId) });
+    tabClaims.invalidateSession(id);
+    const result = await finalizeOwnedTabs(session, keep, { blocked: tabId => params.blockedTabs?.find(tab => tab.tabId === tabId)?.reason, dialog: tabId => commandHealth.dialog(tabId), reserve: reserveCleanup, detach: detachTab, hide: hideCursor,
+      deliver: async tabIds => IS_FIREFOX ? undefined : groupReviewTabs(session, tabIds, chrome), untrack: tabId => untrackTab(id, tabId) });
     if (!session.tabIds.size) sessions.delete(id);
     await persistSessions().catch(() => {});
     return result;
@@ -285,7 +277,7 @@ rpc.register("runtime.reconcileSessions", async (params) => {
     if (!expectedToken || params.reconciliationToken !== expectedToken) throw Object.assign(new Error("Abandoned-session reconciliation requires the stable controller"), { code: "CONTROLLER_AUTH_REQUIRED" });
     if (!Number.isFinite(inactiveBefore) || sessionIds.some(id => !id || id.length > 240)) throw new Error("Invalid abandoned-session reconciliation request");
     const result = await reconcileAbandonedSessions(sessions, sessionIds, Number(inactiveBefore), {
-      idle: () => commandHealth.idle() && uploadConsent.idle(), dialog: tabId => commandHealth.dialog(tabId),
+      idle: () => commandHealth.idle() && uploadConsent.idle(), dialog: tabId => commandHealth.dialog(tabId), reserve: reserveCleanup,
       detach: detachTab, hide: hideCursor, ungroup: ungroupTab, untrack: untrackTab,
     });
     await persistSessions().catch(() => {});
@@ -295,8 +287,14 @@ rpc.register("turnEnded", async (params) => {
     const id = requiredSessionId(params);
     const session = sessionState(id);
     for (const tabId of [...session.tabIds]) {
-        if (!commandHealth.dialog(tabId)) await detachTab(tabId).catch(() => {});
-        await beforeDeadline(() => hideCursor(tabId), Date.now() + 500, { tabId, phase: "cursor cleanup" }).catch(() => {});
+        if (!session.tabIds.has(tabId)) continue;
+        let finish: (() => void) | undefined;
+        try {
+            finish = reserveCleanup(tabId);
+            await detachTab(tabId).catch(() => {});
+            await beforeDeadline(() => hideCursor(tabId), Date.now() + 500, { tabId, phase: "cursor cleanup" }).catch(() => {});
+        } catch { /* Leave busy tabs and native dialogs attached. */ }
+        finally { finish?.(); }
     }
     session.currentTurnId = null;
     await persistSessions().catch(() => { });
@@ -308,8 +306,15 @@ rpc.register("nameSession", async (params) => {
     if (typeof params.name !== "string" || !params.name.trim() || params.name.length > 120)
         throw new Error("Session name must contain 1 to 120 characters.");
     session.name = params.name.trim();
-    if (session.groupId !== null && Number.isInteger(session.groupId) && chrome.tabGroups) {
-        await chrome.tabGroups.update(session.groupId, { title: session.name ?? "OpenCode", color: SESSION_GROUP_COLOR });
+    const groupIds = new Set<number>([...(session.tabGroups?.values() ?? [])].filter(group => group.origin === "session").map(group => group.id));
+    if (session.groupId !== null && Number.isInteger(session.groupId)) groupIds.add(session.groupId);
+    if (!IS_FIREFOX && chrome.tabGroups) {
+        for (const groupId of groupIds) {
+            const members = await chrome.tabs.query({ groupId });
+            if (members.some(tab => tab.id !== undefined && session.tabIds.has(tab.id))) {
+                await chrome.tabGroups.update(groupId, { title: session.name ?? "OpenCode", color: SESSION_GROUP_COLOR });
+            }
+        }
     }
     await persistSessions().catch(() => { });
     return {};

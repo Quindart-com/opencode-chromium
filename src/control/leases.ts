@@ -18,6 +18,7 @@ export interface SwitchJournal {
   next: { root: string; version: string; generation: number };
 }
 export const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+const HOST_IDLE_PUBLISH_MS = 25;
 export function processAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
 }
@@ -41,7 +42,6 @@ export function atomicJson(file: string, value: unknown) {
 }
 export function readJournal(dir: string): SwitchJournal | null {
   const file = path.join(dir, "activation-journal.json");
-  if (!fs.existsSync(file)) return null;
   let value: SwitchJournal;
   try { value = JSON.parse(fs.readFileSync(file, "utf8")) as SwitchJournal; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
@@ -78,10 +78,41 @@ export function createParticipant(dir: string, kind: ParticipantState["kind"], v
   fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
   const file = path.join(folder, `${state.id}.json`);
   let closed = false;
-  const publish = (patch: Partial<ParticipantState> = {}) => { if (closed) return; Object.assign(state, patch, { heartbeatAt: Date.now() }); atomicJson(file, state); };
+  let hostIdleWrite: ReturnType<typeof setTimeout> | undefined;
+  const publish = (patch: Partial<ParticipantState> = {}) => {
+    if (closed) return;
+    const next = { ...state, ...patch, heartbeatAt: Date.now() };
+    atomicJson(file, next);
+    clearTimeout(hostIdleWrite);
+    hostIdleWrite = undefined;
+    Object.assign(state, next);
+  };
+  const begin = () => {
+    const inFlight = state.inFlight + 1;
+    if (kind === "host" && (state.inFlight > 0 || hostIdleWrite)) {
+      clearTimeout(hostIdleWrite);
+      hostIdleWrite = undefined;
+      state.inFlight = inFlight;
+    } else publish({ inFlight });
+  };
+  const leave = (patch?: Partial<ParticipantState>) => {
+    if (closed) return;
+    const inFlight = Math.max(0, state.inFlight - 1);
+    if (kind !== "host" || patch) {
+      publish({ ...patch, inFlight });
+      return;
+    }
+    state.inFlight = inFlight;
+    if (inFlight === 0 && !hostIdleWrite) {
+      // Keep the durable lease busy across adjacent relay messages. The in-memory
+      // count tracks each call, and the file goes idle when the burst drains.
+      hostIdleWrite = setTimeout(() => publish(), HOST_IDLE_PUBLISH_MS);
+      hostIdleWrite.unref();
+    }
+  };
   publish();
   const heartbeat = setInterval(() => publish(), 15000); heartbeat.unref();
-  const close = () => { closed = true; clearInterval(heartbeat); fs.rmSync(file, { force: true }); };
+  const close = () => { closed = true; clearTimeout(hostIdleWrite); clearInterval(heartbeat); fs.rmSync(file, { force: true }); };
   process.once("exit", close);
   return { state, publish, close() { process.removeListener("exit", close); close(); },
     abandon(patch: Partial<ParticipantState> = {}) {
@@ -91,9 +122,20 @@ export function createParticipant(dir: string, kind: ParticipantState["kind"], v
     },
     async enter() {
       const deadline = Date.now() + 45000;
+      if (closed) throw new Error("Runtime participant closed");
+      // Blue/green activation keeps existing releases pinned. Publish activity
+      // before looking for the legacy journal: its coordinator checks activity
+      // again before committing any switch started concurrently with this call.
+      begin();
+      let journal: SwitchJournal | null;
+      try { journal = readJournal(dir); }
+      catch (error) { publish({ inFlight: state.inFlight - 1 }); throw error; }
+      if (!journal) return;
+      publish({ inFlight: state.inFlight - 1 });
+
       for (;;) {
-        if (closed) throw new Error("Runtime participant closed");
         const admitted = await withRuntimeLock(dir, () => {
+          if (closed) throw new Error("Runtime participant closed");
           const journal = readJournal(dir);
           if (journal) {
             if (processAlive(journal.pid)) return false;
@@ -101,13 +143,13 @@ export function createParticipant(dir: string, kind: ParticipantState["kind"], v
             // it before dispatch, even if the coordinator died after publishing it.
             fs.unlinkSync(path.join(dir, "activation-journal.json"));
           }
-          publish({ inFlight: state.inFlight + 1 }); return true;
+          begin(); return true;
         });
         if (admitted) return;
         if (Date.now() >= deadline) throw new Error("Runtime activation is still recovering; retry this call");
         await sleep(20);
       }
     },
-    leave(patch: Partial<ParticipantState> = {}) { publish({ ...patch, inFlight: Math.max(0, state.inFlight - 1) }); },
+    leave,
   };
 }

@@ -85,7 +85,7 @@ export function createSessionOperations(dependencies: Dependencies) {
         },
       }),
       browser_list_tabs: tool({
-        description: "List this session's tabs or ungrouped, unclaimed user tabs available to claim.",
+        description: "List this session's tabs or user tabs available for an approved claim.",
         args: {
           scope: tool.schema.enum(["session", "user"]).default("user"),
         },
@@ -122,12 +122,14 @@ export function createSessionOperations(dependencies: Dependencies) {
         },
       }),
       browser_claim_tab: tool({
-        description: "Claim an ungrouped, unclaimed tab by ID after the user's explicit request or permission. Prefer a new tab otherwise.",
+        description: "Complete an approved claim of a tab in the selected profile.",
         args: {
-          tabId: tool.schema.number().int().positive().describe("Chrome tab ID to claim"),
+          tabId: tool.schema.number().int().positive(),
+          profileId: tool.schema.string(),
+          claimToken: tool.schema.string(),
         },
         async execute(args, context) {
-          const { profileId, result } = await extensionProfileRequest(context, "claimUserTab", { tabId: args.tabId });
+          const { profileId, result } = await extensionProfileRequest(context, "claimUserTab", args);
           return stringify(addProfileToTabResult(result, profileId));
         },
       }),

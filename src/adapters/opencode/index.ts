@@ -146,10 +146,11 @@ function createLegacyOpenCodeHooks(options: OpenCodeOptions = {}) {
   };
 }
 
-type ToolEditor = { add(tool: { name: string; description: string; input: unknown; execute(input: unknown, context: BrowserContext): Promise<unknown> }): unknown };
+type ToolEditor = { add(tool: { name: string; description: string; input: unknown; options: { codemode: boolean };
+  execute(input: unknown, context: BrowserContext): Promise<unknown> }): unknown };
 
 function editorTool(name: string, tool: NativeTool) {
-  return { name, description: tool.description, input: tool.inputSchema,
+  return { name, description: tool.description, input: tool.inputSchema, options: { codemode: tool.codemode },
     async execute(input: unknown, context: BrowserContext) { const result = await tool.execute(input, context); return { content: result.output, attachments: result.attachments }; } };
 }
 

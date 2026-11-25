@@ -4,7 +4,80 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { atomicJson, createParticipant, participantActive, participants, reapParticipants } from "../../src/control/leases.ts";
+import { atomicJson, createParticipant, participantActive, participants, reapParticipants, sleep } from "../../src/control/leases.ts";
+import { withRuntimeLock } from "../../src/control/state.ts";
+
+test("pinned participants publish admission even while the blue-green update gate is held", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "participant-admission-"));
+  const participant = createParticipant(dir, "runtime", "2.0.5");
+  let releaseGate!: () => void;
+  const held = new Promise<void>(resolve => { releaseGate = resolve; });
+  const gate = withRuntimeLock(dir, () => held);
+  const admission = participant.enter();
+  try {
+    // The gate is already held. A normal request publishes its lease before
+    // yielding, so the coordinator can see it without serializing tool calls.
+    expect(participants(dir)[0]?.inFlight).toBe(1);
+    await admission;
+    participant.leave();
+    expect(participants(dir)[0]?.inFlight).toBe(0);
+  } finally {
+    releaseGate();
+    await gate;
+    await admission;
+    participant.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a live legacy activation journal blocks new admission until the coordinator clears it", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "participant-admission-"));
+  const file = path.join(dir, "activation-journal.json");
+  const participant = createParticipant(dir, "host", "2.0.5");
+  try {
+    await participant.enter();
+    participant.leave();
+    expect(participants(dir)[0]?.inFlight).toBe(1);
+    atomicJson(file, { id: "legacy", pid: process.pid, phase: "preparing",
+      previous: { root: dir }, next: { root: dir, version: "2.0.6", generation: 2 } });
+    const pending = participant.enter();
+    const waiting = participants(dir)[0]?.inFlight;
+    fs.unlinkSync(file);
+    await pending;
+    expect(waiting).toBe(0);
+    expect(participants(dir)[0]?.inFlight).toBe(1);
+    participant.leave();
+  } finally {
+    participant.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the native host keeps a durable busy lease across overlapping and adjacent relay requests", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "participant-admission-"));
+  const host = createParticipant(dir, "host", "2.0.5");
+  const busyOnDisk = () => (participants(dir)[0]?.inFlight ?? 0) > 0;
+  try {
+    await host.enter();
+    await host.enter();
+    expect(host.state.inFlight).toBe(2);
+    host.leave();
+    expect(busyOnDisk()).toBe(true);
+    host.leave();
+    expect(host.state.inFlight).toBe(0);
+    expect(busyOnDisk()).toBe(true);
+
+    await host.enter();
+    await sleep(60);
+    expect(busyOnDisk()).toBe(true);
+    host.leave();
+    await sleep(60);
+    expect(busyOnDisk()).toBe(false);
+  } finally {
+    host.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("starting a participant reaps dead idle records but preserves sessions, approvals, in-flight work and live owners", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "participant-recovery-"));

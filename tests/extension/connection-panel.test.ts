@@ -80,3 +80,15 @@ test("connection controls reject website callers and refuse reconnects during br
   await connectionPanelMessage({ type: "RECONNECT_NATIVE_HOST" }, { id: "fixture" }, { ...dependencies, idle: () => true });
   expect(reconnected).toBe(true);
 });
+
+test("diagnostics settings are panel-only, validate booleans and expose Firefox permission", async () => {
+  const calls: [string, unknown][] = [];
+  const rpc = { request: async (method: string, params: unknown) => { calls.push([method, params]); return { enabled: method === "telemetry.status", configured: true }; } } as unknown as NativeRpc;
+  const dependencies = { rpc, extensionId: "fixture", idle: () => true, telemetryAllowed: async () => false };
+  expect(await connectionPanelMessage({ type: "GET_TELEMETRY_SETTINGS" }, { id: "fixture" }, dependencies)).toMatchObject({ enabled: true, browserAllowed: false });
+  await connectionPanelMessage({ type: "SET_TELEMETRY_SETTINGS", enabled: false }, { id: "fixture" }, dependencies);
+  expect(calls).toContainEqual(["telemetry.configure", { enabled: false }]);
+  await expect(connectionPanelMessage({ type: "SET_TELEMETRY_SETTINGS", enabled: "false" }, { id: "fixture" }, dependencies)).rejects.toThrow("boolean");
+  await expect(connectionPanelMessage({ type: "SET_TELEMETRY_SETTINGS", enabled: true }, { id: "fixture", tab: { url: "https://page.example" } }, dependencies)).rejects.toThrow("extension panel");
+  expect(calls).toHaveLength(2);
+});

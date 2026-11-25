@@ -46,3 +46,22 @@ test("a live replacement lease suppresses stale release and dead offline registr
     expect(participants(dir).map(value => value.id)).toEqual(["live"]);
   } finally { fs.rmSync(dir, { recursive: true,force: true }); }
 });
+
+test("a second abandoned lease protects shared ownership while approval is pending", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-reconcile-")), folder = path.join(dir, "participants"); fs.mkdirSync(folder);
+  try {
+    const row = { pid: process.pid, kind: "runtime", version: "1.0.0", inFlight: 0, approvals: 0, heartbeatAt: 1, abandonedAt: 1, sessions: ["shared"], profiles: ["profile"] };
+    atomicJson(path.join(folder, "old.json"), { ...row, id: "old" });
+    atomicJson(path.join(folder, "pending.json"), { ...row, id: "pending", approvals: 1, approvalExpiresAt: 2000 });
+    const registration = normalizeProfileRegistration({ profileId: "profile", ipcPath: "fixture" })!;
+    const calls: unknown[] = [];
+    const options = { participantGraceMs: 100, registrations: [{ ...registration, registrationPath: path.join(dir, "profile.json") }],
+      request: async (_profile: unknown, method: string, params?: Record<string, unknown>) => {
+        calls.push([method, params?.sessionIds]); return { reachable: true, result: { settledSessionIds: ["shared"] } };
+      } };
+    expect(await reconcileRuntimeState(dir, { ...options, now: 1000 })).toMatchObject({ releasedSessions: 0, deferredParticipants: 1 });
+    expect(calls).toEqual([]);
+    expect(await reconcileRuntimeState(dir, { ...options, now: 2000 })).toMatchObject({ releasedSessions: 1, removedParticipants: 2 });
+    expect(calls).toEqual([["runtime.reconcileSessions", ["shared"]]]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

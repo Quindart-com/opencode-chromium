@@ -351,6 +351,9 @@ export async function browserRequest(method: string, params: Record<string, unkn
   }
   const ipcPath = options.ipcPath ?? profile?.ipcPath;
   if (!ipcPath) throw new Error("Browser profile has no native host connection");
+  if (profile && options.profileId && params.profile_id === options.profileId && profile.profileId !== options.profileId) {
+    throw new ProfileSelectionError("PROFILE_DISCONNECTED", "The selected browser profile is no longer available.");
+  }
   const client = pooledBrowserClient(ipcPath, options);
   const creationRequestId = method === "createTab" ? randomUUID() : undefined;
   let before: Record<string, unknown>[] | null = null;

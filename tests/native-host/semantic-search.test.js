@@ -65,6 +65,22 @@ test("lexical ranking keeps tokenless and repeated-token queries stable", async 
   }
 });
 
+test("lexical search prefers the requested control action and requires textual evidence", async () => {
+  const units = [
+    { node_id: "on", text: "Enable activity notifications", interactive: true, inViewport: true },
+    { node_id: "off-other", text: "Mute invoice notifications", interactive: true, inViewport: true },
+    { node_id: "off", text: "Mute activity alerts", interactive: true, inViewport: true },
+    { node_id: "archive", text: "Archive workspace", interactive: true, inViewport: true },
+    { node_id: "restore", text: "Restore workspace", headingPath: ["Archived projects"], interactive: true },
+  ];
+  for (const [query, expected] of [["switch off activity notifications", "off"], ["reinstate the archived workspace", "restore"], ["enable activity notifications", "on"]]) {
+    const ranking = await rankPageUnits({ query, mode: "lexical", units });
+    assert.equal(ranking.results[0].node_id, expected);
+  }
+  const absent = await rankPageUnits({ query: "astronomical ephemeris", mode: "lexical", units });
+  assert.deepEqual(absent.results, []);
+});
+
 test("semantic is the default ranking strategy while lexical remains explicit", async () => {
   const previous = process.env.OPENCODE_BROWSER_SEMANTIC_DIR;
   const previousDisabled = process.env.OPENCODE_BROWSER_DISABLE_SEMANTIC_MODEL;

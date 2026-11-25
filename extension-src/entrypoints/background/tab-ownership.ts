@@ -5,17 +5,22 @@ export function assertTabAccess<T extends { sessionId: string }>({ owner, sessio
 }
 
 export function isBrowserInternalUrl(url: string | undefined): boolean {
-  return /^(chrome|edge|brave|vivaldi|opera|chrome-extension|moz-extension):/i.test(url ?? "") || (/^about:/i.test(url ?? "") && url !== "about:blank");
+  return /^(chrome|chrome-untrusted|edge|brave|vivaldi|opera|chrome-extension|moz-extension|devtools|resource|view-source|javascript):/i.test(url ?? "") || (/^about:/i.test(url ?? "") && url !== "about:blank");
 }
 
-type ClaimableTab = { id?: number; groupId?: number; url?: string };
-
-export function isClaimableTab(tab: ClaimableTab, owner: unknown) {
-  return tab.id !== undefined && !owner && !(typeof tab.groupId === "number" && tab.groupId >= 0) && !isBrowserInternalUrl(tab.url);
+export function ownershipError(code: string, message: string) {
+  return Object.assign(new Error(message), { code, retryable: false, uncertain: false, executionState: "not_started" });
 }
 
-export function assertClaimableTab(tab: ClaimableTab, owner: unknown) {
-  if (owner) throw new Error(`Tab ${tab.id} is already controlled by a session; its owner must release it before it can be claimed`);
-  if (typeof tab.groupId === "number" && tab.groupId >= 0) throw new Error(`Tab ${tab.id} belongs to a tab group; only ungrouped, unclaimed tabs can be claimed`);
-  if (isBrowserInternalUrl(tab.url)) throw new Error(`Cannot claim internal browser tab: ${tab.url}`);
+export class TabOwnershipTransitions {
+  private readonly tabs = new Set<number>();
+  idle(tabId: number) { return !this.tabs.has(tabId); }
+  assertIdle(tabId: number) {
+    if (!this.idle(tabId)) throw ownershipError("TAB_OWNERSHIP_BUSY", "A tab ownership change is in progress.");
+  }
+  begin(tabId: number) {
+    this.assertIdle(tabId);
+    this.tabs.add(tabId);
+    return () => this.tabs.delete(tabId);
+  }
 }

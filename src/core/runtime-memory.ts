@@ -12,6 +12,7 @@ import { READ_ACTIONS,clamp,isStaleTargetError,memoryMatchSchema,parseLegacyResu
 import { RuntimeInteraction } from "./runtime-interaction.ts";
 import type { RuntimeSession } from "./runtime-types.ts";
 import { PAGE_PROTECTION_WARNING,TRANSITION_ACTIONS,classifyTabTransition,type TabSnapshot } from "./tab-transition.ts";
+import { measureTelemetryStage,noteTelemetryDispatch,noteTelemetryRetry } from "./telemetry.ts";
 
 export class RuntimeMemory extends RuntimeInteraction {
   async executeStep(step: Step, tabId: number, prior: PriorResults, session: RuntimeSession, chainId: string | null = null, stepIndex: number | null = null) {
@@ -292,8 +293,9 @@ export class RuntimeMemory extends RuntimeInteraction {
     const watchTab = TRANSITION_ACTIONS.has(step.action);
     const tabsBefore = watchTab ? await this.sessionTabs(session) : null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (attempt > 0) noteTelemetryRetry();
       try {
-        value = await this.executeStep(step, tabId, prior, session, chainId, index);
+        value = await measureTelemetryStage("action", () => this.executeStep(step, tabId, prior, session, chainId, index));
         executionState = "completed";
         lastError = null;
         break;
@@ -303,9 +305,10 @@ export class RuntimeMemory extends RuntimeInteraction {
         if (record(error).retryable === false) break;
       }
     }
+    if (!READ_ACTIONS.has(step.action)) noteTelemetryDispatch(executionState === "completed" ? "acknowledged" : executionState === "unknown" ? "unknown" : "not_started");
     if (!lastError) {
       try {
-        settled = await this.settleStep(step, tabId, prior, session);
+        settled = await measureTelemetryStage("settle", () => this.settleStep(step, tabId, prior, session));
       } catch (error) {
         if (step.settle) lastError = error;
         else settled = { settled: false, degraded: true, error: errorDetails(error) };

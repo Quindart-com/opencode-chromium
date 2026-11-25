@@ -125,7 +125,26 @@ test("dom-quiet settling polls the mutation age instead of snapshotting the page
   const result = await settleBrowserStep(runtime, { action: "click" }, 7, new Map(), { sessionId: "s" });
   assert.deepEqual(result, { condition: "dom-quiet", settled: true });
   assert.equal(calls.every(name => name === "browser_dom_quiet"), true);
-  assert.ok(calls.length >= 5, "polled until the page was quiet for 500ms");
+  assert.ok(calls.length >= 2 && calls.length <= 3, "waited for a complete quiet window without early probes");
+});
+
+test("a mutation during the quiet window delays settlement", async () => {
+  const started = performance.now();
+  let probes = 0;
+  const runtime = {
+    operationScope: { run: (_scope, task) => task() },
+    resolveTarget: async () => ({}),
+    invoke: async name => {
+      assert.equal(name, "browser_dom_quiet");
+      probes++;
+      if (probes === 1) return { documentId: "d", revision: 1, lastMutationAgeMs: 900 };
+      return { documentId: "d", revision: 2, lastMutationAgeMs: Math.max(0, performance.now() - started - 400) };
+    },
+  };
+  const result = await settleBrowserStep(runtime, { action: "click" }, 7, new Map(), { sessionId: "s" });
+  assert.deepEqual(result, { condition: "dom-quiet", settled: true });
+  assert.ok(performance.now() - started >= 900, "the 500 ms quiet window starts again after the mutation");
+  assert.ok(probes >= 3 && probes <= 4);
 });
 
 test("dom-quiet settling falls back to snapshots when the cheap probe is unavailable", async () => {

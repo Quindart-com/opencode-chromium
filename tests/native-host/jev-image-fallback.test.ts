@@ -37,10 +37,15 @@ function network(textConfidence = 0.4, httpStatus = 200) {
     const body = JSON.parse(String(init?.body)); calls.push(body);
     const visual = Array.isArray(body.input ?? body.state), confidence = visual ? 0.95 : textConfidence;
     if (httpStatus !== 200) return new Response("unavailable", { status: httpStatus });
-    if (body.input !== undefined) return Response.json({ model: body.model, answers: [{ type: "choice", name: "decision", choice: "b", confidence,
-      probabilities: [{ value: "a", probability: 0.02 }, { value: "b", probability: 0.95 }, { value: "__abstain", probability: 0.03 }] }], usage: { input_tokens: visual ? 500 : 100, output_tokens: 0 } });
-    return new Response(JSON.stringify({ model: body.model, answers: { decision: { type: "choice", choice: "b", confidence,
-      probabilities: { a: 0.02, b: 0.95, __abstain: 0.03 } } }, usage: { input_tokens: visual ? 500 : 100, output_tokens: 0 } }));
+    const direct = body.input !== undefined;
+    const [first, second] = direct ? body.questions[0].choices.map((row: { value: string }) => row.value) : Object.keys(body.questions.decision.criteria);
+    const usage = { input_tokens: visual ? 500 : 100, output_tokens: 0 };
+    const probabilities = { [first]: 0.02, [second]: 0.95, __abstain: 0.03 };
+    const answer = { type: "choice", name: "decision", choice: second, confidence };
+    return Response.json({ model: body.model, usage, answers: direct ? [{ ...answer,
+      probabilities: Object.entries(probabilities).map(([value, probability]) => ({ value, probability })) }] : {
+      decision: { ...answer, probabilities },
+    } });
   }) as typeof fetch;
 }
 const search = (capture = async () => { captures++; return image; }) => decisionSearch({ query, units,
@@ -81,8 +86,39 @@ test("Jev asks text first, then one image only on a valid unsure answer", async 
   network(); const result = await search();
   expect(calls.map(body => body.model)).toEqual(["typesafe/jev-1.13-20260917", "typesafe/jev-1.14"]);
   expect(typeof calls[0].state).toBe("string"); expect(calls[1].state[1].image_url.url).toBe(image);
-  expect(calls[1].questions.decision.criteria.b).toContain("bounds1000(500,0,300,250)");
+  expect(calls[1].questions.decision.criteria.c2).toContain("bounds1000(500,0,300,250)");
   expect(captures).toBe(1); expect(result?.decision).toMatchObject({ status: "selected", candidateId: "b" });
+});
+test("search sends compact choices with section context, promotes the chosen ID, and retains the full result limit", async () => {
+  configureProvider({ ...settings, shareImages: false });
+  const ranked = Array.from({ length: 20 }, (_, index) => ({
+    node_id: `frame-auxiliary-fixture/record/${randomUUID()}`,
+    name: index < 2 ? "Save changes" : `Other action ${index}`,
+    role: "button", interactive: true, score: 0.5,
+    headingPath: ["Settings", index === 1 ? "Billing" : "Notifications"],
+  }));
+  globalThis.fetch = (async (_url, init) => {
+    const wire = String(init?.body);
+    const body = JSON.parse(wire);
+    calls.push(body);
+    const criteria = body.questions.decision.criteria;
+    expect(Object.keys(criteria)).toHaveLength(17);
+    expect(criteria.c1).toContain("section Notifications");
+    expect(criteria.c2).toContain("section Billing");
+    expect(wire).not.toContain(ranked[1]!.node_id);
+    const probabilities = Object.fromEntries(Object.keys(criteria).map(id => [id, id === "c1" || id === "c2" ? 0.5 : 0]));
+    return Response.json({ model: body.model, usage: { input_tokens: 100, output_tokens: 0 },
+      answers: { decision: { type: "choice", choice: "c2", confidence: 0.95, probabilities } } });
+  }) as typeof fetch;
+  const goal = { query: "Commit the billing preferences", units: ranked, maxResults: 20, pageFingerprint: query };
+  const local = async () => ({ results: ranked });
+  const result = await decisionSearch(goal, local);
+  expect(result?.decision).toMatchObject({ status: "selected", candidateId: ranked[1]!.node_id });
+  expect(result?.results[0]).toEqual(ranked[1]);
+  expect(result?.results.at(-1)).toEqual(ranked[19]);
+  expect(result?.returned).toBe(20);
+  expect((await decisionSearch(goal, local))?.decision).toMatchObject({ origin: "cache" });
+  expect(calls).toHaveLength(1);
 });
 test("confident text results are cached and never capture", async () => {
   network(0.95); await search(); await search();

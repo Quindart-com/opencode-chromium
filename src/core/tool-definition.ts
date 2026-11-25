@@ -8,6 +8,7 @@ export interface BrowserContext {
   sessionId?: string;
   sessionID?: string;
   session_id?: string;
+  profileId?: string;
   messageID?: string;
   messageId?: string;
   turnID?: string;

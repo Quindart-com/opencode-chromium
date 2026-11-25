@@ -1,4 +1,9 @@
 {
+  "anonymousDiagnostics": { "message": "Анонимная диагностика" },
+  "diagnosticsDescription": { "message": "Передавать результаты и ошибки инструментов через Google Analytics. Без содержимого страниц. Можно отключить в любое время." },
+  "diagnosticsLoadFail": { "message": "Подключите мост браузера заново, чтобы загрузить настройки диагностики." },
+  "diagnosticsSaveFail": { "message": "Не удалось сохранить настройки диагностики. Повторите попытку." },
+  "diagnosticsBrowserPermission": { "message": "Разрешите передачу технических данных в Firefox, чтобы включить диагностику." },
   "extensionName": {
     "message": "opencode-chromium"
   },

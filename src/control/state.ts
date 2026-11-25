@@ -23,7 +23,7 @@ function record(value: unknown): Record<string, unknown> { return typeof value =
 export function parseRuntimeActivation(value: unknown): RuntimeActivation {
   const data = record(value);
   if (typeof data.root !== "string" || !data.root) throw new TypeError("Runtime root is missing");
-  for (const key of ["sourceRoot", "linkedAt", "fingerprint"] as const) if (data[key] !== undefined && typeof data[key] !== "string") throw new TypeError(`Invalid runtime ${key}`);
+  for (const key of ["sourceRoot", "linkedAt", "fingerprint", "blockedAutomaticVersion"] as const) if (data[key] !== undefined && typeof data[key] !== "string") throw new TypeError(`Invalid runtime ${key}`);
   if (data.version !== undefined && data.version !== null && typeof data.version !== "string") throw new TypeError("Invalid runtime version");
   for (const key of ["followBranch", "pendingReload", "stateIsolation", "autoUpdate"] as const) if (data[key] !== undefined && typeof data[key] !== "boolean") throw new TypeError(`Invalid runtime ${key}`);
   if (data.channel !== undefined && data.channel !== "development" && data.channel !== "production") throw new TypeError("Invalid runtime channel");
@@ -40,23 +40,46 @@ export function parseRuntimeActivation(value: unknown): RuntimeActivation {
 
 // The same short lock protects startup leases and pointer changes. Downloads
 // never hold this lock, so starting an agent never waits for an installation.
-export async function withRuntimeLock<T>(dir: string, action: () => T | Promise<T>, name = "runtime-gate.lock"): Promise<T> {
+const RUNTIME_GATE = "runtime-gate.lock";
+const LOCK_RETRY_MAX_MS = 50;
+
+export async function withRuntimeLock<T>(dir: string, action: () => T | Promise<T>, name = RUNTIME_GATE): Promise<T> {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = path.join(dir, name), deadline = Date.now() + 5000;
+  const shortGate = name === RUNTIME_GATE;
+  let backoffMs = shortGate ? 4 : LOCK_RETRY_MAX_MS;
   let descriptor;
   for (;;) {
     try {
       descriptor = fs.openSync(file, "wx", 0o600);
-      fs.writeFileSync(descriptor, JSON.stringify({ pid: process.pid }));
       break;
     } catch (error) {
-      if (errorCode(error) !== "EEXIST") throw error;
-      try { if (!alive(record((JSON.parse(fs.readFileSync(file, "utf8")) as unknown)).pid)) { fs.unlinkSync(file); continue; } } catch { /* Another writer may be creating the lock. */ }
-      if (Date.now() >= deadline) throw new Error("Runtime update is busy; retry shortly", { cause: error });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      const code = errorCode(error);
+      // On Windows an exclusive open can race the previous owner's unlink.
+      const sharingConflict = process.platform === "win32" && (code === "EPERM" || code === "EBUSY" || code === "EACCES");
+      if (code !== "EEXIST" && !sharingConflict) throw error;
+      if (code === "EEXIST") {
+        try {
+          const owner = record(JSON.parse(fs.readFileSync(file, "utf8")) as unknown);
+          if (!alive(owner.pid)) { fs.unlinkSync(file); continue; }
+        } catch { /* The previous owner may still be creating or removing the lock. */ }
+      }
+      // A short, jittered retry avoids waking every waiting client on the
+      // same 50 ms tick when an ordinary admission releases the gate.
+      const retryMs = shortGate ? Math.ceil(backoffMs * (0.5 + Math.random() / 2)) : backoffMs;
+      const remaining = deadline - Date.now();
+      if (remaining > 0) await new Promise(resolve => setTimeout(resolve, Math.min(retryMs, remaining)));
+      if (Date.now() >= deadline) {
+        if (sharingConflict) throw error;
+        throw new Error("Runtime update is busy; retry shortly", { cause: error });
+      }
+      backoffMs = Math.min(backoffMs * 2, LOCK_RETRY_MAX_MS);
     }
   }
-  try { return await action(); }
+  try {
+    fs.writeFileSync(descriptor, JSON.stringify({ pid: process.pid }));
+    return await action();
+  }
   finally { fs.closeSync(descriptor); fs.unlinkSync(file); }
 }
 

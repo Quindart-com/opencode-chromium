@@ -4,18 +4,12 @@ import { formatRuntimeStatus } from "./status-format.ts";
 
 import path from "node:path";
 import process from "node:process";
-import { BrowserHostClient } from "../browser/client.ts";
-import { activateChannel,readActivation } from "../management/channels.ts";
-import { developmentExtensionSource,publishDevelopmentExtension } from "../management/development-extension.ts";
-import { formatSetupResult,manageSetup } from "../management/setup.ts";
+import { runtimeDirectory as runtimeDir } from "../control/state.ts";
 import { readProfileRegistrations } from "../shared/profile-registry.ts";
-import { packageRoot } from "./config.ts";
-import { installClient,SUPPORTED_CLIENTS,uninstallClient } from "./install.ts";
-import { runtimeDir } from "./native-host.ts";
-import { linkClientSurfaces,linkRuntime,runtimeStatus,syncRuntime,writeLaunchers } from "./runtime-link.ts";
 
 
 async function runtimeBusy() {
+  const { BrowserHostClient } = await import("../browser/client.ts");
   const profiles = [...readProfileRegistrations(), ...["development", "production"].flatMap(channel =>
     readProfileRegistrations(path.join(runtimeDir(), "state", channel, "profiles")))];
   for (const profile of profiles) {
@@ -42,6 +36,10 @@ function has(argv: string[], flag: string) {
 
 export async function dispatchCommand(argv = process.argv.slice(2)) {
   const [command = "doctor", ...rest] = argv;
+  if (command === "diagnostics" && rest[0] === "summary") {
+    const { summarizeLocalDiagnostics } = await import("../telemetry/local.ts");
+    console.log(JSON.stringify(await summarizeLocalDiagnostics(), null, 2)); return;
+  }
   if (command === "harness" && rest[0] === "reconnect") {
     const { reconnectHarness } = await import("../management/harness-reconnect.ts");
     console.log(JSON.stringify(await reconnectHarness(rest[1], runtimeDir()), null, 2)); return;
@@ -52,31 +50,52 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
   }
   if (command === "dev-extension") {
     if (has(rest, "--help")) { console.log("Build and refresh the stable unpacked extension without changing the production runtime:\n  opencode-chromium dev-extension --source <checkout> [--output <existing-extension-directory>] [--dry-run]\nReload the unpacked extension at the returned extensionPath after the build."); return; }
+    const { publishDevelopmentExtension } = await import("../management/development-extension.ts");
     console.log(JSON.stringify(await publishDevelopmentExtension({ root: valueAfter(rest, "--source") ?? process.cwd(), dir: runtimeDir(), output: valueAfter(rest, "--output"), dryRun: has(rest, "--dry-run") }), null, 2));
     return;
   }
-  if (command === "sync" && !readActivation(runtimeDir())?.followBranch) {
-    const source = developmentExtensionSource(runtimeDir());
-    if (source && path.resolve(source) === path.resolve(packageRoot())) {
-      const result = await publishDevelopmentExtension({ root: source, dir: runtimeDir(), dryRun: has(rest, "--dry-run") });
+  if (command === "link" || command === "sync") {
+    const dir = runtimeDir();
+    const { activateChannel, readActivation } = await import("../management/channels.ts");
+    const { packageRoot } = await import("./config.ts");
+    const activation = readActivation(dir);
+    if (command === "sync" && !activation?.followBranch) {
+      const { developmentExtensionSource,publishDevelopmentExtension } = await import("../management/development-extension.ts");
+      const source = developmentExtensionSource(dir);
+      if (source && path.resolve(source) === path.resolve(packageRoot())) {
+        const result = await publishDevelopmentExtension({ root: source, dir, dryRun: has(rest, "--dry-run") });
+        if (!has(rest, "--quiet")) console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+    }
+    const { linkClientSurfaces,linkRuntime,syncRuntime,writeLaunchers } = await import("./runtime-link.ts");
+    if (command === "link" && has(rest, "--follow-branch") || command === "sync" && activation?.followBranch) {
+      const root = packageRoot();
+      if (command === "sync" && has(rest, "--if-linked") && activation?.sourceRoot !== root) return;
+      const result = await activateChannel({ root, dir, dryRun: has(rest, "--dry-run"), isBusy: runtimeBusy });
+      if (result.activated) writeLaunchers(root, dir);
       if (!has(rest, "--quiet")) console.log(JSON.stringify(result, null, 2));
       return;
     }
+    if (command === "link") {
+      const dryRun = has(rest, "--dry-run");
+      const result = linkRuntime({ dryRun });
+      const clients = dryRun ? { results: [] } : linkClientSurfaces({ dir: result.dir });
+      // Config bodies are large; report what changed, not the file contents.
+      const changedClients = clients.results.map(value => { const { before: _before, after: _after, ...entry } = record(value); return entry; });
+      console.log(JSON.stringify({ ok: true, ...result, clients: changedClients }, null, 2));
+    } else {
+      const quiet = has(rest, "--quiet");
+      const result = syncRuntime({ quiet, ifLinked: has(rest, "--if-linked") });
+      if (!quiet) console.log(JSON.stringify({ ok: true, ...result }, null, 2));
+    }
+    return;
   }
   if (command === "updates") {
     const { createRuntimeUpdater } = await import("../control/update.ts");
     const updater = createRuntimeUpdater({ dir: runtimeDir() });
     if (![undefined, "status", "on", "off"].includes(rest[0])) throw new Error("Use updates status, updates on, or updates off");
     console.log(JSON.stringify(rest[0] !== undefined && ["on", "off"].includes(rest[0]) ? await updater.configure(rest[0] === "on") : updater.status(), null, 2));
-    return;
-  }
-  const activation = ["link", "sync"].includes(command) ? readActivation(runtimeDir()) : null;
-  if (command === "link" && has(rest, "--follow-branch") || command === "sync" && activation?.followBranch) {
-    const root = packageRoot();
-    if (command === "sync" && has(rest, "--if-linked") && activation?.sourceRoot !== root) return;
-    const result = await activateChannel({ root, dir: runtimeDir(), dryRun: has(rest, "--dry-run"), isBusy: runtimeBusy });
-    if (result.activated) writeLaunchers(root, runtimeDir());
-    if (!has(rest, "--quiet")) console.log(JSON.stringify(result, null, 2));
     return;
   }
   if (command === "providers") {
@@ -91,6 +110,7 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
       console.log("Connect your browser to agent apps:\n  opencode-chromium setup --all\n  opencode-chromium setup --targets codex,opencode\n  opencode-chromium setup --all --dry-run --json\n\nOptions:\n  --all           Connect all detected, supported apps\n  --targets       Choose apps: codex,opencode,claude-code,claude-desktop,dsh\n  --config        Override a file: harness-id=/absolute/path\n  --dry-run       Preview changes without writing files\n  --json          Print a machine-readable result\n  --production    Switch from a linked development runtime to this release\n  --restart       Gracefully restart selected desktop apps\n  --no-auto-update  Disable managed runtime updates\n  --auto-update     Enable managed runtime updates\n\nUpdate controls: opencode-chromium updates <status|on|off>");
       return;
     }
+    const { formatSetupResult,manageSetup } = await import("../management/setup.ts");
     const result = await manageSetup(rest, command === "uninstall");
     console.log(has(rest, "--json") ? JSON.stringify(result, null, 2) : formatSetupResult(result));
     return;
@@ -114,30 +134,17 @@ export async function dispatchCommand(argv = process.argv.slice(2)) {
     console.log(JSON.stringify(await (await import("./verify.ts")).verify(), null, 2));
     return;
   }
-  if (command === "link") {
-    const dryRun = has(rest, "--dry-run");
-    const result = linkRuntime({ dryRun });
-    const clients = dryRun ? { results: [] } : linkClientSurfaces({ dir: result.dir });
-    // Config bodies are large; report what changed, not the file contents.
-    const changedClients = clients.results.map(value => { const { before: _before, after: _after, ...entry } = record(value); return entry; });
-    console.log(JSON.stringify({ ok: true, ...result, clients: changedClients }, null, 2));
-    return;
-  }
   if (command === "status") {
+    const { runtimeStatus } = await import("./runtime-link.ts");
     const status = runtimeStatus();
     if (has(rest, "--json")) console.log(JSON.stringify(status, null, 2));
     else console.log(formatRuntimeStatus(status));
     return;
   }
-  if (command === "sync") {
-    const quiet = has(rest, "--quiet");
-    const result = syncRuntime({ quiet, ifLinked: has(rest, "--if-linked") });
-    if (!quiet) console.log(JSON.stringify({ ok: true, ...result }, null, 2));
-    return;
-  }
   if (["install", "configure", "uninstall"].includes(command)) {
     const client = valueAfter(rest, "--client");
     if (!client) throw new Error(`${command} requires --client opencode|opencode-mcp|codex|skills`);
+    const { installClient,SUPPORTED_CLIENTS,uninstallClient } = await import("./install.ts");
     if (!SUPPORTED_CLIENTS.includes(client)) throw new Error("Unsupported client");
     const options: ClientInstallOptions = { client: client as ClientInstallOptions["client"], config: valueAfter(rest, "--config"), dryRun: has(rest, "--dry-run"), serverPath: valueAfter(rest, "--server") };
     const result = command === "install" || command === "configure" ? installClient(options) : uninstallClient(options);

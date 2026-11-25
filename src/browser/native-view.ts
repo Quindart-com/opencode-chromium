@@ -44,7 +44,7 @@ export function layoutScale(document: { contentWidth?: number; contentHeight?: n
   const ratio = ratios[0] ?? 1;
   return Math.abs(ratio - 1) < 0.02 || ratio < 0.25 || ratio > 8 ? 1 : ratio;
 }
-export interface ViewOptions { scope?: "viewport" | "page"; query?: string; maxChars?: number }
+export interface ViewOptions { scope?: "viewport" | "page" | "target"; query?: string; maxChars?: number }
 export interface ViewItem { key: string; line: string; ref?: number; y: number; text?: string }
 export interface NativeView { url: string; title: string; header: string; items: ViewItem[]; omitted: number; matched?: number }
 
@@ -61,6 +61,8 @@ const AT = / @-?\d+,-?\d+$/;
 const clean = (value: string) => value.replace(/\s+/g, " ").trim();
 const clip = (value: string, max: number) => value.length > max ? value.slice(0, max - 1) + "…" : value;
 const WIDE = /[\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF\u3000-\u303F]/;
+// Punctuation that hugs its neighbour: "<b>board</b>." reads "board." rather than "board .".
+const CLOSES = /^[.,;:!?%)\]}\u00BB\u201D\u2019]/, OPENS = /[([{\u00AB\u201C\u2018]$/;
 
 // Reads a block's text in on-screen order. Some sites shuffle text nodes in the DOM and
 // position them with CSS so DOM order is unreadable; line, then x, restores reading order.
@@ -74,7 +76,7 @@ function joinPieces(pieces: { text: string; box: { x: number; y: number; h: numb
       }).map(entry => entry.piece)
     : pieces;
   let text = "";
-  for (const { text: next } of ordered) text += !text || WIDE.test(text.at(-1)!) && WIDE.test(next[0]!) ? next : " " + next;
+  for (const { text: next } of ordered) text += !text || WIDE.test(text.at(-1)!) && WIDE.test(next[0]!) || CLOSES.test(next) || OPENS.test(text) ? next : " " + next;
   return clean(text);
 }
 
@@ -232,13 +234,32 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
   }
 
   const scrollX = (doc.scrollOffsetX ?? viewport.x * scale) / scale, scrollY = (doc.scrollOffsetY ?? viewport.y * scale) / scale;
-  // A lone ASCII letter ("K", "I") matches nearly every line, so it is not a useful term.
-  const terms = clean(options.query ?? "").toLowerCase().split(" ").filter(term => term && !/^[a-z0-9]$/.test(term));
+  // Keep a one-digit row identifier in a targeted phrase such as "Team 9".
+  const words = clean(options.query ?? "").toLowerCase().split(" ");
+  const targeted = options.scope === "target";
+  const terms = words.filter(term => term && (!/^[a-z0-9]$/.test(term) || targeted && words.length > 1 && /^\d$/.test(term)));
   const inView = (box: Draft["box"]) => !!box && box.w > 0 && box.h > 0 && box.y < scrollY + viewport.height && box.y + box.h > scrollY && box.x < scrollX + viewport.width && box.x + box.w > scrollX;
   const items: ViewItem[] = [];
+  const hits: ViewItem[] = [], completeVisible: ViewItem[] = [], completeOffscreen: ViewItem[] = [];
+  const targetScope = targeted && terms.length > 0;
+  const addItem = (item: ViewItem, visible: boolean, text: string) => {
+    if (visible) items.push(item);
+    if (!terms.length) return;
+    const normalized = text.toLowerCase();
+    const numbers: string[] = targetScope ? normalized.match(/\d+/g) ?? [] : [];
+    // Numeric target terms match the label or row identifier, without relying on coordinates.
+    const matches = terms.filter(term => targetScope && /^\d+$/.test(term)
+      ? numbers.includes(term) : normalized.includes(term)).length;
+    if (visible && matches) hits.push(item);
+    if (targetScope && matches === terms.length) {
+      if (visible) completeVisible.push(item);
+      else completeOffscreen.push(item);
+    }
+  };
   for (const draft of order) {
     if (!draft.box || draft.box.w <= 0 || draft.box.h <= 0) continue;
-    if (options.scope !== "page" && !inView(draft.box)) continue;
+    const visible = options.scope === "page" || inView(draft.box);
+    if (!visible && !targetScope) continue;
     const ref = nodes.backendNodeId?.[draft.owner];
     const text = joinPieces(draft.texts);
     if (draft.kind && draft.kind !== "clickable" || (draft.kind === "clickable" && text.length <= CONTROL_LABEL)) {
@@ -254,21 +275,21 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
       if (checked.has(draft.owner) || selected.has(draft.owner)) extra += " checked";
       const x = Math.round(Math.min(draft.box.x + draft.box.w / 2, draft.box.x + 40) - scrollX), y = Math.round(draft.box.y + draft.box.h / 2 - scrollY);
       const line = `[${ref}] ${kind} ${JSON.stringify(label)}${extra} @${x},${y}`;
-      items.push({ key: `#${ref}`, line, ...(ref !== undefined ? { ref } : {}), y: draft.box.y });
+      addItem({ key: `#${ref}`, line: visible ? line : line.replace(AT, "") + " (outside viewport)",
+        ...(ref !== undefined ? { ref } : {}), y: draft.box.y }, visible, targetScope ? kind + " " + label + extra : line);
     } else if (text) {
       // A targeted (query) read also gives text its point, so a clickable block without a
       // detectable listener can still be clicked; plain reads stay as short as possible.
       const at = terms.length ? ` @${Math.round(Math.min(draft.box.x + draft.box.w / 2, draft.box.x + 40) - scrollX)},${Math.round(draft.box.y + Math.min(draft.box.h, 40) / 2 - scrollY)}` : "";
-      items.push({ key: `t:${text.slice(0, 120)}`, line: clip(text, TEXT_LABEL) + at, y: draft.box.y, text });
+      addItem({ key: `t:${text.slice(0, 120)}`, line: clip(text, TEXT_LABEL) + (visible ? at : " (outside viewport)"), y: draft.box.y, text }, visible, text);
     }
   }
 
   let selectedItems = items, matched: number | undefined;
   if (terms.length) {
-    // Match the full text: a long block is clipped in its line, but its whole text is searchable.
-    const hits = items.filter(item => terms.some(term => (item.text ?? item.line).toLowerCase().includes(term)));
-    matched = hits.length;
-    if (hits.length) selectedItems = hits;
+    const matches = completeVisible.length ? completeVisible : completeOffscreen.length ? completeOffscreen : hits;
+    matched = matches.length;
+    if (matches.length) selectedItems = matches;
   }
   const budget = Math.max(400, options.maxChars ?? 3000);
   const kept: ViewItem[] = [];

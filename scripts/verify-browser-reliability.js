@@ -3,11 +3,34 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { chromiumExtensionFixture } from "./fixtures/chromium-extension.js";
+import { shapePageSearchRanking } from "../src/browser/operations/index.ts";
+import { createInspectionOperations } from "../src/browser/operations/operation-groups/inspection.ts";
+import { pageStateExpression } from "../src/browser/operations/page-state.ts";
+import { createOperationSessionRuntime } from "../src/browser/operations/session-runtime.ts";
 import { McpWorker } from "../src/control/mcp-worker.ts";
 import { harnessControls } from "../src/control/harness-control.ts";
 
 const server = http.createServer((req, res) => {
   res.setHeader("Content-Type", "text/html");
+  if (req.url === "/changing-form") {
+    res.end(`<!doctype html><title>Changing confirmation</title>
+      <form data-submissions="0"><button id="record-entry">Record entry</button></form>
+      <p id="confirmation" role="status">Pending</p>
+      <script>
+        const form = document.querySelector("form");
+        let revision = 0;
+        window.rerenderConfirmation = () => {
+          document.querySelector("#confirmation").outerHTML = '<p id="confirmation" role="status">Saved submissions: ' +
+            form.dataset.submissions + ', revision ' + ++revision + '</p>';
+        };
+        form.addEventListener("submit", event => {
+          event.preventDefault();
+          form.dataset.submissions = Number(form.dataset.submissions) + 1;
+          window.rerenderConfirmation();
+        });
+      </script>`);
+    return;
+  }
   if (req.url.startsWith("/frame")) {
     res.end(`<title>Embedded picker</title><style>body{margin:8px}button{height:40px}</style><button id="choose" onclick="document.querySelector('#status').textContent='Chosen'">Choose photo</button><input id="asset" type="file" onchange="this.files[0].text().then(text=>document.querySelector('#preview').textContent=text)"><button id="frame-prompt" onclick="prompt('Embedded fixture prompt')">Embedded prompt</button><p id="preview">No asset</p><p id="status">Ready</p>${req.url.includes("nested") ? "" : '<iframe src="/frame?nested" style="width:350px;height:180px"></iframe>'}`);
     return;
@@ -16,6 +39,7 @@ const server = http.createServer((req, res) => {
     <button id="alpha"><span>Alpha</span></button><button id="beta">Beta</button><p id="chosen">None</p>
     <a id="edit" href="#edit" onclick="document.querySelector('#chosen').textContent='Link activated'">Edit setting</a>
     <input id="readonly" readonly value="Read only"><select id="choice"><option>Blue</option></select><div id="editable" contenteditable>Editable text</div><div tabindex="0" id="custom">Custom focus</div>
+    <input id="display-name" aria-label="Display name" value="Original name"><input id="other-name" aria-label="Other name" value="Other name"><button id="save-name">Save display name</button>
     <div id="shadow"></div><button id="open" onclick="setTimeout(()=>editor.showModal(),350)">Open editor</button>
     <dialog id="editor"><h2>Edit setting</h2><button id="photo">Insert Photo</button><button onclick="editor.close()">Done</button></dialog>
     <button id="prompt" onclick="window.prompt('Fixture image URL')">Prompt fixture</button>
@@ -27,6 +51,7 @@ let fixture, agent, mcp;
 const checks = [];
 const checked = name => { checks.push(name); console.log("Verified:", name); };
 try {
+  process.env.OPENCODE_BROWSER_MEMORY_EMBED = "0";
   fixture = await chromiumExtensionFixture();
   const { createBrowserAgent } = await import("../src/adapters/sdk/index.ts");
   agent = createBrowserAgent();
@@ -41,6 +66,79 @@ try {
   const mainTab = await call("browser_session", { action: "new-tab" });
   const mainTabId = mainTab.activeTabId;
   const origin = `http://127.0.0.1:${server.address().port}`;
+  await run([{ action: "navigate", url: origin + "/changing-form" }]);
+  const changingPage = fixture.context.pages().find(page => page.url() === origin + "/changing-form");
+  assert.ok(changingPage);
+  const tools = await agent.runtime.legacyToolsPromise;
+  const original = {
+    browser_locator_click: tools.browser_locator_click,
+    browser_locator_text: tools.browser_locator_text,
+    browser_page_search: tools.browser_page_search,
+  };
+  const searchRuntime = createOperationSessionRuntime();
+  const pageState = pageStateExpression();
+  let freshnessChecks = 0;
+  const { browser_page_search: searchWithRerender } = createInspectionOperations({
+    ...searchRuntime,
+    shapePageSearchRanking,
+    async runtimeEvaluate(context, tabId, expression, options) {
+      // Invalidate the two captures in the first search after ranking, before
+      // its freshness check. The next search can return the stable document.
+      if (expression === pageState && ++freshnessChecks <= 2) {
+        await changingPage.evaluate(() => window.rerenderConfirmation());
+      }
+      return searchRuntime.runtimeEvaluate(context, tabId, expression, options);
+    },
+  });
+  const durations = { action: [], settle: [], postObserve: [] };
+  const timed = (operation, phase) => ({
+    ...operation,
+    async execute(args, context) {
+      const start = performance.now();
+      try { return await operation.execute(args, context); }
+      finally { durations[phase].push(Math.round(performance.now() - start)); }
+    },
+  });
+  tools.browser_locator_click = timed(original.browser_locator_click, "action");
+  tools.browser_locator_text = timed(original.browser_locator_text, "settle");
+  tools.browser_page_search = timed(searchWithRerender, "postObserve");
+  const entrySteps = [{ action: "click", target: { selector: "#record-entry" },
+    settle: { condition: "contains", target: { selector: "#confirmation" }, value: "Saved" } }];
+  const submissions = () => changingPage.locator("form").getAttribute("data-submissions");
+  const verifyConfirmation = async (memoryMode, status) => {
+    freshnessChecks = 0;
+    for (const phase of Object.values(durations)) phase.length = 0;
+    const result = await raw("browser_run", { memoryMode, steps: entrySteps,
+      postObserve: { mode: "search", searchStrategy: "lexical", query: "Saved submissions", limit: 1 },
+    });
+    assert.equal(await submissions(), "1");
+    console.log(`Changing-form ${memoryMode} operation durations (ms)`, durations);
+    assert.equal(result.status, status, JSON.stringify(result));
+    assert.equal(result.results[0].ok, true);
+    if (status === "memory_replay") assert.deepEqual(result.memory, { used: true, stepsReused: 1, fallback: false });
+    else assert.equal(result.results[0].result.clicked, true);
+    assert.equal(result.results[0].settle.settled, true);
+    assert.equal(result.observation.results[0].label, "Saved submissions: 1, revision 3");
+    assert.equal(durations.postObserve.length, 2);
+    assert.equal(freshnessChecks, 3);
+  };
+  try {
+    await verifyConfirmation("off", "completed");
+    const session = agent.runtime.getSession(sessionId);
+    assert.equal((await agent.runtime.requestHost("memory.enable", {}, session)).enabled, true);
+    try {
+      await run([{ action: "reload" }]);
+      assert.equal((await run(entrySteps, { memoryMode: "auto" })).status, "completed");
+      assert.equal(await submissions(), "1");
+      await run([{ action: "reload" }]);
+      await verifyConfirmation("auto", "memory_replay");
+    } finally {
+      await agent.runtime.requestHost("memory.disable", {}, session);
+    }
+  } finally {
+    Object.assign(tools, original);
+  }
+  checked("stale post-action ranking recovers a fresh confirmation with one form submission in both memory modes");
   await run([{ action: "navigate", url: origin }]);
   const page = fixture.context.pages().find(page => page.url().startsWith(origin));
   assert.ok(page);
@@ -90,6 +188,37 @@ try {
   await run([{ action: "click", target: shadowPoint }]);
   assert.equal(await page.locator("#chosen").innerText(), "Shadow");
   checked("self/descendant hits, lookalike overlay diagnostics, and shadow-root hit testing");
+
+  const { view } = (await call("browser_observe", { mode: "read", detail: "full", query: "display name" })).result;
+  const nameField = view.match(/^\[(\d+)\] field "Display name" /m);
+  const saveName = view.match(/^\[(\d+)\] button "Save display name" /m);
+  assert.ok(nameField && saveName, view);
+  await page.evaluate(() => {
+    const name = document.querySelector("#display-name");
+    const other = document.querySelector("#other-name");
+    window.preferenceJournal = [];
+    for (const field of [name, other]) {
+      field.addEventListener("input", () => window.preferenceJournal.push(["draft", field.id, field.value]));
+    }
+    document.querySelector("#save-name").addEventListener("click", () => window.preferenceJournal.push(["save", name.value]));
+    other.focus();
+  });
+  const displayName = "Équipe Rivière";
+  const fillName = { action: "fill", target: { ref: Number(nameField[1]) }, value: displayName };
+  const renamed = await run([
+    fillName,
+    { action: "click", target: { ref: Number(saveName[1]) } },
+  ], { inputMode: "dom" });
+  assert.equal(renamed.results[0].result.inputRoute, "dom");
+  const expectedJournal = [["draft", "display-name", displayName], ["save", displayName]];
+  assert.deepEqual(await page.evaluate(() => window.preferenceJournal), expectedJournal);
+  await page.locator("#display-name").evaluate(field => {
+    field.addEventListener("click", () => document.querySelector("#other-name").focus(), { once: true });
+  });
+  const redirected = await raw("browser_run", { memoryMode: "off", inputMode: "dom", steps: [{ ...fillName, value: "Second name" }] });
+  assert.equal(redirected.results[0].error?.code, "TARGET_NOT_FOCUSABLE", JSON.stringify(redirected));
+  assert.deepEqual(await page.evaluate(() => window.preferenceJournal), expectedJournal);
+  checked("background fill by read ref commits the intended value and stops on redirected focus");
 
   for (const selector of ["#edit", "#readonly", "#choice", "#editable", "#custom", "#beta"]) {
     await run([{ action: "focus", target: { selector } }]);

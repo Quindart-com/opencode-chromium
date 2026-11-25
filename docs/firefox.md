@@ -19,6 +19,8 @@ The remote port is a local automation boundary. Other local programs can connect
 
 Core browsing uses WebDriver BiDi for trusted pointer/keyboard input, evaluation, navigation, screenshots, dialogs, and approved file inputs. Extension session ownership still controls admission and finalization. Native groups are used where supported; ownership bookkeeping applies otherwise. Raw CDP, Chromium traces, and capabilities the Firefox backend does not implement return an explicit unsupported result. PNG and JPEG screenshots are supported; WebP is unavailable on Firefox.
 
+The `read` observation and `target { ref }` actions work on Firefox. Firefox has no DOM snapshot domain, so the view is built by a function running in an isolated WebDriver BiDi sandbox. Page script cannot see or change that sandbox, and it adds nothing to the page's globals. Unlike Chromium, click-listener detection is approximated from pointer cursors and inline handlers. A very large page is trimmed to stay within the 1 MB browser message limit: the visible area and its surroundings are always kept, then the rest of the page in document order. Any other result over that limit returns a `RESULT_TOO_LARGE` error instead of dropping the browser connection.
+
 Windows, macOS, and Linux discovery includes Firefox and LibreWolf. Firefox 140+ is required. LibreWolf privacy settings may disable its Remote Agent; the health check reports this rather than silently changing preferences. No Android setup is provided. See release verification notes for the browsers and flows actually exercised.
 
 Download observations are limited to the current session's controlled tabs. The

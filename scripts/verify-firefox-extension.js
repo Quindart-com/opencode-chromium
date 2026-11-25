@@ -42,7 +42,19 @@ fs.writeFileSync(launcher, process.platform === 'win32' ? '@echo off\r\n' + vari
 const manifest = path.join(fixture, 'native.json');
 fs.writeFileSync(manifest, JSON.stringify({ name: host, description: 'Disposable extension verification host', path: launcher, type: 'stdio', allowed_extensions: ['opencode-browser-plugin@quindart.com'] }));
 let nativeKey, nativeFile, child, agent, profileId;
+const denseRows = Array.from({ length: 500 }, (_, index) =>
+  '<p>Item ' + index + ': ' + '配送 — réception — 🧪 '.repeat(14) + '</p>').join('');
+const oversizedValue = '配送🧪'.repeat(150_000);
 const server = http.createServer((req, res) => {
+  if (req.url === '/read-fixture') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end('<title>Deep read fixture</title>' + denseRows + '<section id="deep">' +
+      '<button id="read-action">Confirm delivery</button><p id="read-result">Awaiting confirmation</p>' +
+      '<textarea aria-label="Delivery notes">' + oversizedValue + '</textarea></section>' + denseRows +
+      '<script>document.getElementById("read-action").onclick = event => {' +
+      'document.getElementById("read-result").textContent = event.isTrusted ? "Delivery confirmed" : "Synthetic confirmation";};</script>');
+    return;
+  }
   if (req.url === '/frame') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Frame fixture</p><button id="frame-choice" onclick="document.querySelector(\'#frame-result\').textContent=event.isTrusted?\'Trusted frame\':\'Synthetic frame\'">Frame choose</button><input id="frame-name"><button id="frame-prompt" onclick="prompt(123)">Frame prompt</button><p id="frame-result">Ready</p><iframe src="/leaf"></iframe>'); return; }
   if (req.url === '/leaf') { res.setHeader('Content-Type', 'text/html'); res.end('<p>Nested frame fixture</p>'); return; }
   if (req.url === '/download') { res.setHeader('Content-Type', 'text/plain'); res.setHeader('Content-Disposition', 'attachment; filename="fixture.txt"'); res.end('owned fixture'); return; }
@@ -78,6 +90,34 @@ try {
   const { createBrowserAgent } = await import('../src/adapters/sdk/index.ts'); agent = createBrowserAgent();
   const sessionId = 'firefox-extension-verification';
   async function call(name, args) { const result = await agent.call(name, { profile: profileId, sessionId, ...args }); if (!result.ok) throw Error(name + ': ' + JSON.stringify(result)); return result; }
+  async function verifyClaims() {
+    const { activeTabId: tabId } = await call('browser_session', { action: 'new-tab' });
+    await call('browser_run', { tabId, memoryMode: 'off', steps: [{ action: 'navigate', url: origin }] });
+    const neighborSession = 'firefox-claim-neighbor';
+    const neighbor = await call('browser_session', { action: 'new-tab', sessionId: neighborSession });
+    await call('browser_run', { sessionId: neighborSession, tabId: neighbor.activeTabId, memoryMode: 'off', steps: [{ action: 'navigate', url: origin }] });
+    const borrower = 'firefox-tab-borrower';
+    const discover = async () => (await call('browser_session', { action: 'open', scope: 'user', sessionId: borrower })).result.tabs;
+    await call('browser_finalize', { keep: [{ tabId, status: 'handoff' }] });
+    assert.ok(!(await discover()).some(tab => tab.id === tabId));
+    await call('browser_finalize', {});
+    assert.ok((await discover()).some(tab => tab.id === tabId));
+    const request = await agent.call('browser_run', { profile: profileId, sessionId: borrower, tab: { mode: 'claim', tabId }, memoryMode: 'off', steps: [{ action: 'click', target: { selector: '#choose' } }] });
+    assert.equal(request.status, 'approval_required', JSON.stringify(request));
+    assert.equal(request.claimTarget.id, tabId);
+    assert.ok(!(await discover()).some(tab => tab.id === neighbor.activeTabId));
+    const approved = await agent.call('browser_run', { approvalToken: request.approvalToken });
+    assert.equal(approved.ok, true, JSON.stringify(approved));
+    const extraction = (sessionId, tabId) => call('browser_observe', { sessionId, tabId, mode: 'extract', target: { selector: '#result' } });
+    assert.equal((await extraction(borrower, tabId)).result.text, 'Trusted choice');
+    assert.equal((await extraction(neighborSession, neighbor.activeTabId)).result.text, 'Ready');
+    await call('browser_session', { action: 'release-tab', sessionId: borrower, tabId });
+    assert.ok((await discover()).some(tab => tab.id === tabId));
+    await call('browser_finalize', { sessionId: neighborSession });
+    report.checks.push('approved reclaim after handoff and finalization, isolated trusted click, and release');
+  }
+  if (process.argv.includes('--claims-only')) await verifyClaims();
+  else {
   const tab = await call('browser_session', { action: 'new-tab' }); const tabId = tab.activeTabId;
   await call('browser_run', { tabId, steps: [{ action: 'navigate', url: origin }, { action: 'click', target: { selector: '#choose' } }], postObserve: { mode: 'inspect', target: { selector: '#result' } } });
   const chosen = await call('browser_observe', { tabId, mode: 'inspect', target: { selector: '#result' } }); assert.match(JSON.stringify(chosen), /Trusted choice/); report.checks.push('navigation and trusted click through four tools');
@@ -148,6 +188,24 @@ try {
   const replayed = await call('browser_run', remembered);
   assert.equal(replayed.status, 'memory_replay'); report.checks.push('local action memory replay through runtime');
   await call('browser_session', { action: 'configure', tabId, environment: { viewport: { width: 800, height: 600 } } }); await call('browser_session', { action: 'configure', tabId, environment: { reset: true } }); report.checks.push('viewport configuration and reset');
+  await call('browser_run', {
+    tabId, memoryMode: 'off', steps: [{ action: 'navigate', url: origin + '/read-fixture#deep' }],
+  });
+  const read = await call('browser_observe', { tabId, mode: 'read', detail: 'full' });
+  const view = read.result.view;
+  assert.match(view, /Awaiting confirmation/);
+  const ref = view.match(/\[(\d+)\] button "Confirm delivery"/);
+  assert.ok(ref, view);
+  const confirmed = await call('browser_run', {
+    tabId, memoryMode: 'off', steps: [{ action: 'click', target: { ref: Number(ref[1]) } }],
+    postObserve: { mode: 'read' },
+  });
+  assert.match(confirmed.observation.view, /Delivery confirmed/);
+  const unchanged = await call('browser_observe', { tabId, mode: 'read' });
+  assert.match(unchanged.result.view, /no visible change/i);
+  const inspected = await call('browser_observe', { tabId, mode: 'inspect', target: { selector: '#read-result' } });
+  assert.match(JSON.stringify(inspected.result), /Delivery confirmed/);
+  report.checks.push('deep viewport read and trusted ref click with oversized multilingual form text, followed by delta and inspection');
   const second = await call('browser_session', { action: 'new-tab', sessionId: 'firefox-second-session' });
   await call('browser_run', { sessionId: 'firefox-second-session', tabId: second.activeTabId, steps: [{ action: 'navigate', url: origin }] });
   const secondDownloads = await call('browser_observe', { sessionId: 'firefox-second-session', tabId: second.activeTabId, mode: 'downloads' });
@@ -156,6 +214,7 @@ try {
   await call('browser_observe', { sessionId: 'firefox-second-session', tabId: second.activeTabId, mode: 'inspect', target: { selector: '#choose' } });
   report.checks.push('another concurrent session survives finalization');
   await call('browser_finalize', { sessionId: 'firefox-second-session' });
+  }
   if (process.argv.includes('--visual')) {
     const visual = new FirefoxBackend({ endpoint: 'ws://127.0.0.1:' + port + '/session' });
     await visual.connect();
@@ -174,7 +233,10 @@ try {
       await new Promise(resolve => setTimeout(resolve, 120000));
     } finally { await visual.close(); }
   }
-  fs.mkdirSync(path.join(root, 'reports'), { recursive: true }); fs.writeFileSync(path.join(root, 'reports', browser + '-extension-parity.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
+  fs.mkdirSync(path.join(root, 'reports'), { recursive: true });
+  const suite = process.argv.includes('--claims-only') ? 'claims' : 'extension';
+  fs.writeFileSync(path.join(root, 'reports', `${browser}-${suite}-parity.json`), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
 } finally {
   agent?.close();
   if (child && child.exitCode === null) { if (process.platform === 'win32') { try { execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true }); } catch {} } else child.kill(); }

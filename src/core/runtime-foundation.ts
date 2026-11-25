@@ -12,8 +12,12 @@ import { assertNavigationAllowed,combineUrlPolicyConfig,createUrlPolicy,urlPolic
 import { authorizationQuestion } from "../shared/authorization.ts";
 import { recipeSchema,type RecipeStep } from "../shared/memory-recipe.ts";
 import { record } from "../shared/values.ts";
+import type { TelemetrySample } from "../shared/telemetry-schema.ts";
+import { recordLocalDiagnostics } from "../telemetry/local.ts";
+import { measureTelemetryStage,noteTelemetryApproval,noteTelemetryRetry,type CallMeasurement } from "./telemetry.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { createCapabilityRegistry } from "./capabilities.ts";
+import { publicClaimTarget,type TabClaimApproval } from "./claim-approval.ts";
 import { BrowserRuntimeError,errorMessage } from "./errors.ts";
 import { errorDetails } from "./failure-context.ts";
 import { createLogger } from "./logging.ts";
@@ -74,11 +78,11 @@ export function cloneRequest(value: RunInput): RunInput {
 
 export function contextSessionId(args: { sessionId?: string | null }, context: BrowserContext) {
   return args.sessionId
-    ?? context?.sessionId
-    ?? context?.sessionID
-    ?? context?.session_id
+    ?? callerSessionId(context)
     ?? `browser-${randomUUID()}`;
 }
+
+export const callerSessionId = (context: BrowserContext) => context.sessionId ?? context.sessionID ?? context.session_id;
 
 export function resultCandidates(value: unknown): z.infer<typeof candidateSchema>[] {
   if (!value || typeof value !== "object") return [];
@@ -86,6 +90,17 @@ export function resultCandidates(value: unknown): z.infer<typeof candidateSchema
     if (Array.isArray(record(value)[key])) return (record(value)[key] as unknown[]).flatMap(value => { const parsed = candidateSchema.safeParse(value); return parsed.success ? [parsed.data] : []; });
   }
   return [];
+}
+
+function selectedCandidate(candidates: ReturnType<typeof resultCandidates>, index: number | undefined, mutating: boolean) {
+  const candidate = candidates[index ?? 0];
+  const other = candidates[1];
+  if (mutating && index === undefined && typeof candidate?.score === "number" && typeof other?.score === "number" &&
+      Math.abs(candidate.score - other.score) <= 0.015) {
+    throw Object.assign(new BrowserRuntimeError("Two targets match nearly equally. Read their context and choose an explicit reference.", { code: "AMBIGUOUS_TARGET" }),
+      { executionState: "not_started" });
+  }
+  return candidate;
 }
 
 export function usesLongSearchTimeout(strategy: string) {
@@ -129,6 +144,7 @@ export function publicProfiles(profiles: BrowserProfile[]) {
 
 export class RuntimeFoundation {
   readonly operationScope = new AsyncLocalStorage<{ frameId?: string; deadlineAt?: number; inputMode?: "auto" | "pointer" | "dom" }>();
+  readonly claimScope = new AsyncLocalStorage<{ sessionId: string; profileId: string }>();
   readonly artifacts: ArtifactStore;
   readonly ladybird = new LadybirdBackend();
   readonly approvalTtlMs: number;
@@ -169,13 +185,36 @@ export class RuntimeFoundation {
   }
 
   async requestHost(method: string, params: Record<string, unknown> = {}, session: RuntimeSession | null = null) {
-    return this.hostRequest(method, params, session?.profileId ? { profileId: session.profileId } : {});
+    const claim = this.claimScope.getStore();
+    const profileId = claim && claim.sessionId === session?.sessionId ? claim.profileId : session?.profileId;
+    return this.hostRequest(method, params, profileId ? { profileId } : {});
+  }
+
+  telemetryProfile(input: unknown, context: unknown) {
+    return this.sessions.get(contextSessionId(record(input), record(context)))?.profileId ?? null;
+  }
+
+  telemetry(sample: TelemetrySample, result: unknown, input: unknown, context: unknown, previousProfileId?: string | null, measurement?: CallMeasurement) {
+    const value = record(result), args = record(input), ctx = record(context);
+    const sessionId = value.sessionId ?? args.sessionId ?? ctx.sessionId ?? ctx.sessionID;
+    const session = typeof sessionId === "string" ? this.sessions.get(sessionId) : null;
+    const profileId = typeof value.profileId === "string" ? value.profileId : session?.profileId ?? previousProfileId;
+    if (measurement && this.hostRequest === browserRequest) {
+      const profile = this.profileCache.profiles.find(candidate => candidate.profileId === profileId);
+      recordLocalDiagnostics(sample, measurement, input, result, profile);
+    }
+    // Never guess a different profile for diagnostics when a tool could not select one.
+    if (!profileId) return;
+    const report = this.hostRequest === browserRequest
+      ? browserRequest("telemetry.record", sample, { profileId, timeoutMs: 500, recover: false })
+      : this.hostRequest("telemetry.record", sample, { profileId });
+    void report.catch(() => {});
   }
 
   getSession(sessionId: string): RuntimeSession {
     let session = this.sessions.get(sessionId);
     if (!session) {
-      session = { sessionId, profileId: null, activeTabId: null, configuredTabs: new Map(), createdAt: new Date().toISOString(), guardedHosts: new Set() };
+      session = { sessionId, profileId: null, profileIds: new Set(), activeTabId: null, configuredTabs: new Map(), createdAt: new Date().toISOString(), guardedHosts: new Set() };
       this.sessions.set(sessionId, session);
     }
     return session;
@@ -188,7 +227,9 @@ export class RuntimeFoundation {
     const parsed = z.object(definition.args).parse(args ?? {});
     const owner = this.sessions.get(sessionId);
     const scope = this.operationScope.getStore();
+    const claim = this.claimScope.getStore();
     const context = { ...scope, sessionID: sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy,
+      ...(claim?.sessionId === sessionId ? { profileId: claim.profileId } : {}),
       ...(scope?.inputMode ?? owner?.inputMode ? { inputMode: scope?.inputMode ?? owner?.inputMode } : {}),
       ...(owner?.cursor === false ? { cursor: false } : {}),
       ...(owner?.guardedHosts.size ? { guardedHosts: owner.guardedHosts } : {}),
@@ -214,7 +255,7 @@ export class RuntimeFoundation {
       } catch (error) {
         lastError = error;
         if (record(error).retryable === false) throw error;
-        if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 40));
+        if (attempt + 1 < attempts) { noteTelemetryRetry(); await new Promise((resolve) => setTimeout(resolve, 40)); }
       }
     }
     throw lastError;
@@ -274,6 +315,10 @@ export class RuntimeFoundation {
   }
 
   async selectProfile(session: RuntimeSession, requested: string | null | undefined) {
+    return measureTelemetryStage("profile", () => this.resolveProfile(session, requested));
+  }
+
+  private async resolveProfile(session: RuntimeSession, requested: string | null | undefined) {
     const profiles = await this.connectedProfiles();
     if (profiles.length === 0) {
       const error = new BrowserRuntimeError("No browser profiles are available. Connect a browser extension or configure Ladybird WebDriver and retry.", { code: "NO_BROWSER_PROFILE" });
@@ -303,23 +348,27 @@ export class RuntimeFoundation {
       session.activeTabId = null;
       this.searchPrefsCache.clear();
     }
+    session.profileIds?.add(profile.profileId);
     return profile;
+  }
+
+  async selectExplicitTab(session: RuntimeSession, tabId: number) {
+    if (session.activeTabId !== tabId) {
+      const controlled = await this.invoke("browser_get_tab", { tabId }, session.sessionId);
+      if (controlled.id !== tabId) throw new BrowserRuntimeError("The selected tab is outside this session.", { code: "TAB_NOT_CONTROLLED" });
+      session.activeTabId = tabId;
+    }
+    return tabId;
   }
 
   async ensureTab(session: RuntimeSession, tab: NonNullable<RunInput["tab"]> = {}) {
     const mode = tab.mode ?? "current";
-    if (mode === "claim") {
-      if (!tab.tabId) throw new Error("tab.mode=claim requires tab.tabId");
-      const claimed = await this.invoke("browser_claim_tab", { tabId: tab.tabId }, session.sessionId);
-      session.activeTabId = claimed.id ?? claimed.tabId ?? tab.tabId;
-      return session.activeTabId;
-    }
     if (mode === "new") {
       const created = await this.invoke("browser_new_tab", {}, session.sessionId);
       session.activeTabId = created.id ?? created.tabId;
       return session.activeTabId;
     }
-    if (tab.tabId) session.activeTabId = tab.tabId;
+    if (tab.tabId) return this.selectExplicitTab(session, tab.tabId);
     if (!session.activeTabId) {
       const selected = await this.invoke("browser_selected_tab", {}, session.sessionId);
       session.activeTabId = selected?.id ?? selected?.tabId ?? null;
@@ -335,24 +384,30 @@ export class RuntimeFoundation {
     for (const [token, approval] of this.approvals) if (approval.expiresAt <= now) this.approvals.delete(token);
   }
 
-  takeApproval(token: string) {
+  takeApproval(token: string, requestedSessionId?: string | null, caller?: string) {
     const now = Date.now();
     this.pruneApprovals(now);
     const approval = this.approvals.get(token);
     if (!approval) {
+      noteTelemetryApproval("invalid_or_expired");
       const error = new BrowserRuntimeError("Approval token is invalid or expired. Submit the action chain again for review.", { code: "APPROVAL_TOKEN_INVALID" });
       throw error;
     }
+    if (approval.claim && ((requestedSessionId && requestedSessionId !== approval.sessionId) || (approval.callerSessionId && approval.callerSessionId !== caller))) {
+      throw new BrowserRuntimeError("This approval belongs to another browser session or client session.", { code: "APPROVAL_SESSION_MISMATCH" });
+    }
     this.approvals.delete(token);
+    noteTelemetryApproval("granted");
     return approval;
   }
 
-  approvalResult(args: RunInput, sessionId: string, reasons: string[]) {
+  approvalResult(args: RunInput | null, sessionId: string, reasons: string[], claim?: TabClaimApproval, caller?: string) {
+    noteTelemetryApproval("requested");
     const now = Date.now();
     this.pruneApprovals(now);
     const approvalToken = randomUUID();
-    const expiresAt = now + this.approvalTtlMs;
-    this.approvals.set(approvalToken, { sessionId, request: cloneRequest(args), expiresAt });
+    const expiresAt = Math.min(now + this.approvalTtlMs, claim?.expiresAt ?? Infinity);
+    this.approvals.set(approvalToken, { sessionId, callerSessionId: caller, request: args ? cloneRequest(args) : null, expiresAt, claim });
     return {
       ...contractMetadata(),
       ok: false,
@@ -361,18 +416,22 @@ export class RuntimeFoundation {
       approvalToken,
       expiresAt: new Date(expiresAt).toISOString(),
       reasons,
+      ...(claim ? { claimTarget: publicClaimTarget(claim) } : {}),
       authorization: authorizationQuestion("browser-action"),
-      instruction: "If approval is missing, ask the user Approve / Disapprove with the harness question tool. After approval, call browser_run with only approvalToken. No browser action has run yet.",
+      instruction: claim
+        ? "Use existing user approval if it covers claimTarget and the requested actions. Otherwise ask Approve / Disapprove. Resume with browser_run and only approvalToken, or include approvalDecision=decline to cancel."
+        : "Ask Approve / Disapprove with the harness question tool. Use browser_run with only approvalToken to approve, or include approvalDecision=decline to cancel.",
     };
   }
 
-  async resolveTarget(step: Pick<Step, "target">, tabId: number, prior: PriorResults, sessionId: string) {
+  async resolveTarget(step: Pick<Step, "target"> & Partial<Pick<Step, "action">>, tabId: number, prior: PriorResults, sessionId: string) {
     let target: ResolvedTarget = step.target ?? {};
+    const mutating = step.action !== undefined && !READ_ACTIONS.has(step.action);
     if (target.fromStep) {
       const source = prior.get(target.fromStep);
       if (!source) throw new Error(`No result available for step ${target.fromStep}`);
       const candidates = resultCandidates(source);
-      target = { ...target, ...record(candidates[target.index ?? 0] ?? source) };
+      target = { ...target, ...record(selectedCandidate(candidates, target.index, mutating) ?? source) };
     }
     // A ref from the read view is located fresh, so a scroll since the read cannot misplace the action.
     if (typeof target.ref === "number") {
@@ -384,13 +443,14 @@ export class RuntimeFoundation {
       const search = await this.invoke("browser_page_search", {
         tabId,
         query: target.query, frameId: target.frameId,
-        maxResults: Math.max(prefs.maxResults, (target.index ?? 0) + 1),
+        maxResults: Math.max(prefs.maxResults, (target.index ?? 0) + 1, mutating ? 2 : 1),
         detail: prefs.detail,
         mode: prefs.mode,
       }, sessionId);
       const candidates = resultCandidates(search).filter((candidate) => !target.role || candidate.role === target.role);
-      const candidate = candidates[target.index ?? 0];
-      if (!candidate) throw new Error(`No page target matched: ${target.query}`);
+      const candidate = selectedCandidate(candidates, target.index, mutating);
+      if (!candidate) throw Object.assign(new BrowserRuntimeError("No page target matched. Use a new observation or a more specific target.", { code: "TARGET_NOT_FOUND" }),
+        { executionState: "not_started" });
       target = { ...target, ...candidate, nodeId: candidate.nodeId == null ? undefined : String(candidate.nodeId), selector: candidate.selector ?? undefined, role: candidate.role ?? undefined };
     }
     if (!target.nodeId) target.nodeId = typeof record(target).node_id === "string" ? String(record(target).node_id) : typeof record(target).id === "string" ? String(record(target).id) : undefined;

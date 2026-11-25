@@ -42,6 +42,8 @@ Artifacts are registered as resources using `browser://sessions/{sessionId}/arti
 
 Prefer reads to screenshots, which cost far more tokens. Use screenshots for images, canvas and layout questions. Background agent tabs keep rendering without being brought forward, so pointer input and screenshots work there, and several agents can work in parallel.
 
+If the goal already names a record or control, give its exact label or ID to the navigation's `postObserve`, for example `{ "mode": "read", "query": "INV-1042", "fullPage": true }`. Combine the query and full-page scope when the target could be below the fold. Check the returned control label and ref. If the view omits matching lines, narrow the query or expand the read before choosing a target. Use a targeted read for the expected confirmation after the action.
+
 ## Optional capabilities
 
 Discover a pack with `browser_observe` using `mode: "capabilities"` and the pack name. Execute a capability in `browser_run`: `{ "action": "capability", "capability": "visual.capture", "input": { "kind": "both" } }`. Pass the same profile, session and controlled tab throughout.

@@ -7,7 +7,7 @@ function session(lastActivityAt, tabIds = [1, 2]) {
 }
 function fixture({ idle = true, dialog = () => null } = {}) {
   const calls = [];
-  return { calls,dependencies: { idle: () => idle,dialog,detach: async id => { calls.push(["detach", id]); },hide: async id => { calls.push(["hide", id]); },ungroup: async id => { calls.push(["ungroup", id]); },
+  return { calls,dependencies: { idle: () => idle,dialog,detach: async id => { calls.push(["detach", id]); },hide: async id => { calls.push(["hide", id]); },ungroup: async (_sessionId, id) => { calls.push(["ungroup", id]); },
     untrack: async (sessionId, id) => { calls.push(["untrack", id]); const row = sessions.get(sessionId); row?.tabIds.delete(id); } } };
 }
 let sessions;

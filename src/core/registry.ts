@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { measureTool,type TelemetryReporter } from "./telemetry.ts";
 import { defineRuntimeTool,type BrowserContext } from "./tool-definition.ts";
 
 const sessionFields = {
@@ -144,6 +145,7 @@ export const runInputSchema = z.object({
         inputMode: z.enum(["auto", "pointer", "dom"]).optional().describe("pointer = trusted mouse input; dom = in-page click; auto picks per tab."),
         cursor: z.boolean().optional().describe("false hides the cursor overlay."),
         approvalToken: z.string().optional(),
+        approvalDecision: z.literal("decline").optional().describe("Use with approvalToken to cancel after a user declines."),
         postObserve: observationSchema,
         returnMode: z.enum(["last", "all", "summary"]).optional(),
         maxChars: z.number().int().positive().optional(),
@@ -186,7 +188,7 @@ export const finalizeInputSchema = z.object({
         ...sessionFields,
         keep: z.array(z.union([
           z.number().int().positive(),
-          z.object({ tabId: z.number().int().positive(), status: z.enum(["handoff", "deliverable"]).optional().describe("Default: deliverable, open in a blue review group. Explicit handoff retains session ownership for later work.") }),
+          z.object({ tabId: z.number().int().positive(), profileId: z.string().min(1).max(160).optional(), status: z.enum(["handoff", "deliverable"]).optional().describe("Default: deliverable, returned open. Explicit handoff retains session ownership.") }),
         ])).max(50).optional(),
         keepEnvironment: z.boolean().optional().describe("Retain applied emulation overrides instead of clearing them."),
       });
@@ -225,61 +227,61 @@ export interface RuntimePort {
   memorySearch(input: MemorySearchInput, context: BrowserContext): unknown | Promise<unknown>;
 }
 
-export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" | "session" | "finalize">) {
+export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" | "session" | "finalize"> & TelemetryReporter) {
   return {
     browser_run: defineRuntimeTool({
       description: "Run an action chain with settle and post-observation. If authorization is blocked, ask Approve / Disapprove with the harness question tool.",
       inputSchema: runInputSchema,
       outputSchema: resultSchema,
       annotations: { destructiveHint: true, openWorldHint: true },
-      execute: (args, context) => runtime.run(args, context),
+      execute: (args, context) => measureTool(runtime, "browser_run", args, context, () => runtime.run(args, context)),
     }),
     browser_observe: defineRuntimeTool({
       description: "Observe compact browser evidence.",
       inputSchema: observeInputSchema,
       outputSchema: resultSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
-      execute: (args, context) => runtime.observe(args, context),
+      execute: (args, context) => measureTool(runtime, "browser_observe", args, context, () => runtime.observe(args, context)),
     }),
     browser_session: defineRuntimeTool({
-      description: "Manage a named-profile session. Name labels its tab group. scope=user lists only ungrouped, unclaimed tabs; claim-tab needs the user's request or permission.",
+      description: "Manage a named-profile session. scope=user lists eligible unowned tabs, including grouped tabs. claim-tab requests approval for the selected tab.",
       inputSchema: sessionInputSchema,
       outputSchema: resultSchema,
       annotations: { openWorldHint: true },
-      execute: (args, context) => runtime.session(args, context),
+      execute: (args, context) => measureTool(runtime, "browser_session", args, context, () => runtime.session(args, context)),
     }),
     browser_finalize: defineRuntimeTool({
       description: "Finish the session. Extension browsers leave review tabs open and keep explicit handoffs controlled. Ladybird closes its managed browser.",
       inputSchema: finalizeInputSchema,
       outputSchema: resultSchema,
       annotations: { destructiveHint: true, openWorldHint: true },
-      execute: (args, context) => runtime.finalize(args, context),
+      execute: (args, context) => measureTool(runtime, "browser_finalize", args, context, () => runtime.finalize(args, context)),
     }),
   };
 }
 
-export function createMemoryRegistry(runtime: Pick<RuntimePort, "memoryStatus" | "memoryQuery" | "memorySearch">) {
+export function createMemoryRegistry(runtime: Pick<RuntimePort, "memoryStatus" | "memoryQuery" | "memorySearch"> & TelemetryReporter) {
   return {
     memory_status: defineRuntimeTool({
       description: "Report local action-memory availability: capture state, model, quota, purge settings, and success-rate statistics. Read-only; reveals no memory content.",
       inputSchema: memoryStatusInputSchema,
       outputSchema: resultSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
-      execute: (args, context) => runtime.memoryStatus(args, context),
+      execute: (args, context) => measureTool(runtime, "memory_status", args, context, () => runtime.memoryStatus(args, context)),
     }),
     memory_query: defineRuntimeTool({
       description: "Return bounded metadata-only signatures recorded for prior browser sessions (capability, hostname, bounded label, confirmed and failed counts) so a continued run can pick up where an earlier one left off. Never includes URLs, paths, typed text, arguments, results, or window titles. Results may enter model context.",
       inputSchema: memoryQueryInputSchema,
       outputSchema: resultSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
-      execute: (args, context) => runtime.memoryQuery(args, context),
+      execute: (args, context) => measureTool(runtime, "memory_query", args, context, () => runtime.memoryQuery(args, context)),
     }),
     memory_search: defineRuntimeTool({
       description: "Semantically search local action memory: embed the query and return the top-k matching actions or ready-to-run chains, ranked by similarity times confidence. Confirmed actions rank above repeated failures; failures return with a failed-count badge as negative lessons. Query text is never stored.",
       inputSchema: memorySearchInputSchema,
       outputSchema: resultSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
-      execute: (args, context) => runtime.memorySearch(args, context),
+      execute: (args, context) => measureTool(runtime, "memory_search", args, context, () => runtime.memorySearch(args, context)),
     }),
   };
 }

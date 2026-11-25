@@ -59,5 +59,5 @@ export function createController({ dir }: { dir: string }) {
     if (method === "control.configure") return updater.configure(params.enabled === true);
     return undefined;
   }
-  return { capabilities,status,handle };
+  return { capabilities,status,handle,checkForUpdates: updater.checkForUpdates };
 }

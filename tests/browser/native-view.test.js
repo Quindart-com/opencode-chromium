@@ -84,6 +84,13 @@ test("text is read in on-screen line order, and CJK pieces join without spaces",
   assert.match(renderView(projectSnapshot(snap, viewport)), /第一行开头第一行结尾第二行内容/);
 });
 
+test("punctuation from a neighbouring element joins without a space", () => {
+  const snap = snapshot(["body", {}, [0, 0, 1000, 2000], [["p", {}, [0, 0, 800, 20], [
+    "Welcome to the", ["b", {}, [80, 0, 40, 20], ["board"], { display: "inline" }], ". Find work", ["sup", {}, [200, 0, 20, 20], ["[", "12", "]"], { display: "inline" }], "(see notes)",
+  ]]]]);
+  assert.match(renderView(projectSnapshot(snap, viewport)), /^Welcome to the board\. Find work \[12\] \(see notes\)$/m);
+});
+
 test("a query narrows the view, and the character budget is reported", () => {
   const rows = Array.from({ length: 60 }, (_, i) => ["div", {}, [0, i * 12, 800, 12], [`Row ${i} lorem ipsum dolor sit amet`]]);
   const snap = snapshot(["body", {}, [0, 0, 1000, 2000], [...rows, ["div", {}, [0, 740, 800, 20], ["Salary range 15-16k"]]]]);
@@ -97,6 +104,24 @@ test("a query narrows the view, and the character budget is reported", () => {
   assert.match(renderView(projectSnapshot(snap, viewport, { query: "nothing-matches" })), /no line matched the query/);
   const long = snapshot(["body", {}, [0, 0, 1000, 2000], [["div", {}, [0, 0, 800, 200], ["Intro " + "x".repeat(300) + " tail-marker"]]]]);
   assert.equal(projectSnapshot(long, viewport, { query: "tail-marker" }).items.length, 1, "text past the clipped line still matches");
+});
+
+test("a targeted read retains an offscreen ref when visible results only match part of the label", () => {
+  const snap = snapshot(["body", {}, [0, 0, 1000, 2000], [
+    ["button", {}, [8, 8, 80, 22], ["View invoice 148"]],
+    ["button", {}, [8, 48, 80, 22], ["View invoice 49"]],
+    ["button", {}, [8, 1200, 80, 22], ["View invoice 48"]],
+  ]]);
+  const target = projectSnapshot(snap, viewport, { scope: "target", query: "View invoice 48" });
+  assert.equal(target.items.length, 1);
+  assert.match(renderView(target), /\[\d+\] button "View invoice 48" \(outside viewport\)/);
+  assert.doesNotMatch(renderView(target), /invoice (148|49)|@\d/);
+  assert.doesNotMatch(renderView(projectSnapshot(snap, viewport, { scope: "viewport", query: "View invoice 48" })), /invoice 48"/);
+  const teams = snapshot(["body", {}, [0, 0, 1000, 2000], [
+    ["button", {}, [8, 8, 80, 22], ["Team 1"]],
+    ["button", {}, [8, 1200, 80, 22], ["Team 9"]],
+  ]]);
+  assert.match(renderView(projectSnapshot(teams, viewport, { scope: "target", query: "Team 9" })), /"Team 9" \(outside viewport\)/);
 });
 
 test("repeat reads return only what changed, and a new page returns a full view", () => {
@@ -145,7 +170,7 @@ test("observe mode read uses the script-free view and never the page-script sear
     assert.equal(result.result.view.startsWith("Jobs"), true);
     const [name, args] = calls.find(([call]) => call === "browser_read_view");
     assert.equal(name, "browser_read_view");
-    assert.deepEqual(args, { tabId: 7, query: "salary", scope: "viewport", maxChars: 3000, delta: true });
+    assert.deepEqual(args, { tabId: 7, query: "salary", scope: "target", maxChars: 3000, delta: true });
     assert.equal(calls.some(([call]) => call === "browser_page_search"), false);
   } finally { runtime.close(); }
 });

@@ -6,7 +6,7 @@ import { cursorState } from "./cursor-state.ts";
 import type { BackgroundRuntimeDependencies as Dependencies } from "./types.ts";
 
 export function createCdpRuntime(dependencies: Dependencies) {
-  const { DEFAULT_CDP_TIMEOUT_MS, IS_FIREFOX, attachedTabs, chrome, record, beforeDeadline, commandHealth, queryTabs, tabIdFromParams, ensureControlledTab, assertSessionUrl, getTab, firefoxFrameRouting, frameRouting, withTabLock, guardedCdp, uploadConsent, uploadTargetUrl, sendCdpCommand, cursorIdFromParams, finiteNumber, gestureAction, publishCursorState, partialDispatchError, attachTab, cursorStateByTabId, framePoint, cursorStatesForTab } = dependencies;
+  const { DEFAULT_CDP_TIMEOUT_MS, IS_FIREFOX, attachedTabs, chrome, record, beforeDeadline, commandHealth, queryTabs, tabIdFromParams, ensureControlledTab, verifyControlledTab, assertSessionUrl, getTab, firefoxFrameRouting, frameRouting, withTabLock, guardedCdp, uploadConsent, uploadTargetUrl, sendCdpCommand, cursorIdFromParams, finiteNumber, gestureAction, publishCursorState, partialDispatchError, attachTab, cursorStateByTabId, framePoint, cursorStatesForTab } = dependencies;
 function commandTimeoutMs(params: CommandParams): number {
     const timeoutMs = params.timeoutMs ?? params.timeout_ms ?? DEFAULT_CDP_TIMEOUT_MS;
     return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CDP_TIMEOUT_MS;
@@ -25,7 +25,7 @@ async function executeCdp(params: CommandParams) {
         return { targetInfos: targets };
     }
     const tabId = tabIdFromParams(params);
-    const { session } = ensureControlledTab(params, tabId);
+    const { session, sessionId } = ensureControlledTab(params, tabId);
     if (method === "Page.navigate")
         assertSessionUrl(session, params.commandParams?.url ?? params.command_params?.url ?? "");
     else if ((session.urlPolicy?.allowedOrigins?.length || session.urlPolicy?.blockedOrigins?.length) && !/^(Page.stopLoading|Emulation.clear|Network.setExtraHTTPHeaders|Page.removeScriptToEvaluateOnNewDocument)/.test(method))
@@ -39,15 +39,21 @@ async function executeCdp(params: CommandParams) {
     const inspect: CdpRequest = async <K extends CdpMethod>(inspectMethod: K, inspectParams: CdpParams<K>) =>
       await (IS_FIREFOX ? firefoxFrameRouting : frameRouting).command(tabId, inspectMethod, inspectParams, params.frameId, (url: string) => assertSessionUrl(session, url), deadlineAt - Date.now()) as CdpResult<K>;
     if (method === "Page.handleJavaScriptDialog") {
-      const result = await beforeDeadline(() => sendCdpCommand(tabId, method, params.commandParams ?? params.command_params ?? {}, Math.max(1, deadlineAt - Date.now()), commandHealth.dialog(tabId)?.sessionId), deadlineAt, { tabId, method, phase: "dialog recovery" });
+      const result = await beforeDeadline(() => {
+        verifyControlledTab(sessionId, tabId);
+        return sendCdpCommand(tabId, method, params.commandParams ?? params.command_params ?? {}, Math.max(1, deadlineAt - Date.now()), commandHealth.dialog(tabId)?.sessionId);
+      }, deadlineAt, { tabId, method, phase: "dialog recovery" });
       commandHealth.event(tabId, "Page.javascriptDialogClosed", {});
       return result;
     }
     if (commandHealth.dialog(tabId)) throw Object.assign(new Error("A native browser dialog is open. Read events and use handleDialog before continuing."), { code: "DIALOG_OPEN", executionState: "not_started", uncertain: false, details: { tabId, method, phase: "preflight", dialogType: commandHealth.dialog(tabId)?.type } });
-    return withTabLock(tabId, () => guardedCdp({ method, tabId, consent: uploadConsent, getTab,
+    return withTabLock(tabId, () => {
+      verifyControlledTab(sessionId, tabId);
+      return guardedCdp({ method, tabId, consent: uploadConsent, getTab,
         inspectTarget: (uploadMethod: string, command: Record<string, unknown>) => uploadTargetUrl(uploadMethod, command, inspect),
         commandParams: params.commandParams ?? params.command_params ?? {}, send,
-    }), deadlineAt, method);
+      });
+    }, deadlineAt, method);
 }
 async function executeInputGesture(params: CommandParams) {
     const tabId = tabIdFromParams(params);
@@ -76,6 +82,7 @@ async function executeInputGesture(params: CommandParams) {
     await attachTab(tabId, sessionId, deadlineAt);
     let moveSequence = cursorStateByTabId.get(tabId)?.get(cursorId)?.moveSequence ?? 0;
     return withTabLock(tabId, async () => {
+        verifyControlledTab(sessionId, tabId);
         const results = [];
         const hasCursorSteps = steps.some((s) => s.cursor && Number.isFinite(s.cursor.x) && Number.isFinite(s.cursor.y));
         const cursorPublishInterval = hasCursorSteps && steps.length > 20 ? Math.max(1, Math.floor(steps.length / 20)) : 1;

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** October 23, 2026
+**Effective date:** November 24, 2026
 
 Extension updates can open the public release-notes page on GitHub Pages. This can be disabled in the setup guide. Published managed runtimes can download matching releases and dependencies from npm in the background and activate after all browser sessions finish; automatic updates can be disabled under Settings → Updates. These requests disclose normal connection information to the hosting service, but do not include browser content, profile identifiers or decision credentials. Coordination records stay local and contain process identities, opaque session/profile identifiers, activity counts and release versions; they contain no browser content or tool arguments.
 
@@ -45,13 +45,28 @@ no analytics. Help and release-note links open GitHub only when you select them.
   talks to a native messaging host installed on your computer over the
   browser's native messaging channel. The native host calls TypeSafe or
   OpenRouter only after you enable a provider with the disclosed context sharing.
-  Requests never silently switch providers. No data is sent to Quindart.
+  Requests never silently switch providers. Browser content is not sent to Quindart.
 - **Local models, local data.** Optional semantic page search downloads a model
   bundle (a standard Hugging Face transformer) to a local cache directory you
   can inspect and delete from the extension popup. Local semantic inference
   happens in the native host. Model downloads contact the model distributor.
-- **No accounts, no telemetry.** The extension has no accounts, does not use
-  analytics, and does not phone home. Provider accounts and their data-handling
+- **Anonymous diagnostics, on by default.** The native host sends bounded, aggregated
+  tool outcomes, allowlisted error codes, coarse timing, retry/recovery categories,
+  release, browser family/major version and OS family through a Quindart endpoint
+  to Google Analytics 4 when the release has a configured collector endpoint.
+  Disable this in **Settings → Anonymous diagnostics** at any time. This applies to
+  existing installations as well as new ones. Firefox also respects its optional
+  technical-data permission. No browsing content, URLs/domains, profile identifiers,
+  credentials, raw error text, stacks or persistent analytics identifiers are sent.
+  Counters stay in memory until sent or discarded; disabling clears pending counters.
+  A local running marker can report a possible crash, forced termination, or shutdown
+  as an unclean exit on the next start. Each batch uses a fresh random analytics client
+  ID. The collector excludes source IPs and browser user-agent strings from forwarded
+  diagnostics and denies advertising consent. Network services receive normal
+  connection metadata. Diagnostics are used only to measure and improve reliability.
+  See [diagnostics](telemetry.md) for the fields, exclusions, environment opt-out and
+  delivery limits.
+- **No extension account.** Provider accounts and their data-handling
   policies apply separately when you enable cloud assistance. Keys can be supplied
   in Settings or the native host environment. Saved keys stay in private native-host
   state (DPAPI encrypted on Windows; owner-only files on macOS/Linux), never extension
@@ -127,8 +142,8 @@ extension at any time.
 
 ## Children
 
-This extension is not directed to children, and it does not collect information
-from anyone.
+This extension is not directed to children. Anonymous technical diagnostics are
+described above; it does not intentionally collect children's personal information.
 
 ## Changes
 
