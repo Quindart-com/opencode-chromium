@@ -9,6 +9,7 @@ import { pageStateExpression } from "../src/browser/operations/page-state.ts";
 import { createOperationSessionRuntime } from "../src/browser/operations/session-runtime.ts";
 import { McpWorker } from "../src/control/mcp-worker.ts";
 import { harnessControls } from "../src/control/harness-control.ts";
+import { participantActive, participantBusy, participants, sleep } from "../src/control/leases.ts";
 
 const server = http.createServer((req, res) => {
   res.setHeader("Content-Type", "text/html");
@@ -365,6 +366,11 @@ try {
   assert.equal(retainedFinal.ok, true);
   checked("extension button -> detached CLI -> scoped live MCP tool refresh, retained tabs and unrelated-agent continuity");
   await call("browser_finalize", {});
+  // Finalization can return before the coalesced native host lease publishes idle.
+  const hasActiveWork = () => participants(runtimeDir).some(row => participantActive(row) && participantBusy(row));
+  const drainDeadline = Date.now() + 3000;
+  while (hasActiveWork() && Date.now() < drainDeadline) await sleep(25);
+  assert.equal(hasActiveWork(), false, "Finalized browser work must drain before disconnect");
   const disconnected = await connectionControl({ type: "DISCONNECT_HARNESS", params: { id: connectionId } });
   assert.ok(disconnected.result, JSON.stringify(disconnected));
   assert.ok(!disconnected.result.clients.some(client => client.id === connectionId));
