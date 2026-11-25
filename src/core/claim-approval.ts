@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { unsupportedLadybird } from "../browser/ladybird/backend.ts";
+import { LADYBIRD_PROFILE } from "../browser/ladybird/config.ts";
 import { record } from "../shared/values.ts";
 import { BrowserRuntimeError } from "./errors.ts";
 import type { BrowserProfile } from "./profiles.ts";
@@ -13,6 +15,7 @@ export type TabClaimApproval = z.infer<typeof claimSchema> & { profileId: string
 type ClaimRequest = (method: string, params: Record<string, unknown>, options: { profileId: string }) => Promise<unknown>;
 
 export async function prepareTabClaim(request: ClaimRequest, profile: BrowserProfile, sessionId: string, tabId: number, urlPolicy: { allowedOrigins: readonly string[]; blockedOrigins: readonly string[] }): Promise<TabClaimApproval> {
+  if (profile.profileId === LADYBIRD_PROFILE) throw unsupportedLadybird("claiming existing tabs");
   const { allowedOrigins, blockedOrigins } = urlPolicy;
   const reply = await request("prepareTabClaim", { profile_id: profile.profileId, session_id: sessionId, tabId, url_policy: { allowedOrigins, blockedOrigins } }, { profileId: profile.profileId }).catch((error: unknown) => {
     if (record(error).code === -32601) throw new BrowserRuntimeError("Reload the updated browser extension before claiming existing tabs.", { code: "TAB_CLAIM_EXTENSION_UPDATE_REQUIRED" });

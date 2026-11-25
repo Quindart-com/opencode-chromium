@@ -74,6 +74,15 @@ try {
   const firstId = first.activeTabId;
   const secondId = second.activeTabId;
   assert.notEqual(firstId, secondId);
+  const claim = await invoke("browser_session", { action: "claim-tab", tabId: firstId });
+  const claimAndRun = await invoke("browser_run", {
+    tab: { mode: "claim", tabId: firstId },
+    steps: [{ action: "navigate", url }],
+  });
+  const release = await invoke("browser_session", { action: "release-tab", tabId: firstId });
+  for (const result of [claim, claimAndRun, release]) {
+    assert.equal(result.error?.code, "UNSUPPORTED_CAPABILITY");
+  }
   await ok("browser_run", { tab: { tabId: firstId }, steps: [{ action: "navigate", url }] });
   const read = await ok("browser_observe", { mode: "read", tabId: firstId });
   const ref = Number(/\[(\d+)\] button Show result/.exec(read.result.view)?.[1]);

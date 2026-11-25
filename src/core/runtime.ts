@@ -1,4 +1,5 @@
 import { browserRequest,closeBrowserClients } from "../browser/client.ts";
+import { unsupportedLadybird } from "../browser/ladybird/backend.ts";
 import { LADYBIRD_PROFILE } from "../browser/ladybird/config.ts";
 import { record } from "../shared/values.ts";
 import { prepareTabClaim,type TabClaimApproval } from "./claim-approval.ts";
@@ -274,6 +275,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         return this.approvalResult(null, sessionId, ["claim existing tab"], claim, callerSessionId(context));
       } else if (args.action === "release-tab") {
         if (!args.tabId) throw new Error("release-tab requires tabId");
+        if (profile.profileId === LADYBIRD_PROFILE) throw unsupportedLadybird("releasing tabs for human review");
         const configuredTabKey = `${session.profileId}:${args.tabId}`;
         if (session.configuredTabs.has(configuredTabKey)) {
           await this.invoke("browser_configure", { tabId: args.tabId, environment: { reset: true } }, sessionId);

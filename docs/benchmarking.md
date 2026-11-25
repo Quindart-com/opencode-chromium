@@ -39,7 +39,7 @@ Five interleaved trials per tool ran the same seeded 30-case workload on Chromiu
 
 | Tool | Tool calls | Estimated tokens per verified action | Verified p50 | Verified p95 | Median session |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| OpenCode evaluation `603d40c` | 355 | 1,617 | 1.24 s | 5.12 s | 56.27 s |
+| OpenCode evaluation build | 355 | 1,617 | 1.24 s | 5.12 s | 56.27 s |
 | Playwright MCP 0.0.86 | 590 | 5,915 | 1.15 s | 1.57 s | 33.83 s |
 | Chrome DevTools MCP 1.13.0 | 590 | 8,072 | 0.44 s | 6.22 s | 38.19 s |
 
@@ -71,7 +71,7 @@ Previously, explicit pointer mode took 5.31–7.13 s in the same fixture. The tr
 
 ## CPU and resident memory
 
-The Windows comparison used Node 24.22.2 with clean installations of `603d40c` and `786ca1e`. Each CLI command ran seven times per build in alternating order. The table reports median CPU time and peak resident memory per process. [Node process resource measurements](https://nodejs.org/docs/latest-v24.x/api/process.html#processresourceusage)
+The Windows comparison used Node 24.22.2 with clean installations before and after the startup and settling changes. Each CLI command ran seven times per build in alternating order. The table reports median CPU time and peak resident memory per process. [Node process resource measurements](https://nodejs.org/docs/latest-v24.x/api/process.html#processresourceusage)
 
 | Command | CPU before | CPU after | Peak memory before | Peak memory after |
 | --- | ---: | ---: | ---: | ---: |
