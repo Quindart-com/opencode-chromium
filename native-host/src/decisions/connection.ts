@@ -8,7 +8,7 @@ const inputSchema = z.object({ settings: providerSettingsSchema,
 const messages: Record<string, string> = {
   invalid_key: "API key rejected. Check the key and selected service.",
   access_denied: "This key does not have access to the decision model.",
-  insufficient_credit: "Add credits or increase your API key's spending limit.",
+  insufficient_credit: "Check API credits and spending limits for the selected organization.",
   rate_limited: "Service rate limit reached. Try the test again later.",
   timeout: "Connection timed out. Check your network and try again.",
 };

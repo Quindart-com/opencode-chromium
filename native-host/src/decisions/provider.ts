@@ -39,6 +39,26 @@ const responseSchema = z.object({
   usage: z.object({ input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative(), cost: z.number().nonnegative().optional() }),
 });
 const semaphore = Semaphore.makeUnsafe(2);
+// OpenAI uses 429 for both exhausted credits and actual rate limits. Read only
+// a small bounded error body and never expose provider-supplied text.
+async function openAI429Reason(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return "rate_limited";
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > 16384) { await reader.cancel(); return "rate_limited"; }
+      chunks.push(chunk.value);
+    }
+    const error = JSON.parse(Buffer.concat(chunks).toString("utf8"))?.error;
+    return ["insufficient_quota", "credit_balance_exhausted"].includes(error?.code) || error?.type === "insufficient_quota" ? "insufficient_credit" : "rate_limited";
+  } catch { return "rate_limited"; }
+  finally { reader.releaseLock(); }
+}
 export class JevProvider implements DecisionProvider {
   constructor(private readonly key: string, private readonly fetcher: typeof fetch = fetch,
     private readonly model = decisionChoices.find(choice => choice.route === "typesafe")!.model, private readonly timeoutMs = DEFAULT_DECISION_TIMEOUT_MS,
@@ -74,7 +94,7 @@ export class JevProvider implements DecisionProvider {
           method: "POST", signal: effectSignal, headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json", ...(nativeImage ? { "TypeSafe-Danger-Zone-Images": "true" } : {}) },
           body: JSON.stringify(body),
         });
-        if (!response.ok) throw new DecisionFailure({ code: ({ 401: "invalid_key", 403: "access_denied", 402: "insufficient_credit", 429: "rate_limited" } as Record<number, string>)[response.status] ?? "provider_http_error" });
+        if (!response.ok) throw new DecisionFailure({ code: response.status === 429 && this.route === "openai" ? await openAI429Reason(response) : ({ 401: "invalid_key", 403: "access_denied", 402: "insufficient_credit", 429: "rate_limited" } as Record<number, string>)[response.status] ?? "provider_http_error" });
         const reader = response.body?.getReader();
         if (!reader) throw new DecisionFailure({ code: "empty_response" });
         const chunks: Uint8Array[] = [];
