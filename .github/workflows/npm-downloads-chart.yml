@@ -3,6 +3,9 @@ name: Update NPM downloads chart
 on:
   schedule:
     - cron: "23 3 * * 1"
+  workflow_run:
+    workflows: ["Secure npm release"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -14,24 +17,31 @@ concurrency:
 
 jobs:
   update:
-    name: Refresh NPM downloads chart
+    name: Refresh npm badge and downloads chart
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
+        id: source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Update published npm version badge
+        run: node scripts/npm-version-badge.mjs
+
       - name: Update chart data and SVG
+        if: ${{ !cancelled() && steps.source.outcome == 'success' }}
         run: node scripts/npm-downloads-chart.mjs
 
-      - name: Commit chart updates
+      - name: Commit updated npm assets
+        if: ${{ !cancelled() && steps.source.outcome == 'success' }}
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/npm-downloads.json assets/npm-downloads.svg
+          git add assets/npm-version.svg assets/npm-downloads.json assets/npm-downloads.svg
           if git diff --cached --quiet; then
-            echo "NPM downloads history unchanged; nothing to commit."
+            echo "npm assets unchanged."
           else
-            git commit -m "chore: update NPM downloads chart"
+            git commit -m "chore: refresh npm badges and chart"
             git push origin HEAD:master
           fi

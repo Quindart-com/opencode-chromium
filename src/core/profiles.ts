@@ -7,6 +7,7 @@ export interface BrowserProfile {
   browserName?: string | null;
   browserVersion?: string | null;
   extensionVersion?: string | null;
+  experimental?: true;
 }
 
 export class ProfileSelectionError extends Error {
@@ -30,6 +31,7 @@ export function publicProfile(profile: BrowserProfile) {
     connectionId: profile.connectionId ?? null, connectionGeneration: profile.connectionGeneration ?? null,
     browserName: profile.browserName ?? null, browserVersion: profile.browserVersion ?? null,
     extensionVersion: profile.extensionVersion ?? null,
+    ...(profile.experimental ? { experimental: true as const } : {}),
   };
 }
 

@@ -11,5 +11,6 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },
   },
+  { files: ["benchmarks/reading/*.mjs"], extends: [js.configs.recommended], rules: { "no-undef": "off" } },
   { files: ["native-host/src/host.js"], extends: [js.configs.recommended] },
 );

@@ -12,13 +12,13 @@ import { writeLaunchers,writeRuntimeManifest } from "../../src/cli/runtime-link.
  * `plain: true` starts Chromium without Playwright attached, so a live guarded site
  * sees only the extension's own debugger footprint. It returns no Playwright context.
  */
-export async function chromiumExtensionFixture({ headless = true, plain = false, startUrl = "about:blank" } = {}) {
+export async function chromiumExtensionFixture({ headless = true, plain = false, startUrl = "about:blank", executablePath } = {}) {
   const root = process.cwd(), fixture = fs.mkdtempSync(path.join(os.tmpdir(), "browser-reliability-"));
   const source = path.join(fixture, "extension"), registry = path.join(fixture, "registry"), profile = path.join(fixture, "profile");
   fs.cpSync(path.join(root, "extension"), source, { recursive: true }); fs.mkdirSync(registry);
   const host = "com.opencode.browser.test" + randomBytes(5).toString("hex");
   const background = path.join(source, "background.js");
-  fs.writeFileSync(background, fs.readFileSync(background, "utf8").replaceAll("com.opencode.browser.plugin", host));
+  fs.writeFileSync(background, fs.readFileSync(background, "utf8").replaceAll("com.opencode.browser.plugin", host).replaceAll("com.opencode.browser.site_registry_dev", host));
   const key = generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey.export({ type: "spki", format: "der" });
   const extensionId = [...createHash("sha256").update(key).digest().subarray(0, 16)].flatMap(byte => [byte >> 4, byte & 15]).map(n => String.fromCharCode(97 + n)).join("");
   const manifestPath = path.join(source, "manifest.json"), manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
@@ -57,7 +57,7 @@ export async function chromiumExtensionFixture({ headless = true, plain = false,
     }
     const extensionArgs = [`--disable-extensions-except=${source}`, `--load-extension=${source}`, "--site-per-process"];
     if (plain) child = spawn(chromium.executablePath(), [`--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--window-size=1280,900", ...extensionArgs, startUrl], { env, stdio: "ignore" });
-    else context = await chromium.launchPersistentContext(profile, { headless, channel: "chromium", env, viewport: { width: 1100, height: 900 }, args: extensionArgs });
+    else context = await chromium.launchPersistentContext(profile, { headless, channel: "chromium", executablePath, env, viewport: { width: 1100, height: 900 }, args: extensionArgs });
     let registration, startup = null;
     for (let attempt = 0; attempt < 2 && !registration; attempt++) {
       for (let i = 0; i < 100; i++) {

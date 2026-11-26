@@ -458,14 +458,14 @@ button:not(.view-tab),
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
 }
 
-button:not(.view-tab):hover:not(:disabled),
+button:not(.view-tab, .switch):hover:not(:disabled),
 .button:hover {
   border-color: var(--accent-border);
   color: var(--text);
   background: var(--button-hover);
 }
 
-button:not(.view-tab):active:not(:disabled),
+button:not(.view-tab, .switch):active:not(:disabled),
 .button:active {
   transform: translateY(1px);
 }

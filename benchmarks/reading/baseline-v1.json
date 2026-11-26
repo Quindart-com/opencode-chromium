@@ -1,0 +1,300 @@
+{
+  "commit": "893a911788901c81a9478130702d3f9bd3aad33a",
+  "browser": "158.0.8127.18",
+  "node": "v24.22.2",
+  "build": "3641c746614b6a84ec30b6fa4c904202c1d839c43e5ba29c4fb62dc5f697e0a6",
+  "browserSha256": "dafaf388c1194eb610fc5706ba986eb38e5ebedb1fae44f39569e20940a3bae2",
+  "harnessSha256": "62024279b40d154a8002e8c5e8bd0b4cfd196862cada0b9dffc8e43086818339",
+  "readFixtureSha256": "54f88c74df24f5d72c1bf6d23ec7d067d1347c336b85812134fb7b8ecdd9482e",
+  "seed": "routing-baseline-v1",
+  "rounds": 5,
+  "actionPolicies": {
+    "viewport": {
+      "attempts": 150,
+      "eligible": 140,
+      "verified": 140,
+      "guards": {
+        "passed": 10,
+        "total": 10
+      },
+      "holdouts": {
+        "verified": 35,
+        "total": 35
+      },
+      "wrongEffects": 0,
+      "extraEffects": 0,
+      "p50Ms": 1199.51,
+      "p95Ms": 5151.28,
+      "calls": 385,
+      "callsPerVerified": 2.75,
+      "tokensPerVerified": 2538.69,
+      "schemaTokens": 2831,
+      "apps": {
+        "checkout": {
+          "eligible": 20,
+          "verified": 20,
+          "textTokensPerVerified": 6161.25,
+          "p50Ms": 1229.25
+        },
+        "feed": {
+          "eligible": 20,
+          "verified": 20,
+          "textTokensPerVerified": 1573.1,
+          "p50Ms": 5146.81
+        },
+        "invoices": {
+          "eligible": 30,
+          "verified": 30,
+          "textTokensPerVerified": 2125.63,
+          "p50Ms": 1192.03
+        },
+        "preferences": {
+          "eligible": 25,
+          "verified": 25,
+          "textTokensPerVerified": 1829.2,
+          "p50Ms": 1186.08
+        },
+        "shadow": {
+          "eligible": 15,
+          "verified": 15,
+          "textTokensPerVerified": 936.27,
+          "p50Ms": 1154.52
+        },
+        "tickets": {
+          "eligible": 30,
+          "verified": 30,
+          "textTokensPerVerified": 1983.53,
+          "p50Ms": 1193
+        }
+      }
+    },
+    "targeted": {
+      "attempts": 150,
+      "eligible": 140,
+      "verified": 140,
+      "guards": {
+        "passed": 10,
+        "total": 10
+      },
+      "holdouts": {
+        "verified": 35,
+        "total": 35
+      },
+      "wrongEffects": 0,
+      "extraEffects": 0,
+      "p50Ms": 1161.09,
+      "p95Ms": 5143.21,
+      "calls": 355,
+      "callsPerVerified": 2.54,
+      "tokensPerVerified": 1598.4,
+      "schemaTokens": 2831,
+      "apps": {
+        "checkout": {
+          "eligible": 20,
+          "verified": 20,
+          "textTokensPerVerified": 6149.2,
+          "p50Ms": 1190.83
+        },
+        "feed": {
+          "eligible": 20,
+          "verified": 20,
+          "textTokensPerVerified": 808.6,
+          "p50Ms": 5132.03
+        },
+        "invoices": {
+          "eligible": 30,
+          "verified": 30,
+          "textTokensPerVerified": 760.47,
+          "p50Ms": 1161.09
+        },
+        "preferences": {
+          "eligible": 25,
+          "verified": 25,
+          "textTokensPerVerified": 850.72,
+          "p50Ms": 1149.87
+        },
+        "shadow": {
+          "eligible": 15,
+          "verified": 15,
+          "textTokensPerVerified": 748.4,
+          "p50Ms": 1132.72
+        },
+        "tickets": {
+          "eligible": 30,
+          "verified": 30,
+          "textTokensPerVerified": 771.37,
+          "p50Ms": 1151.35
+        }
+      }
+    }
+  },
+  "plainRead": {
+    "numericTasks": 8,
+    "numberVisible": 5,
+    "missing": [
+      "table",
+      "published",
+      "canvas"
+    ]
+  },
+  "agentTrials": {
+    "autonomous": null,
+    "relayed": {
+      "mode": "relayed",
+      "operator": "GPT-6 Luna low, parent-relayed MCP",
+      "correct": 7,
+      "total": 10,
+      "answers": [
+        {
+          "id": "article",
+          "correct": true
+        },
+        {
+          "id": "table",
+          "correct": false
+        },
+        {
+          "id": "personal",
+          "correct": true
+        },
+        {
+          "id": "displayed",
+          "correct": true
+        },
+        {
+          "id": "published",
+          "correct": false
+        },
+        {
+          "id": "other-resource",
+          "correct": true
+        },
+        {
+          "id": "repeat-a",
+          "correct": true
+        },
+        {
+          "id": "repeat-b",
+          "correct": true
+        },
+        {
+          "id": "canvas",
+          "correct": false
+        },
+        {
+          "id": "denied",
+          "correct": true
+        }
+      ]
+    },
+    "guided": null,
+    "replay": null,
+    "fixtureAuthor": {
+      "operator": "GPT-6.2 Astra (xhigh), fixture-author session",
+      "correct": 10,
+      "total": 10,
+      "toolCalls": 12,
+      "toolTimeP50Ms": 19.01,
+      "toolTimeP95Ms": 171.88,
+      "imageBlocks": 1,
+      "textTokens": 3023,
+      "answers": [
+        {
+          "id": "article",
+          "correct": true,
+          "calls": 1,
+          "ms": 45.99,
+          "imageBlocks": 0,
+          "tokens": 189
+        },
+        {
+          "id": "table",
+          "correct": true,
+          "calls": 2,
+          "ms": 171.88,
+          "imageBlocks": 0,
+          "tokens": 851
+        },
+        {
+          "id": "personal",
+          "correct": true,
+          "calls": 1,
+          "ms": 19.59,
+          "imageBlocks": 0,
+          "tokens": 207
+        },
+        {
+          "id": "displayed",
+          "correct": true,
+          "calls": 1,
+          "ms": 17.14,
+          "imageBlocks": 0,
+          "tokens": 207
+        },
+        {
+          "id": "published",
+          "correct": true,
+          "calls": 2,
+          "ms": 116.65,
+          "imageBlocks": 0,
+          "tokens": 571
+        },
+        {
+          "id": "other-resource",
+          "correct": true,
+          "calls": 1,
+          "ms": 16.78,
+          "imageBlocks": 0,
+          "tokens": 188
+        },
+        {
+          "id": "repeat-a",
+          "correct": true,
+          "calls": 1,
+          "ms": 18.02,
+          "imageBlocks": 0,
+          "tokens": 190
+        },
+        {
+          "id": "repeat-b",
+          "correct": true,
+          "calls": 1,
+          "ms": 17.5,
+          "imageBlocks": 0,
+          "tokens": 190
+        },
+        {
+          "id": "canvas",
+          "correct": true,
+          "calls": 1,
+          "ms": 103.11,
+          "imageBlocks": 1,
+          "tokens": 245
+        },
+        {
+          "id": "denied",
+          "correct": true,
+          "calls": 1,
+          "ms": 19.01,
+          "imageBlocks": 0,
+          "tokens": 185
+        }
+      ],
+      "mode": "fixtureAuthor"
+    }
+  },
+  "registry": {
+    "correct": 9,
+    "total": 10,
+    "misses": [
+      {
+        "task": "title of story 8863",
+        "expected": "requested resource differs",
+        "request": {
+          "words": "title",
+          "item": 1
+        }
+      }
+    ]
+  }
+}

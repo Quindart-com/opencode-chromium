@@ -23,6 +23,7 @@ export interface RuntimeActivation {
   generation?: number;
   stagedRelease?: { root: string; version: string };
   approvedMajor?: number;
+  blockedAutomaticVersion?: string;
 }
 
 export function desiredRuntime(activation: RuntimeActivation): RuntimeRelease {

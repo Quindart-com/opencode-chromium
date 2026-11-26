@@ -34,12 +34,13 @@ function createTracker(runtime: AgentBrowserRuntime) {
     for (const [token, approval] of approvals) if (approval.expiresAt <= now) approvals.delete(token);
     return { sessions: [...sessions.keys()], approvals: approvals.size,
       approvalExpiresAt: Math.max(0, ...[...approvals.values()].map(approval => approval.expiresAt)),
-      profiles: [...new Set([...sessions.values()].map(session => session.profileId).filter((id): id is string => id !== null))] };
+      profiles: [...new Set([...sessions.values()].flatMap(session => session.profileIds?.size ? [...session.profileIds] : session.profileId ? [session.profileId] : []))] };
   };
   const timer = setInterval(() => {
     if (!participant) return;
     const state = snapshot();
-    if (state.approvals !== participant.state.approvals || JSON.stringify(state.sessions) !== JSON.stringify(participant.state.sessions)) participant.publish(state);
+    if (state.approvalExpiresAt !== participant.state.approvalExpiresAt || state.approvals !== participant.state.approvals ||
+      JSON.stringify(state.sessions) !== JSON.stringify(participant.state.sessions) || JSON.stringify(state.profiles) !== JSON.stringify(participant.state.profiles)) participant.publish(state);
   }, 1000);
   timer.unref();
   let inFlight = 0;

@@ -55,6 +55,7 @@ test("native OpenCode V2 uses the editor callback and projects browser results",
   const cleanup = await createOpenCodeSetup({ tool: { transform: callback => callback({ add: tool => registered.push(tool) }) }, logger: { info() {} } }, { memory: false });
   try {
     assert.deepEqual(registered.map(tool => tool.name), ["browser_run", "browser_observe", "browser_session", "browser_finalize"]);
+    assert.ok(registered.every(tool => tool.options.codemode === false));
     const response = await registered.find(tool => tool.name === "browser_observe").execute({ mode: "capabilities" }, { sessionId: "fixture" });
     assert.equal(JSON.parse(response.content).ok, true);
   } finally { await cleanup(); }
@@ -81,4 +82,16 @@ test("OpenCode 2.x transform context gets one transform with all tools and dispo
   assert.deepEqual(registered.map(tool => tool.name), ["browser_run", "browser_observe", "browser_session", "browser_finalize"]);
   await cleanup();
   assert.equal(disposed, 1);
+});
+
+test("advanced parameters remain available on demand through the four-tool interface", async () => {
+  const agent = createBrowserAgent();
+  try {
+    const listing = agent.tools("mcp").find(t => t.name === "browser_observe");
+    assert.equal(listing.inputSchema.properties.searchStrategy, undefined);
+    assert.ok(listing.inputSchema.properties.source);
+    const result = await agent.runtime.observe({ mode: "capabilities", pack: "schema", query: "browser_observe" });
+    const full = result.result?.inputSchema ?? JSON.parse(agent.runtime.artifacts.read(result.artifact.uri, { sessionId: result.sessionId }).data.toString()).result.inputSchema;
+    assert.ok(full.properties.searchStrategy);
+  } finally { agent.close(); }
 });

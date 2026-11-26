@@ -1,4 +1,15 @@
 {
+  "anonymousDiagnostics": { "message": "Diagnósticos anónimos" },
+  "diagnosticsDescription": { "message": "Compartir resultados y errores de herramientas mediante Google Analytics. Sin contenido de navegación. Se puede desactivar en cualquier momento." },
+  "diagnosticsLoadFail": { "message": "Vuelve a conectar el puente del navegador para cargar los ajustes de diagnóstico." },
+  "diagnosticsSaveFail": { "message": "No se pudieron guardar los ajustes de diagnóstico. Inténtalo de nuevo." },
+  "sharedSiteReads": { "message": "Lecturas de sitios compartidas" },
+  "sharedSiteReadsDescription": { "message": "Leer campos públicos de sitios compatibles mediante el registro de OpenCode Browser. Solo se envían los campos solicitados y los ID públicos. Requiere Contribuir patrones de tareas activado." },
+  "contributeTaskPatterns": { "message": "Contribuir patrones de tareas" },
+  "contributeTaskPatternsDescription": { "message": "Compartir qué sitios públicos compatibles y tareas completa tu agente mientras la Memoria de acciones está activada. Sin URL ni texto de páginas. Se puede desactivar en cualquier momento." },
+  "memorySharesPatterns": { "message": "También comparte qué sitios públicos compatibles y tareas completa tu agente, para mejorar las lecturas de sitios compartidas. Sin URL ni texto de páginas. Puedes cambiarlo en Contribuir patrones de tareas." },
+  "siteSettingsSaveFail": { "message": "No se pudieron guardar los ajustes de uso compartido. Inténtalo de nuevo." },
+  "diagnosticsBrowserPermission": { "message": "Permite compartir datos técnicos en Firefox para activar los diagnósticos." },
   "extensionName": {
     "message": "opencode-chromium"
   },
@@ -1597,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "No se pudieron cargar algunos ajustes."
+  },
+  "capabilityAvailable": {
+    "message": "Disponible"
+  },
+  "captureSharingOff": {
+    "message": "Sin compartir"
+  },
+  "captureSharingOn": {
+    "message": "Se comparte"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "Los agentes pueden buscar contenido en las pestañas que controlan."
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "Los agentes pueden rellenar campos en las pestañas que controlan."
+  },
+  "captureCapabilityHelp": {
+    "message": "Los agentes pueden capturar sus pestañas. La asistencia comparte capturas solo con tu permiso."
   }
 }

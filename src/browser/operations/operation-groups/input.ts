@@ -41,7 +41,7 @@ export function createInputOperations(dependencies: Dependencies) {
         },
         async execute(args, context) {
           await pointCursor(context, args.tabId, args, "click");
-          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y, args.button);
+          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y, { button: args.button });
           return stringify({ clicked: true, tabId: args.tabId, x: args.x, y: args.y, inputRoute });
         },
       }),
@@ -241,7 +241,7 @@ export function createInputOperations(dependencies: Dependencies) {
           mode: tool.schema.enum(["replace", "append", "focus"]).default("replace"),
         },
         async execute(args, context) {
-          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y);
+          const { inputRoute } = await clickPoint(context, args.tabId, args.x, args.y, { focusTextControl: true });
           if (args.mode === "focus") return { focused: true, inputRoute };
           const before = await runtimeEvaluate(context, args.tabId, focusedEditableSnapshotExpression());
           // Replacing starts from a full selection (the selectAll editing command, on every platform).
@@ -258,7 +258,8 @@ export function createInputOperations(dependencies: Dependencies) {
         args: {
           tabId: tool.schema.number().int().positive(),
           query: tool.schema.string().optional(),
-          scope: tool.schema.enum(["viewport", "page"]).default("viewport"),
+          countMatches: tool.schema.boolean().optional(),
+          scope: tool.schema.enum(["viewport", "page", "target"]).default("viewport"),
           maxChars: tool.schema.number().int().positive().default(3000),
           delta: tool.schema.boolean().default(false),
         },
@@ -274,7 +275,7 @@ export function createInputOperations(dependencies: Dependencies) {
           const comparable = !args.query && args.scope === "viewport";
           const delta = args.delta && comparable ? renderDelta(views.get(key), view) : null;
           if (comparable) { views.delete(key); views.set(key, view); if (views.size > 64) views.delete(views.keys().next().value!); }
-          return { url: view.url, title: view.title, view: delta ?? renderView(view), ...(delta ? { delta: true } : {}) };
+          return { url: view.url, title: view.title, ...(args.countMatches && view.matched !== undefined ? { matched: view.matched } : {}), view: delta ?? renderView(view), ...(delta ? { delta: true } : {}) };
         },
       }),
   };

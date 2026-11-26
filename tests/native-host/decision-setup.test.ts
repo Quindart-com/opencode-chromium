@@ -70,6 +70,19 @@ test("direct OpenAI verifies and stores a separate key without replacing OpenRou
   expect(providerStatus().credentialRoutes).toContain("openrouter");
 }, 15000);
 
+test("OpenAI 429 distinguishes exhausted credits from rate limits without exposing response text", async () => {
+  const direct = { provider: "openai-decisions" as const, route: "openai" as const, shareText: true, shareImages: false, keyEnv: "OPENAI_API_KEY" };
+  for (const [code, expected] of [["credit_balance_exhausted", "credits"], ["insufficient_quota", "credits"], ["rate_limit_exceeded", "rate limit"]] as const) {
+    let calls = 0;
+    const result = await saveAndTestProvider({ settings: direct, apiKey: secret }, (async () => {
+      calls++; return Response.json({ error: { code, message: secret } }, { status: 429 });
+    }) as typeof fetch);
+    expect(result.ok).toBe(false); expect(result.message).toContain(expected);
+    expect(JSON.stringify(result)).not.toContain(secret); expect(calls).toBe(1);
+    expect(providerStatus().provider).toBe("off");
+  }
+});
+
 test("usage keeps known costs separate from missing costs and includes abstentions", () => {
   recordDecision({ status: "selected", elapsedMs: 100, usage: { input_tokens: 10, output_tokens: 0, cost: 0.00002 } }, "rank");
   recordDecision({ status: "abstained", elapsedMs: 300 }, "select");

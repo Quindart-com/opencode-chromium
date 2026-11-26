@@ -24,6 +24,13 @@ const FAILURE_HINTS: Record<string, string> = {
   UPLOAD_NOT_AUTHORIZED: "Ask the user whether to approve this upload. Resume its original authorization flow only after approval.",
   UPLOAD_USER_DECLINED: "The user declined the upload. Keep the prepared files and wait for a new user instruction.",
   PROFILE_DISCONNECTED: "Reconnect the browser profile, then retry.",
+  PROFILE_SELECTION_REQUIRED: "Ask which connected profile to use and pass its profileId. Qualify keep items by profileId when several profiles were used.",
+  PROFILE_LABEL_AMBIGUOUS: "Use an exact profileId from the returned profiles.",
+  TAB_ALREADY_OWNED: "Wait for the owning session to release the tab or for the controller to reconcile it.",
+  TAB_OWNERSHIP_BUSY: "Wait for pending work to finish, then list the eligible tabs again.",
+  TAB_CLAIM_RESTRICTED: "Choose an eligible tab returned by browser_session with scope user.",
+  TAB_CLAIM_CHANGED: "Discover the tab again and request a fresh approval for its current location.",
+  TAB_CLAIM_APPROVAL_INVALID: "Request a fresh approval in the profile and session that will claim the tab.",
   UNSUPPORTED_ACTION: "Use one of the actions listed in the tool description.",
   TAB_NOT_FOUND: "List tabs and choose an existing tabId.",
 };
@@ -39,6 +46,16 @@ function condense(value: unknown) {
 function clip(value: unknown, limit: number) {
   const text = condense(value);
   return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1))}…`;
+}
+
+const terminalCodes = new Set(["URL_POLICY_BLOCKED", "TAB_NOT_OWNED", "TAB_ALREADY_OWNED", "TAB_CLAIM_RESTRICTED",
+  "BROWSER_HOST_ACCESS_DENIED", "ACCESS_DENIED", "CHALLENGE_REQUIRED", "PAGE_PROTECTION_SUSPECTED",
+  "SITE_RESOURCE_MISMATCH", "SITE_HANDLE_MISMATCH", "THROTTLED", "PROVIDER_THROTTLED"]);
+
+export function stopsBrowserChain(error: unknown) {
+  const fields = record(error);
+  return [401, 403, 429].includes(Number(fields.status)) || terminalCodes.has(String(fields.code ?? fields.message).toUpperCase()) ||
+    Boolean(authorizationForError(String(fields.code ?? "")));
 }
 
 export function failureHint(code: string) {

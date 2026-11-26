@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "bun:test";
 import { createBrowserOperations, shapePageSearchRanking } from "../../src/browser/operations/index.ts";
+import { createSessionOperations } from "../../src/browser/operations/operation-groups/session.ts";
 import { contractMetadata, responseMetadata } from "../../src/core/versions.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -143,4 +144,33 @@ test("a typical five-result lean search stays inside the serialized size budget"
   assert.ok(serialized.length < 1024, `lean payload ${serialized.length} bytes should stay far below the 2.5 KB budget`);
   assert.doesNotMatch(serialized, /boundingBox/);
   assert.doesNotMatch(serialized, /"score":/);
+});
+
+test("lean lexical record search keeps both exact duplicates and drops fuzzy neighbors", () => {
+  const labels = ["Open INV-44", "Open INV-445", "Open INV-44"];
+  const ranking = { query: "invoice INV-44", mode: "lexical", returned: 3,
+    results: labels.map((name, id) => ({ name, node_id: String(id), kind: "button", interactive: true })) };
+  assert.deepEqual(shapePageSearchRanking(ranking).results.map(r => r.label), [labels[0], labels[2]]);
+  assert.equal(shapePageSearchRanking({ ...ranking, query: "INV-56" }).results.length, 3);
+  assert.equal(shapePageSearchRanking({ ...ranking, query: "INV-44 or INV-445" }).results.length, 3);
+});
+
+test("viewport pixels are bound to a native document even when page evaluation is unavailable", async () => {
+  let captures = 0, navigation = false, treeReads = 0;
+  const op = createSessionOperations({
+    activate: async () => {}, enableCdpDomains: async () => {}, keepHiddenTabRendering: async () => {},
+    runtimeEvaluate: async () => { throw Error("page evaluation unavailable"); },
+    cdp: async (_ctx, _tab, method) => {
+      if (method === "Page.captureScreenshot") { captures++; return { data: "eA==" }; }
+      assert.equal(method, "Page.getFrameTree");
+      return { frameTree: { frame: { id: "main", loaderId: navigation ? String(++treeReads) : "original", url: "https://fixture.test/" } } };
+    },
+    stringify: JSON.stringify, screenshotMime: () => "image/png", MAX_CAPTURE_BASE64_CHARS: 100,
+  }).browser_screenshot;
+  const first = JSON.parse(await op.execute({ tabId: 1 }, {}));
+  assert.equal(first.base64, "eA==");
+  assert.equal(first.observation.changedDuringCapture, null);
+  navigation = true;
+  await assert.rejects(op.execute({ tabId: 1 }, {}), { code: "STALE_OBSERVATION" });
+  assert.equal(captures, 2);
 });

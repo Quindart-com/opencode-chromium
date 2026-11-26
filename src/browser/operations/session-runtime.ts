@@ -1,3 +1,4 @@
+import { BrowserRuntimeError } from "../../core/errors.ts";
 import type { Target } from "../../core/registry.ts";
 import type { BrowserContext } from "../../core/tool-definition.ts";
 import type { CdpMethod,CdpParams,CdpResult } from "../../shared/cdp.ts";
@@ -88,7 +89,10 @@ async function resolveSessionProfileId(context: BrowserContext, requestedProfile
   const selected = selectedProfilesBySession.get(key) ?? null;
   const used = usedProfilesBySession.get(key);
   const stickyProfileId = !requestedProfileId && !selected && used?.size === 1 ? [...used][0] : null;
-  const profile = await resolveBrowserProfile(requestedProfileId ?? selected ?? stickyProfileId);
+  const profile = await resolveBrowserProfile(requestedProfileId ?? context.profileId ?? selected ?? stickyProfileId);
+  if (context.profileId && profile.profileId !== context.profileId) {
+    throw new BrowserRuntimeError("The approved browser profile is no longer available.", { code: "PROFILE_DISCONNECTED" });
+  }
   return profile.profileId;
 }
 
@@ -102,6 +106,7 @@ async function profileSessionParams(context: BrowserContext, params: Record<stri
 }
 
 async function targetProfileIdsForSession(context: BrowserContext) {
+  if (context.profileId) return [await resolveSessionProfileId(context)];
   const key = sessionKey(context);
   const used = [...(usedProfilesBySession.get(key) ?? [])];
   if (used.length > 0) return used;

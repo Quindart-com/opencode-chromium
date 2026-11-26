@@ -2,7 +2,7 @@ import { useEffect,useState } from "react";
 import { createPortal } from "react-dom";
 import { decisionChoice,decisionChoices,decisionFamilies,decisionServices } from "../../../src/shared/decision-catalog.ts";
 import { t } from "../../i18n";
-import { sendMessage } from "./api";
+import { clearSharedMessages,sendMessage } from "./api";
 import type { DecisionSettings } from "./decision-types";
 
 const providerMessages = new Map<string, string>([
@@ -77,10 +77,11 @@ export default function ProviderSettings() {
         if (!response.result) throw new Error(t("cannotConnect"));
         setTest(response.result); setError(!response.result.ok);
         setMessage(response.result.message ? translateProviderMessage(response.result.message) : t("testFailed"));
-        if (response.result.ok && response.result.settings) { setSettings(response.result.settings); setApiKey(""); }
+        if (response.result.ok && response.result.settings) { clearSharedMessages(); setSettings(response.result.settings); setApiKey(""); }
       } else {
         const response = await sendMessage<{ result?: DecisionSettings }>({ type: "SET_DECISION_SETTINGS", settings: next });
         if (!response.result) throw new Error(t("cannotSaveReconnect"));
+        clearSharedMessages();
         setSettings(response.result); setApiKey(""); setMessage(t("decisionOff"));
       }
     } catch (cause) { setError(true); setMessage(cause instanceof Error ? cause.message : t("cannotSaveSettings")); }
@@ -91,6 +92,7 @@ export default function ProviderSettings() {
     try {
       const response = await sendMessage<{ result?: DecisionSettings }>({ type: "REMOVE_DECISION_KEY" });
       if (!response.result) throw new Error(t("cannotRemoveKey"));
+      clearSharedMessages();
       setSettings(response.result); setApiKey(""); setTest(null); setError(false);
       setMessage(t("keyRemoved"));
     } catch { setError(true); setMessage(t("removeKeyFailure")); }

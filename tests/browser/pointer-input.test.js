@@ -75,6 +75,15 @@ test("a double click sends two press/release pairs with click counts 1 and 2", a
   assert.equal(presses[0].commandParams.buttons, 2);
 });
 
+test("explicit pointer clicks in a background tab send one move and keep trusted input", async () => {
+  const { input, gestures, context } = harness({ facts: { active: false, hostname: "site.test" } });
+  await input.click({ ...context, inputMode: "pointer" }, 1, () => "point");
+  const events = gestures[0].steps.map(step => step.commandParams);
+  assert.deepEqual(events.map(event => event.type), ["mouseMoved", "mousePressed", "mouseReleased"]);
+  assert.ok(events.every(event => event.x === 300 && event.y === 200));
+  assert.deepEqual(events.map(event => event.buttons), [0, 1, 0]);
+});
+
 test("the pointer starts from the last known position and omits the overlay when disabled", async () => {
   const { input, gestures, context } = harness({ cursor: false });
   await input.click(context, 1, () => "e");

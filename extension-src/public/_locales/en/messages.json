@@ -1,4 +1,15 @@
 {
+  "anonymousDiagnostics": { "message": "Anonymous diagnostics" },
+  "diagnosticsDescription": { "message": "Share tool outcomes and errors through Google Analytics. No browsing content. Turn off anytime." },
+  "diagnosticsLoadFail": { "message": "Reconnect the browser bridge to load diagnostics settings." },
+  "diagnosticsSaveFail": { "message": "Could not save diagnostics settings. Try again." },
+  "sharedSiteReads": { "message": "Shared site reads" },
+  "sharedSiteReadsDescription": { "message": "Read public fields on supported sites through the OpenCode Browser registry. Only the requested fields and public IDs are sent. Needs Contribute task patterns on." },
+  "contributeTaskPatterns": { "message": "Contribute task patterns" },
+  "contributeTaskPatternsDescription": { "message": "Share which supported public sites and tasks your agent completes while Action memory is on. No URLs or page text. Turn off anytime." },
+  "memorySharesPatterns": { "message": "Also shares which supported public sites and tasks your agent completes, to improve shared site reads. No URLs or page text. Change this under Contribute task patterns." },
+  "siteSettingsSaveFail": { "message": "Could not save sharing settings. Try again." },
+  "diagnosticsBrowserPermission": { "message": "Allow technical data sharing in Firefox to enable diagnostics." },
   "extensionName": {
     "message": "opencode-chromium"
   },
@@ -1597,5 +1608,23 @@
   },
   "settingsStatusUnavailable": {
     "message": "Some settings could not be loaded."
+  },
+  "capabilityAvailable": {
+    "message": "Available"
+  },
+  "captureSharingOff": {
+    "message": "Sharing off"
+  },
+  "captureSharingOn": {
+    "message": "Sharing on"
+  },
+  "findPagesCapabilityHelp": {
+    "message": "Agents can find content on tabs they control."
+  },
+  "fillFormsCapabilityHelp": {
+    "message": "Agents can fill fields on tabs they control."
+  },
+  "captureCapabilityHelp": {
+    "message": "Agents can capture controlled tabs. Decision assistance shares screenshots only with your permission."
   }
 }

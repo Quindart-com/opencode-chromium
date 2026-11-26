@@ -12,6 +12,7 @@ export { pageSearchUnitsExpression } from './snapshot-expressions.ts';
 // and direct SDK adapters all consume this same operation registry.
 
 type EditableOptions = { selectAll?: boolean; cursorAtEnd?: boolean; includeSelect?: boolean };
+type PointClickOptions = { button?: "left" | "middle" | "right"; focusTextControl?: boolean };
 type InputGestureStep = { method: string; commandParams: object; cursor?: unknown; delayMs?: number };
 
 export function selectorClickTargetExpression(selector: string) {
@@ -66,12 +67,13 @@ function selectorClickExpression(selector: string, options: { trusted?: boolean 
   return backgroundClickExpression(`querySelectorStrict(${JSON.stringify(selector)})`, options);
 }
 
-function clickAtPointExpression(x: number, y: number, options: { button?: string; trusted?: boolean; clickCount?: number } = {}) {
+function clickAtPointExpression(x: number, y: number, options: PointClickOptions & { trusted?: boolean; clickCount?: number } = {}) {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   const clickOptions = {
     button: options.button ?? "left",
     clickCount: options.clickCount ?? 1,
+    focusTextControl: options.focusTextControl,
   };
   return `(() => {
     ${interactionHelpersSource()}
@@ -205,11 +207,11 @@ async function focusWithPointer(context: BrowserContext, tabId: number, expressi
   return "pointer" as const;
 }
 
-async function clickPoint(context: BrowserContext, tabId: number, x: number, y: number, button: "left" | "middle" | "right" = "left") {
+async function clickPoint(context: BrowserContext, tabId: number, x: number, y: number, options: PointClickOptions = {}) {
   finiteNumber(x, "x");
   finiteNumber(y, "y");
   await activate(context, tabId);
-  return performClick(context, tabId, (trusted: boolean) => clickAtPointExpression(x, y, { button, trusted }), { button });
+  return performClick(context, tabId, trusted => clickAtPointExpression(x, y, { ...options, trusted }), { button: options.button });
 }
 
 async function hoverPoint(context: BrowserContext, tabId: number, x: number, y: number) {

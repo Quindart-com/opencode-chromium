@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20" role="img" aria-label="npm: v2.0.5">
+  <title>npm: v2.0.5</title>
+  <clipPath id="badge"><rect width="80" height="20" rx="3"/></clipPath>
+  <g clip-path="url(#badge)"><rect width="35" height="20" fill="#555"/><rect x="35" width="45" height="20" fill="#2563eb"/></g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11">
+    <text x="17.5" y="14">npm</text><text x="57.5" y="14">v2.0.5</text>
+  </g>
+</svg>

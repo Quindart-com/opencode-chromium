@@ -165,8 +165,14 @@ export function interactionHelpersSource() {
       });
 
       if (button === 'left') {
+        // A scripted click skips the pointer's default focus step.
+        const focusTextControl = options.focusTextControl && ['input', 'textarea'].includes(editableKind(element));
+        if (focusTextControl) element.focus({ preventScroll: true });
         for (let count = 1; count <= clickCount; count += 1) element.click();
         if (clickCount > 1) element.dispatchEvent(new MouseEvent('dblclick', eventInit(clickCount)));
+        if (focusTextControl && focusedEditableElement() !== element) {
+          agentFail('TARGET_NOT_FOCUSABLE', 'The text control at the requested point did not retain keyboard focus.');
+        }
       } else if (button === 'right') {
         element.dispatchEvent(new MouseEvent('contextmenu', eventInit(1)));
       } else {

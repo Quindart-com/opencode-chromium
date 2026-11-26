@@ -20,7 +20,10 @@ export class CommandHealth {
   }
 
   generation(tabId: number) { return this.generations.get(tabId) ?? 0; }
-  idle() { return this.queues.size === 0 && this.pending.size === 0 && this.lifecycle.size === 0 && this.quarantined.size === 0; }
+  idle(tabId?: number) {
+    return tabId === undefined ? this.queues.size === 0 && this.pending.size === 0 && this.lifecycle.size === 0 && this.quarantined.size === 0
+      : !this.queues.has(tabId) && !this.pending.has(tabId) && !this.lifecycle.has(tabId) && !this.quarantined.has(tabId);
+  }
   invalidate(tabId: number) { this.generations.set(tabId, this.generation(tabId) + 1); }
   dialog(tabId: number) { return this.dialogs.get(tabId); }
   event(tabId: number, method: string, params: Record<string, unknown>, sessionId?: string) {

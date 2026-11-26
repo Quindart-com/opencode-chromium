@@ -11,6 +11,24 @@ type ExtensionWriter = (message: object) => unknown | Promise<unknown>;
 
 const JSON_RPC_VERSION = "2.0";
 const DEFAULT_RELAY_TIMEOUT_MS = 30000;
+// Browsers cap one native message to the extension at 1 MB and drop the whole host
+// connection when a message is larger, so an oversized result becomes an error instead.
+const MAX_EXTENSION_MESSAGE_BYTES = 1024 * 1024 - 1024;
+
+function fitExtensionMessage(message: { jsonrpc: string; id?: RpcId; result?: unknown }, method: string) {
+  if (!("result" in message)) return message;
+  const bytes = Buffer.byteLength(JSON.stringify(message) ?? "", "utf8");
+  if (bytes <= MAX_EXTENSION_MESSAGE_BYTES) return message;
+  return {
+    jsonrpc: message.jsonrpc,
+    id: message.id,
+    error: {
+      code: -32000,
+      message: `${method} result is ${(bytes / 1048576).toFixed(1)} MB, over the 1 MB browser message limit; request less (a viewport capture, lower quality, or a narrower read).`,
+      data: { code: "RESULT_TOO_LARGE", retryable: false, uncertain: false },
+    },
+  };
+}
 
 function requestTimeoutMs(message: RpcMessage) {
   const deadlineAt = message.params?.deadlineAt;
@@ -113,19 +131,33 @@ export class RpcRelay {
   async handleClientMessage(socket: RpcSocket, input: unknown) {
     const parsed = rpcMessageSchema.parse(input);
     if (parsed.coordinated === true) this.#coordinated.add(socket);
-    const leave = !["runtime.activity", "host.status"].includes(parsed.method ?? "") ? await this.#admit?.() : undefined;
+    let leave: (() => void) | undefined;
+    try {
+      if (parsed.method !== "runtime.activity" && parsed.method !== "host.status") leave = await this.#admit?.();
+    } catch (error) {
+      if (parsed.id === undefined || !parsed.method) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      await this.#writeClientError(socket, parsed.id, -32000, `Browser runtime could not admit the request: ${message}`, {
+        code: "RUNTIME_ADMISSION_FAILED", executionState: "not_started", retryable: false, uncertain: false,
+      });
+      return;
+    }
     try { await this.#dispatchClientMessage(socket, parsed); } finally { leave?.(); }
   }
 
   async #dispatchClientMessage(socket: RpcSocket, input: unknown) {
     const message = rpcMessageSchema.parse(input);
     const commands: unknown[] = (message.method === "inputGesture" || message.method === "executeInputGesture") && Array.isArray(message.params.steps) ? message.params.steps : message?.method === "executeCdp" ? [message.params] : [];
+    if (message.method?.startsWith("siteSettings.")) {
+      if(message.id!==undefined) await this.#writeClientError(socket,message.id,-32000,"Site consent is restricted to the extension");
+      return;
+    }
     const hasFiles = commands.some(value => { const command = record(value), params = record(command.commandParams ?? command.command_params); const files = command.method === "DOM.setFileInputFiles" ? params.files : command.method === "Input.dispatchDragEvent" ? record(params.data).files : null; return Array.isArray(files) && files.length > 0; });
     if (hasFiles && this.#state.profile?.uploadConsentVersion !== 1) {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Reload the updated extension to enable upload confirmation; no files were uploaded");
       return;
     }
-    if (message?.method?.startsWith("connections.") || message?.method?.startsWith("uploads.") || message?.method?.startsWith("firefox.") || message?.method?.startsWith("runtime.update")) {
+    if (["telemetry.status", "telemetry.configure"].includes(message.method ?? "") || message?.method?.startsWith("connections.") || message?.method?.startsWith("uploads.") || message?.method?.startsWith("firefox.") || message?.method?.startsWith("runtime.update")) {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "This operation is restricted to the extension");
       return;
     }
@@ -321,11 +353,11 @@ export class RpcRelay {
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,
         error: { code: -32000, message: local.error, data: local.errorData },
-      } : {
+      } : fitExtensionMessage({
         jsonrpc: JSON_RPC_VERSION,
         id: message.id,
         result: local.result,
-      });
+      }, message.method));
       return;
     }
 

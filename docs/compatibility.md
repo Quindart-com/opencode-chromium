@@ -25,6 +25,7 @@ Every surface exposes the same four tools: `browser_run`, `browser_observe`, `br
 | Chrome, Edge, Brave, Chromium | Chromium extension and CDP | Windows, macOS and Linux |
 | Firefox 140+ | Firefox add-on and WebDriver BiDi | Must be launched with remote debugging. Download lifecycle events need Firefox 144 or 145. See [Firefox](firefox.md). |
 | LibreWolf | Firefox add-on and WebDriver BiDi | Its Remote Agent must be enabled |
+| Ladybird **⚑ Experimental** | Classic WebDriver | Managed headless browser on Linux and Apple silicon macOS. [Setup and limits](ladybird.md) |
 
 Other Chromium or Firefox derivatives need individual validation.
 

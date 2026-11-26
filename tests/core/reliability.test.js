@@ -83,6 +83,83 @@ test("replay completes the turn and honors post-observation", async (t) => {
   assert.equal(invoked.filter((method) => method === "browser_turn_end").length, 1);
 });
 
+const staleObservation = () => Object.assign(new Error("Page changed during search ranking."), {
+  code: "STALE_OBSERVATION", retryable: false, uncertain: false, executionState: "not_started",
+});
+
+for (const keepsChanging of [false, true]) {
+  test(`a replayed click is dispatched once when post-observation ${keepsChanging ? "stays stale" : "recovers"}`, async (t) => {
+    const runtime = fixture(t, [{ action: "click", selector: "#record-entry", hostname: "fixture.test" }]);
+    runtime.memoryHostname = async () => "fixture.test";
+    let clicks = 0;
+    const deadlines = [];
+    runtime.executeStep = async () => { clicks++; return { clicked: true }; };
+    runtime.invoke = async (method) => {
+      if (method !== "browser_read_view") return {};
+      deadlines.push(runtime.operationScope.getStore()?.deadlineAt);
+      if (deadlines.length === 1 || keepsChanging) throw staleObservation();
+      return { view: "Saved" };
+    };
+    const deadlineAt = Date.now() + 5000;
+    const result = await runtime.run({
+      sessionId: "fixture", memoryIntent: "record entry", steps: [{ action: "click", target: { selector: "#record-entry" } }],
+      postObserve: { mode: "read" },
+    }, { deadlineAt });
+    assert.equal(clicks, 1);
+    assert.deepEqual(deadlines, [deadlineAt, deadlineAt]);
+    assert.deepEqual(result.memory, { used: true, stepsReused: 1, fallback: false });
+    assert.equal(result.results[0].ok, true);
+    if (keepsChanging) {
+      assert.equal(result.status, "partial");
+      assert.equal(result.observation.error.code, "STALE_OBSERVATION");
+      assert.equal(result.observation.error.uncertain, true);
+      assert.equal(result.observation.error.retryable, false);
+      assert.match(result.observation.error.hint, /browser_observe/);
+      assert.match(result.summary, /Replayed 1 .*state is unknown/);
+    } else {
+      assert.equal(result.status, "memory_replay");
+      assert.equal(result.observation.view, "Saved");
+    }
+  });
+}
+
+test("a recovery read that exceeds the operation deadline reports unknown state with the click result", async (t) => {
+  const runtime = fixture(t, []);
+  let clicks = 0, reads = 0;
+  runtime.executeStep = async () => { clicks++; return { clicked: true }; };
+  runtime.observeValue = async () => {
+    if (++reads === 1) throw staleObservation();
+    return new Promise(() => {});
+  };
+  const result = await runtime.run({
+    sessionId: "fixture", memoryMode: "off", steps: [{ action: "click", target: { selector: "#record-entry" } }],
+    postObserve: { mode: "search", query: "Saved" },
+  }, { deadlineAt: Date.now() + 250 });
+  assert.equal(clicks, 1);
+  assert.equal(reads, 2);
+  assert.deepEqual(result.results[0].result, { clicked: true });
+  assert.equal(result.status, "partial");
+  assert.equal(result.observation.error.code, "TIMEOUT");
+  assert.equal(result.observation.error.uncertain, true);
+  assert.equal(result.observation.error.retryable, false);
+  assert.match(result.summary, /1\/1 actions completed\. Post-action state is unknown/);
+});
+
+test("post-observation staleness does not trigger recovery after a read-only chain", async (t) => {
+  const runtime = fixture(t, []);
+  let reads = 0;
+  runtime.executeStep = async () => ({ passed: true });
+  runtime.observeValue = async () => { reads++; throw staleObservation(); };
+  const result = await runtime.run({
+    sessionId: "fixture", memoryMode: "off", steps: [{ action: "assert", target: { selector: "#saved" } }],
+    postObserve: { mode: "read" },
+  });
+  assert.equal(reads, 1);
+  assert.equal(result.status, "partial");
+  assert.equal(result.observation.error.code, "STALE_OBSERVATION");
+  assert.equal(result.observation.error.uncertain, false);
+});
+
 // The end-to-end shape of the reported bug: a workflow that has already been
 // recorded must replay on a plain repeat, with no memoryMode and no
 // memoryIntent, because nothing else ever told the agent to pass them.

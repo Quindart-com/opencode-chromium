@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { record } from "../shared/values.ts";
-import { resultSchema } from "./registry.ts";
+import { finalizeInputSchema,observeInputSchema,resultSchema,runInputSchema,sessionInputSchema } from "./registry.ts";
 import type { BrowserContext,RuntimeTool } from "./tool-definition.ts";
 
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
@@ -22,11 +22,39 @@ export function jsonSchemaFor(schema: z.ZodType) {
   return record(sanitizeJsonSchema(z.toJSONSchema(schema, { target: "draft-7" })));
 }
 
+export function fullToolInput(name?: string) {
+  const schemas = new Map([["browser_run", runInputSchema as z.ZodType], ["browser_observe", observeInputSchema], ["browser_session", sessionInputSchema], ["browser_finalize", finalizeInputSchema]]);
+  const schema = name && schemas.get(name);
+  if (name && !schema) throw new Error("Unknown core browser tool");
+  return schema ? { name, inputSchema: jsonSchemaFor(schema) } : { tools: [...schemas.keys()], hint: "Pass the tool name as query." };
+}
+
+// Keep advanced overrides callable. Only their documentation is loaded on demand.
+function advertise(value: unknown, fields: string[]) {
+  const schema = record(value), properties = record(schema.properties);
+  return { ...schema, additionalProperties: true,
+    properties: Object.fromEntries(fields.filter(key => Object.hasOwn(properties, key)).map(key => [key, properties[key]])) };
+}
+
+export function agentInputSchema(name: string, input: z.ZodType) {
+  const full = jsonSchemaFor(input);
+  const session = ["sessionId", "profile"];
+  const observation = ["mode", "query", "source", "target", "fullPage", "pack", "uri"];
+  if (name === "browser_session") return advertise(full, [...session, "action", "tabId", "scope", "name"]);
+  if (name === "browser_observe") return advertise(full, [...session, ...observation, "tabId", "delivery"]);
+  if (name !== "browser_run") return full;
+  const schema = advertise(full, [...session, "tab", "steps", "postObserve", "approvalToken", "approvalDecision", "returnMode"]);
+  const steps = record(schema.properties.steps);
+  schema.properties.steps = { ...steps, items: advertise(steps.items, ["id", "action", "target", "url", "value", "key", "fields", "capability", "input", "settle"]) };
+  schema.properties.postObserve = advertise(schema.properties.postObserve, observation);
+  return schema;
+}
+
 function baseDefinition(name: string, definition: RuntimeTool) {
   return {
     name,
     description: definition.description,
-    input: jsonSchemaFor(definition.inputSchema),
+    input: agentInputSchema(name, definition.inputSchema),
     output: jsonSchemaFor(definition.outputSchema),
   };
 }

@@ -9,7 +9,7 @@ import { createCoreRegistry,createMemoryRegistry } from "../../core/registry.ts"
 import type { RuntimeOptions } from "../../core/runtime-types.ts";
 import type { AgentBrowserRuntime } from "../../core/runtime.ts";
 import { createAgentBrowserRuntime } from "../../core/runtime.ts";
-import { dispatchBrowserTool,jsonSchemaFor } from "../../core/schema-adapters.ts";
+import { agentInputSchema,dispatchBrowserTool,jsonSchemaFor } from "../../core/schema-adapters.ts";
 import type { BrowserContext,RuntimeTool } from "../../core/tool-definition.ts";
 import { responseMetadata as contractMetadata,PLUGIN_NAME,PLUGIN_VERSION } from "../../core/versions.ts";
 import { memoryEnabledForServer } from "../../memory/index.ts";
@@ -81,7 +81,7 @@ function concise(result: unknown) {
 }
 
 function nativeTool(name: string, definition: RuntimeTool, runtime: AgentBrowserRuntime) {
-  const inputSchema = jsonSchemaFor(definition.inputSchema);
+  const inputSchema = agentInputSchema(name, definition.inputSchema);
   return {
     id: name,
     name,
@@ -139,17 +139,18 @@ function createLegacyOpenCodeHooks(options: OpenCodeOptions = {}) {
       if (disposed) return;
       disposed = true;
       trackRuntime(runtime).close();
-      runtime.close();
+      return runtime.close();
     },
     runtime,
     registry,
   };
 }
 
-type ToolEditor = { add(tool: { name: string; description: string; input: unknown; execute(input: unknown, context: BrowserContext): Promise<unknown> }): unknown };
+type ToolEditor = { add(tool: { name: string; description: string; input: unknown; options: { codemode: boolean };
+  execute(input: unknown, context: BrowserContext): Promise<unknown> }): unknown };
 
 function editorTool(name: string, tool: NativeTool) {
-  return { name, description: tool.description, input: tool.inputSchema,
+  return { name, description: tool.description, input: tool.inputSchema, options: { codemode: tool.codemode },
     async execute(input: unknown, context: BrowserContext) { const result = await tool.execute(input, context); return { content: result.output, attachments: result.attachments }; } };
 }
 
@@ -186,7 +187,7 @@ export async function createOpenCodeSetup(ctx: OpenCodeContext = {}, options: Op
     stopPresence();
     control?.close();
     trackRuntime(runtime).close();
-    runtime.close();
+    await runtime.close();
     logger.info("OpenCode V2 browser tools cleaned up", { plugin: PLUGIN_NAME });
   };
   cleanup.tools = tools;

@@ -31,6 +31,35 @@ export function tokenize(value: string) {
   return compactString(value, 2000).toLowerCase().match(/[a-z0-9]{2,}/g) ?? [];
 }
 
+const controlActions = [
+  ["restore", /^(?:restore|unarchive|reinstate|bring back)\b/],
+  ["archive", /^(?:archive|move to archive)\b/],
+  ["disable", /^(?:disable|mute|silence|stop|turn off|switch off)\b/],
+  ["enable", /^(?:enable|unmute|turn on|switch on)\b/],
+] as const;
+const articles = new Set(["the", "an", "this", "my", "please"]);
+
+// Compare an explicit action against the control's own label. Its surrounding
+// context can contain the opposite action, so context alone cannot earn the boost.
+function controlIntent(value: string) {
+  const normalized = compactString(value).toLowerCase().replace(/^please\s+/, "");
+  for (const [action, pattern] of controlActions) {
+    const prefix = pattern.exec(normalized)?.[0];
+    if (!prefix) continue;
+    const topics = tokenize(normalized.slice(prefix.length))
+      .filter(word => !articles.has(word) && !(action === "restore" && word === "archived"))
+      .map(word => /^(?:notification|alert)s?$/.test(word) ? "alert" : word);
+    return topics.length ? { action, topics } : null;
+  }
+  return null;
+}
+
+function matchingControlIntent(query: ReturnType<typeof controlIntent>, unit: NormalizedUnit | undefined) {
+  if (!query || !unit?.interactive || unit.disabled) return false;
+  const control = controlIntent(unit.name || unit.ariaName || unit.label || unit.text || "");
+  return control?.action === query.action && query.topics.every(word => control.topics.includes(word));
+}
+
 export function lexicalScore(normalizedQuery: string, queryTokens: string[], text: string) {
   const normalizedText = compactString(text, 2000).toLowerCase();
   if (!normalizedQuery || !normalizedText) return 0;
@@ -279,7 +308,12 @@ export function baseRanking(input: RankInput = {}) {
   const documents = units.map(unitText);
   const normalizedQuery = compactString(query).toLowerCase();
   const queryTokens = [...new Set(tokenize(normalizedQuery))];
-  const lexical = documents.map((text, index) => lexicalScore(normalizedQuery, queryTokens, text) + unitBoost(units[index]));
+  const intent = controlIntent(normalizedQuery);
+  const lexical = documents.map((text, index) => {
+    const unit = units[index];
+    const score = lexicalScore(normalizedQuery, queryTokens, text);
+    return Math.max(score, matchingControlIntent(intent, unit) ? 0.84 : 0) + unitBoost(unit);
+  });
   const ranked: RankedItem[] = units.map((unit, index) => ({
     unit,
     score: Math.max(0, Math.min(1, lexical[index] ?? 0)),
@@ -291,11 +325,15 @@ export function baseRanking(input: RankInput = {}) {
 }
 
 export function formatRanking(base: BaseRanking, options: RankingOptions = {}) {
-  const ranked = (options.ranked ?? base.ranked).slice(0, base.maxResults);
+  const candidates = options.ranked ?? base.ranked;
+  const mode = options.mode ?? "lexical";
+  // Position and interactivity help order textual hits. Alone, they are no
+  // evidence that a control matches, even if it is the first button on screen.
+  const ranked = (mode === "lexical" ? candidates.filter(item => item.lexical > Math.max(0, unitBoost(item.unit))) : candidates).slice(0, base.maxResults);
   const model = options.model ?? modelById(DEFAULT_MODEL_ID);
   return {
     enabled: options.enabled ?? getSemanticSettings().enabled,
-    mode: options.mode ?? "lexical",
+    mode,
     searchStrategy: options.searchStrategy ?? options.mode ?? "lexical",
     degraded: options.degraded === true,
     degradationReason: options.degradationReason ?? null,

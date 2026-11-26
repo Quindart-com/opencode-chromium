@@ -39,6 +39,7 @@ export async function runBrowserBroker(dir: string) {
     throw Object.assign(new Error(`No installed runtime supports browser contract ${contractVersion}`), { code: "extension_upgrade_required" });
   };
   let release = selected(), child: ChildProcessWithoutNullStreams | null = null, closing = false, swapping = false, maintenanceRunning = false, extensionVersion: string | null = null, lastMaintenanceAt = 0;
+  let profileConnected = false;
   const extensionRequests = new Set<RpcId>(), childRequests = new Set<RpcId>(), profileHelloRequests = new Set<RpcId>();
   const probes = new Map<string, { resolve(value: Record<string, unknown> | null): void; timer: ReturnType<typeof setTimeout> }>();
   const lease = createParticipant(dir, "host", release.version, release.root, { contractVersion: release.contractVersion, harness: "browser" });
@@ -82,6 +83,7 @@ export async function runBrowserBroker(dir: string) {
       if (message.method === "host.versions") value = { ...message,params: { ...record(message.params),browserCompatibility: compatibility() } };
       const profileHello = message.id !== undefined && !message.method && profileHelloRequests.delete(message.id);
       if (profileHello && !message.error) {
+        profileConnected = true;
         value = { ...message,result: { ...record(message.result),reconciliationToken,browserCompatibility: compatibility() } };
       }
       if (message.id !== undefined && !message.method) extensionRequests.delete(message.id);
@@ -167,6 +169,9 @@ export async function runBrowserBroker(dir: string) {
     if (!maintenanceRunning && Date.now() - lastMaintenanceAt >= 60000) {
       lastMaintenanceAt = Date.now(); maintenanceRunning = true;
       void reconcileRuntimeState(dir).catch(() => {}).finally(() => { maintenanceRunning = false; });
+      if (profileConnected) {
+        void controller.checkForUpdates().catch(() => { /* Scheduling is best-effort during browser maintenance. */ });
+      }
     }
     const state = activation(), desired = desiredRuntime(state), compatible = selectBrowserRelease(state, extensionContractVersion);
     lease.publish({ desiredVersion: desired.version,draining: desired.root !== release.root });
@@ -175,11 +180,10 @@ export async function runBrowserBroker(dir: string) {
     try {
       const activity = await probe();
       if (activity?.extensionIdle !== true || Number(activity.clients ?? 0) > 0 || Number(activity.unmanaged ?? 0) > 0 || Number(activity.pending ?? 0) > 0) return;
-      const previous = child;
-      if (!previous) return;
-      child = null;
-      previous.kill("SIGTERM");
-      startWorker(compatible);
+      if (!child || extensionRequests.size || childRequests.size) return;
+      // Reopen the native port so the extension sends its profile hello to the new worker.
+      shutdown();
+      process.exit(0);
     } finally { swapping = false; }
   }
 

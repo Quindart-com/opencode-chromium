@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import path from "node:path";
+import { createParticipant } from "../src/control/leases.ts";
+import { ABANDONED_SESSION_GRACE_MS, reconcileRuntimeState } from "../src/control/reconcile.ts";
+import { PLUGIN_VERSION } from "../src/core/versions.ts";
+import { readProfileRegistrations } from "../src/shared/profile-registry.ts";
 import { chromiumExtensionFixture } from "./fixtures/chromium-extension.js";
 
 const headed = process.argv.includes("--headed");
@@ -31,16 +36,30 @@ try {
   const call = async (name, args = {}) => { const result = await raw(name, args); assert.equal(result.ok, true, JSON.stringify(result)); return result; };
   const tabInfo = tabId => worker.evaluate(id => chrome.tabs.get(id), tabId);
   const groupInfo = groupId => worker.evaluate(id => chrome.tabGroups.get(id), groupId);
-  const userTab = async page => {
-    const tab = await worker.evaluate(url => chrome.tabs.create({ url, active: false }), `${origin}/?page=${page}`);
-    return tab.id;
-  };
+  const userTab = page => worker.evaluate(async url => {
+    const tab = await chrome.tabs.create({ url, active: false });
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const current = await chrome.tabs.get(tab.id);
+      if (current.url === url && current.status === "complete") return tab.id;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    throw new Error("Fixture tab did not load");
+  }, `${origin}/?page=${page}`);
   const makeGroup = tabIds => worker.evaluate(ids => chrome.tabs.group({ tabIds: ids }), tabIds);
   const candidates = async () => (await call("browser_session", { action: "open", scope: "user" })).result.tabs.map(tab => tab.id);
   const rejectClaim = async (tabId, message) => {
     const result = await raw("browser_session", { action: "claim-tab", tabId });
     assert.equal(result.ok, false);
     assert.match(result.error.message, message);
+  };
+  const approve = async proposal => {
+    assert.equal(proposal.status, "approval_required", JSON.stringify(proposal));
+    return agent.call("browser_run", { approvalToken: proposal.approvalToken });
+  };
+  const claim = async (tabId, args = {}) => {
+    const result = await approve(await raw("browser_session", { action: "claim-tab", tabId, ...args }));
+    assert.equal(result.ok, true, JSON.stringify(result));
+    return result;
   };
   const identity = tab => ({ id: tab.id, url: tab.url, windowId: tab.windowId, groupId: tab.groupId });
   const ownedIds = async () => (await call("browser_session", { action: "open" })).result.tabs.map(tab => tab.id);
@@ -66,8 +85,10 @@ try {
   };
 
   await fixture.context.pages()[0].goto(origin);
-  const userId = await userTab("existing"), groupedId = await userTab("user-group"), changedId = await userTab("changed-after-discovery");
-  const protectedGroup = await makeGroup([groupedId]);
+  const userId = await userTab("existing"), groupedId = await userTab("user-group"), siblingId = await userTab("user-group-sibling");
+  const changedId = await userTab("changed-after-approval");
+  const protectedGroup = await makeGroup([groupedId, siblingId]);
+  const restrictedId = await worker.evaluate(async () => (await chrome.tabs.create({ url: "chrome://settings", active: false })).id);
   const otherSessionId = "other-agent-fixture";
   const otherCreated = await call("browser_session", { sessionId: otherSessionId, action: "new-tab" });
   const otherId = otherCreated.activeTabId;
@@ -76,23 +97,64 @@ try {
   assert.equal(otherTabs.result.tabs.find(tab => tab.id === otherId).creationRequestId, otherCreated.result.creationRequestId);
   const ownedUngroupedId = (await call("browser_session", { sessionId: otherSessionId, action: "new-tab" })).activeTabId;
   await worker.evaluate(id => chrome.tabs.ungroup(id), ownedUngroupedId);
-  await call("browser_session", { action: "open", name: "Human review" });
   const available = await candidates();
   assert.ok(available.includes(userId));
   assert.ok(available.includes(changedId));
-  for (const id of [groupedId, otherId, ownedUngroupedId]) assert.ok(!available.includes(id));
-  await rejectClaim(groupedId, /tab group/);
+  assert.ok(available.includes(groupedId));
+  for (const id of [restrictedId, otherId, ownedUngroupedId]) assert.ok(!available.includes(id));
+  await rejectClaim(restrictedId, /internal/);
   await rejectClaim(otherId, /controlled/);
   await rejectClaim(ownedUngroupedId, /controlled/);
+  const stale = await raw("browser_run", { tab: { mode: "claim", tabId: changedId }, steps: [{ action: "reload" }] });
   await makeGroup([changedId]);
-  await rejectClaim(changedId, /tab group/);
-  const runClaim = await raw("browser_run", { tab: { mode: "claim", tabId: groupedId }, steps: [{ action: "reload" }] });
-  assert.equal(runClaim.ok, false);
+  assert.equal((await approve(stale)).error.code, "TAB_CLAIM_CHANGED");
+  const siblingBefore = identity(await tabInfo(siblingId));
+  const groupedBefore = identity(await tabInfo(groupedId));
+  const runClaim = await approve(await raw("browser_run", { tab: { mode: "claim", tabId: groupedId }, memoryMode: "off", steps: [{ action: "hover", target: { selector: "#ready" } }] }));
+  assert.equal(runClaim.ok, true, JSON.stringify(runClaim));
+  await call("browser_session", { action: "release-tab", tabId: groupedId });
   assert.equal((await tabInfo(groupedId)).groupId, protectedGroup);
-  console.log("Verified: discovery hides grouped/owned tabs; both claim paths reject them and recheck stale candidates");
+  assert.deepEqual(identity(await tabInfo(groupedId)), groupedBefore);
+  assert.deepEqual(identity(await tabInfo(siblingId)), siblingBefore);
+  console.log("Verified: discovery exposes personal groups, excludes live owners and internal tabs, and an approved group claim preserves neighboring tabs");
 
+  const contestedId = await userTab("contested");
+  const contenders = ["contender-a", "contender-b"];
+  const proposals = await Promise.all(contenders.map(id => raw("browser_session", { action: "claim-tab", tabId: contestedId, sessionId: id })));
+  const race = await Promise.all(proposals.map(approve));
+  assert.equal(race.filter(result => result.ok).length, 1, JSON.stringify(race));
+  assert.equal((await tabInfo(contestedId)).url, `${origin}/?page=contested`);
+  await call("browser_session", { action: "release-tab", tabId: contestedId, sessionId: race.find(result => result.ok).sessionId });
+  console.log("Verified: concurrent approvals acquire one owner");
+
+  const abandonedSession = "abandoned-tab-fixture";
+  const abandonedId = (await call("browser_session", { action: "new-tab", sessionId: abandonedSession })).activeTabId;
+  await call("browser_run", { sessionId: abandonedSession, memoryMode: "off", steps: [{ action: "navigate", url: `${origin}/?page=abandoned` }] });
+  const abandonedBefore = identity(await tabInfo(abandonedId));
+  const runtimeDir = path.join(fixture.fixture, "runtime");
+  const registrations = readProfileRegistrations(path.join(fixture.fixture, "registry")).filter(row => row.profileId === profile);
+  assert.equal(registrations.length, 1);
+  const lease = createParticipant(runtimeDir, "runtime", PLUGIN_VERSION, undefined, { sessions: [abandonedSession], profiles: [profile] });
+  try {
+    lease.abandon();
+    assert.equal((await reconcileRuntimeState(runtimeDir, { registrations })).releasedSessions, 0);
+    assert.ok(!(await candidates()).includes(abandonedId));
+    const now = Date.now() + ABANDONED_SESSION_GRACE_MS + 1000;
+    const reconciled = await reconcileRuntimeState(runtimeDir, { now, registrations });
+    assert.equal(reconciled.releasedSessions, 1);
+    assert.equal(reconciled.removedParticipants, 1);
+    assert.equal((await tabInfo(abandonedId)).url, abandonedBefore.url);
+    assert.ok((await candidates()).includes(abandonedId));
+    await claim(abandonedId);
+    assert.match((await call("browser_observe", { mode: "extract", target: { selector: "#ready" } })).result.text, /Ready for human review/);
+    await call("browser_session", { action: "release-tab", tabId: abandonedId });
+    assert.deepEqual(identity(await tabInfo(siblingId)), siblingBefore);
+    console.log("Verified: expiry releases abandoned ownership without closing the tab or changing its neighbor");
+  } finally { lease.close(); }
+
+  await call("browser_session", { action: "open", name: "Human review" });
   const urlBefore = (await tabInfo(userId)).url;
-  await call("browser_session", { action: "claim-tab", tabId: userId });
+  await claim(userId);
   assert.equal((await tabInfo(userId)).url, urlBefore);
   const extraction = await call("browser_observe", { mode: "extract", target: { selector: "#ready" } });
   assert.match(JSON.stringify(extraction), /Ready for human review/);
@@ -156,8 +218,12 @@ try {
   assert.equal((await groupInfo(reviewGroup)).title, "Human review");
   assert.equal((await groupInfo((await tabInfo(otherId)).groupId)).color, "green");
   const afterReview = await candidates();
-  for (const id of reviewIds) assert.ok(!afterReview.includes(id));
-  await rejectClaim(userId, /tab group/);
+  for (const id of reviewIds) assert.ok(afterReview.includes(id));
+  const reclaimSession = "review-reclaim";
+  await claim(userId, { sessionId: reclaimSession });
+  await rejectClaim(userId, /controlled/);
+  await call("browser_session", { action: "release-tab", tabId: userId, sessionId: reclaimSession });
+  assert.equal((await tabInfo(userId)).groupId, reviewGroup);
   console.log("Verified: default finalization preserves all four owned tabs in a named blue group and leaves native-grouped personal tabs untouched");
   if (headed && !nativeInput) {
     console.log("REVIEW_READY: four tabs remain in the blue Human review group; press Enter after native UI inspection");
@@ -199,7 +265,7 @@ try {
   console.log("Verified: only explicit handoff retains ownership; omitted and numeric keep entries default to blue review");
 
   const releasedId = await userTab("released");
-  await call("browser_session", { action: "claim-tab", tabId: releasedId });
+  await claim(releasedId);
   await call("browser_session", { action: "release-tab", tabId: releasedId });
   assert.equal((await tabInfo(releasedId)).groupId, -1);
   assert.ok((await candidates()).includes(releasedId));

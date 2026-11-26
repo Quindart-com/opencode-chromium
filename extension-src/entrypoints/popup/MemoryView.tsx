@@ -3,6 +3,7 @@ import { useMemoryStatus } from "./memoryStatusStore";
 import { t } from "../../i18n";
 import { errorMessage,formatBytes,MB,memoryCall,type MemoryStatus } from "./api";
 import Icon from "./Icon";
+import { siteSettingsChanged, useSiteStatus } from "./SiteSettings";
 
 const EMPTY_COUNTS: MemoryStatus["counts"] = {
   signatures: 0,
@@ -87,6 +88,7 @@ export default function MemoryView({ view = "overview", onView, viewButtonRef, o
   const shared = useMemoryStatus({ scope, selectedProfiles }, available);
   const { status, profiles, refresh: refreshMemory } = shared;
   const loadError = available ? shared.error : "";
+  const [site] = useSiteStatus(view === "toggle" || view === "settings");
 
   useEffect(() => {
     if (!status) return;
@@ -98,11 +100,12 @@ export default function MemoryView({ view = "overview", onView, viewButtonRef, o
     if (quotaTimer.current !== null) window.clearTimeout(quotaTimer.current);
   }, []);
 
-  const runMemoryAction = useCallback(async (method: string, successText: string) => {
+  const runMemoryAction = useCallback(async (method: string, successText: string, params: object = {}) => {
     if (memoryBusy) return;
     setMemoryBusy(true);
     try {
-      await memoryCall(method);
+      await memoryCall(method, params);
+      if (method === "memory.enable" || method === "memory.disable") siteSettingsChanged();
       setMemoryFeedback(successText);
     } catch (error) {
       setMemoryFeedback(errorMessage(error));
@@ -147,6 +150,11 @@ export default function MemoryView({ view = "overview", onView, viewButtonRef, o
   const bytesUsed = status?.bytes_used ?? 0;
   const quotaFill = Math.min(100, (bytesUsed / Math.max(1, quotaBytes)) * 100);
   const enabled = status?.enabled === true;
+  // Turning Action Memory on beside this note is the agreement to share task patterns.
+  // Profiles that already chose a sharing setting keep it.
+  const askSharing = Boolean(site?.configured && site.patternSharingSupported && !site.patternChoice && !enabled);
+  const sharingNote = askSharing || (site?.configured && site.sharing) ? ` ${t("memorySharesPatterns")}` : "";
+  const toggleMemory = () => void runMemoryAction(enabled ? "memory.disable" : "memory.enable", t(enabled ? "memoryDisabled" : "memoryEnabled"), askSharing ? { contributePatterns: true } : {});
   const powerUser = status?.power_user === true;
   const executions = counts.executions_v2 ?? 0;
   const negativeActions = counts.negative_actions_v2 ?? 0;
@@ -192,7 +200,7 @@ export default function MemoryView({ view = "overview", onView, viewButtonRef, o
   }, [status, enabled, usage?.replay_fallbacks, usage?.replay_rejections, usage?.replay_rejections_by_reason, replayAttempts, v2Chains]);
 
   if (view === "summary") return <section className="home-memory"><div className="section-heading"><h2>{t("activityMemory")}</h2><button ref={viewButtonRef} className="text-button" type="button" onClick={onView}>{t("viewActivity")}</button></div><p>{!available || loadError ? t("historyUnavailable") : !status ? t("memoryChecking") : v2Actions ? t("memoryCounts", [String(v2Actions), String(v2Chains)]) : t("noSavedActions")}</p></section>;
-  if (view === "toggle") return <section className="setting-row memory-toggle-row"><div><h2>{t("actionMemory")}</h2><small>{t("saveActionsLocally")}</small></div><button id="memory-enabled" type="button" role="switch" aria-checked={enabled} aria-label={t("actionMemory")} className={`switch${enabled ? " on" : ""}`} disabled={!status || memoryBusy} onClick={() => void runMemoryAction(enabled ? "memory.disable" : "memory.enable", t(enabled ? "memoryDisabled" : "memoryEnabled"))}><span /></button>{(loadError || memoryFeedback) && <p role="status">{loadError ? t("memoryUnavailable") : memoryFeedback}</p>}</section>;
+  if (view === "toggle") return <section className="setting-row memory-toggle-row"><div><h2>{t("actionMemory")}</h2><small>{t("saveActionsLocally")}{sharingNote}</small></div><button id="memory-enabled" type="button" role="switch" aria-checked={enabled} aria-label={t("actionMemory")} className={`switch${enabled ? " on" : ""}`} disabled={!status || memoryBusy} onClick={toggleMemory}><span /></button>{(loadError || memoryFeedback) && <p role="status">{loadError ? t("memoryUnavailable") : memoryFeedback}</p>}</section>;
 
   if (view === "storage-summary") return <button className="setting-row" type="button" onClick={onView}><span><strong>{t("storageCleanup")}</strong><small>{loadError ? t("memoryUnavailable") : status ? t("storageSummary", [formatBytes(quotaBytes), String(status.purge_days)]) : t("memoryChecking")}</small></span><Icon name="chevron-right" /></button>;
 
@@ -203,9 +211,9 @@ export default function MemoryView({ view = "overview", onView, viewButtonRef, o
         <div className="memory-head">
           <div>
             <h2>{t("actionMemory")}</h2>
-            <span className="memory-state-line">{t("memoryDescription")}</span>
+            <span className="memory-state-line">{t("memoryDescription")}{sharingNote}</span>
           </div>
-          <button id="memory-enabled" type="button" role="switch" aria-checked={enabled} aria-label={t("actionMemory")} className={`switch${enabled ? " on" : ""}`} disabled={!status || memoryBusy} onClick={() => void runMemoryAction(enabled ? "memory.disable" : "memory.enable", t(enabled ? "memoryDisabled" : "memoryEnabled"))}><span /></button>
+          <button id="memory-enabled" type="button" role="switch" aria-checked={enabled} aria-label={t("actionMemory")} className={`switch${enabled ? " on" : ""}`} disabled={!status || memoryBusy} onClick={toggleMemory}><span /></button>
         </div>
         <span id="memory-state-line" className="visually-hidden" aria-live="polite">{stateLine}</span>
       </div>

@@ -8,6 +8,7 @@ import { FrameDecoder,writeFrame } from "../shared/node-framing.ts";
 import { normalizeProfileRegistration,profileRegistryDir,readProfileRegistrations,type ProfileRegistration } from "../shared/profile-registry.ts";
 import { isRecord,record } from "../shared/values.ts";
 import { browserClientIdentity,stopBrowserClientPresence } from "./client-identity.ts";
+import { LADYBIRD_LABEL,LADYBIRD_PROFILE,readLadybirdConfig } from "./ladybird/config.ts";
 import { reconciledTab,runRecoveryDoctor,sessionTabs,transportFailure } from "./recovery.ts";
 
 const DEFAULT_TIMEOUT_MS = 20000;
@@ -17,7 +18,11 @@ const PROFILE_CACHE_TTL_MS = 750;
 
 const browserClients = new Map<string, BrowserHostClient>();
 const profileCache = new Map<string, { at: number; profiles: ConnectedProfile[] }>();
-interface ConnectedProfile extends ProfileRegistration { host: { connected: boolean; ipcClients: number | null; startedAt: string | null; lastExtensionMessageAt: string | null } }
+interface ConnectedProfile extends Omit<ProfileRegistration, "ipcPath"> {
+  ipcPath: string | null;
+  experimental?: true;
+  host: { connected: boolean; ipcClients: number | null; startedAt: string | null; lastExtensionMessageAt: string | null };
+}
 interface ProfileOptions { timeoutMs?: number; includeInternal?: boolean; fresh?: boolean }
 interface RequestOptions extends ProfileOptions { profileId?: string | null; ipcPath?: string; recover?: boolean }
 interface Pending { method: string; resolve(value: unknown): void; reject(error: unknown): void; timeout: ReturnType<typeof setTimeout> }
@@ -207,7 +212,7 @@ function profileIdFromParams(params: Record<string, unknown> = {}) {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
-function publicProfile(profile: ProfileRegistration) {
+function publicProfile(profile: ConnectedProfile) {
   return {
     profileId: profile.profileId,
     profileLabel: profile.profileLabel ?? null,
@@ -221,6 +226,7 @@ function publicProfile(profile: ProfileRegistration) {
     hostPid: profile.hostPid ?? null,
     startedAt: profile.startedAt ?? null,
     lastSeenAt: profile.lastSeenAt ?? null,
+    ...(profile.experimental ? { experimental: true as const } : {}),
   };
 }
 
@@ -265,7 +271,7 @@ export async function listBrowserProfiles(options: ProfileOptions = {}) {
   const includeInternal = options.includeInternal === true;
   const cacheKey = profileRegistryDir();
   const cached = profileCache.get(cacheKey);
-  let profiles;
+  let profiles: ConnectedProfile[];
 
   if (options.fresh !== true && cached && Date.now() - cached.at < PROFILE_CACHE_TTL_MS) {
     profiles = cached.profiles;
@@ -285,6 +291,15 @@ export async function listBrowserProfiles(options: ProfileOptions = {}) {
       const result = settled[index];
       if (result?.status === "fulfilled") profiles.push(result.value);
       // A busy live host can miss a probe; only the owner removes its registration.
+    }
+    if (readLadybirdConfig()) {
+      const profile = normalizeProfileRegistration({
+        profileId: LADYBIRD_PROFILE, profileLabel: LADYBIRD_LABEL, browserName: "Ladybird", ipcPath: "managed",
+      });
+      if (profile) profiles.push({
+        ...profile, ipcPath: null, experimental: true,
+        host: { connected: true, ipcClients: null, startedAt: null, lastExtensionMessageAt: null },
+      });
     }
     if (registrations.length && !profiles.length) {
       const failures = settled.filter(result => result.status === "rejected").map(result => result.reason as unknown);
@@ -330,8 +345,15 @@ export async function browserRequest(method: string, params: Record<string, unkn
   }
 
   const profile = options.ipcPath ? null : await resolveBrowserProfile(requestedProfileId, options);
+  if (profile?.experimental && profile.profileId === LADYBIRD_PROFILE) {
+    if (method === "host.status") return { connected: true, profile: publicProfile(profile) };
+    throw new BrowserRuntimeError("Ladybird (Experimental) has no browser extension host for " + method + ".", { code: "UNSUPPORTED_CAPABILITY" });
+  }
   const ipcPath = options.ipcPath ?? profile?.ipcPath;
   if (!ipcPath) throw new Error("Browser profile has no native host connection");
+  if (profile && options.profileId && params.profile_id === options.profileId && profile.profileId !== options.profileId) {
+    throw new ProfileSelectionError("PROFILE_DISCONNECTED", "The selected browser profile is no longer available.");
+  }
   const client = pooledBrowserClient(ipcPath, options);
   const creationRequestId = method === "createTab" ? randomUUID() : undefined;
   let before: Record<string, unknown>[] | null = null;

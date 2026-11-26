@@ -95,7 +95,7 @@ export default function App(): React.JSX.Element {
       {view === "home" && <div className="home-stack">
         <ProfileMenu profile={profile} connected={status.state === "connected"} onRename={() => setView("profile")} />
         <HarnessConnections status={status} />
-        <HomeStatus status={status} />
+        <HomeStatus status={status} onSettings={next => { setSection(next); setView("settings"); }} />
         <MemoryView view="summary" available={status.state === "connected"} onView={() => setView("activity")} viewButtonRef={activityButton} />
       </div>}
       {view === "settings" && <><SettingsView status={status} section={section} onSection={setSection} />{(!section || section === "updates") && <VersionNotice status={status} showSnoozed />}</>}

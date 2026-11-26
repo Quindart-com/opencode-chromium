@@ -8,6 +8,7 @@ import type { CdpParams } from "../../shared/cdp.ts";
 import { SourceMapResolver } from "../../shared/source-maps.ts";
 import { record,requiredRecord } from "../../shared/values.ts";
 import { createDiscoveryOperations } from "../discovery.ts";
+import { createSiteOperations } from "../site-operations.ts";
 import { createEnvironmentController } from "../environment.ts";
 import { type BrowserEvent } from "../events.ts";
 import { inspectNetworkEvents } from "../network.ts";
@@ -90,10 +91,17 @@ export function shapePageSearchRanking(input: unknown, detail: string = "lean") 
       results: ranking.results.map(value => compactPageSearchResult(candidateSchema.parse(value))),
     };
   }
-  return {
-    ...base,
-    results: ranking.results.map(value => leanPageSearchResult(candidateSchema.parse(value))),
-  };
+  const results = ranking.results.map(value => leanPageSearchResult(candidateSchema.parse(value)));
+  // A named record often has several controls. Keep every exact hit in the
+  // ranked window, including duplicates, so an agent can detect ambiguity.
+  const identifiers = String(ranking.query ?? "").toLowerCase().match(/\b(?=[\w-]*\d)[a-z\d]+(?:[-_][a-z\d]+)+\b/g);
+  if (identifiers?.length === 1 && ranking.mode === "lexical") {
+    const id = identifiers[0]!;
+    const exact = results.filter(result => result.label?.toLowerCase().match(/[\w-]+/g)?.includes(id));
+    if (exact.length && exact.length < results.length)
+      return { ...base, returned: exact.length, otherRankedResults: results.length - exact.length, results: exact };
+  }
+  return { ...base, results };
 }
 
 function parseJsonObject(value: unknown, label: string) {
@@ -447,6 +455,13 @@ export const createBrowserOperations = async () => {
   for (const [name, definition] of Object.entries(createDiscoveryOperations({ command: cdp, evaluate: runtimeEvaluate, getTab: (context: BrowserContext, tabId) => extensionRequest(context, "getTab", { tabId }) }))) {
     Object.defineProperty(tools, name, { value: definition });
   }
+  const siteOperations = createSiteOperations(async (context, tabId) => {
+    const { result, profileId } = await extensionProfileRequest(context, "getTab", { tabId });
+    const url = record(result).url;
+    if (typeof url !== "string") throw Error("SITE_TAB_UNAVAILABLE");
+    return { profile: profileId, url };
+  });
+  for (const [name, definition] of Object.entries(siteOperations)) Object.defineProperty(tools, name, { value: definition });
   return { tool: tools };
 };
 

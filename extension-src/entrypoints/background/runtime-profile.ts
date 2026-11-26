@@ -1,4 +1,5 @@
 import { z } from "zod/mini";
+import { telemetryPermission } from "../../telemetry-permission.ts";
 import { BROWSER_CONTRACT_VERSION } from "../../../src/shared/product.ts";
 import { maskIdentifier,record } from "../../../src/shared/values.ts";
 import { validVersion,versionNotice } from "../../version-status.ts";
@@ -81,6 +82,7 @@ async function profileMetadata() {
         profileIdMasked: maskIdentifier(profile.profileId),
         profileLabel: profile.profileLabel,
         browserName: browserNameFromUserAgent(),
+        browserVersion: navigator.userAgent?.match(/(?:Firefox|Edg|OPR|Chrome)\/(\d+(?:\.\d+)*)/)?.[1] ?? null,
         extensionId: chrome.runtime.id,
         extensionVersion: manifest.version,
         browserContractVersion: BROWSER_CONTRACT_VERSION,
@@ -109,6 +111,9 @@ function applyHostVersions(value: unknown) {
     broadcastNativeStatus();
 }
 rpc.register("host.versions", async (params) => { applyHostVersions(params); return {}; });
+rpc.register("telemetry.permission", async () => {
+    return { allowed: await telemetryPermission(IS_FIREFOX, () => chrome.permissions.getAll()) };
+});
 async function updateVersionBadge() {
     const notice = versionNotice(chrome.runtime.getManifest().version, hostStatus);
     if (!chrome.action?.setBadgeText)

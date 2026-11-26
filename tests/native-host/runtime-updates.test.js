@@ -49,7 +49,7 @@ test("legacy state migrates to schema v2 and a validated release becomes desired
     assert.equal(activation.fallback.version, "1.9.2");
     assert.equal(activation.preserved, "yes");
     assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "package.json"))).version, "1.9.2");
-    assert.equal(f.updater.status().state, "draining");
+    assert.equal(f.updater.status().state, "ready");
   } finally { f.cleanup(); }
 });
 test("busy existing connections remain pinned while new connections see the desired release", async () => {
@@ -63,6 +63,67 @@ test("busy existing connections remain pinned while new connections see the desi
     assert.equal(f.updater.status().state, "draining");
     assert.equal(f.updater.status().blockerCount, 1);
   } finally { lease.close(); f.cleanup(); }
+});
+
+test("automatic discovery records a retry, survives a restart, and checks once across profiles", async () => {
+  let clock = 1000, checks = 0;
+  const metadata = async () => {
+    checks++;
+    if (checks === 1) throw new Error("private npm error");
+    return { name: "opencode-chromium", version: "1.9.3" };
+  };
+  const f = fixture({ now: () => clock, metadata });
+  const lease = createParticipant(f.dir, "supervisor", "1.9.2", f.root, { contractVersion: 1, sessions: ["busy"], inFlight: 1, harness: "codex" });
+  try {
+    await f.updater.checkForUpdates();
+    const offline = f.updater.status().releaseCheck;
+    assert.equal(offline.lastCheckAt, clock);
+    assert.equal(offline.error, "release_unavailable");
+    assert.ok(offline.nextCheckAt > clock);
+    assert.equal(offline.lastSuccessfulCheckAt, undefined);
+    assert.equal(f.installs(), 0);
+
+    const restarted = createRuntimeUpdater({ dir: f.dir, now: () => clock, metadata,
+      install: async (stage, version) => { release(path.join(stage, "node_modules/opencode-chromium"), version); } });
+    await restarted.checkForUpdates();
+    assert.equal(checks, 1);
+    clock = offline.nextCheckAt;
+    await Promise.all([restarted.checkForUpdates(), f.updater.checkForUpdates()]);
+    assert.equal(checks, 2);
+    const status = restarted.status();
+    assert.equal(status.releaseCheck.lastSuccessfulCheckAt, clock);
+    assert.equal(status.releaseCheck.latestVersion, "1.9.3");
+    assert.equal(status.releaseCheck.error, undefined);
+    assert.equal(status.installedVersion, "1.9.3");
+    assert.equal(status.fallback.version, "1.9.2");
+    assert.deepEqual(status.loadedVersions, ["1.9.2"]);
+    assert.equal(status.state, "draining");
+    lease.close();
+    assert.equal(restarted.status().state, "ready");
+  } finally { lease.close(); f.cleanup(); }
+});
+
+test("automatic discovery respects opt-out before the npm request and before activation", async () => {
+  let checks = 0, inProgress, resolveMetadata;
+  const started = new Promise(resolve => { inProgress = resolve; });
+  const f = fixture({ metadata: () => {
+    checks++;
+    inProgress();
+    return new Promise(resolve => { resolveMetadata = resolve; });
+  } });
+  try {
+    await f.updater.configure(false);
+    await f.updater.checkForUpdates();
+    assert.equal(checks, 0);
+    await f.updater.configure(true);
+    const pending = f.updater.checkForUpdates();
+    await started;
+    await f.updater.configure(false);
+    resolveMetadata({ name: "opencode-chromium", version: "1.9.3" });
+    await pending;
+    assert.equal(f.installs(), 0);
+    assert.equal(f.updater.status().installedVersion, "1.9.2");
+  } finally { f.cleanup(); }
 });
 
 test("major releases require one explicit approval before blue-green activation", async () => {
@@ -102,6 +163,10 @@ test("rollback assigns fallback as desired and drains through the same path", as
     const activation = JSON.parse(fs.readFileSync(f.manifest));
     assert.equal(desiredRuntime(activation).version, "1.9.2");
     assert.equal(activation.fallback.version, "1.9.3");
+    await f.updater.tick("1.9.3");
+    assert.equal(f.updater.status().installedVersion, "1.9.2");
+    await f.updater.tick("1.9.4");
+    assert.equal(f.updater.status().installedVersion, "1.9.4");
   } finally { f.cleanup(); }
 });
 
@@ -114,6 +179,7 @@ test("concurrent updaters install once and corrupt downloads never change desire
     const broken = createRuntimeUpdater({ dir: f.dir, install: async () => { throw new Error("registry unavailable"); } });
     await broken.tick("1.9.4");
     assert.equal(broken.status().state, "retry");
+    assert.equal(broken.status().failurePhase, "install");
     assert.equal(desiredRuntime(JSON.parse(fs.readFileSync(f.manifest))).version, "1.9.3");
     assert.ok(!JSON.stringify(broken.status()).includes("registry unavailable"));
   } finally { f.cleanup(); }

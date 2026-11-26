@@ -95,6 +95,7 @@ jobs:
       - name: Build and test release tarball
         run: |
           bun run pack
+          python3 scripts/check-public-artifacts.py --git ./*.tgz
           bun run test:tarball
           bun run check:release
 

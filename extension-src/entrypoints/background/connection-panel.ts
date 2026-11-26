@@ -6,10 +6,23 @@ const capabilityCache = new WeakMap<NativeRpc, { generation: number; value: Capa
 
 /** Connection controls are restricted to our panel, never content scripts or pages. */
 export async function connectionPanelMessage(message: { type: string; params?: Record<string, unknown>; enabled?: unknown }, sender: { id?: string; tab?: { url?: string }; url?: string; frameId?: number }, dependencies: {
-  extensionId: string; panelUrl?: string; rpc: NativeRpc; idle(): boolean;
+  extensionId: string; panelUrl?: string; rpc: NativeRpc; idle(): boolean; telemetryAllowed?(): Promise<boolean>;
 }) {
   const ownPanelTab = dependencies.panelUrl && sender.url === dependencies.panelUrl && sender.tab?.url === dependencies.panelUrl && sender.frameId === 0;
   if (sender.id !== dependencies.extensionId || sender.tab && !ownPanelTab) throw new Error("Open connection controls from the extension panel");
+  if (message.type === "SET_PATTERN_SHARING" && (!dependencies.panelUrl || sender.url !== dependencies.panelUrl || (sender.frameId !== undefined && sender.frameId !== 0)))
+    throw Error("Manage task sharing from the extension panel");
+  if(message.type==="GET_SITE_SETTINGS") return dependencies.rpc.request("siteSettings.status",{}, {timeoutMs:2500});
+  if (message.type === "SET_SITE_SETTINGS" || message.type === "SET_PATTERN_SHARING") {
+    if(typeof message.enabled!=="boolean") throw Error("Invalid site registry setting");
+    return dependencies.rpc.request(message.type === "SET_PATTERN_SHARING" ? "siteSettings.sharePatterns" : "siteSettings.configure",{enabled:message.enabled, ...(message.type === "SET_SITE_SETTINGS" && message.params?.includePackages === true ? { includePackages: true } : {})},{timeoutMs:2500});
+  }
+  if (message.type === "GET_TELEMETRY_SETTINGS" || message.type === "SET_TELEMETRY_SETTINGS") {
+    if (message.type === "SET_TELEMETRY_SETTINGS" && typeof message.enabled !== "boolean") throw new Error("Diagnostics enabled must be a boolean");
+    const result = await dependencies.rpc.request(message.type === "GET_TELEMETRY_SETTINGS" ? "telemetry.status" : "telemetry.configure",
+      message.type === "GET_TELEMETRY_SETTINGS" ? {} : { enabled: message.enabled }, { timeoutMs: 2500 });
+    return { ...(result && typeof result === "object" ? result : {}), browserAllowed: await dependencies.telemetryAllowed?.() ?? true };
+  }
   const capabilities = async () => {
     const generation = dependencies.rpc.connectionGeneration?.();
     const cached = capabilityCache.get(dependencies.rpc);

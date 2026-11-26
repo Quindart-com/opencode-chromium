@@ -85,7 +85,7 @@ export function createSessionOperations(dependencies: Dependencies) {
         },
       }),
       browser_list_tabs: tool({
-        description: "List this session's tabs or ungrouped, unclaimed user tabs available to claim.",
+        description: "List this session's tabs or user tabs available for an approved claim.",
         args: {
           scope: tool.schema.enum(["session", "user"]).default("user"),
         },
@@ -122,12 +122,14 @@ export function createSessionOperations(dependencies: Dependencies) {
         },
       }),
       browser_claim_tab: tool({
-        description: "Claim an ungrouped, unclaimed tab by ID after the user's explicit request or permission. Prefer a new tab otherwise.",
+        description: "Complete an approved claim of a tab in the selected profile.",
         args: {
-          tabId: tool.schema.number().int().positive().describe("Chrome tab ID to claim"),
+          tabId: tool.schema.number().int().positive(),
+          profileId: tool.schema.string(),
+          claimToken: tool.schema.string(),
         },
         async execute(args, context) {
-          const { profileId, result } = await extensionProfileRequest(context, "claimUserTab", { tabId: args.tabId });
+          const { profileId, result } = await extensionProfileRequest(context, "claimUserTab", args);
           return stringify(addProfileToTabResult(result, profileId));
         },
       }),
@@ -240,7 +242,15 @@ async execute(args, context) {
           await enableCdpDomains(context, args.tabId, ["Page"], { optional: true });
           // A hidden tab never produces the frame a capture waits for; keep it rendering in place.
           await keepHiddenTabRendering(context, args.tabId);
-          const observation = record(await runtimeEvaluate(context, args.tabId, pageStateExpression()));
+          const captureState = async () => {
+            if (!args.fullPage) {
+              const frame = (await cdp(context, args.tabId, "Page.getFrameTree", {}, args.timeoutMs)).frameTree.frame;
+              if (frame.loaderId) return { documentId: JSON.stringify([frame.id, frame.loaderId, frame.url]), url: frame.url };
+            }
+            // Firefox's frame tree may omit loader IDs. Retain its document-generation check.
+            return record(await runtimeEvaluate(context, args.tabId, pageStateExpression()));
+          };
+          const observation = await captureState();
           const params: CdpParams<"Page.captureScreenshot"> = { format: args.format, optimizeForSpeed: true };
           if (args.format !== "png" && args.quality !== undefined) params.quality = args.quality;
           if (args.clip) params.clip = { ...args.clip, scale: args.clip.scale ?? 1 };
@@ -266,13 +276,13 @@ async execute(args, context) {
             mimeType = "image/jpeg";
             capture.formatApplied = "jpeg";
           }
-          const current = record(await runtimeEvaluate(context, args.tabId, pageStateExpression()));
-          if (current.documentId !== observation.documentId) throw Object.assign(new Error("Document changed while capturing the screenshot. Observe it again."), { code: "STALE_OBSERVATION", uncertain: false, retryable: false });
+          const current = await captureState();
+          if (!observation.documentId || current.documentId !== observation.documentId) throw Object.assign(new Error("Document changed while capturing the screenshot. Observe it again."), { code: "STALE_OBSERVATION", uncertain: false, retryable: false });
           return stringify({
             mimeType,
             base64: result.data,
             ...capture,
-            observation: { ...observation, scope: args.fullPage ? "document" : "viewport", changedDuringCapture: current.revision !== observation.revision },
+            observation: { ...observation, scope: args.fullPage ? "document" : "viewport", changedDuringCapture: 'revision' in observation && 'revision' in current ? current.revision !== observation.revision : null },
             bytes: Math.floor(result.data.length * 0.75),
           });
         },

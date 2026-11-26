@@ -69,6 +69,53 @@ test("upload dispatch preserves the selected page node rather than the first inp
   } finally { runtime.close(); }
 });
 
+test("a mutating query asks for a specific target when two controls tie", async () => {
+  const runtime = fakeRuntime();
+  const clicks = [];
+  runtime.executeStep = AgentBrowserRuntime.prototype.executeStep.bind(runtime);
+  runtime.invoke = async (name, args) => {
+    if (name === "browser_page_search") return { results: [
+      { nodeId: "invoice-a", score: 0.92, interactive: true },
+      { nodeId: "invoice-b", score: 0.92, interactive: true },
+    ] };
+    if (name === "browser_dom_click") clicks.push(args.nodeId);
+    return {};
+  };
+  try {
+    const target = { query: "Review invoice" };
+    const refused = await runtime.run({ memoryMode: "off", steps: [{ action: "click", target }] });
+    assert.equal(refused.results[0].error.code, "AMBIGUOUS_TARGET");
+    assert.equal(refused.results[0].error.executionState, "not_started");
+    assert.deepEqual(clicks, []);
+    const selected = await runtime.run({ memoryMode: "off", steps: [{ action: "click", target: { ...target, index: 1 } }] });
+    assert.equal(selected.ok, true);
+    assert.deepEqual(clicks, ["invoice-b"]);
+  } finally { runtime.close(); }
+});
+
+test("a denied explicit tab leaves this session's owned tab selected", async () => {
+  const runtime = fakeRuntime();
+  const sessionId = "retained-selection";
+  const session = runtime.getSession(sessionId);
+  session.activeTabId = 42;
+  runtime.ensureTab = AgentBrowserRuntime.prototype.ensureTab.bind(runtime);
+  runtime.invoke = async (name, args) => {
+    if ((name === "browser_get_tab" || name === "browser_configure") && args.tabId === 99) {
+      throw Object.assign(new Error("The tab belongs to another session."), { code: "TAB_NOT_CONTROLLED" });
+    }
+    return {};
+  };
+  try {
+    const denied = await runtime.run({ sessionId, tab: { tabId: 99 }, memoryMode: "off",
+      steps: [{ action: "click", target: { selector: "button" } }] });
+    assert.equal(denied.error.code, "TAB_NOT_CONTROLLED");
+    assert.equal((await runtime.observe({ sessionId, tabId: 99, mode: "read" })).error.code, "TAB_NOT_CONTROLLED");
+    assert.equal((await runtime.session({ sessionId, tabId: 99, action: "configure", environment: { reset: true } })).error.code, "TAB_NOT_CONTROLLED");
+    assert.equal(session.activeTabId, 42);
+    assert.deepEqual(runtime.executed, []);
+  } finally { runtime.close(); }
+});
+
 test("risky action chain pauses once before any browser action", async () => {
   const runtime = fakeRuntime();
   try {

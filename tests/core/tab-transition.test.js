@@ -125,7 +125,26 @@ test("dom-quiet settling polls the mutation age instead of snapshotting the page
   const result = await settleBrowserStep(runtime, { action: "click" }, 7, new Map(), { sessionId: "s" });
   assert.deepEqual(result, { condition: "dom-quiet", settled: true });
   assert.equal(calls.every(name => name === "browser_dom_quiet"), true);
-  assert.ok(calls.length >= 5, "polled until the page was quiet for 500ms");
+  assert.ok(calls.length >= 2 && calls.length <= 3, "waited for a complete quiet window without early probes");
+});
+
+test("a mutation during the quiet window delays settlement", async () => {
+  const started = performance.now();
+  let probes = 0;
+  const runtime = {
+    operationScope: { run: (_scope, task) => task() },
+    resolveTarget: async () => ({}),
+    invoke: async name => {
+      assert.equal(name, "browser_dom_quiet");
+      probes++;
+      if (probes === 1) return { documentId: "d", revision: 1, lastMutationAgeMs: 900 };
+      return { documentId: "d", revision: 2, lastMutationAgeMs: Math.max(0, performance.now() - started - 400) };
+    },
+  };
+  const result = await settleBrowserStep(runtime, { action: "click" }, 7, new Map(), { sessionId: "s" });
+  assert.deepEqual(result, { condition: "dom-quiet", settled: true });
+  assert.ok(performance.now() - started >= 900, "the 500 ms quiet window starts again after the mutation");
+  assert.ok(probes >= 3 && probes <= 4);
 });
 
 test("dom-quiet settling falls back to snapshots when the cheap probe is unavailable", async () => {
@@ -143,4 +162,48 @@ test("dom-quiet settling falls back to snapshots when the cheap probe is unavail
   assert.equal(result.settled, true);
   assert.equal(calls.filter(name => name === "browser_dom_quiet").length, 1, "the missing probe is only tried once");
   assert.ok(calls.includes("browser_dom_snapshot"));
+});
+
+test("a protection signal stops later steps and post-observation", async () => {
+  const { runtime } = runtimeWith([tab(7, "about:blank")]);
+  let dispatches = 0, observations = 0;
+  runtime.executeStep = async () => { dispatches++; return {}; };
+  runtime.observeValue = async () => { observations++; return {}; };
+  try {
+    const result = await runtime.run({ sessionId: "protected", memoryMode: "off", postObserve: { mode: "read" },
+      steps: [{ action: "click", target: { selector: "#test" }, onError: "continue" }, { action: "find", value: "next" }] });
+    assert.equal(result.status, "partial");
+    assert.equal(dispatches, 1);
+    assert.equal(observations, 0);
+  } finally { runtime.close(); }
+});
+
+test("denial stops read retries, onError continue, and follow-up reads", async () => {
+  const { runtime } = runtimeWith([]);
+  let attempts = 0, observations = 0;
+  runtime.executeStep = async () => { attempts++; throw Object.assign(new Error("denied"), { status: 403 }); };
+  runtime.observeValue = async () => { observations++; return {}; };
+  try {
+    const result = await runtime.run({ sessionId: "denial", memoryMode: "off", postObserve: { mode: "read" },
+      steps: [{ action: "find", value: "record", retry: 2, onError: "continue" }, { action: "find", value: "next" }] });
+    assert.equal(result.ok, false);
+    assert.equal(attempts, 1);
+    assert.equal(observations, 0);
+  } finally { runtime.close(); }
+});
+
+test("a read stays on the displayed tab unless a public task was requested", async () => {
+  const { runtime } = runtimeWith([]);
+  const calls = [];
+  runtime.getSession("source").activeTabId = 7;
+  runtime.readView = async () => ({ view: "displayed" });
+  runtime.invoke = async (name, input) => { calls.push([name, input]); return { data: { id: 1, score: 7 } }; };
+  try {
+    assert.equal((await runtime.observe({ sessionId: "source", mode: "read", query: "score" })).result.view, "displayed");
+    const current = await runtime.observe({ sessionId: "source", mode: "read", source: "public", query: "score" });
+    assert.equal(current.result.data.score, 7);
+    assert.deepEqual(calls, [["browser_site_read", { tabId: 7, task: "score" }]]);
+    assert.equal((await runtime.observe({ sessionId: "source", mode: "read", source: "public" })).ok, false);
+    assert.equal(calls.length, 1);
+  } finally { runtime.close(); }
 });

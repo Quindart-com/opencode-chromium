@@ -4,11 +4,6 @@ import type { RuntimeTool } from "../../core/tool-definition.ts";
 import { record } from "../../shared/values.ts";
 import { imageCandidates,sanitizeImages } from "../image-content.ts";
 
-import {
-  localhostHostValidation,
-  localhostOriginValidation,
-  NodeStreamableHTTPServerTransport,
-} from "@modelcontextprotocol/node";
 import { McpServer,ResourceTemplate } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { randomUUID,timingSafeEqual } from "node:crypto";
@@ -19,12 +14,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { markBrowserClientUsed,startBrowserClientPresence } from "../../browser/client-identity.ts";
-import { announceBrowserClient,closeBrowserClients,resetBrowserClientConnections } from "../../browser/client.ts";
+import { announceBrowserClient,resetBrowserClientConnections } from "../../browser/client.ts";
 import { startHarnessControl } from "../../control/harness-control.ts";
 import { artifactUriTemplate } from "../../core/artifacts.ts";
 import { createCoreRegistry,createMemoryRegistry } from "../../core/registry.ts";
 import { createAgentBrowserRuntime } from "../../core/runtime.ts";
-import { jsonSchemaFor } from "../../core/schema-adapters.ts";
+import { agentInputSchema } from "../../core/schema-adapters.ts";
 import { responseMetadata as contractMetadata,PLUGIN_NAME,PLUGIN_VERSION } from "../../core/versions.ts";
 import { memoryEnabledForServer } from "../../memory/index.ts";
 import { identifyHarness } from "../../shared/connections.ts";
@@ -34,14 +29,14 @@ export const SERVER_NAME = PLUGIN_NAME;
 export const SERVER_INSTRUCTIONS = [
   "Use the four browser tools for UI-only work, connector gaps, and visual verification; prefer structured connectors when available.",
   "Pass a user-named profile on the first useful call, batch find/action/settle/verification in browser_run, and reuse sessionId.",
-  "To read a page or check what an action did, use browser_observe mode read (or postObserve mode read): page text and controls as short lines with @x,y click points, built without page script, so it works on sites that block automation and on hidden tabs. Repeat reads return only changes. Prefer it to screenshots; act on a line with target { ref } (click, fill, type), which is located fresh at action time.",
+  "Read the displayed tab with browser_observe mode read. For an offscreen record, query its exact ID. For a live value linked from this page, follow the link and verify the new resource and value. For a requested current public value on a supported site, use read with source public and a task query. Use screenshot for visual evidence on an authorized page. Stop on access denial or a challenge.",
   "When authorization is missing or automatic approval review rejects an action, use the harness question tool with Approve and Disapprove. Wait for the human answer, then resume the original authorization path after approval. Do not end the task or bypass a denial with another tool. An actual human refusal requires a new user instruction.",
   "Transport failures run a bounded CLI doctor and return recovery results. Follow those checks; if unresolved, run opencode-chromium doctor --repair-runtime --json before one targeted repair and verification. Never replay an uncertain mutation unchanged.",
-  "Page search uses the auto retrieval strategy by default (lexical first, escalating to the active local embedding model); request lexical for lowest latency, semantic to always embed, and deep for reranked multilingual or code-heavy matching.",
+  "Search is lexical first. Discover advanced options with browser_observe mode capabilities, pack schema, query set to a core tool name.",
   "For a specific tab's deeper network debugging, request browser_observe mode capabilities with pack network, then execute network.inspect inside browser_run; bodies are opt-in and approval-gated.",
-  "Only claim an existing tab after the user's explicit request or permission. browser_session action open with scope user lists ungrouped, unclaimed tabs; grouped or owned tabs cannot be claimed. Prefer new-tab otherwise.",
-  "Approval-required results must be followed by browser_run with only the approvalToken. Call browser_finalize when finished: all tabs remain open in a blue review group and ownership is released. Pass explicit keep status 'handoff' only for unfinished work that must retain the live session in a green group. Omitted keep or status means human review; finalization never closes tabs.",
-  "When local action memory is enabled, browser_run replays a remembered recipe for steps you already issue on the same host and reports memory.used with stepsReused; targets are re-resolved against the live DOM and stale steps fall back to normal exploration. Pass memoryMode 'off' to skip memory, or memoryIntent to also try bounded semantic recall.",
+  "Discover eligible existing tabs with browser_session action open and scope user. Claim only the existing tab the user authorized. Approve the returned claimTarget with its approvalToken.",
+  "Call browser_run with only approvalToken after approval. After a decline, send approvalToken and approvalDecision=decline. Finalize when finished to release tabs for review. Existing groups are preserved. Explicit handoffs retain ownership.",
+  "When enabled, local memory automatically reuses matching steps and verifies their targets during browser_run.",
 ].join(" ");
 
 function rootDir() {
@@ -138,8 +133,8 @@ function sanitizeImagePayloads(value: unknown): unknown { return sanitizeImages(
 
 export { mcpImageContent,sanitizeImagePayloads };
 
-function mcpSchema(schema: z.ZodType) {
-  const jsonSchema = jsonSchemaFor(schema);
+function mcpSchema(name: string, schema: z.ZodType) {
+  const jsonSchema = agentInputSchema(name, schema);
   return {
     "~standard": {
       version: 1 as const,
@@ -165,7 +160,7 @@ export async function registerCoreTools(server: McpServer, runtime: AgentBrowser
     for (const [name, definition] of Object.entries(registry)) {
       server.registerTool(name, {
         description: definition.description,
-      inputSchema: mcpSchema(definition.inputSchema),
+        inputSchema: mcpSchema(name, definition.inputSchema),
       annotations: definition.annotations,
     }, async (args: unknown) => activity.call(async () => {
       markBrowserClientUsed();
@@ -228,6 +223,8 @@ export async function createServer({ runtime, fallbackSessionId = `mcp-${randomU
 export async function serveStdio(options: ServerOptions, runtime: AgentBrowserRuntime) {
   const fallbackSessionId = process.env.AGENT_BROWSER_SESSION_ID ?? process.env.CODEX_SESSION_ID ?? `mcp-${randomUUID()}`;
   const server = await createServer({ runtime, fallbackSessionId });
+  const onclose = server.server.onclose;
+  server.server.onclose = () => { onclose?.(); void runtime.close(); };
   await server.connect(new StdioServerTransport());
   return server;
 }
@@ -236,6 +233,7 @@ export async function serveHttp(options: ServerOptions, runtime: AgentBrowserRun
   const loopback = isLoopback(options.host);
   const configuredToken = process.env[options.authTokenEnv];
   if (!loopback && !configuredToken) throw new Error(`Refusing non-loopback MCP binding without a bearer token in ${options.authTokenEnv}`);
+  const { localhostHostValidation,localhostOriginValidation,NodeStreamableHTTPServerTransport } = await import("@modelcontextprotocol/node");
   const validateHost = loopback ? localhostHostValidation() : null;
   const validateOrigin = loopback ? localhostOriginValidation() : null;
   const server = http.createServer(async (request, response) => {
@@ -305,12 +303,11 @@ export async function main(argv = process.argv.slice(2)) {
   });
   const cleanup = () => {
     trackRuntime(runtime).close();
-    runtime.close();
-    closeBrowserClients();
+    return runtime.close();
   };
-  process.once("SIGINT", () => { cleanup(); process.exit(0); });
-  process.once("SIGTERM", () => { cleanup(); process.exit(0); });
-  process.once("exit", cleanup);
+  const shutdown = () => { void cleanup().finally(() => process.exit(0)); };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
   await startMcpServer(options, { runtime });
 }
 
