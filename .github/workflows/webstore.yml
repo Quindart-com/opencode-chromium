@@ -55,6 +55,8 @@ jobs:
         env:
           CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
         run: bun run check:webstore
+      - name: Scan Chrome archive
+        run: python3 scripts/check-public-artifacts.py dist-extension/*-chrome.zip
 
       - name: Preserve the verified extension for review and retries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

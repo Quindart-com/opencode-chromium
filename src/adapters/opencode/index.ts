@@ -9,7 +9,7 @@ import { createCoreRegistry,createMemoryRegistry } from "../../core/registry.ts"
 import type { RuntimeOptions } from "../../core/runtime-types.ts";
 import type { AgentBrowserRuntime } from "../../core/runtime.ts";
 import { createAgentBrowserRuntime } from "../../core/runtime.ts";
-import { dispatchBrowserTool,jsonSchemaFor } from "../../core/schema-adapters.ts";
+import { agentInputSchema,dispatchBrowserTool,jsonSchemaFor } from "../../core/schema-adapters.ts";
 import type { BrowserContext,RuntimeTool } from "../../core/tool-definition.ts";
 import { responseMetadata as contractMetadata,PLUGIN_NAME,PLUGIN_VERSION } from "../../core/versions.ts";
 import { memoryEnabledForServer } from "../../memory/index.ts";
@@ -81,7 +81,7 @@ function concise(result: unknown) {
 }
 
 function nativeTool(name: string, definition: RuntimeTool, runtime: AgentBrowserRuntime) {
-  const inputSchema = jsonSchemaFor(definition.inputSchema);
+  const inputSchema = agentInputSchema(name, definition.inputSchema);
   return {
     id: name,
     name,

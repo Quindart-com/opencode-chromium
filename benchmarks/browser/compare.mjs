@@ -17,7 +17,7 @@ const percentChange = (base, head) => base > 0 && head !== null ? (head / base -
 const sentinelFailed = entry => entry?.status === "failed" || entry?.incorrectInput || entry?.focusLoss > 0 || entry?.unfocusedSamples > 0;
 
 export function compare(base, head) {
-  for (const field of ["schemaVersion", "harnessSha256", "seed", "suite", "rounds", "roundOffset", "matrix", "viewport", "inputMode", "deadlines", "tokenizer", "node", "platform", "release", "arch", "cpu"]) {
+  for (const field of ["schemaVersion", "harnessSha256", "seed", "suite", "rounds", "roundOffset", "matrix", "viewport", "inputMode", "deadlines", "tokenizer", "node", "platform", "release", "arch", "cpu", "runnerCohort"]) {
     if (JSON.stringify(base.run[field]) !== JSON.stringify(head.run[field])) throw new Error(`Runs differ on ${field}`);
   }
   for (const field of ["engine", "binarySha256", "headed"]) {

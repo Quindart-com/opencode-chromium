@@ -152,8 +152,9 @@ export async function startExtension({ root, controllerRoot = root, engine, bina
   const host = `com.opencode.browser.bench${randomBytes(8).toString("hex")}`;
   const background = path.join(source, "background.js");
   const code = fs.readFileSync(background, "utf8");
-  if (!code.includes("com.opencode.browser.plugin")) throw new Error("Built extension is missing its native host identifier");
-  fs.writeFileSync(background, code.replaceAll("com.opencode.browser.plugin", host));
+  const builtHost = /com\.opencode\.browser\.(?:plugin|site_registry_dev)\b/g;
+  if (!code.match(builtHost)) throw new Error("Built extension is missing its native host identifier");
+  fs.writeFileSync(background, code.replace(builtHost, host));
   const manifestPath = path.join(source, "manifest.json");
   const manifest = json(manifestPath);
   const launcher = path.join(dir, windows ? "native.cmd" : "native.sh");

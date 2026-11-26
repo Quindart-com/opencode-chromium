@@ -3,6 +3,12 @@
   "diagnosticsDescription": { "message": "通过 Google Analytics 分享工具结果和错误。不包含浏览内容，可随时关闭。" },
   "diagnosticsLoadFail": { "message": "请重新连接浏览器桥接程序以加载诊断设置。" },
   "diagnosticsSaveFail": { "message": "无法保存诊断设置，请重试。" },
+  "sharedSiteReads": { "message": "共享站点读取" },
+  "sharedSiteReadsDescription": { "message": "通过 OpenCode Browser 注册表读取受支持站点的公开字段。仅发送请求的字段和公开 ID。需要开启“贡献任务模式”。" },
+  "contributeTaskPatterns": { "message": "贡献任务模式" },
+  "contributeTaskPatternsDescription": { "message": "在操作记忆开启时，分享代理完成了哪些受支持的公开站点和任务。不包含网址或页面文本，可随时关闭。" },
+  "memorySharesPatterns": { "message": "还会分享代理完成了哪些受支持的公开站点和任务，以改进共享站点读取。不包含网址或页面文本，可在“贡献任务模式”中更改。" },
+  "siteSettingsSaveFail": { "message": "无法保存共享设置，请重试。" },
   "diagnosticsBrowserPermission": { "message": "请在 Firefox 中允许分享技术数据以启用诊断。" },
   "extensionName": {
     "message": "opencode-chromium"

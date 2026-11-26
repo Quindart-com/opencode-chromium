@@ -163,3 +163,47 @@ test("dom-quiet settling falls back to snapshots when the cheap probe is unavail
   assert.equal(calls.filter(name => name === "browser_dom_quiet").length, 1, "the missing probe is only tried once");
   assert.ok(calls.includes("browser_dom_snapshot"));
 });
+
+test("a protection signal stops later steps and post-observation", async () => {
+  const { runtime } = runtimeWith([tab(7, "about:blank")]);
+  let dispatches = 0, observations = 0;
+  runtime.executeStep = async () => { dispatches++; return {}; };
+  runtime.observeValue = async () => { observations++; return {}; };
+  try {
+    const result = await runtime.run({ sessionId: "protected", memoryMode: "off", postObserve: { mode: "read" },
+      steps: [{ action: "click", target: { selector: "#test" }, onError: "continue" }, { action: "find", value: "next" }] });
+    assert.equal(result.status, "partial");
+    assert.equal(dispatches, 1);
+    assert.equal(observations, 0);
+  } finally { runtime.close(); }
+});
+
+test("denial stops read retries, onError continue, and follow-up reads", async () => {
+  const { runtime } = runtimeWith([]);
+  let attempts = 0, observations = 0;
+  runtime.executeStep = async () => { attempts++; throw Object.assign(new Error("denied"), { status: 403 }); };
+  runtime.observeValue = async () => { observations++; return {}; };
+  try {
+    const result = await runtime.run({ sessionId: "denial", memoryMode: "off", postObserve: { mode: "read" },
+      steps: [{ action: "find", value: "record", retry: 2, onError: "continue" }, { action: "find", value: "next" }] });
+    assert.equal(result.ok, false);
+    assert.equal(attempts, 1);
+    assert.equal(observations, 0);
+  } finally { runtime.close(); }
+});
+
+test("a read stays on the displayed tab unless a public task was requested", async () => {
+  const { runtime } = runtimeWith([]);
+  const calls = [];
+  runtime.getSession("source").activeTabId = 7;
+  runtime.readView = async () => ({ view: "displayed" });
+  runtime.invoke = async (name, input) => { calls.push([name, input]); return { data: { id: 1, score: 7 } }; };
+  try {
+    assert.equal((await runtime.observe({ sessionId: "source", mode: "read", query: "score" })).result.view, "displayed");
+    const current = await runtime.observe({ sessionId: "source", mode: "read", source: "public", query: "score" });
+    assert.equal(current.result.data.score, 7);
+    assert.deepEqual(calls, [["browser_site_read", { tabId: 7, task: "score" }]]);
+    assert.equal((await runtime.observe({ sessionId: "source", mode: "read", source: "public" })).ok, false);
+    assert.equal(calls.length, 1);
+  } finally { runtime.close(); }
+});

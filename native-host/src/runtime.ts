@@ -21,6 +21,7 @@ import { handleDiagnosticsHostMethod } from "./diagnostics/index.ts";
 import { createFirefoxHost } from "./firefox/backend.ts";
 import { memoryCommandSchema } from "./memory/commands.ts";
 import { EmbedQueue,MemoryStore,embeddingEnabled } from "./memory/index.ts";
+import { PatternSharing } from "./memory/pattern-sharing.ts";
 import { candidateRecipes } from "./memory/recipe-candidates.ts";
 import { configureNetworkFamilyFallback } from "./network-policy.ts";
 import type { RelayState } from "./rpc-relay.ts";
@@ -93,6 +94,17 @@ try {
 } catch (error) {
   log(`action memory unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
+let patterns: PatternSharing | null = null;
+try {
+  if (memoryStore) patterns = new PatternSharing(memoryStore.db, {
+    tab: async (sessionId, tabId) => record(await relay.requestExtension("getTab", { sessionId, tabId, patternContext: true })),
+    activeProfile: () => activeProfileId,
+    recording: () => {
+      const capture = memoryStore?.captureState();
+      return capture?.enabled === true && !capture.paused;
+    },
+  });
+} catch { log("Task pattern storage unavailable"); }
 const uploadFiles = createUploadFiles();
 const firefoxHost = createFirefoxHost({ getProfile: () => state.profile, onEvent: (tabId, method, params) => {
   void relay.requestExtension("firefox.event", { tabId, method, params }).catch(() => {});
@@ -105,6 +117,25 @@ const relay: RpcRelay = new RpcRelay({
   canDisconnect: () => !participants(runtimeDirectory()).some(row => participantActive(row) && participantBusy(row)),
   connectionDetails: () => ({}),
   localHandler: async (method, params): Promise<unknown> => {
+    if (["siteSettings.status", "siteSettings.configure", "siteSettings.sharePatterns"].includes(method)) {
+      if(!activeProfileId) throw Error("No active browser profile");
+      const {configureSite,configuredRegistryOrigin,siteEnabled}=await import("../../src/site-registry/client.ts");
+      let configured = true;
+      try { configuredRegistryOrigin(); } catch { configured = false; }
+      if(method==="siteSettings.configure") {
+        const enabled = z.boolean().parse(params.enabled);
+        // Shared site reads are available only while the profile contributes task patterns.
+        if (enabled && !patterns?.grant(activeProfileId)) throw Error("Turn on Contribute task patterns first.");
+        configureSite(activeProfileId,enabled,params.includePackages === true);
+      }
+      if (method === "siteSettings.sharePatterns") {
+        if (!patterns) throw Error("Action Memory storage is unavailable.");
+        patterns.configure(activeProfileId, z.boolean().parse(params.enabled));
+      }
+      const sharing = Boolean(patterns?.grant(activeProfileId));
+      if (!sharing && siteEnabled(activeProfileId)) configureSite(activeProfileId, false);
+      return {enabled:siteEnabled(activeProfileId), sharing, patternChoice: Boolean(patterns?.chosen(activeProfileId)), patternSharingSupported: Boolean(patterns), configured};
+    }
     const diagnosticsTelemetry = telemetry.handle(method, params);
     if (diagnosticsTelemetry !== undefined) return diagnosticsTelemetry;
     const firefox = await firefoxHost(method, params);
@@ -136,7 +167,12 @@ const relay: RpcRelay = new RpcRelay({
   },
 });
 
-function handleMemoryHostMethod(method: string, input: unknown = {}) {
+const patternTimer = setInterval(() => {
+  if (relay.activity().pending === 0) void patterns?.flush().catch(() => {});
+}, 60000);
+patternTimer.unref();
+
+async function handleMemoryHostMethod(method: string, input: unknown = {}) {
   const params = memoryCommandSchema.parse(input);
   if (method === "memory.profiles") {
     const connected = readProfileRegistrations().filter((profile) => {
@@ -153,18 +189,51 @@ function handleMemoryHostMethod(method: string, input: unknown = {}) {
     }
     return { error: "memory_storage_unavailable" };
   }
-  if (method === "memory.captureState") return memoryStore.captureState();
+  if (method === "memory.captureState") {
+    const state = memoryStore.captureState();
+    const patternGrant = activeProfileId && state.enabled && !state.paused ? patterns?.grant(activeProfileId) : null;
+    return { ...state, ...(patternGrant ? { patternGrant } : {}) };
+  }
+  if (method === "memory.beginReadPattern") {
+    if (!activeProfileId || !patterns || !params.sessionId || !params.tabId || !params.query) return null;
+    const grant = patterns.grant(activeProfileId);
+    return grant ? patterns.begin(activeProfileId, grant, params.sessionId, params.tabId, params.query) : null;
+  }
+  if (method === "memory.confirmReadPattern") {
+    const store = memoryStore, profileId = activeProfileId;
+    if (patterns && profileId && params.patternTicket && params.sessionId && params.tabId && params.observedUrl)
+      await patterns.confirm(profileId, params.patternTicket, params.sessionId, params.tabId, {
+        url: params.observedUrl,
+        // The enclosing confirmation owns the SQLite transaction.
+        record: (site, task) => store._recordStep({ profileId, action: "read", hostname: site === "npm" ? "www.npmjs.com" : "news.ycombinator.com", target: { label: task }, success: true }).accepted,
+      });
+    return null;
+  }
+  if (method === "memory.beginPattern") {
+    if (!activeProfileId || !patterns || !params.patternGrant || !params.sessionId || !params.tabId || !params.query) return null;
+    return patterns.begin(activeProfileId, params.patternGrant, params.sessionId, params.tabId, params.query);
+  }
   if (method === "memory.stats") return memoryStore.status(params);
   if (method === "memory.query") return memoryStore.query(params);
   if (method === "memory.search") return memoryStore.search({ ...params, profileId: activeProfileId });
   if (method === "memory.recipe") return memoryStore.findRecipe(params);
   if (method === "memory.configure") return memoryStore.configure(params);
   if (method === "memory.prune") return memoryStore.prune(params);
-  if (method === "memory.enable") return memoryStore.enable();
+  if (method === "memory.enable") {
+    const enabled = memoryStore.enable();
+    // Sent only by the popup switch that shows the task-pattern sharing note.
+    if (params.contributePatterns === true && activeProfileId) patterns?.applyDefault(activeProfileId);
+    return enabled;
+  }
   if (method === "memory.disable") return memoryStore.disable();
   if (method === "memory.pause") return memoryStore.pause();
   if (method === "memory.resume") return memoryStore.resume();
-  if (method === "memory.recordStep") return memoryStore.recordStep({ ...params, success: params.success ?? true, profileId: activeProfileId });
+  if (method === "memory.recordStep") {
+    const result = memoryStore.recordStep({ ...params, success: params.success ?? true, profileId: activeProfileId });
+    if (result.accepted && params.success === true && !params.errorCode && activeProfileId && params.patternTicket && params.tabId && params.sessionId)
+      await patterns?.confirm(activeProfileId, params.patternTicket, params.sessionId, params.tabId).catch(() => {});
+    return result;
+  }
   if (method === "memory.finalizeChain") return memoryStore.finalizeChain({ ...params, success: params.success ?? true, profileId: activeProfileId });
   if (method === "memory.usageEvent") return memoryStore.usageEvent({ ...params, eventType: z.string().parse(params.eventType), profileId: activeProfileId });
   if (method === "memory.reindex") {
@@ -235,6 +304,8 @@ function shutdownHost(reason: string|undefined, exitCode = 0) {
   hostActivity.close();
   log(reason ?? "Native host shutting down");
   relay.flushMemory();
+  clearInterval(patternTimer);
+  patterns?.close();
   memoryStore?.close();
   cleanupProfileRegistration();
   relay.shutdown(reason);

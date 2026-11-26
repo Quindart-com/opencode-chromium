@@ -258,6 +258,7 @@ export function createInputOperations(dependencies: Dependencies) {
         args: {
           tabId: tool.schema.number().int().positive(),
           query: tool.schema.string().optional(),
+          countMatches: tool.schema.boolean().optional(),
           scope: tool.schema.enum(["viewport", "page", "target"]).default("viewport"),
           maxChars: tool.schema.number().int().positive().default(3000),
           delta: tool.schema.boolean().default(false),
@@ -274,7 +275,7 @@ export function createInputOperations(dependencies: Dependencies) {
           const comparable = !args.query && args.scope === "viewport";
           const delta = args.delta && comparable ? renderDelta(views.get(key), view) : null;
           if (comparable) { views.delete(key); views.set(key, view); if (views.size > 64) views.delete(views.keys().next().value!); }
-          return { url: view.url, title: view.title, view: delta ?? renderView(view), ...(delta ? { delta: true } : {}) };
+          return { url: view.url, title: view.title, ...(args.countMatches && view.matched !== undefined ? { matched: view.matched } : {}), view: delta ?? renderView(view), ...(delta ? { delta: true } : {}) };
         },
       }),
   };

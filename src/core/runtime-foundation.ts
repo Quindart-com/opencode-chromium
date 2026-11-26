@@ -19,7 +19,7 @@ import { ArtifactStore } from "./artifacts.ts";
 import { createCapabilityRegistry } from "./capabilities.ts";
 import { publicClaimTarget,type TabClaimApproval } from "./claim-approval.ts";
 import { BrowserRuntimeError,errorMessage } from "./errors.ts";
-import { errorDetails } from "./failure-context.ts";
+import { errorDetails,stopsBrowserChain } from "./failure-context.ts";
 import { createLogger } from "./logging.ts";
 import { createObservationOperations } from "./observation-diffs.ts";
 import { candidateSchema,parseOperationResult,type OperationResult } from "./operation-results.ts";
@@ -34,7 +34,7 @@ import { responseMetadata as contractMetadata } from "./versions.ts";
 
 export type PriorResults = Map<string, unknown>;
 export type ResolvedTarget = Target & { node_id?: string | number | null; id?: string | number | null };
-export type MemoryCapture = { enabled: boolean; paused: boolean; embedding_profile?: string | null };
+export type MemoryCapture = { patternGrant?: string; enabled: boolean; paused: boolean; embedding_profile?: string | null };
 export const memoryMatchSchema = z.looseObject({ id: z.number().optional(), kind: z.string(), steps: z.array(recipeSchema), embedding_profile: z.string().nullable().optional(), confidence: z.number().optional(), similarity: z.number().optional(), deterministic: z.boolean().optional(), failed_count: z.number().optional() });
 export type RunStepResult = { index: number; action: Step["action"]; id?: string | null; ok: boolean; result?: unknown; error?: ReturnType<typeof errorDetails>; settle?: unknown; observation?: unknown; tabTransition?: TabTransition; warnings?: StepWarning[] };
 export type StepWarning = { code: string; uncertain: boolean; message: string };
@@ -42,7 +42,7 @@ export function summarizeStepResult(item: RunStepResult) { const { result, ...re
 type OutcomeExtras = { tabTransition?: TabTransition; warnings?: StepWarning[] };
 export type StepOutcome = ({ ok: true; value: unknown; settled: unknown; executionState: string } | { ok: false; error: ReturnType<typeof errorDetails>; rawError: unknown; value: unknown; settled: unknown; executionState: string }) & OutcomeExtras;
 export type ReplayOutcome = { used: true; stepsReused: number; results: RunStepResult[]; failed?: boolean } | { used?: false; fallback: true; supersedes?: number | null } | null;
-export type StepExecution = { step: Step; index: number; tabId: number; prior: PriorResults; session: RuntimeSession; chainId: string; memoryEnabled: boolean };
+export type StepExecution = { step: Step; index: number; tabId: number; prior: PriorResults; session: RuntimeSession; chainId: string; memoryEnabled: boolean; patternGrant?: string };
 export type ScreenshotOptions = { fullPage?: boolean; format?: "png" | "jpeg" | "webp"; quality?: number; timeoutMs?: number; delivery?: "artifact" | "inline" };
 export type ResultPayload = Record<string, unknown> & { ok: boolean; status: string; sessionId: string; summary?: string };
 export const APPROVAL_TTL_MS = 5 * 60 * 1000;
@@ -254,7 +254,7 @@ export class RuntimeFoundation {
         return parseOperationResult(name, value);
       } catch (error) {
         lastError = error;
-        if (record(error).retryable === false) throw error;
+        if (record(error).retryable === false || stopsBrowserChain(error)) throw error;
         if (attempt + 1 < attempts) { noteTelemetryRetry(); await new Promise((resolve) => setTimeout(resolve, 40)); }
       }
     }

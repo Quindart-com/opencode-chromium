@@ -23,6 +23,25 @@ is off by default; Jev uses images only after an unsure text decision, and ordin
 decision screenshots. You can turn off cloud assistance or screenshot sharing
 in Settings.
 
+## Shared site reads and task patterns
+
+Each has its own switch in Settings.
+
+- **Contribute task patterns** turns on when you turn on Action Memory, as noted
+  beside that switch, unless you already chose a setting. If Action Memory was
+  already on, it starts off. While Action Memory is recording, it shares the site
+  and task category of successful agent reads on supported public sites to
+  improve shared site reads. No URLs, package names, page text or credentials
+  are sent. Contribution records expire within about two weeks. Turning it off
+  stops sharing, withdraws recent contributions and turns off shared site reads.
+- **Shared site reads** (off by default, available while task patterns are on)
+  let agents read public fields on supported sites through the OpenCode Browser
+  registry, hosted on Convex. For Hacker News it receives the requested fields
+  and the public story ID. Supported npm packages are read directly from npm.
+
+Registry requests carry a random pseudonymous key. Each service you contact
+receives normal connection information, such as your IP address.
+
 ## What the extension does
 
 - The extension receives tool calls from a locally running native messaging host
@@ -75,8 +94,9 @@ no analytics. Help and release-note links open GitHub only when you select them.
 - **No device identification.** The plugin, extension, and native host never
   read machine IDs, hostnames, usernames, MAC addresses, hardware serials, or
   install IDs, and never compute device fingerprints. The only persistent
-  identifier is a random per-profile UUID generated locally for routing
-  requests to the browser profile you selected. Profile IDs and labels can
+  identifiers are a random per-profile UUID generated locally for routing
+  requests to the browser profile you selected and, when the shared site
+  features above are in use, their random registry keys. Profile IDs and labels can
   appear in agent tool responses or copied profile selectors; your connected
   agent or harness handles those responses under its own data policy. The
   routing ID is not used as a device fingerprint or silently sent to a decision
@@ -101,7 +121,7 @@ no analytics. Help and release-note links open GitHub only when you select them.
 
 The opt-in **Action Memory** feature (off by default) stores a structured,
 vector-searchable record of agent browser actions in a local SQLite database.
-By design it contains **no personal content**: no URLs, window titles, typed
+By design it contains **no page content**: no URLs, window titles, typed
 text, form values, keystrokes, clipboard contents, screenshots, file paths, or
 accessibility trees — only action names, hostnames, bounded element labels
 (≤ 64 characters, passed through a privacy normalizer that strips email
@@ -110,9 +130,8 @@ filesystem paths), outcomes, and timestamps. Steps that need a value or URL at
 replay time are stored as flags only; the value always comes from the live
 agent request and is never persisted. Search queries are embedded for the
 lookup and never stored; searchable chain text is generated purely from the
-privacy-safe structured fields. There is no encryption because there is
-nothing personal to protect: the record is a what/where/result log, not a
-transcript. Delete (`memory delete --yes`) permanently removes the
+privacy-safe structured fields. The database is not encrypted; the record is
+a what/where/result log, not a transcript. Delete (`memory delete --yes`) permanently removes the
 database. Confirmed actions are never auto-purged; stale failed lessons are
 cleaned up automatically per the quota and purge settings shown in the Action
 Memory dashboard (extension popup → Action Memory).

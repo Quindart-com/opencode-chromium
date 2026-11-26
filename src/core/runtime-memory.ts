@@ -3,9 +3,11 @@ import { nodeFrameId } from "../browser/operations/page-state.ts";
 import { partialDispatchError } from "../shared/execution-state.ts";
 import { record } from "../shared/values.ts";
 import { BrowserRuntimeError } from "./errors.ts";
-import { errorDetails } from "./failure-context.ts";
+import { errorDetails,stopsBrowserChain } from "./failure-context.ts";
 import { screenshotResultSchema } from "./operation-results.ts";
-import type { RunInput,Step } from "./registry.ts";
+import { packageField } from "../site-registry/package-read.ts";
+import { fieldsForTask } from "../site-registry/intent.ts";
+import type { ObserveInput,RunInput,Step } from "./registry.ts";
 import { replayGateRejection } from "./replay-gate.ts";
 import { requiresApproval } from './run-validation.ts';
 import { READ_ACTIONS,clamp,isStaleTargetError,memoryMatchSchema,parseLegacyResult,rememberedStepMismatch,type MemoryCapture,type PriorResults,type ReplayOutcome,type RunStepResult,type StepExecution,type StepOutcome,type StepWarning } from "./runtime-foundation.ts";
@@ -15,6 +17,20 @@ import { PAGE_PROTECTION_WARNING,TRANSITION_ACTIONS,classifyTabTransition,type T
 import { measureTelemetryStage,noteTelemetryDispatch,noteTelemetryRetry } from "./telemetry.ts";
 
 export class RuntimeMemory extends RuntimeInteraction {
+  async observeWithMemory(args: ObserveInput, tabId: number, session: RuntimeSession) {
+    const label = args.query;
+    if (args.mode !== "read" || args.source === "public" || args.target || !label ||
+        (!packageField(label) && !fieldsForTask(label).length))
+      return this.observeValue(args, tabId, session);
+    const binding = { sessionId: session.sessionId, tabId };
+    const ticket = await this.requestHost("memory.beginReadPattern", { ...binding, query: label }, session).catch(() => null);
+    const value = await this.observeValue(args, tabId, session, undefined, typeof ticket === "string");
+    const { matched, ...view } = record(value);
+    if (typeof ticket === "string" && typeof matched === "number" && matched > 0 && typeof view.url === "string")
+      await this.requestHost("memory.confirmReadPattern", { ...binding, patternTicket: ticket, observedUrl: view.url }, session).catch(() => {});
+    return matched === undefined ? value : view;
+  }
+
   async executeStep(step: Step, tabId: number, prior: PriorResults, session: RuntimeSession, chainId: string | null = null, stepIndex: number | null = null) {
     return this.operationScope.run({ frameId: step.target?.frameId ?? nodeFrameId(step.target?.nodeId), deadlineAt: Date.now() + clamp(step.timeoutMs, step.action === "upload" ? 120000 : 15000, 250, 120000) }, () => this.executeStepInScope(step, tabId, prior, session, chainId, stepIndex));
   }
@@ -34,6 +50,7 @@ export class RuntimeMemory extends RuntimeInteraction {
         throw error;
       }
       const input = { ...record(step.input), ...(tabId && record(step.input).tabId === undefined ? { tabId } : {}) };
+      if (step.capability?.startsWith("site.") && input.tabId !== tabId) throw Object.assign(new Error("SITE_HANDLE_MISMATCH"), { code: "SITE_HANDLE_MISMATCH", retryable: false });
       const parsed = registry.validate(step.capability ?? "", input);
       const value = await definition.execute(parsed, { sessionID: session.sessionId, sessionId: session.sessionId, agent: "agent-browser-core", urlPolicy: this.urlPolicy, filePolicy: this.filePolicy });
       if (step.capability === "network.inspect" && record(parsed).bodyDelivery === "artifact") {
@@ -109,7 +126,7 @@ export class RuntimeMemory extends RuntimeInteraction {
   async memoryCaptureState(session: RuntimeSession) {
     try {
       const state = record(await this.requestHost("memory.captureState", {}, session).catch(() => null));
-      if (typeof state.enabled === "boolean") return { enabled: state.enabled, paused: state.paused === true, embedding_profile: typeof state.embedding_profile === "string" ? state.embedding_profile : null };
+      if (typeof state.enabled === "boolean") return { patternGrant: typeof state.patternGrant === "string" ? state.patternGrant : undefined, enabled: state.enabled, paused: state.paused === true, embedding_profile: typeof state.embedding_profile === "string" ? state.embedding_profile : null };
       const status = record(await this.requestHost("memory.stats", {}, session).catch(() => null));
       if (!status) return null;
       return { enabled: status.enabled === true, paused: status.paused === true, embedding_profile: typeof status.embedding_profile === "string" ? status.embedding_profile : null };
@@ -223,13 +240,17 @@ export class RuntimeMemory extends RuntimeInteraction {
     let allOk = true;
     let completedMutation = false;
     let uncertainMutation = false;
+    let stopped = false;
     for (const [index, step] of bound.entries()) {
-      const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId: replayChainId, memoryEnabled: true });
+      const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId: replayChainId, memoryEnabled: true, patternGrant: state?.patternGrant });
       if (outcome.ok) {
-        if (record(outcome.settled).settled === false) allOk = false;
+        if (outcome.warnings?.some(stopsBrowserChain)) stopped = true;
+        if (stopped || record(outcome.settled).settled === false) allOk = false;
         if (!READ_ACTIONS.has(step.action)) completedMutation = true;
         results.push({ index, action: step.action, ok: true, ...(outcome.settled ? { settle: outcome.settled } : {}), ...(outcome.tabTransition ? { tabTransition: outcome.tabTransition } : {}), ...(outcome.warnings?.length ? { warnings: outcome.warnings } : {}) });
+        if (stopped) break;
       } else {
+        stopped = stopsBrowserChain(outcome.rawError) || Boolean(outcome.warnings?.some(stopsBrowserChain));
         allOk = false;
         const detail = outcome.error;
         uncertainMutation = !READ_ACTIONS.has(step.action) && detail.uncertain === true;
@@ -240,7 +261,7 @@ export class RuntimeMemory extends RuntimeInteraction {
     await this.requestHost("memory.finalizeChain", { chainId: replayChainId, success: allOk, supersedes: allOk ? rememberedChainId : null }, session).catch(() => {});
     if (!allOk) {
       await this.requestHost("memory.usageEvent", { eventType: "replay_failed", chainId: rememberedChainId, success: false, stepsReused: results.filter((item) => item.ok).length, reason: "stale_step" }, session).catch(() => {});
-      if (completedMutation || uncertainMutation) {
+      if (stopped || completedMutation || uncertainMutation) {
         return { used: true, stepsReused: results.filter((item) => item.ok).length, results, failed: true };
       }
       return { fallback: true, supersedes: rememberedChainId };
@@ -259,7 +280,7 @@ export class RuntimeMemory extends RuntimeInteraction {
 
   // One high-level browser step produces exactly one memory record, whatever
   // the step expands to at the RPC layer. Only privacy-safe fields persist.
-  async recordMemoryStep({ chainId, position, step, tabId, success, durationMs, errorCode }: { chainId: string | null; position: number; step: Step; tabId: number; success: boolean; durationMs: number; errorCode: string | null }, session: RuntimeSession) {
+  async recordMemoryStep({ chainId, position, step, tabId, success, durationMs, errorCode, patternTicket }: { patternTicket?: string; chainId: string | null; position: number; step: Step; tabId: number; success: boolean; durationMs: number; errorCode: string | null }, session: RuntimeSession) {
     const target = step.target ?? {};
     const summary = {
       action: step.action,
@@ -274,6 +295,7 @@ export class RuntimeMemory extends RuntimeInteraction {
       chainId,
       position,
       action: summary.action,
+      ...(patternTicket ? { sessionId: session.sessionId, patternTicket } : {}),
       tabId,
       hostname,
       target: summary.target,
@@ -283,8 +305,12 @@ export class RuntimeMemory extends RuntimeInteraction {
     }, session);
   }
 
-  async executeStepWithPolicy({ step, index, tabId, prior, session, chainId, memoryEnabled }: StepExecution): Promise<StepOutcome> {
+  async executeStepWithPolicy({ step, index, tabId, prior, session, chainId, memoryEnabled, patternGrant }: StepExecution): Promise<StepOutcome> {
     const startedAt = Date.now();
+    const label = step.target?.query;
+    const canShare = patternGrant && memoryEnabled && typeof label === "string" && Object.keys(step.target ?? {}).every(key => key === "query" || key === "role") &&
+      (step.action === "find" || (step.action === "assert" && step.condition !== "not-exists"));
+    const ticket = canShare ? await this.requestHost("memory.beginPattern", { sessionId: session.sessionId, tabId, patternGrant, query: label }, session).catch(() => null) : null;
     const attempts = READ_ACTIONS.has(step.action) ? (step.retry ?? 0) + 1 : 1;
     let value;
     let lastError = null;
@@ -302,7 +328,7 @@ export class RuntimeMemory extends RuntimeInteraction {
       } catch (error) {
         lastError = error;
         executionState = READ_ACTIONS.has(step.action) || record(error).executionState === "not_started" ? "not_started" : "unknown";
-        if (record(error).retryable === false) break;
+        if (record(error).retryable === false || stopsBrowserChain(error)) break;
       }
     }
     if (!READ_ACTIONS.has(step.action)) noteTelemetryDispatch(executionState === "completed" ? "acknowledged" : executionState === "unknown" ? "unknown" : "not_started");
@@ -310,19 +336,22 @@ export class RuntimeMemory extends RuntimeInteraction {
       try {
         settled = await measureTelemetryStage("settle", () => this.settleStep(step, tabId, prior, session));
       } catch (error) {
-        if (step.settle) lastError = error;
+        if (step.settle || stopsBrowserChain(error)) lastError = error;
         else settled = { settled: false, degraded: true, error: errorDetails(error) };
       }
     }
     const { tabTransition, warnings } = await this.detectTabTransition(step, tabId, tabsBefore, session);
     if (!lastError && step.id) prior.set(step.id, value);
     if (memoryEnabled) {
+      const evidence = record(value);
+      const found = step.action === "assert" ? evidence.passed === true : Array.isArray(evidence.results) && evidence.results.length > 0;
       await this.recordMemoryStep({
+        ...(typeof ticket === "string" && found ? { patternTicket: ticket } : {}),
         chainId,
         position: index,
         step,
         tabId,
-        success: lastError == null && record(settled).settled !== false,
+        success: lastError == null && !warnings.length && record(settled).settled !== false,
         durationMs: Date.now() - startedAt,
         errorCode: lastError ? errorDetails(lastError).code ?? "unknown" : record(settled).settled === false ? "SETTLE_UNVERIFIED" : null,
       }, session).catch(() => {});

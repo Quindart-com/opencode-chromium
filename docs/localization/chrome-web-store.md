@@ -2,6 +2,12 @@
 
 These descriptions are prepared for the Chrome Web Store dashboard. Select the matching locale after uploading a package containing that locale. Review screenshots and product claims before submission.
 
+## Listing note for task patterns
+
+Add this note, translated, to every listing in the release that turns on the shared site registry.
+
+When you turn on Action Memory, OpenCode Browser also shares which supported public sites and tasks your agent completes, to improve shared site reads. No URLs, page text or credentials are sent. Turn it off anytime in Settings → Contribute task patterns; shared site reads need it on.
+
 ## 简体中文 (`zh_CN`)
 
 将 OpenCode、Codex 和 MCP 智能体连接到您的浏览器。智能体可以搜索网页、填写表单、检查页面并截取屏幕，同时您仍可查看和控制操作。

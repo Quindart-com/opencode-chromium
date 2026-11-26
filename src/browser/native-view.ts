@@ -165,6 +165,12 @@ export function projectSnapshot(snapshot: Snapshot, viewport: Viewport, options:
       }
       if (block >= 0 && depth >= 6) break;
     }
+    // In a targeted read keep the record label with its sibling cell values.
+    // Interactive descendants still bind to their original control and ref.
+    if (options.query && found < 0 && block >= 0 && ["td", "th"].includes(tag(block))) {
+      const row = parent[block] ?? -1;
+      if (row >= 0 && tag(row) === "tr") block = row;
+    }
     const owner = found >= 0 ? found : block;
     ownerCache.set(start, owner);
     return owner;

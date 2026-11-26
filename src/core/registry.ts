@@ -70,7 +70,9 @@ const diagnosticSchema = z.object({
   url: z.string().max(500).optional(),
 });
 
+const readSource = z.enum(["page", "public"]).optional().describe("Read the displayed page by default. Use public with a query for a verified, current public value.");
 const observationSchema = z.object({
+  source: readSource,
   mode: z.enum(["read", "search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
   target: targetSchema,
   query: z.string().optional(),
@@ -155,6 +157,7 @@ export const runInputSchema = z.object({
 export type RunInput = z.output<typeof runInputSchema>;
 
 export const observeInputSchema = z.object({
+        source: readSource,
         ...sessionFields,
         mode: z.enum(["read", "search", "inspect", "visual", "extract", "events", "downloads", "screenshot", "raw-snapshot", "capabilities", "artifact", "diagnostic"]),
         tabId: z.number().int().positive().optional(),
@@ -237,7 +240,7 @@ export function createCoreRegistry(runtime: Pick<RuntimePort, "run" | "observe" 
       execute: (args, context) => measureTool(runtime, "browser_run", args, context, () => runtime.run(args, context)),
     }),
     browser_observe: defineRuntimeTool({
-      description: "Observe compact browser evidence.",
+      description: "Read the displayed tab. Use mode read with a record ID or label as query. Use screenshot for visual evidence. Discover advanced inputs with pack schema in capabilities mode.",
       inputSchema: observeInputSchema,
       outputSchema: resultSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },

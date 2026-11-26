@@ -5,8 +5,9 @@ import { record } from "../shared/values.ts";
 import { prepareTabClaim,type TabClaimApproval } from "./claim-approval.ts";
 import { cleanupSessionEnvironment } from "./environment-cleanup.ts";
 import { BrowserRuntimeError } from "./errors.ts";
-import { shouldReobservePage } from "./failure-context.ts";
+import { shouldReobservePage,stopsBrowserChain } from "./failure-context.ts";
 import { summarizeAccessibilitySnapshot } from './observation-projection.ts';
+import { fullToolInput } from "./schema-adapters.ts";
 import type { FinalizeInput,MemoryQueryInput,MemorySearchInput,MemoryStatusInput,ObserveInput,RunInput,SessionInput,Step } from "./registry.ts";
 import { requiresApproval,validateSteps } from './run-validation.ts';
 import { READ_ACTIONS,callerSessionId,clamp,contextSessionId,publicProfiles,summarizeStepResult,type RunStepResult,type StepOutcome } from "./runtime-foundation.ts";
@@ -112,7 +113,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         if (replay?.used) {
           await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
           const completedMutation = replay.results.every(item => item.ok) && replay.results.some(item => !READ_ACTIONS.has(item.action));
-          const observed = request.postObserve && session.activeTabId
+          const observed = !replay.failed && request.postObserve && session.activeTabId
             ? await this.observeAfterRun(request.postObserve, session.activeTabId, session, completedMutation, deadlineAt)
             : undefined;
           const failed = replay.failed === true || observed?.failed === true;
@@ -139,11 +140,13 @@ export class AgentBrowserRuntime extends RuntimeMemory {
       const prior = new Map();
       const results: RunStepResult[] = [];
       let failed = false;
+      let stopped = false;
       const chainId = `${session.sessionId}:${this.memoryChainSequence++}`;
       const memoryEnabled = memoryRequested && this.memoryRecordingEnabled(memoryState);
       try {
         for (const [index, step] of request.steps.entries()) {
-          const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId, memoryEnabled });
+          const outcome = await this.executeStepWithPolicy({ step, index, tabId, prior, session, chainId, memoryEnabled, patternGrant: memoryState?.patternGrant });
+          stopped = Boolean(outcome.warnings?.some(stopsBrowserChain)) || (!outcome.ok && stopsBrowserChain(outcome.rawError));
           if (!outcome.ok) {
             failed = true;
             const detail = outcome.error;
@@ -151,31 +154,32 @@ export class AgentBrowserRuntime extends RuntimeMemory {
             // Re-reading the page is only worth its bytes when the action may have
             // had an effect and the outcome is genuinely unknown.
             const mayHaveActed = shouldReobservePage({ uncertain: detail.uncertain, readOnly: READ_ACTIONS.has(step.action), hasTarget: Boolean(step.target) });
-            if (mayHaveActed && session.activeTabId) {
+            if (!stopped && mayHaveActed && session.activeTabId) {
               observation = await this.observeValue({ mode: "inspect", target: step.target, detail: "lean", limit: 5 }, tabId, session).catch(() => undefined);
             }
             results.push({ index, id: step.id ?? null, action: step.action, ok: false, error: detail, ...(observation ? { observation } : {}), ...stepExtras(outcome) });
-            if (step.onError !== "continue") break;
+            if (stopped || detail.uncertain || step.onError !== "continue") { stopped ||= detail.uncertain; break; }
             continue;
           }
           results.push({ index, id: step.id ?? null, action: step.action, ok: true, result: outcome.value, ...(outcome.settled ? { settle: outcome.settled } : {}), ...stepExtras(outcome) });
+          if (stopped) { failed ||= index + 1 < request.steps.length; break; }
         }
       } finally {
         if (memoryEnabled) {
-          const verified = !failed && results.every(item => record(item.settle).settled !== false);
+          const verified = !failed && !stopped && results.every(item => record(item.settle).settled !== false);
           await this.requestHost("memory.finalizeChain", { chainId, success: verified, supersedes: verified ? correctiveCandidate : null }, session).catch(() => {});
         }
         await this.invoke("browser_turn_end", {}, sessionId).catch(() => {});
       }
       let postObservation;
       let stateUnknown = false;
-      if (request.postObserve && session.activeTabId) {
+      if (!stopped && request.postObserve && session.activeTabId) {
         const completedMutation = !failed && results.some(item => item.ok && !READ_ACTIONS.has(item.action));
         const observed = await this.observeAfterRun(request.postObserve, session.activeTabId, session, completedMutation, deadlineAt);
         postObservation = observed.value;
         stateUnknown = observed.stateUnknown;
         failed ||= observed.failed;
-      } else if (session.activeTabId && request.steps.some(step => !READ_ACTIONS.has(step.action)) && await this.isGuardedTab(session.activeTabId, session)) {
+      } else if (!stopped && session.activeTabId && request.steps.some(step => !READ_ACTIONS.has(step.action)) && await this.isGuardedTab(session.activeTabId, session)) {
         // On a guarded host the agent gets the script-free change summary for free,
         // so it never needs a screenshot to see what its action did.
         postObservation = await this.readView(session.activeTabId, session, {}).catch(() => undefined);
@@ -202,6 +206,8 @@ export class AgentBrowserRuntime extends RuntimeMemory {
     const sessionId = contextSessionId(args, context);
     try {
       if (args.mode === "capabilities") {
+        if (args.pack === "schema")
+          return this.compact({ ok: true, status: "capabilities", sessionId, result: fullToolInput(args.query) }, sessionId, 4000, "tool-schema");
         const registry = await this.capabilities();
         return { ...contractMetadata(), ok: true, status: "capabilities", sessionId, result: registry.manifest(args.pack ?? "core") };
       }
@@ -220,7 +226,7 @@ export class AgentBrowserRuntime extends RuntimeMemory {
         : await this.selectExplicitTab(session, args.tabId);
       if (!tabId) throw new Error("No controlled tab is selected. Create or claim one with browser_session.");
       session.activeTabId = tabId;
-      const value = await this.observeValue(args, tabId, session);
+      const value = await this.observeWithMemory(args, tabId, session);
       if (args.mode === "screenshot" && args.delivery === "inline") {
         return { ...contractMetadata(), ok: true, status: "observed", sessionId, profileId: session.profileId, tabId, result: value };
       }

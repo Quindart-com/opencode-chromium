@@ -49,6 +49,11 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
     const parsed = popupMessageSchema.safeParse(value);
     if (!parsed.success) return false;
     const message = parsed.data;
+    if (["GET_SITE_SETTINGS","SET_SITE_SETTINGS","SET_PATTERN_SHARING"].includes(message.type)) {
+        connectionPanelMessage(message,sender,{extensionId:chrome.runtime.id,panelUrl:chrome.runtime.getURL("/popup.html"),rpc,idle:connectionIdle})
+          .then(result=>sendResponse({result})).catch(error=>sendResponse({error:errorMessage(error)}));
+        return true;
+    }
     if (["GET_TELEMETRY_SETTINGS", "SET_TELEMETRY_SETTINGS", "GET_HARNESS_CONNECTIONS", "DISCONNECT_HARNESS", "RECONNECT_NATIVE_HOST", "START_HARNESS_RECONNECT", "RUN_CONNECTION_DOCTOR", "INSTALL_RUNTIME_UPDATE", "GET_LOCAL_ACTION", "GET_RUNTIME_UPDATES", "SET_RUNTIME_UPDATES"].includes(message.type)) {
         connectionPanelMessage(message, sender, { extensionId: chrome.runtime.id, panelUrl: chrome.runtime.getURL("/popup.html"), rpc, idle: connectionIdle,
             telemetryAllowed: () => telemetryPermission(dependencies.IS_FIREFOX, () => chrome.permissions.getAll()) })

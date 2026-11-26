@@ -200,6 +200,10 @@ rpc.register("getTab", async (params) => {
     ensureControlledTab(params, tabId);
     const tab = await getTab(tabId);
     assertSessionUrl(sessionState(requiredSessionId(params)), tab.url ?? "about:blank");
+    if (params.patternContext === true) return {
+      id: tab.id, sessionId: requiredSessionId(params), controlled: true,
+      url: tab.url, incognito: tab.incognito, pendingUrl: tab.pendingUrl ?? null,
+    };
     return normalizeTab(tab);
 });
 rpc.register("getUserTabs", params => tabClaims.list(params));

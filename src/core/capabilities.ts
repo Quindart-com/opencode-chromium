@@ -13,6 +13,7 @@ function inputSchemaFor(required: string[] = []) {
 }
 
 const PACKS: Record<string, { description: string; capabilities: string[] }> = {
+  site: {description:"Use a single verified public read on the controlled tab. Resolve separately for discovery or a pinned handle.",capabilities:["site.resolve","site.invokeRead"]},
   core: {
     description: "Navigate, find, interact, assert, and observe a controlled browser.",
     capabilities: ["navigation.navigate", "navigation.reload", "forms.fill", "forms.type", "events.read"],
@@ -67,6 +68,8 @@ const PACKS: Record<string, { description: string; capabilities: string[] }> = {
 interface BuiltIn { operation: string; safety: string; required: string[]; description?: string; schema?: z.ZodType; args?: z.ZodRawShape; example?: Record<string, unknown>; manifest?: object }
 export interface Capability { name: string; version: string; description: string; safety: string; required: string[]; inputSchema: z.ZodType; example: Record<string, unknown>; manifest?: object; execute(input: unknown, context?: BrowserContext): Promise<unknown> }
 const BUILT_INS: Record<string, BuiltIn> = {
+  "site.resolve": {operation:"browser_site_resolve",safety:"read",required:["tabId","task"],description:"Find verified reads on the current Hacker News story. Pass a short task such as author karma."},
+  "site.invokeRead": {operation:"browser_site_read",safety:"read",required:["tabId"],description:"Read the current public story or supported npm package. Pass either a short task for one-call execution or a handle from site.resolve."},
   "navigation.navigate": { operation: "browser_navigate", safety: "read", required: ["tabId", "url"], example: { url: "https://example.com" } },
   "navigation.reload": { operation: "browser_reload", safety: "read", required: ["tabId"] },
   "navigation.back": { operation: "browser_back", safety: "read", required: ["tabId"] },

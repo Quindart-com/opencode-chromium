@@ -46,7 +46,8 @@ type HostStatus = VersionStatus & {
     nextRetryMs: number | null;
 };
 const uploadInfoSchema = z.object({ token: z.string(), files: z.array(z.object({ name: z.string(), size: z.number(), preview: z.optional(z.string()), path: z.string() })) });
-const HOST_NAME = "com.opencode.browser.plugin";
+const HOST_NAME = import.meta.env.WXT_SITE_REGISTRY_DEV === "1"
+  ? "com.opencode.browser.site_registry_dev" : "com.opencode.browser.plugin";
 const IS_FIREFOX = import.meta.env.BROWSER === "firefox";
 const DEBUGGER_VERSION = "1.3";
 const KEEPALIVE_ALARM = "opencode-browser-plugin-keepalive";

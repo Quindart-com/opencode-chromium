@@ -4,10 +4,10 @@ Action Memory is an opt-in, local, **vector-searchable record of agent browser
 actions** that makes prior successful routes reusable across sessions and
 self-corrects over time. It is off by default.
 
-It records only structured signatures — never typed text, form values,
-keystrokes, clipboard contents, URLs, window titles, paths, screenshots, or
-accessibility trees — so the store contains **no personal content by
-construction**.
+It records only structured signatures — action names, hostnames and short element
+labels — never typed text, form values, keystrokes, clipboard contents, full URLs,
+window titles, paths, screenshots, or accessibility trees. The store stays on your
+machine.
 
 ## Enable or disable
 
@@ -43,6 +43,10 @@ count, last hit time).
 The following are **never** stored: screenshots, typed text, keystrokes,
 clipboard contents, raw tool arguments or results, file paths, window titles,
 full URLs or URL paths, and accessibility trees.
+
+## Contributing task patterns
+
+While Action Memory is recording, successful agent reads on a few supported public sites share their site and task category to improve shared site reads. URLs, page text, typed values and the rest of the memory store stay on your machine. Turning on Action Memory turns this on too, as noted beside the switch; if Action Memory was already on, it starts off. Change it anytime in **Settings → Contribute task patterns**. Turning it off withdraws recent contributions and turns off shared site reads, which need it. See the [privacy policy](PRIVACY.md).
 
 ## Success and failure semantics
 

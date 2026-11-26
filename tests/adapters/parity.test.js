@@ -83,3 +83,15 @@ test("OpenCode 2.x transform context gets one transform with all tools and dispo
   await cleanup();
   assert.equal(disposed, 1);
 });
+
+test("advanced parameters remain available on demand through the four-tool interface", async () => {
+  const agent = createBrowserAgent();
+  try {
+    const listing = agent.tools("mcp").find(t => t.name === "browser_observe");
+    assert.equal(listing.inputSchema.properties.searchStrategy, undefined);
+    assert.ok(listing.inputSchema.properties.source);
+    const result = await agent.runtime.observe({ mode: "capabilities", pack: "schema", query: "browser_observe" });
+    const full = result.result?.inputSchema ?? JSON.parse(agent.runtime.artifacts.read(result.artifact.uri, { sessionId: result.sessionId }).data.toString()).result.inputSchema;
+    assert.ok(full.properties.searchStrategy);
+  } finally { agent.close(); }
+});

@@ -6,6 +6,8 @@ export const memoryCommandSchema = z.object({
   steps: z.array(z.object({ action: z.string().nullable().optional(), target: z.unknown().optional() })).max(24).optional(),
   quota_bytes: z.number().nullable().optional(), purge_days: z.number().nullable().optional(), power_user: z.boolean().nullable().optional(),
   days: z.number().nullable().optional(), now: z.number().optional(), profileIds: z.array(z.string()).max(50).nullable().optional(), includeUnattributed: z.boolean().optional(),
+  observedUrl: z.string().max(2048).optional(),
+  tabId: z.number().int().optional(), patternGrant: z.string().uuid().optional(), patternTicket: z.string().uuid().optional(), contributePatterns: z.boolean().optional(),
   chainId: z.union([z.string(), z.number()]).nullable().optional(), position: z.number().int().nullable().optional(), action: z.string().nullable().optional(),
   target: z.unknown().optional(), success: z.boolean().nullable().optional(), durationMs: z.number().nullable().optional(), errorCode: z.string().nullable().optional(),
   supersedes: z.number().nullable().optional(), eventType: z.string().optional(), actionId: z.number().nullable().optional(), stepsReused: z.number().nullable().optional(), reason: z.string().nullable().optional(),

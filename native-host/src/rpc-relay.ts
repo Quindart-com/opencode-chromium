@@ -148,6 +148,10 @@ export class RpcRelay {
   async #dispatchClientMessage(socket: RpcSocket, input: unknown) {
     const message = rpcMessageSchema.parse(input);
     const commands: unknown[] = (message.method === "inputGesture" || message.method === "executeInputGesture") && Array.isArray(message.params.steps) ? message.params.steps : message?.method === "executeCdp" ? [message.params] : [];
+    if (message.method?.startsWith("siteSettings.")) {
+      if(message.id!==undefined) await this.#writeClientError(socket,message.id,-32000,"Site consent is restricted to the extension");
+      return;
+    }
     const hasFiles = commands.some(value => { const command = record(value), params = record(command.commandParams ?? command.command_params); const files = command.method === "DOM.setFileInputFiles" ? params.files : command.method === "Input.dispatchDragEvent" ? record(params.data).files : null; return Array.isArray(files) && files.length > 0; });
     if (hasFiles && this.#state.profile?.uploadConsentVersion !== 1) {
       if (message.id !== undefined) await this.#writeClientError(socket, message.id, -32000, "Reload the updated extension to enable upload confirmation; no files were uploaded");

@@ -3,6 +3,12 @@
   "diagnosticsDescription": { "message": "Partager les résultats et erreurs des outils via Google Analytics. Aucun contenu de navigation. Désactivable à tout moment." },
   "diagnosticsLoadFail": { "message": "Reconnectez la passerelle du navigateur pour charger les paramètres de diagnostic." },
   "diagnosticsSaveFail": { "message": "Impossible d’enregistrer les paramètres de diagnostic. Réessayez." },
+  "sharedSiteReads": { "message": "Lectures de sites partagées" },
+  "sharedSiteReadsDescription": { "message": "Lire les champs publics des sites pris en charge via le registre OpenCode Browser. Seuls les champs demandés et les identifiants publics sont envoyés. Nécessite Contribuer aux modèles de tâches." },
+  "contributeTaskPatterns": { "message": "Contribuer aux modèles de tâches" },
+  "contributeTaskPatternsDescription": { "message": "Partager les sites publics pris en charge et les tâches accomplies par votre agent lorsque la Mémoire des actions est activée. Aucune URL ni texte de page. Désactivable à tout moment." },
+  "memorySharesPatterns": { "message": "Partage aussi les sites publics pris en charge et les tâches accomplies par votre agent, pour améliorer les lectures de sites partagées. Aucune URL ni texte de page. Modifiable dans Contribuer aux modèles de tâches." },
+  "siteSettingsSaveFail": { "message": "Impossible d’enregistrer les paramètres de partage. Réessayez." },
   "diagnosticsBrowserPermission": { "message": "Autorisez le partage des données techniques dans Firefox pour activer les diagnostics." },
   "extensionName": {
     "message": "opencode-chromium"

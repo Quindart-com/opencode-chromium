@@ -48,6 +48,16 @@ function clip(value: unknown, limit: number) {
   return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1))}…`;
 }
 
+const terminalCodes = new Set(["URL_POLICY_BLOCKED", "TAB_NOT_OWNED", "TAB_ALREADY_OWNED", "TAB_CLAIM_RESTRICTED",
+  "BROWSER_HOST_ACCESS_DENIED", "ACCESS_DENIED", "CHALLENGE_REQUIRED", "PAGE_PROTECTION_SUSPECTED",
+  "SITE_RESOURCE_MISMATCH", "SITE_HANDLE_MISMATCH", "THROTTLED", "PROVIDER_THROTTLED"]);
+
+export function stopsBrowserChain(error: unknown) {
+  const fields = record(error);
+  return [401, 403, 429].includes(Number(fields.status)) || terminalCodes.has(String(fields.code ?? fields.message).toUpperCase()) ||
+    Boolean(authorizationForError(String(fields.code ?? "")));
+}
+
 export function failureHint(code: string) {
   return FAILURE_HINTS[code] ?? FAILURE_HINTS.BROWSER_OPERATION_FAILED;
 }

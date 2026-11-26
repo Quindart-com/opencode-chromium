@@ -261,6 +261,10 @@ Cloud assistance is off by default. Choose Jev through OpenRouter or TypeSafe, o
 
 Anonymous diagnostics are on by default to help improve tool reliability. Turn them off in **Settings → Anonymous diagnostics**. Only aggregated tool outcomes, allowlisted error codes, timing/retry categories and coarse release/browser/OS information are shared through Google Analytics; browsing content and persistent analytics identifiers are excluded. Firefox also respects its built-in technical-data permission. See [what is collected and how to opt out](docs/telemetry.md) and the [privacy policy](docs/PRIVACY.md).
 
+## Task patterns
+
+To improve shared site reads, OpenCode Browser shares which supported public sites and tasks your agent completes while Action Memory is on. No URLs, page text or credentials are sent. It turns on when you turn on Action Memory; if Action Memory was already on, it starts off. Change it anytime in **Settings → Contribute task patterns**; shared site reads need it on. See the [privacy policy](docs/PRIVACY.md).
+
 ## Updates
 
 Extension updates open [what’s new](https://quindart-com.github.io/opencode-chromium/updates/) once per version in a background tab. Turn this off in the extension’s setup guide.

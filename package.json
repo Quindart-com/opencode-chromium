@@ -144,7 +144,7 @@
     "verify:popup": "node scripts/verify-popup.js",
     "verify:uploads": "node scripts/verify-uploads.js",
     "verify:cursor": "node scripts/verify-cursor.js",
-    "lint": "eslint src native-host/src extension-src",
+    "lint": "eslint src native-host/src extension-src benchmarks/reading",
     "check:unused": "knip --no-progress --include files,dependencies",
     "benchmark:decisions": "bun scripts/benchmark-decision-pipeline.ts",
     "benchmark:flow": "bun scripts/benchmark-agent-flow.js",
